@@ -3,15 +3,23 @@ import type {
   Device,
   DeviceDetail,
   ChangeLogPage,
+  ConfigDiff,
+  ConfigSnapshot,
   ImportField,
+  IngestResult,
   InsightReport,
   ImportResult,
   MaintenanceContract,
+  NetworkInterface,
+  RebuildResult,
   Scenario,
   ScenarioDetail,
   ScenarioItem,
   ScenarioSummary,
   Site,
+  TopologyEdge,
+  TopologyGraph,
+  TopologyStats,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
@@ -191,6 +199,54 @@ export const api = {
     }),
   deleteScenarioItem: (itemId: number) =>
     request<void>(`/scenarios/items/${itemId}`, { method: "DELETE" }),
+
+  // --- Config 取り込み ---
+  uploadConfigs: (files: File[], options: { deviceId?: number; applyInventory?: boolean } = {}) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    if (options.deviceId !== undefined) form.append("device_id", String(options.deviceId));
+    form.append("apply_inventory", String(options.applyInventory ?? false));
+    return upload<IngestResult[]>("/configs/upload", form);
+  },
+  previewConfig: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<IngestResult>("/configs/preview", form);
+  },
+  listConfigs: (deviceId?: number) =>
+    request<ConfigSnapshot[]>(`/configs${query({ device_id: deviceId })}`),
+  getConfig: (id: number) => request<ConfigSnapshot & { content: string }>(`/configs/${id}`),
+  diffConfig: (id: number, against?: number) =>
+    request<ConfigDiff>(`/configs/${id}/diff${query({ against })}`),
+  deleteConfig: (id: number) => request<void>(`/configs/${id}`, { method: "DELETE" }),
+  listInterfaces: (deviceId: number) =>
+    request<NetworkInterface[]>(`/configs/devices/${deviceId}/interfaces`),
+
+  // --- トポロジ ---
+  getTopology: (layer: string, includeRetired = false) =>
+    request<TopologyGraph>(`/topology${query({ layer, include_retired: String(includeRetired) })}`),
+  getTopologyStats: (layer: string) => request<TopologyStats>(`/topology/stats${query({ layer })}`),
+  savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>
+    request<{ saved: number }>("/topology/positions", {
+      method: "PUT",
+      body: JSON.stringify({ layer, positions }),
+    }),
+  resetPositions: (layer: string) =>
+    request<{ reset: number }>(`/topology/positions${query({ layer })}`, { method: "DELETE" }),
+  rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
+  createLink: (body: {
+    a_device_id: number;
+    b_device_id: number;
+    a_interface?: string;
+    b_interface?: string;
+    label?: string | null;
+  }) => request<TopologyEdge>("/topology/links", { method: "POST", body: JSON.stringify(body) }),
+  updateLink: (id: number, body: { a_interface?: string; b_interface?: string; label?: string }) =>
+    request<TopologyEdge>(`/topology/links/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteLink: (id: number) => request<void>(`/topology/links/${id}`, { method: "DELETE" }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

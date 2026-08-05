@@ -290,3 +290,169 @@ button:disabled {
   display: inline-block;
   width: auto;
 }
+
+/* --- トポロジ図 --- */
+.topo-canvas {
+  height: 620px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.topo-node {
+  width: 190px;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--sev-unknown);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 12px;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 40%);
+}
+.topo-node.selected {
+  outline: 2px solid var(--accent);
+}
+.topo-node.sev-expired {
+  border-left-color: var(--sev-expired);
+}
+.topo-node.sev-critical {
+  border-left-color: var(--sev-critical);
+}
+.topo-node.sev-warning {
+  border-left-color: var(--sev-warning);
+}
+.topo-node.sev-ok {
+  border-left-color: var(--sev-ok);
+}
+
+.topo-node-head {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin-bottom: 4px;
+}
+.topo-glyph {
+  font-size: 14px;
+  color: var(--accent);
+}
+.topo-hostname {
+  font-weight: 700;
+  font-size: 13px;
+}
+.topo-node-body {
+  line-height: 1.45;
+}
+.topo-node-foot {
+  margin-top: 5px;
+  font-size: 11px;
+}
+.sev-text-expired {
+  color: var(--sev-expired);
+}
+.sev-text-critical {
+  color: var(--sev-critical);
+}
+.sev-text-warning {
+  color: var(--sev-warning);
+}
+.sev-text-ok {
+  color: var(--sev-ok);
+}
+.sev-text-unknown {
+  color: var(--sev-unknown);
+}
+
+/* 自動推定は実線、片側だけの推定は点線、手動は青の実線で区別する */
+.react-flow__edge.topo-edge .react-flow__edge-path {
+  stroke: var(--sev-unknown);
+  stroke-width: 2;
+  stroke-dasharray: 5 4;
+}
+.react-flow__edge.topo-edge.confirmed .react-flow__edge-path {
+  stroke: var(--sev-ok);
+  stroke-dasharray: none;
+}
+.react-flow__edge.topo-edge.manual .react-flow__edge-path {
+  stroke: var(--accent);
+  stroke-dasharray: none;
+}
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke-width: 3.5;
+}
+.react-flow__edge-text {
+  fill: var(--muted);
+  font-size: 10px;
+}
+.react-flow__edge-textbg {
+  fill: var(--panel);
+}
+.react-flow__handle {
+  background: var(--accent);
+  width: 7px;
+  height: 7px;
+  border: none;
+}
+.react-flow__controls button {
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--border);
+  fill: var(--text);
+}
+.topo-minimap {
+  background: var(--panel-2);
+}
+
+.topo-legend {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.topo-legend-line {
+  display: inline-block;
+  width: 26px;
+  height: 0;
+  border-top: 2px dashed var(--sev-unknown);
+}
+.topo-legend-line.confirmed {
+  border-top: 2px solid var(--sev-ok);
+}
+.topo-legend-line.manual {
+  border-top: 2px solid var(--accent);
+}
+
+/* --- Config の差分 --- */
+.diff {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  overflow-x: auto;
+  font-size: 12px;
+  line-height: 1.5;
+  max-height: 460px;
+}
+.diff-add {
+  color: #7ee787;
+  background: rgb(46 160 67 / 12%);
+}
+.diff-del {
+  color: #ffa198;
+  background: rgb(248 81 73 / 12%);
+}
+.diff-hunk {
+  color: var(--accent);
+}
+
+.react-flow__minimap {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.react-flow__minimap-mask {
+  fill: rgb(15 20 25 / 60%);
+}
+.react-flow__minimap-node {
+  fill: var(--accent);
+}

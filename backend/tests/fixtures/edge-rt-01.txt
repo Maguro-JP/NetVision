@@ -1,0 +1,15 @@
+edge-rt-01> show version
+Hostname: edge-rt-01
+Model: mx204
+Junos: 21.4R3-S5.4
+
+edge-rt-01> show configuration | display set
+set system host-name edge-rt-01
+set interfaces ge-0/0/0 description "->core-sw-01"
+set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/24
+set interfaces ge-0/0/1 description "->ISP"
+set interfaces ge-0/0/2 disable
+
+edge-rt-01> show lldp neighbors
+Local Interface  Parent Interface  Chassis Id         Port info          System Name
+ge-0/0/0         -                 00:11:22:33:44:55  GigabitEthernet1/0/1  core-sw-01

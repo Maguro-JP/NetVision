@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     changes,
+    configs,
     dashboard,
     devices,
     exports,
@@ -11,6 +12,7 @@ from app.api.routes import (
     maintenance,
     scenarios,
     sites,
+    topology,
 )
 from app.config import settings
 from app.services import audit  # noqa: F401  変更履歴のフック登録
@@ -39,6 +41,8 @@ app.include_router(exports.router, prefix=api)
 app.include_router(changes.router, prefix=api)
 app.include_router(insights.router, prefix=api)
 app.include_router(scenarios.router, prefix=api)
+app.include_router(configs.router, prefix=api)
+app.include_router(topology.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

@@ -1,0 +1,16 @@
+hostname acc-sw-osaka-01
+!
+version 15.2
+!
+interface GigabitEthernet0/24
+ description ->core-sw-01
+ switchport mode trunk
+!
+interface GigabitEthernet0/1
+ switchport access vlan 20
+!
+acc-sw-osaka-01#show cdp neighbors
+Capability Codes: R - Router, T - Trans Bridge, S - Switch
+Device ID        Local Intrfce     Holdtme    Capability  Platform  Port ID
+core-sw-01       Gig 0/24          176         S I        C9500-40X Gig 1/0/2
+unmanaged-hub    Gig 0/2           140         S          WS-C2960  Fas 0/1

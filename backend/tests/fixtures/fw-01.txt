@@ -1,0 +1,17 @@
+#config-version=FGT100F-7.2.8-FW-build1639-230926:opmode=0:vdom=0
+config system global
+    set hostname "fw-01"
+end
+config system interface
+    edit "port1"
+        set ip 10.1.0.1 255.255.255.0
+        set alias "LAN"
+    next
+    edit "port2"
+        set ip 203.0.113.2 255.255.255.252
+        set description "WAN"
+    next
+    edit "port8"
+        set status down
+    next
+end

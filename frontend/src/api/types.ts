@@ -110,6 +110,133 @@ export interface ImportResult {
   rows: ImportRowResult[];
 }
 
+export type ConfigVendor =
+  | "cisco_ios"
+  | "cisco_nxos"
+  | "juniper"
+  | "fortinet"
+  | "unknown";
+
+export interface FieldDiff {
+  field: string;
+  label: string;
+  current: string | null;
+  observed: string | null;
+  differs: boolean;
+}
+
+export interface UnresolvedNeighbor {
+  local_device: string;
+  local_interface: string;
+  remote_hostname: string;
+  remote_platform: string | null;
+}
+
+export interface IngestResult {
+  filename: string;
+  vendor: ConfigVendor;
+  vendor_label: string;
+  hostname: string | null;
+  device_id: number | null;
+  device_hostname: string | null;
+  matched: boolean;
+  unchanged: boolean;
+  snapshot_id: number | null;
+  interface_count: number;
+  neighbor_count: number;
+  vlan_count: number;
+  links_created: number;
+  diffs: FieldDiff[];
+  applied_fields: string[];
+  unresolved_neighbors: UnresolvedNeighbor[];
+  message: string | null;
+}
+
+export interface ConfigSnapshot {
+  id: number;
+  device_id: number | null;
+  hostname: string | null;
+  filename: string;
+  sha256: string;
+  vendor: string | null;
+  parsed_os_name: string | null;
+  parsed_os_version: string | null;
+  parsed_model: string | null;
+  parsed_serial: string | null;
+  interface_count: number;
+  neighbor_count: number;
+  created_at: string;
+}
+
+export interface ConfigDiff {
+  from_id: number;
+  to_id: number;
+  diff: string;
+  changed: boolean;
+}
+
+export interface NetworkInterface {
+  id: number;
+  device_id: number;
+  name: string;
+  description: string | null;
+  ip_address: string | null;
+  vlan: number | null;
+  mode: string | null;
+  enabled: boolean;
+}
+
+export type LinkOrigin = "discovered" | "manual";
+
+export interface TopologyNode {
+  device_id: number;
+  hostname: string;
+  vendor: string;
+  model: string;
+  device_type: DeviceType;
+  status: DeviceStatus;
+  site_name: string | null;
+  mgmt_ip: string | null;
+  severity: Severity;
+  interface_count: number;
+  x: number;
+  y: number;
+  placed: boolean;
+}
+
+export interface TopologyEdge {
+  id: number;
+  source: number;
+  target: number;
+  source_interface: string;
+  target_interface: string;
+  origin: LinkOrigin;
+  protocol: string | null;
+  label: string | null;
+  confirmed_both_ways: boolean;
+}
+
+export interface TopologyGraph {
+  layer: string;
+  nodes: TopologyNode[];
+  edges: TopologyEdge[];
+  unplaced_count: number;
+}
+
+export interface TopologyStats {
+  device_count: number;
+  link_count: number;
+  discovered_links: number;
+  manual_links: number;
+  confirmed_links: number;
+  isolated_devices: string[];
+}
+
+export interface RebuildResult {
+  links_created: number;
+  unresolved_neighbors: UnresolvedNeighbor[];
+}
+
 export type InsightCategory = "cost" | "risk" | "data" | "consolidation";
 
 export interface Insight {

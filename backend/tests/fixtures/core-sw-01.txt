@@ -1,0 +1,54 @@
+core-sw-01#show version
+Cisco IOS XE Software, Version 17.09.04a
+Cisco IOS Software [Cupertino], Catalyst L3 Switch Software (CAT9K_IOSXE), Version 17.9.4a, RELEASE SOFTWARE (fc2)
+
+cisco C9500-40X (X86) processor with 1331521K/6147K bytes of memory.
+Model Number                       : C9500-40X
+System Serial Number               : FOC2401A001
+
+core-sw-01#show running-config
+Building configuration...
+
+version 17.9
+hostname core-sw-01
+!
+vlan 10
+ name SERVER
+!
+vlan 20
+ name OFFICE
+!
+interface GigabitEthernet1/0/1
+ description ->edge-rt-01
+ switchport mode trunk
+!
+interface GigabitEthernet1/0/2
+ description ->acc-sw-osaka-01
+ switchport mode trunk
+!
+interface GigabitEthernet1/0/24
+ description 未使用
+ switchport access vlan 20
+ shutdown
+!
+interface Vlan10
+ ip address 10.0.0.11 255.255.255.0
+!
+end
+
+core-sw-01#show cdp neighbors detail
+-------------------------
+Device ID: edge-rt-01.example.local
+Entry address(es):
+  IP address: 10.0.0.1
+Platform: Juniper MX204,  Capabilities: Router
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): ge-0/0/0
+Holdtime : 143 sec
+
+-------------------------
+Device ID: acc-sw-osaka-01(FOC1234ABCD)
+Entry address(es):
+  IP address: 10.1.0.21
+Platform: cisco WS-C2960X-48TS-L,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/2,  Port ID (outgoing port): GigabitEthernet0/24
+Holdtime : 160 sec

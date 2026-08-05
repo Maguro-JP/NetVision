@@ -19,6 +19,8 @@ Excel 台帳ではなく、常に最新の状態で見られるようにする�
 - **変更履歴** — 機器・保守契約・拠点への変更をすべて自動記録。誰がいつ何をどう変えたかを追える
 - **最適化の指摘** — 払わなくてよい保守費とリスクを洗い出し、年間削減見込みを算出
 - **将来構成シナリオ** — 台帳に触れずに「入れ替えたらどうなるか」を試算し、現状と比較
+- **Config の取り込み** — running-config / show 出力から構成情報を自動抽出、世代管理と差分表示
+- **トポロジ図** — LLDP / CDP から結線を自動推定し、人が配置を整えて仕上げる図エディタ
 
 `unknown`（情報未登録）を `ok` より重い扱いにしているのは、台帳の抜けを見逃さないためです。
 
@@ -37,13 +39,15 @@ backend/
     models/      SQLAlchemy モデル（Device / MaintenanceContract / Site）
     schemas/     Pydantic スキーマ（API の入出力）
     services/    ライフサイクル判定・取り込み・書き出し・変更履歴・指摘・シナリオ
+      configparse/ ベンダー別 Config パーサ（Cisco / Juniper / Fortinet）
     api/routes/  エンドポイント
   alembic/       DB マイグレーション
   scripts/seed.py  デモデータ投入
   tests/         pytest
 frontend/
-  src/pages/     画面（ダッシュボード / 機器一覧 / 詳細 / 拠点 / 取り込み /
-                 最適化の指摘 / 将来構成シナリオ / 変更履歴）
+  src/pages/     画面（ダッシュボード / トポロジ図 / 機器一覧 / 詳細 / 拠点 /
+                 Config取り込み / 台帳取り込み / 最適化の指摘 /
+                 将来構成シナリオ / 変更履歴）
   src/api/       API クライアントと型定義
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
@@ -183,6 +187,51 @@ Excel でそのまま開けるよう BOM 付き UTF-8）。
 対象の機器が台帳から削除されても案は残り（何を検討していたかは名前で残る）、
 比較時に警告が出ます。
 
+## Config の取り込み
+
+running-config や show 出力を読み込み、**機器情報・インターフェース・VLAN・隣接情報**を抽出します。
+Cisco IOS / IOS-XE / NX-OS、Juniper Junos、Fortinet FortiOS に対応（ベンダーは自動判別）。
+
+`show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
+CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
+
+### 抽出するもの
+
+| 種別 | 内容 |
+|---|---|
+| 機器情報 | ホスト名、型番、シリアル、OS名、OSバージョン |
+| インターフェース | 名前、description、IPアドレス、VLAN、access/trunk、shutdown 状態 |
+| VLAN | ID と名前 |
+| 隣接情報 | LLDP / CDP のネイバー（detail 形式・表形式の両方） |
+
+### 台帳との関係（重要）
+
+**Config から読み取った値で台帳を自動上書きしません。** 実機と台帳が食い違っていること自体が
+情報だからです。取り込み時は差分を提示するだけで、反映するかどうかは人が選びます。
+
+さらに、`running-config` の `version 15.2` のように**Config 側の情報が粗いだけ**の場合は
+差分として扱いません（適用しても台帳の `15.2(7)E6` を劣化させないため）。
+
+Config の原文は世代ごとに保存され、前の世代との差分を表示できます。同じ内容を再取り込みしても
+世代は増えません（sha256 で判定）。変更追跡・監査の証跡として使えます。
+
+## トポロジ図
+
+**Config を取り込むだけで、結線が自動で組み上がります。** LLDP / CDP のネイバー情報から
+「どの機器のどのポートが、どの機器のどのポートに繋がっているか」を推定します。
+
+- `Gi1/0/2` と `GigabitEthernet1/0/2`、`sw2.example.com` と `sw2` のような表記ゆれは吸収します
+- **両側の機器から同じ結線が見えたものは「確認済み」**として区別します（実線 / 点線）
+- 台帳に無い機器と繋がっている場合は、記載漏れの可能性として報告します
+- 機器が後から登録された場合は「Config から結線を作り直す」で再推定できます
+
+図の上では次のことができます。
+
+- ノードをドラッグして配置を整える（**配置は保存され、機器が増えても崩れません**）
+- ノード同士をつないで**手で線を引く**（自動再推定しても手で引いた線は消えません）
+- 線を選んで削除、レイヤ（物理 / L2 / L3 / 論理）ごとに別の配置を持つ
+- ノードの色は保守期限・EoL のアラート状態と連動します
+
 ## 設定（環境変数）
 
 | 変数 | 既定値 | 説明 |
@@ -220,6 +269,16 @@ Excel でそのまま開けるよう BOM 付き UTF-8）。
 | POST | `/scenarios/{id}/generate` | 期限が近い機器からたたき台を生成 |
 | POST | `/scenarios/{id}/items` | シナリオ項目の追加 |
 | PATCH / DELETE | `/scenarios/items/{id}` | シナリオ項目の更新・削除 |
+| POST | `/configs/upload` | Config を取り込み（複数可、`apply_inventory` で台帳へ反映） |
+| POST | `/configs/preview` | 保存せずに読み取り内容だけ確認 |
+| GET | `/configs` | 取り込み履歴 |
+| GET | `/configs/{id}/diff` | Config の世代間差分 |
+| GET | `/configs/devices/{id}/interfaces` | 抽出したインターフェース一覧 |
+| GET | `/topology` | 図のノードと結線（`layer` 指定可） |
+| GET | `/topology/stats` | 結線の統計と未接続機器 |
+| PUT / DELETE | `/topology/positions` | ノード配置の保存・リセット |
+| POST | `/topology/rebuild` | Config から結線を再推定 |
+| POST / PATCH / DELETE | `/topology/links` | 手動での結線の追加・更新・削除 |
 | GET / POST | `/sites` | 拠点の一覧・登録 |
 | PATCH / DELETE | `/sites/{id}` | 拠点の更新・削除 |
 
@@ -232,5 +291,5 @@ cd frontend && npm test && npm run typecheck
 
 ## 今後
 
-Config 取り込みによる構成情報の自動抽出、LLDP/CDP からのトポロジ自動生成、
-図エディタでの可視化、CVE 突合を予定しています。詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。
+脆弱性情報（CVE）の突合と、更改計画のトポロジ上での影響範囲表示を予定しています。
+詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。

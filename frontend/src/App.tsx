@@ -2,11 +2,13 @@ import { NavLink, Outlet } from "react-router-dom";
 
 const NAV = [
   { to: "/dashboard", label: "ダッシュボード" },
+  { to: "/topology", label: "トポロジ図" },
   { to: "/devices", label: "機器一覧" },
   { to: "/sites", label: "拠点" },
   { to: "/insights", label: "最適化の指摘" },
   { to: "/scenarios", label: "将来構成シナリオ" },
   { to: "/changes", label: "変更履歴" },
+  { to: "/configs", label: "Configの取り込み" },
   { to: "/import", label: "台帳の取り込み" },
 ];
 
