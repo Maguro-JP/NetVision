@@ -104,6 +104,18 @@ export const api = {
     }),
   deleteContract: (id: number) => request<void>(`/contracts/${id}`, { method: "DELETE" }),
 
+  /** 書き出しURL。一覧の絞り込みをそのまま引き継いで出力する。 */
+  exportUrl: (
+    format: "csv" | "xlsx",
+    filters: DeviceFilters = {},
+    options: { includeStatus?: boolean; encoding?: "utf-8" | "shift_jis" } = {},
+  ) => {
+    const params: Record<string, string | number | undefined> = { ...filters };
+    if (options.includeStatus === false) params.include_status = "false";
+    if (format === "csv" && options.encoding) params.encoding = options.encoding;
+    return `${BASE}/export/devices.${format}${query(params)}`;
+  },
+
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
   importDevices: (options: ImportOptions) => {

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import dashboard, devices, imports, maintenance, sites
+from app.api.routes import dashboard, devices, exports, imports, maintenance, sites
 from app.config import settings
 
 app = FastAPI(
@@ -24,6 +24,7 @@ app.include_router(maintenance.router, prefix=api)
 app.include_router(sites.router, prefix=api)
 app.include_router(dashboard.router, prefix=api)
 app.include_router(imports.router, prefix=api)
+app.include_router(exports.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

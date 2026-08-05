@@ -216,3 +216,21 @@ def test_fields_and_template_endpoints(client):
     assert res.status_code == 200
     assert res.text.startswith("﻿")
     assert "ホスト名" in res.text
+
+
+def test_excel_without_extension_is_detected_by_content(client):
+    """拡張子が付かない状態で保存されても、中身が xlsx なら読める。"""
+    from openpyxl import Workbook
+
+    workbook = Workbook()
+    workbook.active.append(["ホスト名", "ベンダー", "型番"])
+    workbook.active.append(["no-ext-01", "Cisco", "C9200"])
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+
+    res = client.post(
+        f"{API}/import/devices/preview",
+        files={"file": ("download", buffer.getvalue(), "application/octet-stream")},
+    )
+    assert res.status_code == 200, res.text
+    assert res.json()["created"] == 1

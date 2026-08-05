@@ -82,3 +82,19 @@ def test_parse_device_type_and_status_accept_japanese():
     assert parse_device_status("撤去済み") is DeviceStatus.RETIRED
     with pytest.raises(CellValueError):
         parse_device_type("なにか")
+
+
+def test_collect_samples_formats_excel_dates_and_dedupes():
+    from datetime import datetime
+
+    from app.services.importer import collect_samples
+
+    rows = [
+        {"導入日": datetime(2021, 4, 1, 0, 0), "拠点": "本社"},
+        {"導入日": datetime(2021, 4, 1, 0, 0), "拠点": "大阪"},
+        {"導入日": "", "拠点": "本社"},
+    ]
+    samples = collect_samples(["導入日", "拠点"], rows)
+
+    assert samples["導入日"] == ["2021/04/01"]  # 重複と空欄は除く
+    assert samples["拠点"] == ["本社", "大阪"]

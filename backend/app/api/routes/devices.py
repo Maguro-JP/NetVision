@@ -1,14 +1,15 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import or_, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import to_device_detail, to_device_read
 from app.db import get_db
 from app.models import Device, DeviceStatus, DeviceType, Site
 from app.schemas import DeviceCreate, DeviceDetail, DeviceRead, DeviceUpdate
-from app.services.lifecycle import Severity, evaluate
+from app.services.device_query import DeviceFilters, query_devices
+from app.services.lifecycle import Severity
 
 router = APIRouter(prefix="/devices", tags=["devices"])
 
@@ -41,33 +42,17 @@ def list_devices(
     limit: int = Query(default=200, le=1000),
     offset: int = 0,
 ) -> list[DeviceRead]:
-    stmt = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
-
-    if q:
-        like = f"%{q}%"
-        stmt = stmt.where(
-            or_(
-                Device.hostname.ilike(like),
-                Device.model.ilike(like),
-                Device.serial_number.ilike(like),
-            )
-        )
-    if vendor:
-        stmt = stmt.where(Device.vendor == vendor)
-    if device_type:
-        stmt = stmt.where(Device.device_type == device_type)
-    if device_status:
-        stmt = stmt.where(Device.status == device_status)
-    if site_id is not None:
-        stmt = stmt.where(Device.site_id == site_id)
-
-    devices = list(db.scalars(stmt.order_by(Device.hostname)))
-
-    # 重要度は日付から算出するため SQL では絞れない。
-    # 想定規模（〜数千台）ではアプリ側で判定して問題ない。
-    if severity is not None:
-        devices = [d for d in devices if evaluate(d).overall_severity == severity]
-
+    devices = query_devices(
+        db,
+        DeviceFilters(
+            q=q,
+            vendor=vendor,
+            device_type=device_type,
+            status=device_status,
+            site_id=site_id,
+            severity=severity,
+        ),
+    )
     return [to_device_read(d) for d in devices[offset : offset + limit]]
 
 

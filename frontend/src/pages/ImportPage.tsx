@@ -63,8 +63,11 @@ export default function ImportPage() {
     <>
       <h1>台帳の取り込み</h1>
       <p className="subtitle">
-        既存の Excel / CSV 台帳をそのまま読み込みます。列名は自動で対応付けますが、
-        取り込み前に必ず内容を確認できます。
+        既存の Excel / CSV 台帳をそのまま読み込みます。列名は自動で対応付け、
+        合っていない列は下の「列の対応付け」で選び直せます。取り込み前に必ず内容を確認できます。
+        <br />
+        <Link to="/devices">機器一覧</Link>
+        から書き出したファイルは、そのまま編集して取り込み直せます。
       </p>
 
       <div className="form-grid">
@@ -184,6 +187,7 @@ export default function ImportPage() {
             <thead>
               <tr>
                 <th>ファイルの列名</th>
+                <th>データの例</th>
                 <th>取り込み先</th>
               </tr>
             </thead>
@@ -191,6 +195,9 @@ export default function ImportPage() {
               {columns.map((column) => (
                 <tr key={column}>
                   <td>{column}</td>
+                  <td className="muted" style={{ maxWidth: 360, overflow: "hidden" }}>
+                    {(result.column_samples[column] ?? []).join(" / ") || "（空）"}
+                  </td>
                   <td>
                     <select
                       value={mapping[column] ?? result.mapping[column] ?? ""}

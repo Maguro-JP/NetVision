@@ -39,4 +39,7 @@ class ImportResult(BaseModel):
     mapping: dict[str, str] = Field(description="{ファイルの列名: 取り込み先フィールド}")
     unmapped_columns: list[str] = Field(description="対応付けできなかった列")
     missing_required_fields: list[str] = Field(description="必須項目のうち未対応付けのもの")
+    column_samples: dict[str, list[str]] = Field(
+        default_factory=dict, description="{列名: 実データの例}。列の対応付けを判断する材料"
+    )
     rows: list[ImportRowResult]

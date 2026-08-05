@@ -81,6 +81,27 @@ export default function DeviceListPage() {
         </Link>
       </div>
 
+      <div className="toolbar">
+        <span className="muted" style={{ alignSelf: "center" }}>
+          絞り込んだ {data?.length ?? 0} 件を書き出す:
+        </span>
+        <a href={api.exportUrl("xlsx", filters)}>
+          <button>Excel (.xlsx)</button>
+        </a>
+        <a href={api.exportUrl("csv", filters, { encoding: "utf-8" })}>
+          <button>CSV (UTF-8)</button>
+        </a>
+        <a href={api.exportUrl("csv", filters, { encoding: "shift_jis" })}>
+          <button>CSV (Shift_JIS)</button>
+        </a>
+        <a
+          href={api.exportUrl("csv", filters, { includeStatus: false })}
+          title="算出列を除いた、取り込み用の列だけのCSVです。編集して取り込み直せます。"
+        >
+          <button>取り込み用CSV</button>
+        </a>
+      </div>
+
       {error && <div className="error">{(error as Error).message}</div>}
       {isLoading ? <p className="muted">読み込み中…</p> : <DeviceTable devices={data ?? []} />}
     </>

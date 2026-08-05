@@ -24,9 +24,13 @@ class Table:
     rows: list[dict[str, object]] = field(default_factory=list)
 
 
+ZIP_MAGIC = b"PK\x03\x04"
+
+
 def read_table(filename: str, content: bytes) -> Table:
     name = (filename or "").lower()
-    if name.endswith((".xlsx", ".xlsm")):
+    # .xlsx は ZIP なので、拡張子が付いていない/変えられていても中身で判別できる
+    if content.startswith(ZIP_MAGIC) or name.endswith((".xlsx", ".xlsm")):
         return _read_excel(content)
     if name.endswith((".csv", ".txt", ".tsv")):
         return _read_csv(content, delimiter="\t" if name.endswith(".tsv") else None)

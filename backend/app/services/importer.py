@@ -277,8 +277,11 @@ def normalize_header(header: str) -> str:
 
 
 _ALIAS_INDEX: dict[str, str] = {}
+# 書き出したファイルをそのまま取り込み直せるよう、表示ラベル自体も必ず別名に含める
+for _field, _label in FIELD_LABELS.items():
+    _ALIAS_INDEX[normalize_header(_label)] = _field
 for _field, _aliases in FIELD_ALIASES.items():
-    _ALIAS_INDEX[normalize_header(_field)] = _field
+    _ALIAS_INDEX.setdefault(normalize_header(_field), _field)
     for _alias in _aliases:
         _ALIAS_INDEX.setdefault(normalize_header(_alias), _field)
 
@@ -408,6 +411,7 @@ class ImportOutcome:
     mapping: dict[str, str]
     unmapped_columns: list[str]
     missing_required_fields: list[str]
+    column_samples: dict[str, list[str]]
     rows: list[RowResult]
 
 
@@ -416,6 +420,32 @@ class KeyField(enum.StrEnum):
 
     HOSTNAME = "hostname"
     SERIAL_NUMBER = "serial_number"
+
+
+def _sample_text(value: object) -> str:
+    """Excel の日付セルは datetime で返るので、時刻を落として見やすくする。"""
+    if isinstance(value, datetime):
+        return value.strftime("%Y/%m/%d")
+    if isinstance(value, date):
+        return value.strftime("%Y/%m/%d")
+    return str(value or "").strip()
+
+
+def collect_samples(
+    headers: list[str], rows: list[dict[str, object]], limit: int = 3
+) -> dict[str, list[str]]:
+    """列ごとの実データの例。画面で列を対応付けるとき、列名だけでは判断しづらいため添える。"""
+    samples: dict[str, list[str]] = {}
+    for header in headers:
+        values: list[str] = []
+        for row in rows:
+            text = _sample_text(row.get(header, ""))
+            if text and text not in values:
+                values.append(text)
+            if len(values) >= limit:
+                break
+        samples[header] = values
+    return samples
 
 
 def run_import(
@@ -437,6 +467,7 @@ def run_import(
         else:
             mapping.pop(column, None)  # 空文字は「この列は使わない」の意味
 
+    samples = collect_samples(table_headers, table_rows)
     mapped_fields = set(mapping.values())
     missing_required = [f for f in REQUIRED_FIELDS if f not in mapped_fields]
     unmapped = [h for h in table_headers if h not in mapping]
@@ -455,6 +486,7 @@ def run_import(
             mapping=mapping,
             unmapped_columns=unmapped,
             missing_required_fields=missing_required,
+            column_samples=samples,
             rows=[],
         )
 
@@ -551,6 +583,7 @@ def run_import(
         mapping=mapping,
         unmapped_columns=unmapped,
         missing_required_fields=[],
+        column_samples=samples,
         rows=results,
     )
 

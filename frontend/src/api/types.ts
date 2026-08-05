@@ -106,6 +106,7 @@ export interface ImportResult {
   mapping: Record<string, string>;
   unmapped_columns: string[];
   missing_required_fields: string[];
+  column_samples: Record<string, string[]>;
   rows: ImportRowResult[];
 }
 
