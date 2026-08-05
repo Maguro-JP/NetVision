@@ -1,0 +1,292 @@
+:root {
+  --bg: #0f1419;
+  --panel: #171d24;
+  --panel-2: #1e252e;
+  --border: #2a3340;
+  --text: #e6edf3;
+  --muted: #8b98a5;
+  --accent: #4c9aff;
+
+  --sev-expired: #f04747;
+  --sev-critical: #f2913d;
+  --sev-warning: #e3c000;
+  --sev-ok: #3ba55d;
+  --sev-unknown: #6e7b8b;
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family:
+    system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+  font-size: 14px;
+}
+
+a {
+  color: var(--accent);
+  text-decoration: none;
+}
+a:hover {
+  text-decoration: underline;
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 220px 1fr;
+  min-height: 100vh;
+}
+
+.sidebar {
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 20px 0;
+}
+
+.brand {
+  font-size: 20px;
+  font-weight: 700;
+  padding: 0 20px 20px;
+  letter-spacing: 0.5px;
+}
+.brand span {
+  color: var(--accent);
+}
+
+.nav a {
+  display: block;
+  padding: 10px 20px;
+  color: var(--muted);
+}
+.nav a:hover {
+  background: var(--panel-2);
+  text-decoration: none;
+}
+.nav a.active {
+  color: var(--text);
+  background: var(--panel-2);
+  border-left: 3px solid var(--accent);
+  padding-left: 17px;
+}
+
+.main {
+  padding: 24px 28px 60px;
+  overflow-x: auto;
+}
+
+h1 {
+  font-size: 22px;
+  margin: 0 0 4px;
+}
+h2 {
+  font-size: 16px;
+  margin: 28px 0 12px;
+}
+.subtitle {
+  color: var(--muted);
+  margin: 0 0 20px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 12px;
+}
+
+.card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.card .label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.card .value {
+  font-size: 26px;
+  font-weight: 700;
+  margin-top: 4px;
+}
+.card.clickable {
+  cursor: pointer;
+}
+.card.clickable:hover {
+  border-color: var(--accent);
+}
+
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+th,
+td {
+  text-align: left;
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+th {
+  background: var(--panel-2);
+  color: var(--muted);
+  font-weight: 600;
+  font-size: 12px;
+}
+tbody tr:last-child td {
+  border-bottom: none;
+}
+tbody tr:hover {
+  background: var(--panel-2);
+}
+
+.badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #0f1419;
+}
+.badge.expired {
+  background: var(--sev-expired);
+  color: #fff;
+}
+.badge.critical {
+  background: var(--sev-critical);
+}
+.badge.warning {
+  background: var(--sev-warning);
+}
+.badge.ok {
+  background: var(--sev-ok);
+  color: #fff;
+}
+.badge.unknown {
+  background: var(--sev-unknown);
+  color: #fff;
+}
+
+.toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 14px;
+}
+
+input,
+select,
+textarea,
+button {
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+}
+input:focus,
+select:focus,
+textarea:focus {
+  outline: 1px solid var(--accent);
+}
+
+button {
+  cursor: pointer;
+}
+button:hover {
+  border-color: var(--accent);
+}
+button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #06121f;
+  font-weight: 600;
+}
+button.danger {
+  color: var(--sev-expired);
+}
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.field label {
+  color: var(--muted);
+  font-size: 12px;
+}
+.field.wide {
+  grid-column: 1 / -1;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 14px;
+}
+
+.error {
+  background: #3a1c1c;
+  border: 1px solid var(--sev-expired);
+  color: #ffc9c9;
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+}
+
+.muted {
+  color: var(--muted);
+}
+.empty {
+  color: var(--muted);
+  padding: 24px;
+  text-align: center;
+  background: var(--panel);
+  border: 1px dashed var(--border);
+  border-radius: 8px;
+}
+
+.kv {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px 20px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 16px;
+}
+.kv div span {
+  display: block;
+}
+.kv .k {
+  color: var(--muted);
+  font-size: 12px;
+}
+/* 上の span{display:block} を打ち消して、バッジは文字幅のまま並べる */
+.kv .badge {
+  display: inline-block;
+  width: auto;
+}

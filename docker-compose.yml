@@ -1,0 +1,39 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: netvision
+      POSTGRES_PASSWORD: netvision
+      POSTGRES_DB: netvision
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U netvision"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./backend
+    environment:
+      NETVISION_DATABASE_URL: postgresql+psycopg://netvision:netvision@db:5432/netvision
+      NETVISION_CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
+    depends_on:
+      db:
+        condition: service_healthy
+    # 起動時にマイグレーションを適用してから API を立ち上げる
+    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    ports:
+      - "8000:8000"
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  pgdata:

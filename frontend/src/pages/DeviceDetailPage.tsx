@@ -1,0 +1,309 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+
+import { api } from "../api/client";
+import type { MaintenanceContract } from "../api/types";
+import SeverityBadge from "../components/SeverityBadge";
+import {
+  DEVICE_STATUS_LABEL,
+  DEVICE_TYPE_LABEL,
+  formatCurrency,
+  formatDate,
+  formatRemaining,
+} from "../lib/format";
+
+const EMPTY_CONTRACT = {
+  provider: "",
+  contract_number: "",
+  service_level: "",
+  start_date: "",
+  end_date: "",
+  annual_cost: "",
+  contact: "",
+};
+
+export default function DeviceDetailPage() {
+  const { id } = useParams();
+  const deviceId = Number(id);
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [contract, setContract] = useState({ ...EMPTY_CONTRACT });
+  const [showForm, setShowForm] = useState(false);
+
+  const { data: device, isLoading, error } = useQuery({
+    queryKey: ["device", id],
+    queryFn: () => api.getDevice(deviceId),
+  });
+
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["device", id] });
+    queryClient.invalidateQueries({ queryKey: ["devices"] });
+    queryClient.invalidateQueries({ queryKey: ["summary"] });
+  };
+
+  const addContract = useMutation({
+    mutationFn: () =>
+      api.createContract(deviceId, {
+        ...contract,
+        contract_number: contract.contract_number || null,
+        service_level: contract.service_level || null,
+        contact: contract.contact || null,
+        annual_cost: contract.annual_cost ? Number(contract.annual_cost) : null,
+      } as Partial<MaintenanceContract>),
+    onSuccess: () => {
+      setContract({ ...EMPTY_CONTRACT });
+      setShowForm(false);
+      refresh();
+    },
+  });
+
+  const removeContract = useMutation({
+    mutationFn: (contractId: number) => api.deleteContract(contractId),
+    onSuccess: refresh,
+  });
+
+  const removeDevice = useMutation({
+    mutationFn: () => api.deleteDevice(deviceId),
+    onSuccess: () => {
+      refresh();
+      navigate("/devices");
+    },
+  });
+
+  if (isLoading) return <p className="muted">読み込み中…</p>;
+  if (error) return <div className="error">{(error as Error).message}</div>;
+  if (!device) return null;
+
+  const lc = device.lifecycle;
+  const set = (key: keyof typeof EMPTY_CONTRACT) => (e: { target: { value: string } }) =>
+    setContract((prev) => ({ ...prev, [key]: e.target.value }));
+
+  return (
+    <>
+      <h1>
+        {device.hostname} <SeverityBadge severity={lc.overall_severity} />
+      </h1>
+      <p className="subtitle">
+        <Link to="/devices">← 機器一覧</Link>
+      </p>
+
+      <div className="toolbar">
+        <Link to={`/devices/${device.id}/edit`}>
+          <button className="primary">編集</button>
+        </Link>
+        <button
+          className="danger"
+          onClick={() => {
+            if (confirm(`${device.hostname} を削除します。よろしいですか？`)) {
+              removeDevice.mutate();
+            }
+          }}
+        >
+          削除
+        </button>
+      </div>
+
+      <h2>基本情報</h2>
+      <div className="kv">
+        <div>
+          <span className="k">ベンダー / 型番</span>
+          <span>
+            {device.vendor} / {device.model}
+          </span>
+        </div>
+        <div>
+          <span className="k">種別 / 状態</span>
+          <span>
+            {DEVICE_TYPE_LABEL[device.device_type]} / {DEVICE_STATUS_LABEL[device.status]}
+          </span>
+        </div>
+        <div>
+          <span className="k">シリアル番号</span>
+          <span>{device.serial_number ?? "—"}</span>
+        </div>
+        <div>
+          <span className="k">OS / バージョン</span>
+          <span>
+            {device.os_name ?? "—"} {device.os_version ?? ""}
+          </span>
+        </div>
+        <div>
+          <span className="k">ファームウェア</span>
+          <span>{device.firmware_version ?? "—"}</span>
+        </div>
+        <div>
+          <span className="k">設置場所</span>
+          <span>
+            {device.site_name ?? "—"}
+            {device.rack ? ` / ${device.rack}` : ""}
+            {device.rack_unit ? ` ${device.rack_unit}` : ""}
+          </span>
+        </div>
+        <div>
+          <span className="k">管理IP</span>
+          <span>{device.mgmt_ip ?? "—"}</span>
+        </div>
+        <div>
+          <span className="k">導入日 / 経過年数</span>
+          <span>
+            {formatDate(device.install_date)}
+            {lc.age_years !== null ? ` (${lc.age_years}年)` : ""}
+          </span>
+        </div>
+      </div>
+
+      <h2>ライフサイクル</h2>
+      <div className="kv">
+        <div>
+          <span className="k">保守期限</span>
+          <span>
+            {formatDate(lc.maintenance_end)}{" "}
+            <span className="muted">{formatRemaining(lc.days_to_maintenance_end)}</span>{" "}
+            <SeverityBadge severity={lc.maintenance_severity} />
+          </span>
+        </div>
+        <div>
+          <span className="k">販売終了 (EoS)</span>
+          <span>
+            {formatDate(device.eos_date)}{" "}
+            <span className="muted">{formatRemaining(lc.days_to_eos)}</span>
+          </span>
+        </div>
+        <div>
+          <span className="k">サポート終了 (EoL)</span>
+          <span>
+            {formatDate(device.eol_date)}{" "}
+            <span className="muted">{formatRemaining(lc.days_to_eol)}</span>{" "}
+            <SeverityBadge severity={lc.eol_severity} />
+          </span>
+        </div>
+      </div>
+
+      <h2>保守契約</h2>
+      {device.contracts.length === 0 ? (
+        <div className="empty">保守契約が登録されていません</div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>契約番号</th>
+              <th>保守ベンダー</th>
+              <th>サービスレベル</th>
+              <th>期間</th>
+              <th>年額</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {device.contracts.map((c) => (
+              <tr key={c.id}>
+                <td>{c.contract_number ?? "—"}</td>
+                <td>{c.provider}</td>
+                <td>{c.service_level ?? "—"}</td>
+                <td>
+                  {formatDate(c.start_date)} 〜 {formatDate(c.end_date)}
+                </td>
+                <td>{formatCurrency(c.annual_cost)}</td>
+                <td>
+                  <button className="danger" onClick={() => removeContract.mutate(c.id)}>
+                    削除
+                  </button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+
+      <div className="actions">
+        <button onClick={() => setShowForm((v) => !v)}>
+          {showForm ? "入力をやめる" : "保守契約を追加"}
+        </button>
+      </div>
+
+      {showForm && (
+        <form
+          style={{ marginTop: 12 }}
+          onSubmit={(e) => {
+            e.preventDefault();
+            addContract.mutate();
+          }}
+        >
+          {addContract.error && <div className="error">{(addContract.error as Error).message}</div>}
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="provider">保守ベンダー *</label>
+              <input id="provider" required value={contract.provider} onChange={set("provider")} />
+            </div>
+            <div className="field">
+              <label htmlFor="contract_number">契約番号</label>
+              <input
+                id="contract_number"
+                value={contract.contract_number}
+                onChange={set("contract_number")}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="service_level">サービスレベル</label>
+              <input
+                id="service_level"
+                placeholder="24x365 4時間駆付 など"
+                value={contract.service_level}
+                onChange={set("service_level")}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="start_date">開始日 *</label>
+              <input
+                id="start_date"
+                type="date"
+                required
+                value={contract.start_date}
+                onChange={set("start_date")}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="end_date">終了日 *</label>
+              <input
+                id="end_date"
+                type="date"
+                required
+                value={contract.end_date}
+                onChange={set("end_date")}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="annual_cost">年額（円）</label>
+              <input
+                id="annual_cost"
+                type="number"
+                min={0}
+                value={contract.annual_cost}
+                onChange={set("annual_cost")}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="contact">連絡先</label>
+              <input id="contact" value={contract.contact} onChange={set("contact")} />
+            </div>
+          </div>
+          <div className="actions">
+            <button className="primary" type="submit" disabled={addContract.isPending}>
+              追加
+            </button>
+          </div>
+        </form>
+      )}
+
+      {device.notes && (
+        <>
+          <h2>備考</h2>
+          <div className="kv">
+            <div style={{ whiteSpace: "pre-wrap" }}>{device.notes}</div>
+          </div>
+        </>
+      )}
+    </>
+  );
+}
