@@ -1,8 +1,19 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api.routes import dashboard, devices, exports, imports, maintenance, sites
+from app.api.routes import (
+    changes,
+    dashboard,
+    devices,
+    exports,
+    imports,
+    insights,
+    maintenance,
+    scenarios,
+    sites,
+)
 from app.config import settings
+from app.services import audit  # noqa: F401  変更履歴のフック登録
 
 app = FastAPI(
     title="NetVision API",
@@ -25,6 +36,9 @@ app.include_router(sites.router, prefix=api)
 app.include_router(dashboard.router, prefix=api)
 app.include_router(imports.router, prefix=api)
 app.include_router(exports.router, prefix=api)
+app.include_router(changes.router, prefix=api)
+app.include_router(insights.router, prefix=api)
+app.include_router(scenarios.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

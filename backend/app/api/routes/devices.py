@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.api.deps import to_device_detail, to_device_read
 from app.db import get_db
-from app.models import Device, DeviceStatus, DeviceType, Site
+from app.models import Device, DeviceStatus, DeviceType, ScenarioItem, Site
 from app.schemas import DeviceCreate, DeviceDetail, DeviceRead, DeviceUpdate
 from app.services.device_query import DeviceFilters, query_devices
 from app.services.lifecycle import Severity
@@ -108,5 +108,11 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
 
 @router.delete("/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_device(device_id: int, db: DbSession) -> None:
-    db.delete(_load(db, device_id))
+    device = _load(db, device_id)
+
+    # 将来構成シナリオはこの機器が消えても案として残す（何を検討していたかは device_label に残る）
+    for item in db.scalars(select(ScenarioItem).where(ScenarioItem.device_id == device_id)):
+        item.device_id = None
+
+    db.delete(device)
     db.commit()

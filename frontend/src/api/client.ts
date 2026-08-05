@@ -2,9 +2,15 @@ import type {
   DashboardSummary,
   Device,
   DeviceDetail,
+  ChangeLogPage,
   ImportField,
+  InsightReport,
   ImportResult,
   MaintenanceContract,
+  Scenario,
+  ScenarioDetail,
+  ScenarioItem,
+  ScenarioSummary,
   Site,
 } from "./types";
 
@@ -76,6 +82,17 @@ export interface ImportOptions {
   commit: boolean;
 }
 
+export interface ChangeFilters extends Record<string, string | number | undefined> {
+  entity_type?: string;
+  entity_id?: number;
+  action?: string;
+  source?: string;
+  batch_id?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}
+
 export interface DeviceFilters extends Record<string, string | number | undefined> {
   q?: string;
   vendor?: string;
@@ -129,6 +146,51 @@ export const api = {
       form,
     );
   },
+
+  /** エラー行だけを抽出したCSVを取得する（Blob で受けてブラウザに保存させる）。 */
+  importErrorsCsv: async (options: ImportOptions & { encoding?: "utf-8" | "shift_jis" }) => {
+    const form = new FormData();
+    form.append("file", options.file);
+    form.append("key_field", options.keyField);
+    form.append("update_existing", String(options.updateExisting));
+    form.append("encoding", options.encoding ?? "utf-8");
+    if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
+
+    const res = await fetch(`${BASE}/import/devices/errors.csv`, { method: "POST", body: form });
+    if (!res.ok) throw new ApiError(res.status, await extractError(res));
+    return res.blob();
+  },
+
+  listChanges: (params: ChangeFilters = {}) =>
+    request<ChangeLogPage>(`/changes${query(params)}`),
+
+  listInsights: (params: { category?: string; site_id?: number } = {}) =>
+    request<InsightReport>(`/insights${query(params)}`),
+
+  listScenarios: () => request<Scenario[]>("/scenarios"),
+  getScenario: (id: number) => request<ScenarioDetail>(`/scenarios/${id}`),
+  createScenario: (body: Partial<Scenario>) =>
+    request<ScenarioDetail>("/scenarios", { method: "POST", body: JSON.stringify(body) }),
+  updateScenario: (id: number, body: Partial<Scenario>) =>
+    request<ScenarioDetail>(`/scenarios/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteScenario: (id: number) => request<void>(`/scenarios/${id}`, { method: "DELETE" }),
+  generateScenarioItems: (id: number, withinDays: number) =>
+    request<ScenarioDetail>(`/scenarios/${id}/generate?within_days=${withinDays}`, {
+      method: "POST",
+    }),
+  scenarioSummary: (id: number) => request<ScenarioSummary>(`/scenarios/${id}/summary`),
+  addScenarioItem: (scenarioId: number, body: Partial<ScenarioItem>) =>
+    request<ScenarioItem>(`/scenarios/${scenarioId}/items`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateScenarioItem: (itemId: number, body: Partial<ScenarioItem>) =>
+    request<ScenarioItem>(`/scenarios/items/${itemId}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteScenarioItem: (itemId: number) =>
+    request<void>(`/scenarios/items/${itemId}`, { method: "DELETE" }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

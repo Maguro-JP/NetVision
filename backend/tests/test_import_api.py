@@ -234,3 +234,69 @@ def test_excel_without_extension_is_detected_by_content(client):
     )
     assert res.status_code == 200, res.text
     assert res.json()["created"] == 1
+
+
+def test_error_rows_can_be_downloaded_and_fixed(client):
+    broken = (
+        CSV_HEADER
+        + CSV_ROWS
+        + (
+            "acc-sw-01,Cisco,C2960X,スイッチ,稼働中,15.2,本社DC,未定,,,,,\n"
+            ",Cisco,C9200,スイッチ,稼働中,17.6,本社DC,2023/4/1,,,,,\n"
+        )
+    )
+
+    res = client.post(
+        f"{API}/import/devices/errors.csv",
+        files={"file": ("daichou.csv", broken.encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    assert "netvision_import_errors.csv" in res.headers["content-disposition"]
+
+    lines = res.text.lstrip("﻿").strip().splitlines()
+    header = lines[0].split(",")
+    assert header[:2] == ["ホスト名", "メーカー"]
+    assert header[-1] == "エラー内容"
+
+    # エラー行だけが出る（正常な2行は含まれない）
+    assert len(lines) == 3
+    assert "acc-sw-01" in lines[1]
+    assert "日付として解釈できません" in lines[1]
+    assert "ホスト名が空です" in lines[2]
+
+    # 直したファイルを取り込み直せる形になっていること
+    fixed = res.text.lstrip("﻿").replace("未定", "2023/4/1").replace("エラー内容", "備考メモ")
+    fixed_lines = fixed.strip().splitlines()
+    repaired = "\n".join([fixed_lines[0], fixed_lines[1]]) + "\n"
+    body = upload(client, repaired, path="/import/devices").json()
+    assert body["committed"] is True
+    assert body["created"] == 1
+
+
+def test_error_rows_csv_is_empty_when_no_errors(client):
+    res = client.post(
+        f"{API}/import/devices/errors.csv",
+        files={"file": ("daichou.csv", (CSV_HEADER + CSV_ROWS).encode("utf-8"), "text/csv")},
+    )
+    assert res.status_code == 200
+    assert len(res.text.strip().splitlines()) == 1  # ヘッダのみ
+
+
+def test_error_rows_csv_shift_jis(client):
+    broken = CSV_HEADER + "acc-sw-01,Cisco,C2960X,スイッチ,稼働中,15.2,本社DC,未定,,,,,\n"
+    res = client.post(
+        f"{API}/import/devices/errors.csv",
+        files={"file": ("daichou.csv", broken.encode("utf-8"), "text/csv")},
+        data={"encoding": "shift_jis"},
+    )
+    assert res.status_code == 200
+    assert "エラー内容" in res.content.decode("cp932")
+
+
+def test_error_rows_csv_does_not_write_to_db(client):
+    broken = CSV_HEADER + CSV_ROWS
+    client.post(
+        f"{API}/import/devices/errors.csv",
+        files={"file": ("daichou.csv", broken.encode("utf-8"), "text/csv")},
+    )
+    assert client.get(f"{API}/devices").json() == []

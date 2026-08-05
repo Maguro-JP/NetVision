@@ -14,6 +14,8 @@ from sqlalchemy import select
 
 from app.db import SessionLocal
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
+from app.models.change_log import ChangeSource
+from app.services.audit import audit_context
 
 TODAY = date.today()
 
@@ -23,6 +25,12 @@ def _d(days: int) -> date:
 
 
 def seed(force: bool = False) -> None:
+    # 投入したデータも変更履歴に残す（発生元は seed として区別できる）
+    with audit_context(ChangeSource.SEED, note="デモデータの投入"):
+        _seed(force)
+
+
+def _seed(force: bool) -> None:
     db = SessionLocal()
     try:
         if db.scalar(select(Device).limit(1)):

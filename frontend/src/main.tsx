@@ -4,11 +4,15 @@ import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import App from "./App";
+import ChangesPage from "./pages/ChangesPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
 import DeviceFormPage from "./pages/DeviceFormPage";
 import DeviceListPage from "./pages/DeviceListPage";
 import ImportPage from "./pages/ImportPage";
+import InsightsPage from "./pages/InsightsPage";
+import ScenarioDetailPage from "./pages/ScenarioDetailPage";
+import ScenariosPage from "./pages/ScenariosPage";
 import SitesPage from "./pages/SitesPage";
 import "./styles.css";
 
@@ -30,6 +34,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="devices/:id/edit" element={<DeviceFormPage />} />
             <Route path="sites" element={<SitesPage />} />
             <Route path="import" element={<ImportPage />} />
+            <Route path="changes" element={<ChangesPage />} />
+            <Route path="insights" element={<InsightsPage />} />
+            <Route path="scenarios" element={<ScenariosPage />} />
+            <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
           </Route>
         </Routes>
       </BrowserRouter>

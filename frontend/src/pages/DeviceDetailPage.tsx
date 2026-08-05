@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { MaintenanceContract } from "../api/types";
+import ChangeLogTable from "../components/ChangeLogTable";
 import SeverityBadge from "../components/SeverityBadge";
 import {
   DEVICE_STATUS_LABEL,
@@ -31,15 +32,28 @@ export default function DeviceDetailPage() {
   const [contract, setContract] = useState({ ...EMPTY_CONTRACT });
   const [showForm, setShowForm] = useState(false);
 
-  const { data: device, isLoading, error } = useQuery({
+  const {
+    data: device,
+    isLoading,
+    error,
+  } = useQuery({
     queryKey: ["device", id],
     queryFn: () => api.getDevice(deviceId),
+  });
+
+  // この機器に対する変更と、紐づく保守契約への変更をまとめて見せる
+  const { data: history } = useQuery({
+    queryKey: ["deviceChanges", id],
+    queryFn: () => api.listChanges({ q: device?.hostname, limit: 50 }),
+    enabled: Boolean(device?.hostname),
   });
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["device", id] });
     queryClient.invalidateQueries({ queryKey: ["devices"] });
     queryClient.invalidateQueries({ queryKey: ["summary"] });
+    queryClient.invalidateQueries({ queryKey: ["deviceChanges", id] });
+    queryClient.invalidateQueries({ queryKey: ["changes"] });
   };
 
   const addContract = useMutation({
@@ -295,6 +309,9 @@ export default function DeviceDetailPage() {
           </div>
         </form>
       )}
+
+      <h2>変更履歴</h2>
+      <ChangeLogTable logs={history?.items ?? []} showEntity={false} />
 
       {device.notes && (
         <>

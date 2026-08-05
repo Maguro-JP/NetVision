@@ -20,6 +20,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
+from app.models.change_log import ChangeSource
+from app.services.audit import audit_context
 
 # ---------------------------------------------------------------------------
 # 取り込み可能なフィールド
@@ -458,8 +460,32 @@ def run_import(
     update_existing: bool = True,
     commit: bool = False,
 ) -> ImportOutcome:
-    """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。"""
+    """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
+    この取り込みで発生した変更は、まとめて1つのバッチとして履歴に残る。
+    """
+    with audit_context(ChangeSource.IMPORT, note="台帳の取り込み"):
+        return _run_import(
+            db,
+            table_headers,
+            table_rows,
+            mapping_override=mapping_override,
+            key_field=key_field,
+            update_existing=update_existing,
+            commit=commit,
+        )
+
+
+def _run_import(
+    db: Session,
+    table_headers: list[str],
+    table_rows: list[dict[str, object]],
+    *,
+    mapping_override: dict[str, str] | None = None,
+    key_field: KeyField = KeyField.HOSTNAME,
+    update_existing: bool = True,
+    commit: bool = False,
+) -> ImportOutcome:
     mapping = detect_mapping(table_headers)
     for column, target in (mapping_override or {}).items():
         if target:

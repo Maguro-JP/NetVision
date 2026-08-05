@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
+import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
 
 const ACTION_LABEL: Record<ImportRowAction, string> = {
@@ -46,6 +47,20 @@ export default function ImportPage() {
         queryClient.invalidateQueries({ queryKey: ["sites"] });
         queryClient.invalidateQueries({ queryKey: ["summary"] });
       }
+    },
+  });
+
+  const downloadErrors = useMutation({
+    mutationFn: async (encoding: "utf-8" | "shift_jis") => {
+      const blob = await api.importErrorsCsv({
+        file: file!,
+        keyField,
+        updateExisting,
+        mapping: Object.keys(mapping).length ? mapping : undefined,
+        commit: false,
+        encoding,
+      });
+      saveBlob(blob, "netvision_import_errors.csv");
     },
   });
 
@@ -141,9 +156,32 @@ export default function ImportPage() {
             </div>
           ) : result.errors > 0 ? (
             <div className="error" style={{ marginTop: 16 }}>
-              エラーが {result.errors} 行あります。1行でもエラーがあると取り込みは実行されません。
+              <div>
+                エラーが {result.errors} 行あります。1行でもエラーがあると取り込みは実行されません。
+              </div>
+              <div style={{ marginTop: 8 }}>
+                エラー行だけを書き出して Excel で修正し、そのファイルを取り込み直せます。
+              </div>
+              <div className="actions">
+                <button
+                  disabled={downloadErrors.isPending}
+                  onClick={() => downloadErrors.mutate("utf-8")}
+                >
+                  エラー行をCSVで書き出す
+                </button>
+                <button
+                  disabled={downloadErrors.isPending}
+                  onClick={() => downloadErrors.mutate("shift_jis")}
+                >
+                  Shift_JIS で書き出す
+                </button>
+              </div>
             </div>
           ) : null}
+
+          {downloadErrors.error && (
+            <div className="error">{(downloadErrors.error as Error).message}</div>
+          )}
 
           <h2>取り込み内容</h2>
           <div className="cards">
