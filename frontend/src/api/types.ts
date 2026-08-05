@@ -72,6 +72,43 @@ export interface Site {
   device_count: number;
 }
 
+export interface ImportField {
+  name: string;
+  label: string;
+  required: boolean;
+  aliases: string[];
+}
+
+export type ImportRowAction = "create" | "update" | "skip" | "error";
+
+export interface ImportRowIssue {
+  column: string | null;
+  message: string;
+}
+
+export interface ImportRowResult {
+  row_number: number;
+  key: string;
+  action: ImportRowAction;
+  issues: ImportRowIssue[];
+  device_id: number | null;
+  contract_added: boolean;
+}
+
+export interface ImportResult {
+  committed: boolean;
+  total_rows: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  errors: number;
+  contracts_added: number;
+  mapping: Record<string, string>;
+  unmapped_columns: string[];
+  missing_required_fields: string[];
+  rows: ImportRowResult[];
+}
+
 export type SeverityCounts = Record<Severity, number>;
 
 export interface DashboardSummary {

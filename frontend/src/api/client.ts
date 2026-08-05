@@ -2,6 +2,8 @@ import type {
   DashboardSummary,
   Device,
   DeviceDetail,
+  ImportField,
+  ImportResult,
   MaintenanceContract,
   Site,
 } from "./types";
@@ -27,6 +29,15 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(res.status, await extractError(res));
   }
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
+}
+
+/** multipart 送信。Content-Type はブラウザに境界文字列ごと決めさせる。 */
+async function upload<T>(path: string, form: FormData): Promise<T> {
+  const res = await fetch(`${BASE}${path}`, { method: "POST", body: form });
+  if (!res.ok) {
+    throw new ApiError(res.status, await extractError(res));
+  }
+  return (await res.json()) as T;
 }
 
 /** FastAPI のエラー形式（detail が文字列 or バリデーション配列）を読める文字列にする。 */
@@ -56,6 +67,15 @@ function query(params: Record<string, string | number | undefined>): string {
   return entries.length ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}` : "";
 }
 
+export interface ImportOptions {
+  file: File;
+  keyField: "hostname" | "serial_number";
+  updateExisting: boolean;
+  /** 自動判別を上書きする {列名: 項目名}。空文字はその列を取り込まない。 */
+  mapping?: Record<string, string>;
+  commit: boolean;
+}
+
 export interface DeviceFilters extends Record<string, string | number | undefined> {
   q?: string;
   vendor?: string;
@@ -83,6 +103,20 @@ export const api = {
       body: JSON.stringify(body),
     }),
   deleteContract: (id: number) => request<void>(`/contracts/${id}`, { method: "DELETE" }),
+
+  importFields: () => request<ImportField[]>("/import/fields"),
+  importTemplateUrl: `${BASE}/import/template.csv`,
+  importDevices: (options: ImportOptions) => {
+    const form = new FormData();
+    form.append("file", options.file);
+    form.append("key_field", options.keyField);
+    form.append("update_existing", String(options.updateExisting));
+    if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
+    return upload<ImportResult>(
+      options.commit ? "/import/devices" : "/import/devices/preview",
+      form,
+    );
+  },
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

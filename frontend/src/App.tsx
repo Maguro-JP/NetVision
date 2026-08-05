@@ -4,6 +4,7 @@ const NAV = [
   { to: "/dashboard", label: "ダッシュボード" },
   { to: "/devices", label: "機器一覧" },
   { to: "/sites", label: "拠点" },
+  { to: "/import", label: "台帳の取り込み" },
 ];
 
 export default function App() {

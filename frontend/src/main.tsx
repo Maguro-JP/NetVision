@@ -8,6 +8,7 @@ import DashboardPage from "./pages/DashboardPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
 import DeviceFormPage from "./pages/DeviceFormPage";
 import DeviceListPage from "./pages/DeviceListPage";
+import ImportPage from "./pages/ImportPage";
 import SitesPage from "./pages/SitesPage";
 import "./styles.css";
 
@@ -28,6 +29,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="devices/:id" element={<DeviceDetailPage />} />
             <Route path="devices/:id/edit" element={<DeviceFormPage />} />
             <Route path="sites" element={<SitesPage />} />
+            <Route path="import" element={<ImportPage />} />
           </Route>
         </Routes>
       </BrowserRouter>
