@@ -23,6 +23,8 @@ Excel 台帳ではなく、常に最新の状態で見られるようにする�
 - **トポロジ図** — LLDP / CDP から結線を自動推定し、人が配置を整えて仕上げる図エディタ
 - **リファレンス管理** — EoL 情報を型番単位で管理。出典と取得日を必ず記録し、鮮度を可視化
 - **脆弱性の突合** — CVE と機器のバージョンを突き合わせ、悪用確認済み（CISA KEV）を最優先で提示
+- **ベンダードキュメント** — コマンドリファレンスやマニュアルを、ベンダー・型番・バージョン範囲で管理。**古い版は消さない**
+- **Config テンプレート** — 機器を選ぶとその書式に合ったテンプレートで設定変更用 Config を生成（実機には投入しない）
 
 `unknown`（情報未登録）を `ok` より重い扱いにしているのは、台帳の抜けを見逃さないためです。
 
@@ -43,6 +45,8 @@ backend/
     services/    ライフサイクル判定・取り込み・書き出し・変更履歴・指摘・シナリオ
       configparse/ ベンダー別 Config パーサ（Cisco / Juniper / Fortinet）
       reference.py リファレンス取り込みと CVE 突合
+      documents.py ベンダー資料の保管と適用判定
+      config_render.py Config テンプレートの展開（サンドボックス）
       versions.py  OSバージョンの自然順比較
     api/routes/  エンドポイント
   alembic/       DB マイグレーション
@@ -51,6 +55,7 @@ backend/
 frontend/
   src/pages/     画面（ダッシュボード / トポロジ図 / 機器一覧 / 詳細 / 拠点 /
                  Config取り込み / 台帳取り込み / リファレンス管理 /
+                 ベンダードキュメント / Configテンプレート /
                  脆弱性 / 最適化の指摘 / 将来構成シナリオ / 変更履歴）
   src/api/       API クライアントと型定義
   src/lib/       表示フォーマット
@@ -293,6 +298,76 @@ NVD / CISA KEV は API があり、Juniper・Fortinet は実質手動）。
 現状は全ベンダーを同じ手順で扱えるオフライン取り込みに統一しています。
 オンライン同期を足す場合も、この取り込み経路の上にアダプタとして載る形になります。
 
+## ベンダードキュメント（コマンドリファレンス / マニュアル）
+
+コマンドの書式はメーカー・型番・バージョンで変わります。資料も同じ3軸で管理します。
+
+```
+資料（ベンダー ＋ 型番 ＋ 適用バージョン範囲）
+  ├ 種別（コマンドリファレンス / コンフィグガイド / リリースノート / …）
+  ├ 適用バージョン  17.9.0 〜 17.9.99（範囲。空なら全バージョン共通）
+  ├ 実体ファイル（PDF など。省略可、URL だけの登録もできる）
+  └ 後継資料へのリンク（superseded_by）
+        ↓ ベンダー + 型番 + 稼働中バージョンで自動解決
+機器  →「この機器で使える資料」を逆引き
+```
+
+### 古い版を消さない（設計上の約束）
+
+現場によっては古いバージョンが現役です。新しい版を登録しても、**旧版は削除されません**。
+
+- 新版を登録したら「後継を指定」でリンクするだけ。旧版の行はそのまま残る
+- 一覧は既定で旧版も表示（`include_superseded=false` で現行のみ）
+- 17.9 で動いている機器からは、17.12 の版が出た後も 17.9 向けの資料が引かれる
+- 明示的な削除 API はあるが、UI では「版が新しくなっただけなら後継指定を使ってください」と確認する
+
+型番は空欄でベンダー全体、`C9500*` で前方一致（シリーズ共通資料）を表せます。
+
+### ファイルの保管
+
+実体は DB ではなくファイル領域（`NETVISION_DOCUMENT_STORAGE_PATH`）に置き、
+内容の SHA-256 でパスを決めます。同じファイルを2回登録しても実体は1つで、
+片方を消してももう片方が参照している限りファイルは残ります。
+
+> **バックアップは2系統必要です。** DB（メタデータ）とファイル領域（実体）の両方を取ってください。
+> Docker Compose では `documents` ボリュームが実体の置き場です。
+
+### 自動取得について
+
+閉域運用が前提のため、**アプリからの外部通信は一切行いません**。
+資料は手動アップロード（またはURLの記録のみ）で登録します。
+入手元URLと取得日を残せるので、後から「どこから持ってきた版か」を追えます。
+
+## Config テンプレート
+
+設定変更用の Config を、機器に合った書式で生成します。
+
+- テンプレートは資料と同じ3軸（ベンダー / 型番 / バージョン範囲）で管理
+- 機器を選ぶと、そのバージョンに合うテンプレートだけが候補に出る
+- 根拠にしたマニュアル（`source_document_id`）を紐付けられる
+- 本文は Jinja2 記法。`{{ vlan_id }}` のような変数に加え、`device.hostname` や
+  `interfaces` ループで台帳・Config 取り込み済みの値をそのまま差し込める
+
+```
+vlan {{ vlan_id }}
+ name {{ vlan_name }}
+!
+interface {{ interface }}
+ description {{ vlan_name }} ({{ device.hostname }})
+ switchport mode access
+ switchport access vlan {{ vlan_id }}
+```
+
+### 事故を防ぐための作り
+
+- **生成するだけで、実機には一切投入しません。** 内容を確認して手で流し込む前提です
+- 未定義の変数は空文字にせず**エラーにします**（`{{ vlna_id }}` のような打ち間違いで
+  壊れた config が出ると気付けないため）
+- 必須変数が埋まっていなければ「必須の変数「VLAN 名」が入力されていません」と明示
+- 適用バージョン範囲から外れた機器に当てた場合は生成しつつ**警告を出します**
+  （現場判断で流用したい場面があるため、禁止ではなく警告）
+- テンプレートはサンドボックス（`SandboxedEnvironment`）で展開し、内部構造には触れられません
+
 ## 設定（環境変数）
 
 | 変数 | 既定値 | 説明 |
@@ -301,6 +376,8 @@ NVD / CISA KEV は API があり、Juniper・Fortinet は実質手動）。
 | `NETVISION_CRITICAL_DAYS` | `90` | この日数以内の期限を `critical` とする |
 | `NETVISION_WARNING_DAYS` | `365` | この日数以内の期限を `warning` とする |
 | `NETVISION_REFERENCE_STALE_DAYS` | `180` | リファレンスがこの日数より古ければ「要更新」とする |
+| `NETVISION_DOCUMENT_STORAGE_PATH` | `./data/documents` | 資料ファイルの保管先（DB とは別にバックアップが必要） |
+| `NETVISION_MAX_DOCUMENT_BYTES` | `209715200`（200MB） | 1ファイルあたりの上限 |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
 
 ## 主なAPI
@@ -349,6 +426,15 @@ NVD / CISA KEV は API があり、Juniper・Fortinet は実質手動）。
 | GET | `/reference/vulnerabilities` | CVE 一覧（`affecting_only` で自社該当のみ） |
 | GET | `/reference/vulnerabilities/matches/summary` | 機器と CVE の突合結果 |
 | GET | `/reference/freshness` | リファレンスの鮮度 |
+| GET / POST | `/documents` | 資料の一覧・登録（`q` / `vendor` / `doc_type` / `include_superseded`） |
+| PATCH / DELETE | `/documents/{id}` | 資料の更新・削除 |
+| POST | `/documents/{id}/supersede/{successor_id}` | 後継資料を指定（旧版は残る） |
+| GET | `/documents/{id}/download` | 資料ファイルのダウンロード |
+| GET | `/devices/{id}/documents` | その機器で使える資料（該当理由つき） |
+| GET / POST | `/config-templates` | Config テンプレートの一覧・作成 |
+| PATCH / DELETE | `/config-templates/{id}` | テンプレートの更新・削除 |
+| POST | `/config-templates/{id}/render` | Config を生成（実機には投入しない） |
+| GET | `/devices/{id}/config-templates` | その機器に使えるテンプレート |
 | GET / POST | `/sites` | 拠点の一覧・登録 |
 | PATCH / DELETE | `/sites/{id}` | 拠点の更新・削除 |
 

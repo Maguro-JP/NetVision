@@ -16,6 +16,10 @@ class Settings(BaseSettings):
     # 閉域環境では自動更新されないため、鮮度を意識させる必要がある。
     reference_stale_days: int = 180
 
+    # ベンダーマニュアル等の実体を置くディレクトリ。DB にはメタデータとパスだけ持つ。
+    document_storage_path: str = "./data/documents"
+    max_document_bytes: int = 200 * 1024 * 1024
+
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
 

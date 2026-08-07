@@ -10,6 +10,8 @@ const NAV = [
   { to: "/scenarios", label: "将来構成シナリオ" },
   { to: "/changes", label: "変更履歴" },
   { to: "/configs", label: "Configの取り込み" },
+  { to: "/documents", label: "ベンダー資料" },
+  { to: "/config-templates", label: "Configテンプレート" },
   { to: "/reference", label: "リファレンス管理" },
   { to: "/import", label: "台帳の取り込み" },
 ];

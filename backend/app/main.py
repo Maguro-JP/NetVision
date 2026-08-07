@@ -6,6 +6,7 @@ from app.api.routes import (
     configs,
     dashboard,
     devices,
+    documents,
     exports,
     imports,
     insights,
@@ -45,6 +46,7 @@ app.include_router(scenarios.router, prefix=api)
 app.include_router(configs.router, prefix=api)
 app.include_router(topology.router, prefix=api)
 app.include_router(reference.router, prefix=api)
+app.include_router(documents.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

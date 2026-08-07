@@ -4,6 +4,8 @@ import type {
   DeviceDetail,
   ChangeLogPage,
   ConfigDiff,
+  ConfigTemplate,
+  ConfigTemplateMatch,
   ConfigSnapshot,
   ImportField,
   IngestResult,
@@ -15,6 +17,7 @@ import type {
   ProductReference,
   RebuildResult,
   ReferenceFreshness,
+  RenderResult,
   Scenario,
   ScenarioDetail,
   ScenarioItem,
@@ -23,6 +26,8 @@ import type {
   TopologyEdge,
   TopologyGraph,
   TopologyStats,
+  VendorDocument,
+  VendorDocumentMatch,
   Vulnerability,
   VulnerabilityImportResult,
   VulnerabilitySummary,
@@ -292,6 +297,45 @@ export const api = {
       `/reference/vulnerabilities/matches/summary${query({ device_id: deviceId })}`,
     ),
   referenceFreshness: () => request<ReferenceFreshness>("/reference/freshness"),
+
+  // --- ベンダードキュメント ---
+  listDocuments: (params: { q?: string; vendor?: string; doc_type?: string } = {}) =>
+    request<VendorDocument[]>(`/documents${query(params)}`),
+  createDocument: (fields: Record<string, string>, file?: File | null) => {
+    const form = new FormData();
+    for (const [key, value] of Object.entries(fields)) {
+      if (value) form.append(key, value);
+    }
+    if (file) form.append("file", file);
+    return upload<VendorDocument>("/documents", form);
+  },
+  updateDocument: (id: number, body: Partial<VendorDocument>) =>
+    request<VendorDocument>(`/documents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  supersedeDocument: (id: number, successorId: number) =>
+    request<VendorDocument>(`/documents/${id}/supersede/${successorId}`, { method: "POST" }),
+  deleteDocument: (id: number) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+  documentDownloadUrl: (id: number) => `${BASE}/documents/${id}/download`,
+  documentsForDevice: (deviceId: number) =>
+    request<VendorDocumentMatch[]>(`/devices/${deviceId}/documents`),
+
+  // --- Config テンプレート ---
+  listTemplates: (params: { q?: string; vendor?: string; category?: string } = {}) =>
+    request<ConfigTemplate[]>(`/config-templates${query(params)}`),
+  createTemplate: (body: Partial<ConfigTemplate>) =>
+    request<ConfigTemplate>("/config-templates", { method: "POST", body: JSON.stringify(body) }),
+  updateTemplate: (id: number, body: Partial<ConfigTemplate>) =>
+    request<ConfigTemplate>(`/config-templates/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteTemplate: (id: number) => request<void>(`/config-templates/${id}`, { method: "DELETE" }),
+  templatesForDevice: (deviceId: number) =>
+    request<ConfigTemplateMatch[]>(`/devices/${deviceId}/config-templates`),
+  renderTemplate: (id: number, body: { device_id?: number; variables: Record<string, string> }) =>
+    request<RenderResult>(`/config-templates/${id}/render`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

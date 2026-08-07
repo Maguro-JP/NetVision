@@ -348,6 +348,94 @@ export interface ReferenceFreshness {
   devices_without_reference: string[];
 }
 
+export type DocumentType =
+  | "command_reference"
+  | "config_guide"
+  | "release_notes"
+  | "install_guide"
+  | "hardware_guide"
+  | "security_advisory"
+  | "datasheet"
+  | "other";
+
+export interface VendorDocument {
+  id: number;
+  vendor: string;
+  model: string | null;
+  os_name: string | null;
+  doc_type: DocumentType;
+  title: string;
+  language: string | null;
+  applies_from: string | null;
+  applies_to: string | null;
+  version_label: string | null;
+  edition: string | null;
+  published_at: string | null;
+  source_url: string | null;
+  fetched_at: string | null;
+  notes: string | null;
+  filename: string | null;
+  content_type: string | null;
+  size_bytes: number | null;
+  sha256: string | null;
+  has_file: boolean;
+  superseded_by_id: number | null;
+  superseded_by_title: string | null;
+  device_count: number;
+}
+
+export interface VendorDocumentMatch extends VendorDocument {
+  reason: string;
+}
+
+export type TemplateCategory =
+  | "interface"
+  | "vlan"
+  | "routing"
+  | "acl"
+  | "qos"
+  | "management"
+  | "security"
+  | "other";
+
+export interface TemplateVariable {
+  name: string;
+  label?: string;
+  required?: boolean;
+  default?: string;
+  help?: string;
+}
+
+export interface ConfigTemplate {
+  id: number;
+  name: string;
+  description: string | null;
+  category: TemplateCategory;
+  vendor: string;
+  model: string | null;
+  os_name: string | null;
+  applies_from: string | null;
+  applies_to: string | null;
+  version_label: string | null;
+  body: string;
+  variables: TemplateVariable[];
+  source_document_id: number | null;
+  source_document_title: string | null;
+  superseded_by_id: number | null;
+  detected_variables: TemplateVariable[];
+}
+
+export interface ConfigTemplateMatch extends ConfigTemplate {
+  reason: string;
+}
+
+export interface RenderResult {
+  rendered: string;
+  device_hostname: string | null;
+  used_variables: Record<string, string>;
+  warnings: string[];
+}
+
 export type InsightCategory = "cost" | "risk" | "data" | "consolidation";
 
 export interface Insight {

@@ -5,7 +5,9 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
 import App from "./App";
 import ChangesPage from "./pages/ChangesPage";
+import ConfigTemplatesPage from "./pages/ConfigTemplatesPage";
 import ConfigsPage from "./pages/ConfigsPage";
+import DocumentsPage from "./pages/DocumentsPage";
 import DashboardPage from "./pages/DashboardPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
 import DeviceFormPage from "./pages/DeviceFormPage";
@@ -44,6 +46,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="insights" element={<InsightsPage />} />
             <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
             <Route path="reference" element={<ReferencePage />} />
+            <Route path="documents" element={<DocumentsPage />} />
+            <Route path="config-templates" element={<ConfigTemplatesPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
           </Route>

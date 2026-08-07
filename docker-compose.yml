@@ -20,6 +20,10 @@ services:
     environment:
       NETVISION_DATABASE_URL: postgresql+psycopg://netvision:netvision@db:5432/netvision
       NETVISION_CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
+      NETVISION_DOCUMENT_STORAGE_PATH: /var/lib/netvision/documents
+    volumes:
+      # マニュアル等の実体。DB とは別領域なので、バックアップは2系統必要
+      - documents:/var/lib/netvision/documents
     depends_on:
       db:
         condition: service_healthy
@@ -37,3 +41,4 @@ services:
 
 volumes:
   pgdata:
+  documents:

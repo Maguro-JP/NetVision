@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { MaintenanceContract } from "../api/types";
 import ChangeLogTable from "../components/ChangeLogTable";
+import { DOC_TYPE_LABEL, versionRange } from "../lib/docs";
 import SeverityBadge from "../components/SeverityBadge";
 import {
   DEVICE_STATUS_LABEL,
@@ -39,6 +40,11 @@ export default function DeviceDetailPage() {
   } = useQuery({
     queryKey: ["device", id],
     queryFn: () => api.getDevice(deviceId),
+  });
+
+  const { data: deviceDocuments } = useQuery({
+    queryKey: ["deviceDocuments", id],
+    queryFn: () => api.documentsForDevice(deviceId),
   });
 
   const { data: vulnerabilities } = useQuery({
@@ -318,6 +324,53 @@ export default function DeviceDetailPage() {
             </button>
           </div>
         </form>
+      )}
+
+      <h2>この機器の資料</h2>
+      {!deviceDocuments || deviceDocuments.length === 0 ? (
+        <div className="empty">
+          該当する資料がありません。「ベンダー資料」から登録できます。
+        </div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>資料</th>
+              <th>種別</th>
+              <th>適用バージョン</th>
+              <th>該当理由</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {deviceDocuments.map((doc) => (
+              <tr key={doc.id}>
+                <td>
+                  {doc.title}
+                  {doc.superseded_by_title && (
+                    <div className="muted">新版あり: {doc.superseded_by_title}</div>
+                  )}
+                </td>
+                <td className="muted">{DOC_TYPE_LABEL[doc.doc_type]}</td>
+                <td>{versionRange(doc.applies_from, doc.applies_to, doc.version_label)}</td>
+                <td className="muted" style={{ whiteSpace: "normal" }}>
+                  {doc.reason}
+                </td>
+                <td>
+                  {doc.has_file ? (
+                    <a href={api.documentDownloadUrl(doc.id)}>開く</a>
+                  ) : doc.source_url ? (
+                    <a href={doc.source_url} target="_blank" rel="noreferrer">
+                      入手元
+                    </a>
+                  ) : (
+                    "—"
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
 
       <h2>該当する脆弱性</h2>
