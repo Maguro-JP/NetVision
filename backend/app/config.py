@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     warning_days: int = 365
     critical_days: int = 90
 
+    # リファレンス（EoL / 脆弱性）がこの日数より古ければ「情報が古い」と表示する。
+    # 閉域環境では自動更新されないため、鮮度を意識させる必要がある。
+    reference_stale_days: int = 180
+
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
 

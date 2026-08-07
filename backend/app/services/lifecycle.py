@@ -63,6 +63,10 @@ def worst(*severities: Severity) -> Severity:
 class LifecycleStatus:
     """1台の機器のライフサイクル評価結果。API のレスポンスにそのまま載る。"""
 
+    # 実際に判定へ使った日付と、その出どころ（機器個別の入力か、型番の製品マスタか）
+    effective_eos_date: date | None
+    effective_eol_date: date | None
+    eol_source: str | None
     maintenance_end: date | None
     days_to_maintenance_end: int | None
     maintenance_severity: Severity
@@ -81,9 +85,22 @@ def evaluate(device: Device, today: date | None = None) -> LifecycleStatus:
     ends = [c.end_date for c in device.contracts if c.end_date is not None]
     maintenance_end = max(ends) if ends else None
 
+    # 機器個別の入力を優先し、無ければ型番の製品マスタを使う。
+    # 個体の事情（特別な延長保守など）を上書きできる余地を残すため。
+    product = getattr(device, "product", None)
+    eos_date = device.eos_date or (product.eos_date if product else None)
+    eol_date = device.eol_date or (product.eol_date if product else None)
+
+    if device.eol_date is not None:
+        eol_source = "device"
+    elif product is not None and product.eol_date is not None:
+        eol_source = "product"
+    else:
+        eol_source = None
+
     maintenance_sev = severity_for(maintenance_end, today)
-    eos_sev = severity_for(device.eos_date, today)
-    eol_sev = severity_for(device.eol_date, today)
+    eos_sev = severity_for(eos_date, today)
+    eol_sev = severity_for(eol_date, today)
 
     age_years = None
     if device.install_date is not None:
@@ -93,12 +110,15 @@ def evaluate(device: Device, today: date | None = None) -> LifecycleStatus:
     overall = Severity.OK if device.status.value == "retired" else worst(maintenance_sev, eol_sev)
 
     return LifecycleStatus(
+        effective_eos_date=eos_date,
+        effective_eol_date=eol_date,
+        eol_source=eol_source,
         maintenance_end=maintenance_end,
         days_to_maintenance_end=days_until(maintenance_end, today),
         maintenance_severity=maintenance_sev,
-        days_to_eos=days_until(device.eos_date, today),
+        days_to_eos=days_until(eos_date, today),
         eos_severity=eos_sev,
-        days_to_eol=days_until(device.eol_date, today),
+        days_to_eol=days_until(eol_date, today),
         eol_severity=eol_sev,
         overall_severity=overall,
         age_years=age_years,

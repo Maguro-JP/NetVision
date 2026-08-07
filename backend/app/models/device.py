@@ -3,10 +3,11 @@ from __future__ import annotations
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, func
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, and_, func
+from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
 from app.db import Base
+from app.models.reference import ProductReference
 
 
 class DeviceType(enum.StrEnum):
@@ -72,6 +73,18 @@ class Device(Base):
     )
 
     site: Mapped[Site | None] = relationship(back_populates="devices")  # noqa: F821
+
+    # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスタに正規化してある。
+    # 台帳の表記ゆれ（cisco / Cisco）を吸収するため、大文字小文字を無視して突き合わせる。
+    product: Mapped[ProductReference | None] = relationship(
+        primaryjoin=lambda: and_(
+            func.lower(foreign(Device.vendor)) == func.lower(ProductReference.vendor),
+            func.lower(foreign(Device.model)) == func.lower(ProductReference.model),
+        ),
+        viewonly=True,
+        uselist=False,
+        lazy="selectin",
+    )
     contracts: Mapped[list[MaintenanceContract]] = relationship(  # noqa: F821
         back_populates="device",
         cascade="all, delete-orphan",

@@ -13,6 +13,10 @@ export type DeviceType =
 export type DeviceStatus = "active" | "standby" | "maintenance" | "retired";
 
 export interface LifecycleStatus {
+  effective_eos_date: string | null;
+  effective_eol_date: string | null;
+  /** "device" = 機器個別の入力 / "product" = 型番の製品マスタ / null = 未登録 */
+  eol_source: "device" | "product" | null;
   maintenance_end: string | null;
   days_to_maintenance_end: number | null;
   maintenance_severity: Severity;
@@ -235,6 +239,113 @@ export interface TopologyStats {
 export interface RebuildResult {
   links_created: number;
   unresolved_neighbors: UnresolvedNeighbor[];
+}
+
+export type ReferenceSourceKind = "manual" | "csv" | "nvd" | "kev" | "vendor";
+
+export interface ProductReference {
+  id: number;
+  vendor: string;
+  model: string;
+  product_name: string | null;
+  eos_date: string | null;
+  eol_date: string | null;
+  end_of_sw_date: string | null;
+  last_support_date: string | null;
+  recommended_replacement: string | null;
+  source: ReferenceSourceKind;
+  source_url: string | null;
+  fetched_at: string | null;
+  notes: string | null;
+  device_count: number;
+  age_days: number | null;
+  stale: boolean;
+}
+
+export interface ProductImportRow {
+  row_number: number;
+  vendor: string | null;
+  model: string | null;
+  action: string;
+  message: string | null;
+}
+
+export interface ProductImportResult {
+  total_rows: number;
+  created: number;
+  updated: number;
+  unchanged: number;
+  errors: number;
+  mapping: Record<string, string>;
+  unmapped_columns: string[];
+  missing_required_fields: string[];
+  rows: ProductImportRow[];
+}
+
+export interface Vulnerability {
+  id: number;
+  cve_id: string;
+  title: string | null;
+  description: string | null;
+  cvss_score: number | null;
+  cvss_severity: string | null;
+  published: string | null;
+  last_modified: string | null;
+  known_exploited: boolean;
+  remediation_due: string | null;
+  source: ReferenceSourceKind;
+  source_url: string | null;
+  fetched_at: string | null;
+  affected_device_count: number;
+}
+
+export interface VulnerabilityImportResult {
+  format: string;
+  total: number;
+  created: number;
+  updated: number;
+  skipped: number;
+  affects_created: number;
+  messages: string[];
+}
+
+export interface DeviceVulnerability {
+  device_id: number;
+  hostname: string;
+  cve_id: string;
+  title: string | null;
+  cvss_score: number | null;
+  cvss_severity: string | null;
+  known_exploited: boolean;
+  fixed_version: string | null;
+  matched_on: string;
+  source: string;
+  fetched_at: string | null;
+}
+
+export interface VulnerabilitySummary {
+  total_vulnerabilities: number;
+  devices_affected: number;
+  known_exploited_findings: number;
+  critical_findings: number;
+  high_findings: number;
+  devices_without_version: number;
+  findings: DeviceVulnerability[];
+}
+
+export interface ReferenceFreshness {
+  product_count: number;
+  products_with_dates: number;
+  products_stale: number;
+  products_never_fetched: number;
+  oldest_product_fetch: string | null;
+  vulnerability_count: number;
+  vulnerabilities_stale: number;
+  oldest_vulnerability_fetch: string | null;
+  stale_after_days: number;
+  devices_total: number;
+  devices_with_product_reference: number;
+  devices_without_reference: string[];
 }
 
 export type InsightCategory = "cost" | "risk" | "data" | "consolidation";

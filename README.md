@@ -21,6 +21,8 @@ Excel 台帳ではなく、常に最新の状態で見られるようにする�
 - **将来構成シナリオ** — 台帳に触れずに「入れ替えたらどうなるか」を試算し、現状と比較
 - **Config の取り込み** — running-config / show 出力から構成情報を自動抽出、世代管理と差分表示
 - **トポロジ図** — LLDP / CDP から結線を自動推定し、人が配置を整えて仕上げる図エディタ
+- **リファレンス管理** — EoL 情報を型番単位で管理。出典と取得日を必ず記録し、鮮度を可視化
+- **脆弱性の突合** — CVE と機器のバージョンを突き合わせ、悪用確認済み（CISA KEV）を最優先で提示
 
 `unknown`（情報未登録）を `ok` より重い扱いにしているのは、台帳の抜けを見逃さないためです。
 
@@ -40,14 +42,16 @@ backend/
     schemas/     Pydantic スキーマ（API の入出力）
     services/    ライフサイクル判定・取り込み・書き出し・変更履歴・指摘・シナリオ
       configparse/ ベンダー別 Config パーサ（Cisco / Juniper / Fortinet）
+      reference.py リファレンス取り込みと CVE 突合
+      versions.py  OSバージョンの自然順比較
     api/routes/  エンドポイント
   alembic/       DB マイグレーション
   scripts/seed.py  デモデータ投入
   tests/         pytest
 frontend/
   src/pages/     画面（ダッシュボード / トポロジ図 / 機器一覧 / 詳細 / 拠点 /
-                 Config取り込み / 台帳取り込み / 最適化の指摘 /
-                 将来構成シナリオ / 変更履歴）
+                 Config取り込み / 台帳取り込み / リファレンス管理 /
+                 脆弱性 / 最適化の指摘 / 将来構成シナリオ / 変更履歴）
   src/api/       API クライアントと型定義
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
@@ -232,6 +236,63 @@ Config の原文は世代ごとに保存され、前の世代との差分を表�
 - 線を選んで削除、レイヤ（物理 / L2 / L3 / 論理）ごとに別の配置を持つ
 - ノードの色は保守期限・EoL のアラート状態と連動します
 
+## リファレンス管理（EoL / 脆弱性）
+
+**外部への通信は一切行いません。** 閉域環境での運用を前提に、
+オフラインでの持ち込みを唯一かつ第一級の経路にしています。
+
+### EoL は型番に紐づける
+
+EoL は本来「型番の属性」です。機器ごとに持たせると同じ日付を何度も入力することになり、
+ベンダーが訂正したときに全台直す羽目になります。そこで製品マスタに正規化しています。
+
+```
+製品リファレンス（ベンダー + 型番）
+  ├ EoS / EoL / ソフトウェア保守終了 / 最終サポート日 / 推奨後継機
+  ├ 出典（手入力 / CSV / NVD / KEV / ベンダー資料）
+  ├ 出典URL
+  └ 情報取得日   ← 「いつ時点の情報か」を必ず持つ
+        ↓ ベンダー+型番で自動解決（大文字小文字の揺れは吸収）
+機器（個別の事情があれば機器側の値が優先される）
+```
+
+これにより「C9500-40X の EoL が変わった」を1回の更新で該当機器すべてに反映できます。
+機器詳細には EoL が製品マスタ由来か機器個別の入力かを表示します。
+
+### 鮮度の可視化
+
+リファレンスは放っておけば古くなります。自動更新されない以上、
+**いつ時点の情報で判断しているか**を運用者が意識できないと使えません。
+
+- 取得日から `NETVISION_REFERENCE_STALE_DAYS`（既定180日）を過ぎたら「要更新」を表示
+- リファレンスが未登録の型番を一覧表示（その機器は EoL を判定できない）
+- 最も古い取得日をダッシュボードに表示
+
+### 脆弱性データの取り込み
+
+JSON を置くだけで、形式は中身から自動判別します。
+
+| 形式 | 入手元 | 備考 |
+|---|---|---|
+| NVD 2.0 | NIST NVD | CPE からバージョン範囲を組み立てる |
+| CISA KEV | CISA | **実際に悪用が確認された**脆弱性。優先度判断で最も効く |
+| 簡易形式 | ベンダー PSIRT を手で整理 | 型番のワイルドカード指定（`C9500*`）に対応 |
+
+突合はベンダー・型番・OSバージョンで行い、**何で一致したかを必ず表示**します
+（「バージョン 17.09.04a が影響範囲に含まれる」）。根拠を示せない判定は運用で使えないためです。
+
+バージョン比較は semver ではなく自然順比較で、`17.09.04` と `17.9.4`、
+`15.2(7)E6`、`21.4R3-S5.4` のような表記を正しく大小比較できます。
+
+OSバージョンが未登録の機器は**判定できない**ため、その台数を明示します（見落とし防止）。
+
+### 自動取得について
+
+公式ソースの自動取得はベンダーによって難易度が大きく異なります（Cisco EoX API と
+NVD / CISA KEV は API があり、Juniper・Fortinet は実質手動）。
+現状は全ベンダーを同じ手順で扱えるオフライン取り込みに統一しています。
+オンライン同期を足す場合も、この取り込み経路の上にアダプタとして載る形になります。
+
 ## 設定（環境変数）
 
 | 変数 | 既定値 | 説明 |
@@ -239,6 +300,7 @@ Config の原文は世代ごとに保存され、前の世代との差分を表�
 | `NETVISION_DATABASE_URL` | `postgresql+psycopg://netvision:netvision@localhost:5432/netvision` | 接続先DB |
 | `NETVISION_CRITICAL_DAYS` | `90` | この日数以内の期限を `critical` とする |
 | `NETVISION_WARNING_DAYS` | `365` | この日数以内の期限を `warning` とする |
+| `NETVISION_REFERENCE_STALE_DAYS` | `180` | リファレンスがこの日数より古ければ「要更新」とする |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
 
 ## 主なAPI
@@ -279,6 +341,14 @@ Config の原文は世代ごとに保存され、前の世代との差分を表�
 | PUT / DELETE | `/topology/positions` | ノード配置の保存・リセット |
 | POST | `/topology/rebuild` | Config から結線を再推定 |
 | POST / PATCH / DELETE | `/topology/links` | 手動での結線の追加・更新・削除 |
+| GET / POST | `/reference/products` | 型番リファレンスの一覧・登録 |
+| PATCH / DELETE | `/reference/products/{id}` | 型番リファレンスの更新・削除 |
+| POST | `/reference/products/import` | 型番リファレンスの CSV / Excel 取り込み |
+| GET | `/reference/products/template.csv` | 記入用テンプレート |
+| POST | `/reference/vulnerabilities/import` | 脆弱性 JSON の取り込み（形式自動判別） |
+| GET | `/reference/vulnerabilities` | CVE 一覧（`affecting_only` で自社該当のみ） |
+| GET | `/reference/vulnerabilities/matches/summary` | 機器と CVE の突合結果 |
+| GET | `/reference/freshness` | リファレンスの鮮度 |
 | GET / POST | `/sites` | 拠点の一覧・登録 |
 | PATCH / DELETE | `/sites/{id}` | 拠点の更新・削除 |
 
@@ -291,5 +361,5 @@ cd frontend && npm test && npm run typecheck
 
 ## 今後
 
-脆弱性情報（CVE）の突合と、更改計画のトポロジ上での影響範囲表示を予定しています。
+更改計画のトポロジ上での影響範囲表示、図のエクスポート、Config の自動収集を予定しています。
 詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。

@@ -110,8 +110,26 @@ def test_missing_data_is_reported(client, device_payload):
     add_device(client, device_payload)
 
     body = insights(client, category="data")
-    assert kinds(body) == {"missing_lifecycle_data", "missing_site"}
+    # 製品リファレンス未登録も台帳整備の指摘として挙がる
+    assert kinds(body) == {"missing_lifecycle_data", "missing_site", "missing_product_reference"}
     assert body["annual_saving_total"] == 0
+
+
+def test_missing_os_version_blocks_vulnerability_matching(client, device_payload):
+    add_device(client, device_payload, os_version=None)
+
+    flagged = next(i for i in insights(client)["insights"] if i["kind"] == "missing_os_version")
+    assert "判定できません" in flagged["detail"]
+
+
+def test_registered_product_reference_clears_the_data_gap(client, device_payload):
+    client.post(
+        f"{API}/reference/products",
+        json={"vendor": "Cisco", "model": "C9500-40X", "eol_date": "2030-01-31"},
+    )
+    add_device(client, device_payload)
+
+    assert "missing_product_reference" not in kinds(insights(client))
 
 
 def test_contract_beyond_eol_is_flagged(client, device_payload):
@@ -164,3 +182,31 @@ def test_empty_database_has_no_insights(client):
     body = insights(client)
     assert body["total"] == 0
     assert body["insights"] == []
+
+
+def test_known_exploited_vulnerability_is_the_top_insight(client, device_payload):
+    """悪用確認済みの脆弱性は、他のどの指摘よりも上に来る。"""
+    from tests.test_reference_api import upload_vulnerabilities
+    from tests.test_vulnerabilities_api import KEV_PAYLOAD, NVD_PAYLOAD
+
+    upload_vulnerabilities(client, NVD_PAYLOAD)
+    upload_vulnerabilities(client, KEV_PAYLOAD)
+    add_device(client, device_payload, os_name="IOS-XE", os_version="17.9.4")
+
+    body = insights(client)
+    top = body["insights"][0]
+
+    assert top["kind"] == "known_exploited_vulnerability"
+    assert top["severity"] == "expired"
+    assert "CVE-2024-20353" in top["detail"]
+
+
+def test_patched_device_gets_no_vulnerability_insight(client, device_payload):
+    from tests.test_reference_api import upload_vulnerabilities
+    from tests.test_vulnerabilities_api import NVD_PAYLOAD
+
+    upload_vulnerabilities(client, NVD_PAYLOAD)
+    add_device(client, device_payload, os_name="IOS-XE", os_version="17.9.5")
+
+    assert "known_exploited_vulnerability" not in kinds(insights(client))
+    assert "critical_vulnerability" not in kinds(insights(client))

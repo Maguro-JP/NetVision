@@ -10,6 +10,7 @@ from app.api.routes import (
     imports,
     insights,
     maintenance,
+    reference,
     scenarios,
     sites,
     topology,
@@ -43,6 +44,7 @@ app.include_router(insights.router, prefix=api)
 app.include_router(scenarios.router, prefix=api)
 app.include_router(configs.router, prefix=api)
 app.include_router(topology.router, prefix=api)
+app.include_router(reference.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

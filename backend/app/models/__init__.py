@@ -1,6 +1,12 @@
 from app.models.change_log import ChangeAction, ChangeLog, ChangeSource
 from app.models.device import Device, DeviceStatus, DeviceType
 from app.models.maintenance import MaintenanceContract
+from app.models.reference import (
+    ProductReference,
+    ReferenceSource,
+    Vulnerability,
+    VulnerabilityAffect,
+)
 from app.models.scenario import Scenario, ScenarioAction, ScenarioItem, ScenarioStatus
 from app.models.site import Site
 from app.models.topology import (
@@ -26,6 +32,10 @@ __all__ = [
     "DeviceStatus",
     "DeviceType",
     "MaintenanceContract",
+    "ProductReference",
+    "ReferenceSource",
+    "Vulnerability",
+    "VulnerabilityAffect",
     "Scenario",
     "ScenarioAction",
     "ScenarioItem",

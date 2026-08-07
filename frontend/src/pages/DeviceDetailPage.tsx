@@ -41,6 +41,11 @@ export default function DeviceDetailPage() {
     queryFn: () => api.getDevice(deviceId),
   });
 
+  const { data: vulnerabilities } = useQuery({
+    queryKey: ["deviceVulnerabilities", id],
+    queryFn: () => api.vulnerabilityMatches(deviceId),
+  });
+
   // この機器に対する変更と、紐づく保守契約への変更をまとめて見せる
   const { data: history } = useQuery({
     queryKey: ["deviceChanges", id],
@@ -180,14 +185,19 @@ export default function DeviceDetailPage() {
         <div>
           <span className="k">販売終了 (EoS)</span>
           <span>
-            {formatDate(device.eos_date)}{" "}
+            {formatDate(lc.effective_eos_date)}{" "}
             <span className="muted">{formatRemaining(lc.days_to_eos)}</span>
           </span>
         </div>
         <div>
-          <span className="k">サポート終了 (EoL)</span>
+          <span className="k">
+            サポート終了 (EoL)
+            {lc.eol_source === "product" && (
+              <span className="muted">（型番の製品マスタ由来）</span>
+            )}
+          </span>
           <span>
-            {formatDate(device.eol_date)}{" "}
+            {formatDate(lc.effective_eol_date)}{" "}
             <span className="muted">{formatRemaining(lc.days_to_eol)}</span>{" "}
             <SeverityBadge severity={lc.eol_severity} />
           </span>
@@ -308,6 +318,44 @@ export default function DeviceDetailPage() {
             </button>
           </div>
         </form>
+      )}
+
+      <h2>該当する脆弱性</h2>
+      {!vulnerabilities || vulnerabilities.findings.length === 0 ? (
+        <div className="empty">
+          {device.os_version
+            ? "該当する脆弱性はありません"
+            : "OSバージョンが未登録のため判定できません"}
+        </div>
+      ) : (
+        <table>
+          <thead>
+            <tr>
+              <th>CVE</th>
+              <th>CVSS</th>
+              <th>状況</th>
+              <th>判定根拠</th>
+              <th>修正版</th>
+            </tr>
+          </thead>
+          <tbody>
+            {vulnerabilities.findings.map((finding) => (
+              <tr key={finding.cve_id}>
+                <td>{finding.cve_id}</td>
+                <td>{finding.cvss_score ?? "—"}</td>
+                <td>
+                  {finding.known_exploited && (
+                    <span className="badge expired">悪用確認済み</span>
+                  )}
+                </td>
+                <td className="muted" style={{ whiteSpace: "normal" }}>
+                  {finding.matched_on}
+                </td>
+                <td>{finding.fixed_version ?? "—"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
       )}
 
       <h2>変更履歴</h2>

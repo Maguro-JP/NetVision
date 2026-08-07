@@ -11,7 +11,10 @@ import type {
   ImportResult,
   MaintenanceContract,
   NetworkInterface,
+  ProductImportResult,
+  ProductReference,
   RebuildResult,
+  ReferenceFreshness,
   Scenario,
   ScenarioDetail,
   ScenarioItem,
@@ -20,6 +23,9 @@ import type {
   TopologyEdge,
   TopologyGraph,
   TopologyStats,
+  Vulnerability,
+  VulnerabilityImportResult,
+  VulnerabilitySummary,
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
@@ -247,6 +253,45 @@ export const api = {
       body: JSON.stringify(body),
     }),
   deleteLink: (id: number) => request<void>(`/topology/links/${id}`, { method: "DELETE" }),
+
+  // --- リファレンス（型番のライフサイクル / 脆弱性）---
+  listProducts: (params: { q?: string; stale_only?: string } = {}) =>
+    request<ProductReference[]>(`/reference/products${query(params)}`),
+  createProduct: (body: Partial<ProductReference>) =>
+    request<ProductReference>("/reference/products", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateProduct: (id: number, body: Partial<ProductReference>) =>
+    request<ProductReference>(`/reference/products/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteProduct: (id: number) =>
+    request<void>(`/reference/products/${id}`, { method: "DELETE" }),
+  importProducts: (file: File, fetchedAt?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (fetchedAt) form.append("fetched_at", fetchedAt);
+    return upload<ProductImportResult>("/reference/products/import", form);
+  },
+  productTemplateUrl: `${BASE}/reference/products/template.csv`,
+
+  importVulnerabilities: (file: File, fetchedAt?: string) => {
+    const form = new FormData();
+    form.append("file", file);
+    if (fetchedAt) form.append("fetched_at", fetchedAt);
+    return upload<VulnerabilityImportResult>("/reference/vulnerabilities/import", form);
+  },
+  listVulnerabilities: (params: { q?: string; affecting_only?: string } = {}) =>
+    request<Vulnerability[]>(`/reference/vulnerabilities${query(params)}`),
+  deleteVulnerability: (id: number) =>
+    request<void>(`/reference/vulnerabilities/${id}`, { method: "DELETE" }),
+  vulnerabilityMatches: (deviceId?: number) =>
+    request<VulnerabilitySummary>(
+      `/reference/vulnerabilities/matches/summary${query({ device_id: deviceId })}`,
+    ),
+  referenceFreshness: () => request<ReferenceFreshness>("/reference/freshness"),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

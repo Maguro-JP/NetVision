@@ -70,6 +70,10 @@ class DeviceUpdate(BaseModel):
 
 
 class LifecycleStatusRead(BaseModel):
+    effective_eos_date: date | None
+    effective_eol_date: date | None
+    # "device"（機器個別の入力） / "product"（型番の製品マスタ） / None（未登録）
+    eol_source: str | None
     maintenance_end: date | None
     days_to_maintenance_end: int | None
     maintenance_severity: Severity

@@ -10,9 +10,13 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 from datetime import date
+from typing import TYPE_CHECKING
 
 from app.models import Device, DeviceStatus, MaintenanceContract
 from app.services.lifecycle import Severity, evaluate
+
+if TYPE_CHECKING:
+    from app.models.reference import Vulnerability
 
 
 class InsightKind(enum.StrEnum):
@@ -25,9 +29,13 @@ class InsightKind(enum.StrEnum):
     ACTIVE_AFTER_EOL = "active_after_eol"
     ACTIVE_WITHOUT_CONTRACT = "active_without_contract"
     AGING_DEVICE = "aging_device"
+    KNOWN_EXPLOITED_VULNERABILITY = "known_exploited_vulnerability"
+    CRITICAL_VULNERABILITY = "critical_vulnerability"
     # 台帳の整備
     MISSING_LIFECYCLE_DATA = "missing_lifecycle_data"
     MISSING_SITE = "missing_site"
+    MISSING_PRODUCT_REFERENCE = "missing_product_reference"
+    MISSING_OS_VERSION = "missing_os_version"
     # 集約の余地
     MIXED_PROVIDERS = "mixed_providers"
 
@@ -74,6 +82,26 @@ KIND_META: dict[InsightKind, tuple[InsightCategory, str, Severity]] = {
         InsightCategory.RISK,
         "導入から年数が経過しており更改の検討時期です",
         Severity.WARNING,
+    ),
+    InsightKind.KNOWN_EXPLOITED_VULNERABILITY: (
+        InsightCategory.RISK,
+        "悪用が確認されている脆弱性の影響を受けています",
+        Severity.EXPIRED,
+    ),
+    InsightKind.CRITICAL_VULNERABILITY: (
+        InsightCategory.RISK,
+        "深刻度の高い脆弱性の影響を受けています",
+        Severity.CRITICAL,
+    ),
+    InsightKind.MISSING_PRODUCT_REFERENCE: (
+        InsightCategory.DATA,
+        "型番の製品リファレンスが未登録です",
+        Severity.UNKNOWN,
+    ),
+    InsightKind.MISSING_OS_VERSION: (
+        InsightCategory.DATA,
+        "OSバージョンが未登録で、脆弱性の判定ができません",
+        Severity.UNKNOWN,
     ),
     InsightKind.MISSING_LIFECYCLE_DATA: (
         InsightCategory.DATA,
@@ -140,7 +168,11 @@ def _make(kind: InsightKind, device: Device | None, detail: str, **kwargs) -> In
     )
 
 
-def analyze(devices: list[Device], today: date | None = None) -> InsightReport:
+def analyze(
+    devices: list[Device],
+    today: date | None = None,
+    vulnerabilities: list[Vulnerability] | None = None,
+) -> InsightReport:
     today = today or date.today()
     insights: list[Insight] = []
 
@@ -188,15 +220,15 @@ def analyze(devices: list[Device], today: date | None = None) -> InsightReport:
                         )
                     )
 
-        if device.eol_date and active:
+        if status.effective_eol_date and active:
             latest = max(c.end_date for c in active)
-            if latest > device.eol_date:
-                over_days = (latest - device.eol_date).days
+            if latest > status.effective_eol_date:
+                over_days = (latest - status.effective_eol_date).days
                 insights.append(
                     _make(
                         InsightKind.CONTRACT_AFTER_EOL,
                         device,
-                        f"サポート終了({device.eol_date:%Y/%m/%d})より "
+                        f"サポート終了({status.effective_eol_date:%Y/%m/%d})より "
                         f"{over_days} 日先まで保守契約があります",
                         recommendation=(
                             "EoL 以降はベンダー保守が受けられない場合があります。"
@@ -239,9 +271,32 @@ def analyze(devices: list[Device], today: date | None = None) -> InsightReport:
                     )
                 )
 
+            insights.extend(_vulnerability_insights(device, vulnerabilities or []))
+
         # --- 台帳の整備 -----------------------------------------------------
         if device.status is not DeviceStatus.RETIRED:
-            if device.eol_date is None and status.maintenance_end is None:
+            if getattr(device, "product", None) is None:
+                insights.append(
+                    _make(
+                        InsightKind.MISSING_PRODUCT_REFERENCE,
+                        device,
+                        f"{device.vendor} {device.model} の EoL 情報が製品マスタにありません",
+                        recommendation=(
+                            "リファレンス管理から型番を登録すると、"
+                            "同じ型番の機器すべてに反映されます。"
+                        ),
+                    )
+                )
+            if not device.os_version:
+                insights.append(
+                    _make(
+                        InsightKind.MISSING_OS_VERSION,
+                        device,
+                        "OSバージョンが分からないため、該当する脆弱性を判定できません",
+                        recommendation="Config を取り込むと自動で読み取れます。",
+                    )
+                )
+            if status.effective_eol_date is None and status.maintenance_end is None:
                 insights.append(
                     _make(
                         InsightKind.MISSING_LIFECYCLE_DATA,
@@ -275,6 +330,46 @@ def analyze(devices: list[Device], today: date | None = None) -> InsightReport:
         by_category=by_category,
         insights=insights,
     )
+
+
+def _vulnerability_insights(device: Device, vulnerabilities: list) -> list[Insight]:
+    """該当する脆弱性を指摘に変える。悪用確認済みを最優先で挙げる。"""
+    from app.services.reference import match_device
+
+    findings = match_device(device, vulnerabilities)
+    if not findings:
+        return []
+
+    exploited = [f for f in findings if f.known_exploited]
+    critical = [f for f in findings if not f.known_exploited and (f.cvss_score or 0) >= 9.0]
+
+    insights: list[Insight] = []
+    if exploited:
+        ids = ", ".join(f.cve_id for f in exploited[:5])
+        fixed = next((f.fixed_version for f in exploited if f.fixed_version), None)
+        insights.append(
+            _make(
+                InsightKind.KNOWN_EXPLOITED_VULNERABILITY,
+                device,
+                f"{len(exploited)}件（{ids}）。稼働中のバージョン {device.os_version}",
+                recommendation=(
+                    f"{fixed} 以降へのアップグレードを最優先で検討してください。"
+                    if fixed
+                    else "ベンダーの案内に従い、最優先で対処してください。"
+                ),
+            )
+        )
+    if critical:
+        ids = ", ".join(f.cve_id for f in critical[:5])
+        insights.append(
+            _make(
+                InsightKind.CRITICAL_VULNERABILITY,
+                device,
+                f"CVSS 9.0 以上が {len(critical)}件（{ids}）",
+                recommendation="アップグレード計画に含めてください。",
+            )
+        )
+    return insights
 
 
 def _mixed_providers(devices: list[Device], today: date) -> list[Insight]:

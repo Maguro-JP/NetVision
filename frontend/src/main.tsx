@@ -13,8 +13,10 @@ import DeviceListPage from "./pages/DeviceListPage";
 import ImportPage from "./pages/ImportPage";
 import InsightsPage from "./pages/InsightsPage";
 import ScenarioDetailPage from "./pages/ScenarioDetailPage";
+import ReferencePage from "./pages/ReferencePage";
 import ScenariosPage from "./pages/ScenariosPage";
 import TopologyPage from "./pages/TopologyPage";
+import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
 import SitesPage from "./pages/SitesPage";
 import "./styles.css";
 
@@ -40,6 +42,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="configs" element={<ConfigsPage />} />
             <Route path="changes" element={<ChangesPage />} />
             <Route path="insights" element={<InsightsPage />} />
+            <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+            <Route path="reference" element={<ReferencePage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
           </Route>
