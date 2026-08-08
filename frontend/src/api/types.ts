@@ -548,3 +548,55 @@ export interface DashboardSummary {
   devices_without_lifecycle_data: number;
   upcoming: Device[];
 }
+
+// --- Config 計画（現行フル / 将来フル / 差分） ---
+
+export type PlanStatus = "draft" | "review" | "approved" | "applied" | "archived";
+
+export interface ConfigPlan {
+  id: number;
+  device_id: number;
+  device_hostname: string | null;
+  name: string;
+  description: string | null;
+  status: PlanStatus;
+  body: string;
+  vendor: string | null;
+  scenario_id: number | null;
+  base_snapshot_id: number | null;
+  revision: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface DiffCommand {
+  text: string;
+  depth: number;
+  kind: "add" | "remove" | "context";
+  rendered: string;
+}
+
+export interface PlanDiff {
+  verified: boolean;
+  commands: DiffCommand[];
+  script: string;
+  rollback_script: string;
+  mismatches: string[];
+  warnings: string[];
+  risks: string[];
+  added: number;
+  removed: number;
+  changed: number;
+}
+
+export interface PlanOutputs {
+  plan_id: number;
+  device_hostname: string | null;
+  vendor: string;
+  base_snapshot_id: number | null;
+  base_is_stale: boolean;
+  notes: string[];
+  current_full: string;
+  future_full: string;
+  diff: PlanDiff;
+}

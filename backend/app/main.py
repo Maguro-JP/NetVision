@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routes import (
     changes,
+    config_plans,
     configs,
     dashboard,
     devices,
@@ -47,6 +48,7 @@ app.include_router(configs.router, prefix=api)
 app.include_router(topology.router, prefix=api)
 app.include_router(reference.router, prefix=api)
 app.include_router(documents.router, prefix=api)
+app.include_router(config_plans.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

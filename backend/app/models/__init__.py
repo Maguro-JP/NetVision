@@ -1,4 +1,5 @@
 from app.models.change_log import ChangeAction, ChangeLog, ChangeSource
+from app.models.config_plan import ConfigPlan, PlanStatus
 from app.models.device import Device, DeviceStatus, DeviceType
 from app.models.document import ConfigTemplate, Document, DocumentType, TemplateCategory
 from app.models.maintenance import MaintenanceContract
@@ -21,6 +22,8 @@ from app.models.topology import (
 
 __all__ = [
     "ChangeAction",
+    "ConfigPlan",
+    "PlanStatus",
     "ConfigSnapshot",
     "ConfigTemplate",
     "Document",

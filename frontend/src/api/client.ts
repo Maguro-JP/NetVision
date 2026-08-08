@@ -4,6 +4,7 @@ import type {
   DeviceDetail,
   ChangeLogPage,
   ConfigDiff,
+  ConfigPlan,
   ConfigTemplate,
   ConfigTemplateMatch,
   ConfigSnapshot,
@@ -14,6 +15,7 @@ import type {
   MaintenanceContract,
   NetworkInterface,
   ProductImportResult,
+  PlanOutputs,
   ProductReference,
   RebuildResult,
   ReferenceFreshness,
@@ -336,6 +338,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  // --- Config 計画 ---
+  listPlans: (deviceId?: number) =>
+    request<ConfigPlan[]>(`/config-plans${query({ device_id: deviceId })}`),
+  createPlan: (body: Record<string, unknown>) =>
+    request<ConfigPlan>("/config-plans", { method: "POST", body: JSON.stringify(body) }),
+  updatePlan: (id: number, body: Partial<ConfigPlan>) =>
+    request<ConfigPlan>(`/config-plans/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deletePlan: (id: number) => request<void>(`/config-plans/${id}`, { method: "DELETE" }),
+  planOutputs: (id: number) => request<PlanOutputs>(`/config-plans/${id}/outputs`),
+  planDownloadUrl: (id: number, kind: "current" | "future" | "diff" | "rollback") =>
+    `${BASE}/config-plans/${id}/download/${kind}`,
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

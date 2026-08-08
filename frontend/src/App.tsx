@@ -12,6 +12,7 @@ const NAV = [
   { to: "/configs", label: "Configの取り込み" },
   { to: "/documents", label: "ベンダー資料" },
   { to: "/config-templates", label: "Configテンプレート" },
+  { to: "/config-plans", label: "Config計画（差分生成）" },
   { to: "/reference", label: "リファレンス管理" },
   { to: "/import", label: "台帳の取り込み" },
 ];

@@ -215,6 +215,22 @@ button.primary {
 button.danger {
   color: var(--sev-expired);
 }
+/* ダウンロードリンクをボタンと同じ見た目にする */
+a.button {
+  display: inline-block;
+  font: inherit;
+  color: var(--text);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 10px;
+  text-decoration: none;
+  cursor: pointer;
+}
+a.button:hover {
+  border-color: var(--accent);
+}
+
 button:disabled {
   opacity: 0.5;
   cursor: not-allowed;
