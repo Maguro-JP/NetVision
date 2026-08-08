@@ -6,6 +6,7 @@ const NAV = [
   { to: "/devices", label: "機器一覧" },
   { to: "/sites", label: "拠点" },
   { to: "/vulnerabilities", label: "脆弱性" },
+  { to: "/remediation", label: "脆弱性への対処" },
   { to: "/insights", label: "最適化の指摘" },
   { to: "/scenarios", label: "将来構成シナリオ" },
   { to: "/replacement", label: "更改支援" },

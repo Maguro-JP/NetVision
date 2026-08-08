@@ -639,3 +639,69 @@ export interface ImpactReport {
   isolated: string[];
   note: string;
 }
+
+// --- 脆弱性への対処 ---
+
+export type RemediationKind =
+  | "upgrade"
+  | "workaround"
+  | "mitigation"
+  | "accepted"
+  | "not_applicable";
+
+export interface RemediationOption {
+  id: number;
+  kind: string;
+  summary: string;
+  fixed_version: string | null;
+  procedure: string | null;
+  source_document_id: number | null;
+  source_document_title: string | null;
+  config_template_id: number | null;
+  config_template_name: string | null;
+  verified_by: string | null;
+  verified_on: string | null;
+  matched_on: string;
+}
+
+export interface RemediationSuggestion {
+  id: number;
+  title?: string | null;
+  name?: string | null;
+  reason: string;
+}
+
+export interface RemediationFinding {
+  cve_id: string;
+  title: string | null;
+  cvss_score: number | null;
+  cvss_severity: string | null;
+  known_exploited: boolean;
+  matched_on: string;
+  fixed_version: string | null;
+  upgrade_available: boolean;
+  has_remediation: boolean;
+  remediations: RemediationOption[];
+  suggested_documents: RemediationSuggestion[];
+  suggested_templates: RemediationSuggestion[];
+}
+
+export interface DeviceRemediation {
+  device_id: number;
+  hostname: string;
+  os_version: string | null;
+  findings: RemediationFinding[];
+  unresolved_count: number;
+  note: string;
+}
+
+export interface Remediation extends RemediationOption {
+  vulnerability_id: number;
+  cve_id: string | null;
+  vendor: string | null;
+  model: string | null;
+  os_name: string | null;
+  applies_from: string | null;
+  applies_to: string | null;
+  notes: string | null;
+}

@@ -9,6 +9,7 @@ from app.models.reference import (
     Vulnerability,
     VulnerabilityAffect,
 )
+from app.models.remediation import Remediation, RemediationKind
 from app.models.scenario import Scenario, ScenarioAction, ScenarioItem, ScenarioStatus
 from app.models.site import Site
 from app.models.topology import (
@@ -44,6 +45,8 @@ __all__ = [
     "ReferenceSource",
     "Vulnerability",
     "VulnerabilityAffect",
+    "Remediation",
+    "RemediationKind",
     "Scenario",
     "ScenarioAction",
     "ScenarioItem",

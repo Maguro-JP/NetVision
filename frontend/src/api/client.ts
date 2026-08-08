@@ -14,11 +14,13 @@ import type {
   ImportResult,
   MaintenanceContract,
   NetworkInterface,
+  DeviceRemediation,
   ImpactReport,
   ProductImportResult,
   PlanOutputs,
   ProductReference,
   RebuildResult,
+  Remediation,
   ReplacementPlan,
   ReferenceFreshness,
   RenderResult,
@@ -352,6 +354,15 @@ export const api = {
   planOutputs: (id: number) => request<PlanOutputs>(`/config-plans/${id}/outputs`),
   planDownloadUrl: (id: number, kind: "current" | "future" | "diff" | "rollback") =>
     `${BASE}/config-plans/${id}/download/${kind}`,
+
+  // --- 脆弱性への対処 ---
+  deviceRemediation: (deviceId: number) =>
+    request<DeviceRemediation>(`/devices/${deviceId}/remediation`),
+  listRemediations: (cveId?: string) =>
+    request<Remediation[]>(`/remediations${query({ cve_id: cveId })}`),
+  createRemediation: (body: Record<string, unknown>) =>
+    request<Remediation>("/remediations", { method: "POST", body: JSON.stringify(body) }),
+  deleteRemediation: (id: number) => request<void>(`/remediations/${id}`, { method: "DELETE" }),
 
   // --- 更改支援 ---
   replacementPlan: (years = 5) =>
