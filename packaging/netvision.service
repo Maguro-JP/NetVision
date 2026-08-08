@@ -1,0 +1,28 @@
+# 常時起動させる場合の systemd ユニット例。
+#   sudo cp netvision.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now netvision
+#
+# 認証がまだ無いため、既定では 127.0.0.1 のみ待ち受ける。
+# 他の端末からも使う場合は認証を入れてから ExecStart の --host を変えること。
+[Unit]
+Description=NetVision - ネットワーク機器管理
+After=network.target
+
+[Service]
+Type=simple
+User=netvision
+WorkingDirectory=/opt/netvision/backend
+Environment=NETVISION_SERVE_FRONTEND=/opt/netvision/frontend/dist
+ExecStart=/opt/netvision/.venv/bin/python -m scripts.standalone --host 127.0.0.1 --port 8000
+Restart=on-failure
+RestartSec=5
+
+# 書き込みはデータディレクトリだけに限る
+ProtectSystem=strict
+ProtectHome=read-only
+PrivateTmp=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/netvision
+
+[Install]
+WantedBy=multi-user.target

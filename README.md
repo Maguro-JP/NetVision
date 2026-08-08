@@ -71,8 +71,11 @@ frontend/
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
 docs/GETTING_STARTED.md  自分の端末で実データを試す手順
+docs/INSTALL.md      閉域環境への導入手順書
+docs/OPERATIONS.md   運用手順書
 docs/PREVIEW.md  プレビュー環境（Vercel）の手順
 api/index.py     プレビュー用のサーバレス関数入口
+packaging/       閉域へ持ち込むオフラインバンドルの作成・導入スクリプト
 ```
 
 ## 起動方法
@@ -86,6 +89,19 @@ cd backend && .venv/bin/python -m scripts.standalone   # http://127.0.0.1:8000
 
 データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
 認証がまだ無いため、既定では自分の端末からのみ待ち受けます。
+
+### 閉域環境へ導入する
+
+インターネットに繋がらない環境へは、**持ち込み用の1ファイル**を作って渡します。
+閉域側で Git もネットも使いません。
+
+```bash
+./packaging/make-bundle.sh        # ネット側で実行 → dist/netvision-YYYYMMDD.tar.gz
+```
+
+閉域側は展開して `./install.sh`（Windows は `install.bat`）だけ。必要なのは Python 3.11 以上のみで、
+Node.js もインターネットも要りません。手順は [docs/INSTALL.md](docs/INSTALL.md)、
+運用は [docs/OPERATIONS.md](docs/OPERATIONS.md) にまとめています。
 
 ### Docker Compose（本番と同じ構成）
 
