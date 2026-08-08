@@ -13,7 +13,14 @@ from datetime import date, timedelta
 from sqlalchemy import select
 
 from app.db import SessionLocal
-from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
+from app.models import (
+    Device,
+    DeviceStatus,
+    DeviceType,
+    DeviceVlan,
+    MaintenanceContract,
+    Site,
+)
 from app.models.change_log import ChangeSource
 from app.models.topology import Link, LinkOrigin
 from app.services.audit import audit_context
@@ -214,8 +221,26 @@ def _seed(force: bool) -> None:
                 for a, a_if, b, b_if, confirmed in wiring
             ]
         )
+        # VLAN も入れておく。デモで絞り込みを試せないと、機能があること自体が伝わらない。
+        # 実運用では Config の `vlan 10 / name USERS` から取り込まれる部分。
+        segments = [
+            (10, "USERS", ["core-sw-01", "core-sw-02", "acc-sw-osaka-01"]),
+            (20, "SERVERS", ["core-sw-01", "core-sw-02"]),
+            (30, "MGMT", ["core-sw-01", "core-sw-02", "acc-sw-osaka-01", "wlc-01"]),
+            (40, "WIFI", ["core-sw-02", "wlc-01"]),
+        ]
+        db.add_all(
+            [
+                DeviceVlan(device_id=by_host[host].id, vlan_id=vlan_id, name=name)
+                for vlan_id, name, hosts in segments
+                for host in hosts
+            ]
+        )
         db.commit()
-        print(f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件 / 結線{len(wiring)}本")
+        print(
+            f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件 / "
+            f"結線{len(wiring)}本 / VLAN{len(segments)}件"
+        )
     finally:
         db.close()
 
