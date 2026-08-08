@@ -13,6 +13,8 @@ class Vendor(enum.StrEnum):
     CISCO_NXOS = "cisco_nxos"
     JUNIPER = "juniper"
     FORTINET = "fortinet"
+    NEC_IX = "nec_ix"
+    NEC_QX = "nec_qx"
     UNKNOWN = "unknown"
 
 

@@ -1,0 +1,29 @@
+H3C Comware Platform Software
+Comware Software, Version 5.20.99, Release 6108
+NEC QX-S5528P Routing Switch uptime is 0 week, 3 days, 4 hours
+#
+ sysname qx-sw-01
+#
+vlan 10
+ name USERS
+#
+vlan 20
+ name SERVERS
+#
+interface GigabitEthernet1/0/1
+ description to-core-sw-01
+ port link-type trunk
+ port trunk permit vlan 10 20
+#
+interface GigabitEthernet1/0/8
+ description client-port
+ port link-type access
+ port access vlan 10
+#
+interface Vlan-interface10
+ ip address 192.168.10.254 255.255.255.0
+#
+LLDP neighbor-information of port 1[GigabitEthernet1/0/1]:
+  Chassis type      : MAC address
+  System name       : core-sw-01
+  Port ID           : GigabitEthernet1/0/24

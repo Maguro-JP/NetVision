@@ -262,7 +262,80 @@ _FORTINET = _FortiDialect(
 )
 
 
+class _ComwareDialect(Dialect):
+    """NEC QX（Comware）は否定が `no` ではなく `undo`。"""
+
+    def parse_change(self, line: str) -> tuple[str, bool]:
+        stripped = line.strip()
+        if stripped.lower().startswith("undo "):
+            return stripped[5:].strip(), True
+        return stripped, False
+
+    def negate(self, line: str) -> str:
+        return f"undo {line}"
+
+
+_NEC_QX = _ComwareDialect(
+    name="nec_qx",
+    single_valued=[
+        re.compile(r"^description", re.I),
+        re.compile(r"^sysname", re.I),
+        re.compile(r"^name", re.I),
+        re.compile(r"^ip\s+address", re.I),
+        re.compile(r"^port\s+link-type", re.I),
+        re.compile(r"^port\s+access\s+vlan", re.I),
+        re.compile(r"^speed", re.I),
+        re.compile(r"^duplex", re.I),
+    ],
+    risks=[
+        RiskRule(
+            re.compile(r"^\s*undo\s+interface\b", re.I),
+            "インターフェースを削除します。管理経路だと接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*shutdown\b", re.I),
+            "ポートを閉塞します。通信が止まります",
+        ),
+        RiskRule(
+            re.compile(r"^\s*undo\s+ip\s+address\b", re.I),
+            "IPアドレスを外します。その経路で作業していると接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*undo\s+vlan\b", re.I),
+            "VLAN を削除します。所属ポートの通信が止まります",
+        ),
+    ],
+)
+
+# IX は Cisco と同じく `no` で否定する
+_NEC_IX = Dialect(
+    name="nec_ix",
+    single_valued=[
+        re.compile(r"^description", re.I),
+        re.compile(r"^device-name", re.I),
+        re.compile(r"^ip\s+address", re.I),
+        re.compile(r"^ip\s+mtu", re.I),
+    ],
+    risks=[
+        RiskRule(
+            re.compile(r"^\s*no\s+interface\b", re.I),
+            "インターフェースを削除します。管理経路だと接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*shutdown\b", re.I),
+            "ポートを閉塞します。通信が止まります",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+ip\s+address\b", re.I),
+            "IPアドレスを外します。その経路で作業していると接続が切れます",
+        ),
+    ],
+)
+
+
 _BY_VENDOR: dict[Vendor, Dialect] = {
+    Vendor.NEC_IX: _NEC_IX,
+    Vendor.NEC_QX: _NEC_QX,
     Vendor.CISCO_IOS: _CISCO,
     Vendor.CISCO_NXOS: _CISCO,
     Vendor.JUNIPER: _JUNIPER,

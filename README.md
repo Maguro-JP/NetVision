@@ -47,7 +47,7 @@ backend/
     models/      SQLAlchemy モデル（Device / MaintenanceContract / Site）
     schemas/     Pydantic スキーマ（API の入出力）
     services/    ライフサイクル判定・取り込み・書き出し・変更履歴・指摘・シナリオ
-      configparse/ ベンダー別 Config パーサ（Cisco / Juniper / Fortinet）
+      configparse/ ベンダー別 Config パーサ（Cisco / Juniper / Fortinet / NEC）
       reference.py リファレンス取り込みと CVE 突合
       documents.py ベンダー資料の保管と適用判定
       config_render.py Config テンプレートの展開（サンドボックス）
@@ -255,7 +255,15 @@ Excel でそのまま開けるよう BOM 付き UTF-8）。
 ## Config の取り込み
 
 running-config や show 出力を読み込み、**機器情報・インターフェース・VLAN・隣接情報**を抽出します。
-Cisco IOS / IOS-XE / NX-OS、Juniper Junos、Fortinet FortiOS に対応（ベンダーは自動判別）。
+対応ベンダーは次のとおりです（自動判別）。
+
+| ベンダー | 系統 | 備考 |
+|---|---|---|
+| Cisco | IOS / IOS-XE / NX-OS | Catalyst 2960 / 2960-X / 3850 / 9300 / 9500 などを確認済み |
+| Juniper | Junos | |
+| Fortinet | FortiOS | |
+| **NEC** | **IX シリーズ** | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式 |
+| **NEC** | **QX シリーズ** | QX-S。H3C Comware ベースで、否定は `undo` |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。

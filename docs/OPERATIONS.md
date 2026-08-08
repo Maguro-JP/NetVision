@@ -41,11 +41,13 @@ show cdp neighbors detail    ← あれば結線が自動で引ける
 running-config
 ```
 
-| ベンダー | 対応 |
-|---|---|
-| Cisco IOS / IOS-XE / NX-OS | ✅ |
-| Juniper Junos | ✅ |
-| Fortinet FortiOS | ✅ |
+| ベンダー | 対応 | 型番が取れる出力 |
+|---|---|---|
+| Cisco IOS / IOS-XE / NX-OS | ✅ | `show version`（Catalyst 2960 〜 9500 で確認済み） |
+| Juniper Junos | ✅ | `show version` / `show chassis hardware` |
+| Fortinet FortiOS | ✅ | `get system status` |
+| NEC IX シリーズ | ✅ | `show version`（`IX Series IX2215 ...` の行） |
+| NEC QX シリーズ | ✅ | `display version`（Comware ベース） |
 
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 

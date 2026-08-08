@@ -1,0 +1,19 @@
+IX Series IX2215 (magellan-sec) Software, Version 10.6.21, RELEASE SOFTWARE
+Compiled Jul 05-Tue-2022 14:25:30 JST #2
+System serial number: 2215X0012345
+!
+device-name ix-rt-01
+!
+interface GigaEthernet0.0
+  description WAN-回線
+  ip address 203.0.113.2/30
+  no shutdown
+!
+interface GigaEthernet1.0
+  description LAN-core
+  ip address 192.168.10.1/24
+  no shutdown
+!
+interface Loopback0.0
+  ip address 10.255.0.1/32
+!
