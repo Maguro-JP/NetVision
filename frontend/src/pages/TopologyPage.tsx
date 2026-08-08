@@ -226,6 +226,13 @@ function TopologyEditor() {
           配置をリセット
         </button>
         <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
+        <a
+          className="button"
+          href={api.topologyExportUrl(layer)}
+          title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
+        >
+          図をファイルに出す（SVG）
+        </a>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>
         </RouterLink>

@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from app.schemas.topology import (
 )
 from app.services import configs as config_service
 from app.services import topology as service
+from app.services import topology_export
 
 router = APIRouter(prefix="/topology", tags=["topology"])
 
@@ -33,6 +34,27 @@ def get_topology(
     """図に描くためのノードと結線を返す。位置は保存済みのものを優先する。"""
     graph = service.get_graph(db, layer, include_retired=include_retired)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
+
+
+@router.get("/export.svg", response_class=Response)
+def export_topology(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    title: str = "ネットワーク構成図",
+) -> Response:
+    """構成図を SVG で書き出す。
+
+    設計書や報告書に貼るための出力。ベクタなので拡大・印刷しても潰れず、
+    Word / PowerPoint / Excel はそのまま挿入できる（Office 2016 以降）。
+    画面で整えた配置をそのまま使う。
+    """
+    svg = topology_export.export_svg(db, layer, title=title)
+    filename = f"topology-{layer}.svg"
+    return Response(
+        content=svg,
+        media_type="image/svg+xml; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/stats", response_model=TopologyStatsRead)
