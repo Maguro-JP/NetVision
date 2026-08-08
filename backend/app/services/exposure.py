@@ -68,9 +68,7 @@ def sync(db: Session, *, today: date | None = None) -> SyncResult:
     vulnerabilities = list(db.scalars(select(Vulnerability)))
     devices = _active_devices(db)
 
-    existing = {
-        (e.device_id, e.vulnerability_id): e for e in db.scalars(select(DeviceExposure))
-    }
+    existing = {(e.device_id, e.vulnerability_id): e for e in db.scalars(select(DeviceExposure))}
     by_cve = {v.cve_id: v for v in vulnerabilities}
     seen: set[tuple[int, int]] = set()
 

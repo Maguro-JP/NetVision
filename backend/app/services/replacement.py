@@ -237,10 +237,7 @@ def impact_of(db: Session, device_id: int) -> ImpactReport:
             "Config を取り込むと隣接情報から結線が推定されます"
         )
     elif isolated:
-        note = (
-            f"{len(isolated)}台が経路を失います。"
-            "更改の際は停止時間の調整と周知が必要です"
-        )
+        note = f"{len(isolated)}台が経路を失います。更改の際は停止時間の調整と周知が必要です"
     else:
         note = "経路が失われる機器はありません（迂回経路があります）"
 

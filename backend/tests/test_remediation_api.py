@@ -137,9 +137,12 @@ def test_remediation_for_another_model_is_not_offered(client, device_payload):
     device_id = add_device(client, device_payload)
     add_remediation(client, model="C9300-48P")
 
-    assert client.get(f"{API}/devices/{device_id}/remediation").json()["findings"][0][
-        "has_remediation"
-    ] is False
+    assert (
+        client.get(f"{API}/devices/{device_id}/remediation").json()["findings"][0][
+            "has_remediation"
+        ]
+        is False
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -211,8 +214,9 @@ def test_verified_workaround_comes_first(client, device_payload):
     device_id = add_device(client, device_payload)
 
     add_remediation(client, kind="upgrade", summary="17.9.6 へ上げる")
-    add_remediation(client, summary="Web UI を無効化する", verified_by="運用チーム",
-                    verified_on="2026-08-01")
+    add_remediation(
+        client, summary="Web UI を無効化する", verified_by="運用チーム", verified_on="2026-08-01"
+    )
 
     options = client.get(f"{API}/devices/{device_id}/remediation").json()["findings"][0][
         "remediations"
@@ -226,9 +230,7 @@ def test_remediation_crud(client):
     created = add_remediation(client).json()
 
     assert created["cve_id"] == "CVE-2026-0001"
-    updated = client.patch(
-        f"{API}/remediations/{created['id']}", json={"summary": "改訂"}
-    ).json()
+    updated = client.patch(f"{API}/remediations/{created['id']}", json={"summary": "改訂"}).json()
     assert updated["summary"] == "改訂"
 
     assert len(client.get(f"{API}/remediations", params={"cve_id": "CVE-2026-0001"}).json()) == 1

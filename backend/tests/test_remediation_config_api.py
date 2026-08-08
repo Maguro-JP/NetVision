@@ -61,9 +61,7 @@ def test_fix_config_produces_current_fixed_and_diff(client, device_payload):
     device_id = setup(client, device_payload)
     remediation = with_template(client)
 
-    fix = client.get(
-        f"{API}/devices/{device_id}/remediations/{remediation['id']}/config"
-    ).json()
+    fix = client.get(f"{API}/devices/{device_id}/remediations/{remediation['id']}/config").json()
 
     assert "ip http server" in fix["current_full"]
     # 対応版では塞がれている
@@ -80,9 +78,7 @@ def test_diff_converges_to_the_fixed_config(client, device_payload):
 
     device_id = setup(client, device_payload)
     remediation = with_template(client)
-    fix = client.get(
-        f"{API}/devices/{device_id}/remediations/{remediation['id']}/config"
-    ).json()
+    fix = client.get(f"{API}/devices/{device_id}/remediations/{remediation['id']}/config").json()
 
     dialect = for_vendor(fix["vendor"])
     applied = apply_script(
@@ -97,9 +93,7 @@ def test_rollback_restores_the_vulnerable_state(client, device_payload):
     device_id = setup(client, device_payload)
     remediation = with_template(client)
 
-    fix = client.get(
-        f"{API}/devices/{device_id}/remediations/{remediation['id']}/config"
-    ).json()
+    fix = client.get(f"{API}/devices/{device_id}/remediations/{remediation['id']}/config").json()
     assert "ip http server" in fix["diff"]["rollback_script"]
 
 
@@ -108,9 +102,7 @@ def test_already_applied_is_reported(client, device_payload):
     device_id = setup(client, device_payload, extra=b"\n")  # http server が無い
     remediation = with_template(client)
 
-    fix = client.get(
-        f"{API}/devices/{device_id}/remediations/{remediation['id']}/config"
-    ).json()
+    fix = client.get(f"{API}/devices/{device_id}/remediations/{remediation['id']}/config").json()
 
     assert fix["already_applied"] is True
     assert fix["diff"]["script"] == ""
@@ -161,9 +153,7 @@ def test_procedure_text_is_usable_but_warned_about(client, device_payload):
         client, procedure="no ip http server\nno ip http secure-server\n"
     )
 
-    fix = client.get(
-        f"{API}/devices/{device_id}/remediations/{remediation['id']}/config"
-    ).json()
+    fix = client.get(f"{API}/devices/{device_id}/remediations/{remediation['id']}/config").json()
 
     assert fix["source"] == "procedure"
     assert fix["diff"]["verified"] is True

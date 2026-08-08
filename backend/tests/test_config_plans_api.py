@@ -113,9 +113,12 @@ def test_each_output_can_be_downloaded(client, device_payload):
         assert res.status_code == 200, kind
         assert "attachment" in res.headers["content-disposition"]
 
-    assert "core-sw-01-current.txt" in client.get(
-        f"{API}/config-plans/{plan['id']}/download/current"
-    ).headers["content-disposition"]
+    assert (
+        "core-sw-01-current.txt"
+        in client.get(f"{API}/config-plans/{plan['id']}/download/current").headers[
+            "content-disposition"
+        ]
+    )
 
 
 def test_unverified_diff_cannot_be_downloaded(client, device_payload, monkeypatch):
@@ -228,9 +231,7 @@ def test_editing_the_body_bumps_the_revision(client, device_payload):
     plan = make_plan(client, device_id, seed_from="blank", body="hostname a\n").json()
     assert plan["revision"] == 1
 
-    updated = client.patch(
-        f"{API}/config-plans/{plan['id']}", json={"body": "hostname b\n"}
-    ).json()
+    updated = client.patch(f"{API}/config-plans/{plan['id']}", json={"body": "hostname b\n"}).json()
     assert updated["revision"] == 2
 
     # 本文が変わらない更新では上げない

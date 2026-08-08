@@ -47,9 +47,7 @@ def test_earlier_of_maintenance_and_eol_decides_the_year(client, device_payload)
     add_contract(client, device_id, "2027-06-30")
 
     plan = client.get(f"{API}/replacement/plan", params={"years": 10}).json()
-    target = next(
-        t for y in plan["years"] for t in y["targets"] if t["hostname"] == "sw-1"
-    )
+    target = next(t for y in plan["years"] for t in y["targets"] if t["hostname"] == "sw-1")
     assert target["reason"] == "保守期限"
     assert target["due_on"] == "2027-06-30"
 
@@ -73,9 +71,7 @@ def test_devices_without_a_due_date_are_listed_separately(client, device_payload
 
 
 def test_retired_devices_are_excluded(client, device_payload):
-    add_device(
-        client, device_payload, hostname="gone-sw", status="retired", eol_date="2027-01-01"
-    )
+    add_device(client, device_payload, hostname="gone-sw", status="retired", eol_date="2027-01-01")
     plan = client.get(f"{API}/replacement/plan", params={"years": 10}).json()
     names = [t["hostname"] for y in plan["years"] for t in y["targets"]]
     assert "gone-sw" not in names
