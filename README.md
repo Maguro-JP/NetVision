@@ -70,13 +70,24 @@ frontend/
   src/api/       API クライアントと型定義
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
+docs/GETTING_STARTED.md  自分の端末で実データを試す手順
 docs/PREVIEW.md  プレビュー環境（Vercel）の手順
 api/index.py     プレビュー用のサーバレス関数入口
 ```
 
 ## 起動方法
 
-### Docker Compose（推奨）
+**まず自分の端末で試したい場合は [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md) を見てください。**
+サーバは不要で、Docker も要らない1台完結モードがあります。
+
+```bash
+cd backend && .venv/bin/python -m scripts.standalone   # http://127.0.0.1:8000
+```
+
+データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
+認証がまだ無いため、既定では自分の端末からのみ待ち受けます。
+
+### Docker Compose（本番と同じ構成）
 
 ```bash
 docker compose up --build
@@ -232,6 +243,15 @@ CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
 | インターフェース | 名前、description、IPアドレス、VLAN、access/trunk、shutdown 状態 |
 | VLAN | ID と名前 |
 | 隣接情報 | LLDP / CDP のネイバー（detail 形式・表形式の両方） |
+
+### 台帳がまだ空のとき
+
+「台帳に無い機器を Config から登録する」を有効にすると、Config から機器を作れます。
+実 Config で立ち上げるときの入口です。
+
+ただし**型番が読み取れない Config は登録しません**。型番はこのツールの軸で、EoL も脆弱性も
+型番で引くため、空のまま登録すると判定できない機器が黙って増えます。plain な running-config には
+型番が入っていないので、その場合は `show version` の出力も一緒に取り込んでください。
 
 ### 台帳との関係（重要）
 
@@ -563,6 +583,8 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_REFERENCE_STALE_DAYS` | `180` | リファレンスがこの日数より古ければ「要更新」とする |
 | `NETVISION_DOCUMENT_STORAGE_PATH` | `./data/documents` | 資料ファイルの保管先（DB とは別にバックアップが必要） |
 | `NETVISION_MAX_DOCUMENT_BYTES` | `209715200`（200MB） | 1ファイルあたりの上限 |
+| `NETVISION_AUTO_CREATE_SCHEMA` | `false` | 起動時にテーブルが無ければ作る（1台完結モード用） |
+| `NETVISION_SERVE_FRONTEND` | なし | ビルド済み画面の配信元。同一プロセスで画面も返す |
 | `NETVISION_DEMO_MODE` | `false` | プレビュー用。起動時にスキーマ作成とデモデータ投入を行う（本番では使わない） |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
 

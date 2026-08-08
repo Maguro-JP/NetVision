@@ -70,3 +70,34 @@ def meta() -> dict[str, object]:
         "warning_days": settings.warning_days,
         "critical_days": settings.critical_days,
     }
+
+
+def _mount_frontend(directory: str) -> None:
+    """ビルド済みの画面を同じプロセスから配信する（1台完結モード）。
+
+    nginx を別に立てずに済むので、1人で試すときの手数が減る。
+    SPA なので、API 以外の未知のパスは index.html に返す。
+    """
+    from pathlib import Path
+
+    from fastapi.responses import FileResponse
+    from fastapi.staticfiles import StaticFiles
+
+    root = Path(directory)
+    index = root / "index.html"
+    if not index.exists():
+        return
+
+    if (root / "assets").is_dir():
+        app.mount("/assets", StaticFiles(directory=root / "assets"), name="assets")
+
+    @app.get("/{full_path:path}", include_in_schema=False)
+    def spa(full_path: str) -> FileResponse:
+        candidate = root / full_path
+        if full_path and candidate.is_file():
+            return FileResponse(candidate)
+        return FileResponse(index)
+
+
+if settings.serve_frontend:
+    _mount_frontend(settings.serve_frontend)

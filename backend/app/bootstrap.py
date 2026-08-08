@@ -24,9 +24,9 @@ _ready = False
 
 
 def ensure_ready() -> None:
-    """デモモードなら、テーブルとデモデータを用意する。何度呼んでも安全。"""
+    """必要ならスキーマを作る。デモモードならデモデータも入れる。何度呼んでも安全。"""
     global _ready
-    if _ready or not settings.demo_mode:
+    if _ready or not (settings.auto_create_schema or settings.demo_mode):
         return
 
     from app.db import Base, engine
@@ -36,11 +36,12 @@ def ensure_ready() -> None:
 
         Base.metadata.create_all(engine)
 
-        # 既にデータがあれば触らない
-        if "devices" in inspect(engine).get_table_names():
+        # デモデータを入れるのはデモモードのときだけ。
+        # 実データを入れる用途で、勝手にサンプルが混ざると困る。
+        if settings.demo_mode and "devices" in inspect(engine).get_table_names():
             from scripts.seed import seed
 
             seed()
         _ready = True
-    except Exception:  # プレビューが真っ白になる方が困るので落とさない
-        logger.exception("デモデータの用意に失敗しました")
+    except Exception:  # 画面が真っ白になる方が困るので落とさない
+        logger.exception("起動時の初期化に失敗しました")

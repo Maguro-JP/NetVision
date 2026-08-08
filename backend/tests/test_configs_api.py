@@ -232,3 +232,109 @@ def test_genuine_version_change_is_still_detected(client, device_payload):
     body = upload(client, "acc-sw-osaka-01").json()[0]
     version = next(d for d in body["diffs"] if d["field"] == "os_version")
     assert version["differs"] is True
+
+
+# ---------------------------------------------------------------------------
+# 台帳が空の状態から実 Config で立ち上げる
+# ---------------------------------------------------------------------------
+
+
+def test_create_missing_builds_the_ledger_from_configs(client):
+    """台帳が空でも、Config を入れれば機器が登録される。"""
+    fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
+
+    result = client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("core-sw-01.txt", fixture.read_bytes(), "text/plain"))],
+        data={"create_missing": "true"},
+    ).json()[0]
+
+    assert result["created"] is True
+    assert result["matched"] is True
+
+    devices = client.get(f"{API}/devices").json()
+    assert [d["hostname"] for d in devices] == ["core-sw-01"]
+    assert devices[0]["vendor"] == "Cisco"
+    assert devices[0]["model"] == "C9500-40X"
+
+
+def test_create_missing_is_off_by_default(client):
+    """既定では作らない（意図しない登録を防ぐ）。"""
+    fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
+
+    result = client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("core-sw-01.txt", fixture.read_bytes(), "text/plain"))],
+    ).json()[0]
+
+    assert result["created"] is False
+    assert client.get(f"{API}/devices").json() == []
+
+
+def test_create_missing_does_not_duplicate_existing_devices(client, device_payload):
+    """既にある機器は作り直さない。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="core-sw-01"))
+    fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
+
+    result = client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("core-sw-01.txt", fixture.read_bytes(), "text/plain"))],
+        data={"create_missing": "true"},
+    ).json()[0]
+
+    assert result["created"] is False
+    assert result["matched"] is True
+    assert len(client.get(f"{API}/devices").json()) == 1
+
+
+def test_create_missing_does_not_overwrite_existing_values(client, device_payload):
+    """新規作成は許すが、既存の値の上書きは従来どおり apply_inventory 任せ。"""
+    client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="core-sw-01", model="手で入れた型番"),
+    )
+    fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
+
+    client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("core-sw-01.txt", fixture.read_bytes(), "text/plain"))],
+        data={"create_missing": "true"},
+    )
+
+    assert client.get(f"{API}/devices").json()[0]["model"] == "手で入れた型番"
+
+
+def test_config_without_a_model_is_not_registered(client):
+    """型番が読めない Config は登録しない。EoL も脆弱性も型番で引くため。"""
+    running_only = b"hostname plain-sw\n!\ninterface GigabitEthernet1/0/1\n description x\n"
+
+    result = client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("plain-sw.txt", running_only, "text/plain"))],
+        data={"create_missing": "true"},
+    ).json()[0]
+
+    assert result["created"] is False
+    assert client.get(f"{API}/devices").json() == []
+    # 黙って落とさず、何をすればいいかを返す
+    assert "show version" in result["message"]
+
+
+def test_topology_builds_itself_from_multiple_configs(client):
+    """複数台まとめて入れれば、台帳とトポロジが一度に立ち上がる。"""
+    directory = Path(__file__).parent / "fixtures"
+    files = [
+        ("files", (path.name, path.read_bytes(), "text/plain"))
+        for path in sorted(directory.glob("*.txt"))
+    ]
+
+    results = client.post(
+        f"{API}/configs/upload", files=files, data={"create_missing": "true"}
+    ).json()
+    created = [r for r in results if r["created"]]
+    assert len(created) >= 2
+
+    client.post(f"{API}/topology/rebuild")
+    graph = client.get(f"{API}/topology").json()
+    assert len(graph["nodes"]) == len(created)
+    assert len(graph["edges"]) >= 1

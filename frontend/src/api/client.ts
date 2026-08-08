@@ -223,11 +223,15 @@ export const api = {
     request<void>(`/scenarios/items/${itemId}`, { method: "DELETE" }),
 
   // --- Config 取り込み ---
-  uploadConfigs: (files: File[], options: { deviceId?: number; applyInventory?: boolean } = {}) => {
+  uploadConfigs: (
+    files: File[],
+    options: { deviceId?: number; applyInventory?: boolean; createMissing?: boolean } = {},
+  ) => {
     const form = new FormData();
     for (const file of files) form.append("files", file);
     if (options.deviceId !== undefined) form.append("device_id", String(options.deviceId));
     form.append("apply_inventory", String(options.applyInventory ?? false));
+    form.append("create_missing", String(options.createMissing ?? false));
     return upload<IngestResult[]>("/configs/upload", form);
   },
   previewConfig: (file: File) => {

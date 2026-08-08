@@ -44,6 +44,7 @@ def _to_read(result: service.IngestResult) -> IngestResultRead:
         device_id=result.device_id,
         device_hostname=result.device_hostname,
         matched=result.matched,
+        created=result.created,
         unchanged=result.unchanged,
         snapshot_id=result.snapshot_id,
         interface_count=result.interface_count,
@@ -82,10 +83,14 @@ async def upload_configs(
     apply_inventory: bool = Form(
         default=False, description="読み取った型番・バージョンを台帳へ反映するか"
     ),
+    create_missing: bool = Form(
+        default=False, description="台帳に無いホスト名なら機器を新規作成するか"
+    ),
 ) -> list[IngestResultRead]:
     """Config を取り込み、機器・インターフェース・隣接情報を抽出する。
 
     既定では台帳を書き換えず、差分の提示だけ行う（apply_inventory で反映）。
+    台帳が空の状態から実 Config で立ち上げる場合は create_missing を使う。
     """
     if device_id is not None and db.get(Device, device_id) is None:
         raise HTTPException(
@@ -113,6 +118,7 @@ async def upload_configs(
                     _decode(content),
                     device_id=device_id,
                     apply_inventory=apply_inventory,
+                    create_missing=create_missing,
                 )
             )
         )
@@ -137,6 +143,7 @@ async def preview_config(
         device_id=device.id if device else None,
         device_hostname=device.hostname if device else None,
         matched=device is not None,
+        created=False,
         unchanged=False,
         snapshot_id=None,
         interface_count=len(parsed.interfaces),

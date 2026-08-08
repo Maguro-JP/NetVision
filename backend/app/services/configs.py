@@ -69,6 +69,7 @@ class IngestResult:
     device_id: int | None
     device_hostname: str | None
     matched: bool  # 台帳の機器と結び付いたか
+    created: bool  # 台帳に無かったので新規に作ったか
     unchanged: bool  # 前回と同じ内容だったか
     snapshot_id: int | None
     interface_count: int
@@ -93,6 +94,35 @@ def _find_device(db: Session, hostname: str | None) -> Device | None:
         if normalize_hostname(device.hostname) == key:
             return device
     return None
+
+
+def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
+    """Config から読み取れた値だけで機器を作る。
+
+    台帳が空の状態から実 Config で立ち上げるときの入口。読めなかった項目は
+    埋めずに空のままにする（推測で埋めると、後から本物の値が入ったときに
+    どちらが正しいか分からなくなる）。
+
+    ただし**型番が読めないときは作らない**。型番はこのツールの中心で、
+    EoL も脆弱性も型番で引くため、空のまま登録すると判定できない機器が
+    黙って増える。plain な running-config には型番が入っていないことが多く、
+    その場合は `show version` を一緒に取り込んでもらう必要がある。
+    """
+    vendor = configparse.VENDOR_NAMES.get(parsed.vendor)
+    if not parsed.model or not vendor:
+        return None
+
+    device = Device(
+        hostname=parsed.hostname,
+        vendor=vendor,
+        model=parsed.model,
+        serial_number=parsed.serial_number,
+        os_name=parsed.os_name,
+        os_version=parsed.os_version,
+    )
+    db.add(device)
+    db.flush()
+    return device
 
 
 def compute_diffs(device: Device | None, parsed: ParsedConfig) -> list[FieldDiff]:
@@ -127,11 +157,31 @@ def ingest(
     *,
     device_id: int | None = None,
     apply_inventory: bool = False,
+    create_missing: bool = False,
     commit: bool = True,
 ) -> IngestResult:
-    """1ファイル分を取り込む。apply_inventory=True のとき台帳へ反映する。"""
+    """1ファイル分を取り込む。
+
+    - `apply_inventory` … 既存機器の項目を Config の観測値で更新する
+    - `create_missing`  … 台帳に無いホスト名なら機器を新規作成する
+
+    既存の値を勝手に上書きしないのが原則だが、**まだ無い機器を作るのは上書きでは
+    ない**ので分けてある。台帳が空の状態から実 Config で立ち上げるときに使う。
+    """
     parsed = configparse.parse(text)
     device = db.get(Device, device_id) if device_id else _find_device(db, parsed.hostname)
+
+    created = False
+    creation_note: str | None = None
+    if device is None and create_missing and parsed.hostname:
+        device = _create_from_config(db, parsed)
+        created = device is not None
+        if device is None:
+            creation_note = (
+                f"{parsed.hostname} は型番が読み取れないため登録していません。"
+                "running-config だけでは型番が分からないので、"
+                "`show version` の出力も一緒に取り込んでください"
+            )
 
     result = IngestResult(
         filename=filename,
@@ -140,6 +190,7 @@ def ingest(
         device_id=device.id if device else None,
         device_hostname=device.hostname if device else None,
         matched=device is not None,
+        created=created,
         unchanged=False,
         snapshot_id=None,
         interface_count=len(parsed.interfaces),
@@ -149,7 +200,7 @@ def ingest(
     )
 
     if device is None:
-        result.message = (
+        result.message = creation_note or (
             f"ホスト名「{parsed.hostname}」に一致する機器が台帳にありません。"
             "内容は保存したので、機器を登録してから紐付けられます。"
             if parsed.hostname

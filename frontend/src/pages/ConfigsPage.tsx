@@ -97,6 +97,8 @@ export default function ConfigsPage() {
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
   const [applyInventory, setApplyInventory] = useState(false);
+  // 台帳が空の状態から実 Config で立ち上げるときに使う
+  const [createMissing, setCreateMissing] = useState(false);
   const [results, setResults] = useState<IngestResult[] | null>(null);
   const [diffTarget, setDiffTarget] = useState<number | null>(null);
 
@@ -108,7 +110,7 @@ export default function ConfigsPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => api.uploadConfigs(files, { applyInventory }),
+    mutationFn: () => api.uploadConfigs(files, { applyInventory, createMissing }),
     onSuccess: (data) => {
       setResults(data);
       queryClient.invalidateQueries({ queryKey: ["configs"] });
@@ -155,6 +157,21 @@ export default function ConfigsPage() {
             <option value="diff">差分を表示するだけ（台帳は変更しない）</option>
             <option value="apply">台帳へ反映する</option>
           </select>
+        </div>
+        <div className="field wide">
+          <label>
+            <input
+              type="checkbox"
+              checked={createMissing}
+              onChange={(e) => setCreateMissing(e.target.checked)}
+            />{" "}
+            台帳に無い機器を Config から登録する
+          </label>
+          <span className="muted">
+            まだ台帳が空のときに使います。型番が読み取れない Config は登録しません
+            （EoL も脆弱性も型番で引くため）。running-config だけでは型番が入っていないので、
+            <code>show version</code> の出力も同じファイルに含めてください。
+          </span>
         </div>
       </div>
 

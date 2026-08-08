@@ -30,6 +30,7 @@ class IngestResultRead(BaseModel):
     device_id: int | None
     device_hostname: str | None
     matched: bool
+    created: bool = False
     unchanged: bool
     snapshot_id: int | None
     interface_count: int

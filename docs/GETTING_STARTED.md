@@ -1,0 +1,137 @@
+# 自分の端末で実データを試す
+
+サーバは要りません。**自分のPC1台で完結します。** データも全部手元に残ります。
+
+> **前提**：まだ認証機能がありません。そのため既定では**自分の端末からしか開けない**設定
+> （`127.0.0.1` 待ち受け）にしてあります。実機の Config には管理IP・ACL・SNMP コミュニティ名
+> などが入るので、ここは緩めないでください。
+
+## 方法A: 1台完結モード（おすすめ / Docker 不要）
+
+Postgres も nginx も要りません。データは **SQLite ファイル1個**に入るので、
+そのファイルをコピーすればバックアップになります。
+
+必要なもの: Python 3.11 以上、Node.js 22 以上
+
+```bash
+git clone https://github.com/Maguro-JP/NetVision.git
+cd NetVision
+
+# 画面をビルド（初回のみ）
+cd frontend && npm ci && npm run build && cd ..
+
+# バックエンドの用意（初回のみ）
+cd backend
+python3 -m venv .venv && .venv/bin/pip install -e .
+
+# 起動
+.venv/bin/python -m scripts.standalone
+```
+
+ブラウザで <http://127.0.0.1:8000> を開けば使えます。止めるのは `Ctrl+C`。
+
+```
+データの置き場所 : /Users/you/.netvision
+DB               : /Users/you/.netvision/netvision.db
+画面             : http://127.0.0.1:8000
+```
+
+| オプション | 意味 |
+|---|---|
+| `--data-dir <パス>` | データの置き場所を変える（既定 `~/.netvision`） |
+| `--port 9000` | ポートを変える |
+| `--demo` | デモデータを入れて起動する（お試し用） |
+
+2回目以降は `cd backend && .venv/bin/python -m scripts.standalone` だけです。
+
+### バックアップ
+
+止めてから、データディレクトリごとコピーするだけです。
+
+```bash
+cp -r ~/.netvision ~/netvision-backup-$(date +%Y%m%d)
+```
+
+## 方法B: Docker Compose（本番と同じ構成）
+
+複数人で使う想定に近い形で試したいときはこちら。Postgres を使います。
+
+```bash
+docker compose up --build
+```
+
+画面は <http://127.0.0.1:8080>。止めるのは `Ctrl+C`、片付けは `docker compose down`。
+
+こちらもデータは手元のボリュームに入ります。バックアップは **DB とファイル領域の2系統**が必要です。
+
+```bash
+docker compose exec db pg_dump -U netvision netvision > netvision.sql
+docker run --rm -v netvision_documents:/d -v "$PWD:/out" alpine \
+  tar czf /out/documents.tar.gz -C /d .
+```
+
+---
+
+# 実データでの始め方
+
+## 1. Config を集める
+
+**`show version` の出力も一緒に取ってください。** running-config だけだと型番が入っておらず、
+型番が分からないと EoL も脆弱性も引けません（このツールは型番を軸に全部つないでいます）。
+
+1ファイルにまとめて構いません。パーサは running-config と show 出力の混在を読めます。
+
+```
+! ---- core-sw-01.txt ----
+show version の出力
+show inventory の出力     ← あればシリアルも取れる
+show cdp neighbors detail ← あれば結線が自動で引ける
+running-config
+```
+
+Cisco IOS / IOS-XE / NX-OS、Juniper Junos、Fortinet FortiOS に対応しています（自動判別）。
+文字コードは Shift_JIS でも UTF-8 でも構いません。
+
+## 2. まとめて取り込む
+
+「Configの取り込み」画面で、**「台帳に無い機器を Config から登録する」にチェック**を入れて
+ファイルをまとめて放り込みます。これで台帳が一気に立ち上がります。
+
+実際にやるとこうなります。
+
+```
+core-sw-01.txt         新規登録   core-sw-01    Cisco    C9500-40X   17.09.04a
+edge-rt-01.txt         新規登録   edge-rt-01    Juniper  mx204       21.4R3-S5.4
+fw-01.txt              新規登録   fw-01         Fortinet FGT100F     7.2.8
+acc-sw-osaka-01.txt    未登録     → 型番が読み取れないため登録していません。
+                                    show version の出力も一緒に取り込んでください
+```
+
+**型番が読めないものは黙って登録しません。** 判定できない機器が静かに増えるのを防ぐためです。
+該当したファイルは `show version` を足して取り込み直してください。
+
+## 3. トポロジを作る
+
+「トポロジ図」で「Config から結線を作り直す」を押すと、LLDP / CDP の情報から結線が引かれます。
+足りないところは手で線を引けます（自動再推定しても手で引いた線は消えません）。
+
+## 4. 保守期限・EoL を入れる
+
+ここは Config には入っていないので、別途登録が必要です。
+
+- 既に Excel 台帳があるなら「台帳の取り込み」でそのまま読み込めます（列名は自動対応付け）
+- EoL は「リファレンス管理」で**型番ごとに**登録すれば、同じ型番の全機器に効きます
+
+## 5. あとは見るだけ
+
+ダッシュボード / 更改支援 / 最適化の指摘 が埋まってきます。
+
+---
+
+## 試すときに知っておいてほしいこと
+
+- **このツールは機器に触りません。** Config の取り込みはファイルのアップロード、
+  設定変更は生成するだけです。SSH で繋いで自動投入する作りにはしていません
+- **外部通信を一切しません。** CVE も EoL もマニュアルも、ファイルを置いて取り込む方式です
+- **認証がまだありません。** 1人で使う分には問題ありませんが、他の人にも使わせる段階では
+  必須になります
