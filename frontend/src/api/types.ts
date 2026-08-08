@@ -705,3 +705,63 @@ export interface Remediation extends RemediationOption {
   applies_to: string | null;
   notes: string | null;
 }
+
+// --- 対処状況（対処漏れ防止） ---
+
+export interface ExposureRow {
+  id: number;
+  device_id: number;
+  hostname: string;
+  os_version: string | null;
+  cve_id: string;
+  title: string | null;
+  cvss_score: number | null;
+  known_exploited: boolean;
+  status: string;
+  remediation_id: number | null;
+  remediation_summary: string | null;
+  decided_by: string | null;
+  decided_on: string | null;
+  first_seen_on: string | null;
+  reopened_on: string | null;
+  reopen_reason: string | null;
+  config_verified: boolean | null;
+  config_verified_on: string | null;
+  due_on: string | null;
+  overdue: boolean;
+  note: string | null;
+}
+
+export interface ExposureSummary {
+  total: number;
+  unhandled: number;
+  known_exploited_unhandled: number;
+  overdue: number;
+  mitigated_but_still_affected: number;
+  reopened: number;
+  unverified: number;
+  by_status: Record<string, number>;
+}
+
+export interface ExposureSyncResult {
+  created: number;
+  reopened: number;
+  resolved: number;
+  unchanged: number;
+  messages: string[];
+}
+
+export interface FixConfig {
+  device_id: number;
+  hostname: string;
+  cve_id: string;
+  remediation_id: number;
+  remediation_summary: string;
+  vendor: string;
+  source: string;
+  current_full: string;
+  fixed_full: string;
+  diff: PlanDiff;
+  already_applied: boolean;
+  notes: string[];
+}

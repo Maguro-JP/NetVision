@@ -9,6 +9,7 @@ from app.api.routes import (
     devices,
     documents,
     exports,
+    exposures,
     imports,
     insights,
     maintenance,
@@ -53,6 +54,7 @@ app.include_router(documents.router, prefix=api)
 app.include_router(config_plans.router, prefix=api)
 app.include_router(replacement.router, prefix=api)
 app.include_router(remediation.router, prefix=api)
+app.include_router(exposures.router, prefix=api)
 
 
 @app.get("/health", tags=["meta"])

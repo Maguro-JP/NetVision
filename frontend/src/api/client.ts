@@ -15,6 +15,10 @@ import type {
   MaintenanceContract,
   NetworkInterface,
   DeviceRemediation,
+  ExposureRow,
+  ExposureSummary,
+  ExposureSyncResult,
+  FixConfig,
   ImpactReport,
   ProductImportResult,
   PlanOutputs,
@@ -354,6 +358,28 @@ export const api = {
   planOutputs: (id: number) => request<PlanOutputs>(`/config-plans/${id}/outputs`),
   planDownloadUrl: (id: number, kind: "current" | "future" | "diff" | "rollback") =>
     `${BASE}/config-plans/${id}/download/${kind}`,
+
+  // --- 対処状況（対処漏れ防止） ---
+  syncExposures: () => request<ExposureSyncResult>("/exposures/sync", { method: "POST" }),
+  listExposures: (params: { status_filter?: string; unhandled_only?: boolean } = {}) =>
+    request<ExposureRow[]>(
+      `/exposures${query({
+        status_filter: params.status_filter,
+        unhandled_only: params.unhandled_only ? "true" : undefined,
+      })}`,
+    ),
+  exposureSummary: () => request<ExposureSummary>("/exposures/summary"),
+  decideExposure: (id: number, body: Record<string, unknown>) =>
+    request<ExposureRow>(`/exposures/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  verifyExposureConfig: (id: number) =>
+    request<ExposureRow>(`/exposures/${id}/verify-config`, { method: "POST" }),
+  fixConfig: (deviceId: number, remediationId: number) =>
+    request<FixConfig>(`/devices/${deviceId}/remediations/${remediationId}/config`),
+  fixConfigDownloadUrl: (
+    deviceId: number,
+    remediationId: number,
+    kind: "current" | "fixed" | "diff" | "rollback",
+  ) => `${BASE}/devices/${deviceId}/remediations/${remediationId}/config/download/${kind}`,
 
   // --- 脆弱性への対処 ---
   deviceRemediation: (deviceId: number) =>

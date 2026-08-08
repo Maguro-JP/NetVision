@@ -484,6 +484,10 @@ def _import_simple(db: Session, data: list, fetched_at: date) -> VulnerabilityIm
         if entry.get("known_exploited"):
             vulnerability.known_exploited = True
         vulnerability.published = _parse_iso(entry.get("published")) or vulnerability.published
+        # 是正期限。KEV 相当の運用をベンダー資料からも持ち込めるようにする
+        vulnerability.remediation_due = (
+            _parse_iso(entry.get("remediation_due")) or vulnerability.remediation_due
+        )
         vulnerability.source = ReferenceSource(entry.get("source", "manual"))
         vulnerability.source_url = entry.get("source_url") or vulnerability.source_url
         vulnerability.fetched_at = fetched_at

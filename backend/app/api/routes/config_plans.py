@@ -7,7 +7,6 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import ConfigPlan, Device
 from app.schemas.config_plans import (
-    CommandRead,
     ConfigPlanCreate,
     ConfigPlanRead,
     ConfigPlanUpdate,
@@ -16,6 +15,7 @@ from app.schemas.config_plans import (
     PlanOutputRead,
 )
 from app.services import config_plans as service
+from app.services.api_helpers import diff_read
 from app.services.configdiff import DiffResult, build
 
 router = APIRouter(tags=["config-plans"])
@@ -30,21 +30,7 @@ def _to_read(plan: ConfigPlan) -> ConfigPlanRead:
 
 
 def _diff_read(diff: DiffResult) -> DiffRead:
-    return DiffRead(
-        verified=diff.verified,
-        commands=[
-            CommandRead(text=c.text, depth=c.depth, kind=c.kind, rendered=c.rendered)
-            for c in diff.commands
-        ],
-        script=diff.script,
-        rollback_script=diff.rollback_script,
-        mismatches=diff.mismatches,
-        warnings=diff.warnings,
-        risks=diff.risks,
-        added=diff.added,
-        removed=diff.removed,
-        changed=diff.changed,
-    )
+    return diff_read(diff)
 
 
 def _get_plan(db: Session, plan_id: int) -> ConfigPlan:

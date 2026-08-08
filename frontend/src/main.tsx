@@ -13,6 +13,7 @@ import DashboardPage from "./pages/DashboardPage";
 import DeviceDetailPage from "./pages/DeviceDetailPage";
 import DeviceFormPage from "./pages/DeviceFormPage";
 import DeviceListPage from "./pages/DeviceListPage";
+import ExposuresPage from "./pages/ExposuresPage";
 import ImportPage from "./pages/ImportPage";
 import InsightsPage from "./pages/InsightsPage";
 import ScenarioDetailPage from "./pages/ScenarioDetailPage";
@@ -54,6 +55,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="config-plans" element={<ConfigPlansPage />} />
             <Route path="replacement" element={<ReplacementPage />} />
             <Route path="remediation" element={<RemediationPage />} />
+            <Route path="exposures" element={<ExposuresPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
           </Route>
