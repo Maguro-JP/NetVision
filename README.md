@@ -100,8 +100,17 @@ cd backend && .venv/bin/python -m scripts.standalone   # http://127.0.0.1:8000
 ```
 
 閉域側は展開して `./install.sh`（Windows は `install.bat`）だけ。必要なのは Python 3.11 以上のみで、
-Node.js もインターネットも要りません。手順は [docs/INSTALL.md](docs/INSTALL.md)、
-運用は [docs/OPERATIONS.md](docs/OPERATIONS.md) にまとめています。
+Node.js もインターネットも要りません。
+
+**Python すら入れられない環境**向けに、インストール不要版も作れます。
+python.org の embeddable package を同梱するので、ZIP を展開して `NetVision.bat` を
+ダブルクリックするだけで動きます（管理者権限もレジストリ変更も不要）。
+
+```bash
+./packaging/make-bundle-windows.sh   # → dist/NetVision-YYYYMMDD-windows.zip
+```
+
+手順は [docs/INSTALL.md](docs/INSTALL.md)、運用は [docs/OPERATIONS.md](docs/OPERATIONS.md) にまとめています。
 
 ### Docker Compose（本番と同じ構成）
 
