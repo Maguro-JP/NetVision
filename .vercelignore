@@ -1,0 +1,8 @@
+# プレビューのビルドに要らないもの
+backend/tests
+backend/.venv
+backend/htmlcov
+docs
+docker-compose.yml
+**/__pycache__
+**/*.pyc
