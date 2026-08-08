@@ -93,7 +93,8 @@ show cdp neighbors detail ← あれば結線が自動で引ける
 running-config
 ```
 
-Cisco IOS / IOS-XE / NX-OS、Juniper Junos、Fortinet FortiOS に対応しています（自動判別）。
+対応ベンダーは Cisco（IOS / IOS-XE / NX-OS）、Juniper Junos、Fortinet FortiOS、
+NEC（IX シリーズ / QX シリーズ）です（自動判別）。
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 
 ## 2. まとめて取り込む
@@ -118,6 +119,11 @@ acc-sw-osaka-01.txt    未登録     → 型番が読み取れないため登録
 
 「トポロジ図」で「Config から結線を作り直す」を押すと、LLDP / CDP の情報から結線が引かれます。
 足りないところは手で線を引けます（自動再推定しても手で引いた線は消えません）。
+
+**VLAN で絞り込めます。** チェックを入れると、その VLAN を持たない機器が薄くなるので、
+「このセグメントがどこまで伸びているか」を図で確認できます。
+「図をファイルに出す（SVG）」で設計書に貼れる形で書き出せます（VLAN を1つ選んでいれば、
+そのセグメントだけの図になります）。
 
 ## 4. 保守期限・EoL を入れる
 
