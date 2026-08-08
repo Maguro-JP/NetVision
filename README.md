@@ -70,6 +70,8 @@ frontend/
   src/api/       API クライアントと型定義
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
+docs/PREVIEW.md  プレビュー環境（Vercel）の手順
+api/index.py     プレビュー用のサーバレス関数入口
 ```
 
 ## 起動方法
@@ -88,6 +90,14 @@ docker compose up --build
 ```bash
 docker compose exec backend python -m scripts.seed
 ```
+
+### プレビュー（Vercel）
+
+PR ごとに実際の画面を触って確認できます。DB の用意は不要で、デモデータが自動で入ります。
+手順と制約は [docs/PREVIEW.md](docs/PREVIEW.md) を参照してください。
+
+**本番運用の想定は変わりません。** 閉域環境での Docker Compose 運用が前提で、
+プレビューは確認用です。データは永続せず、実機の情報を入れる場所ではありません。
 
 ### ローカル開発
 
@@ -553,6 +563,7 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_REFERENCE_STALE_DAYS` | `180` | リファレンスがこの日数より古ければ「要更新」とする |
 | `NETVISION_DOCUMENT_STORAGE_PATH` | `./data/documents` | 資料ファイルの保管先（DB とは別にバックアップが必要） |
 | `NETVISION_MAX_DOCUMENT_BYTES` | `209715200`（200MB） | 1ファイルあたりの上限 |
+| `NETVISION_DEMO_MODE` | `false` | プレビュー用。起動時にスキーマ作成とデモデータ投入を行う（本番では使わない） |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
 
 ## 主なAPI

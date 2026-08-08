@@ -765,3 +765,9 @@ export interface FixConfig {
   already_applied: boolean;
   notes: string[];
 }
+
+export interface AppMeta {
+  demo_mode: boolean;
+  warning_days: number;
+  critical_days: number;
+}

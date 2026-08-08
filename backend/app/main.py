@@ -60,3 +60,13 @@ app.include_router(exposures.router, prefix=api)
 @app.get("/health", tags=["meta"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/v1/meta", tags=["meta"])
+def meta() -> dict[str, object]:
+    """画面側が動作モードを知るための情報。"""
+    return {
+        "demo_mode": settings.demo_mode,
+        "warning_days": settings.warning_days,
+        "critical_days": settings.critical_days,
+    }

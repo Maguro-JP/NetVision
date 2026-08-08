@@ -1,4 +1,7 @@
+import { useQuery } from "@tanstack/react-query";
 import { NavLink, Outlet } from "react-router-dom";
+
+import { api } from "./api/client";
 
 const NAV = [
   { to: "/dashboard", label: "ダッシュボード" },
@@ -21,6 +24,9 @@ const NAV = [
 ];
 
 export default function App() {
+  // プレビュー環境かどうか。データが消えることを黙っていると事故のもとになる
+  const { data: meta } = useQuery({ queryKey: ["meta"], queryFn: () => api.meta() });
+
   return (
     <div className="layout">
       <aside className="sidebar">
@@ -40,6 +46,13 @@ export default function App() {
         </nav>
       </aside>
       <main className="main">
+        {meta?.demo_mode && (
+          <div className="demo-banner">
+            <strong>デモ環境です。</strong>
+            データは永続しません（入力してもしばらくすると消えます）。
+            画面と操作感の確認用で、実機の情報は入れないでください。
+          </div>
+        )}
         <Outlet />
       </main>
     </div>

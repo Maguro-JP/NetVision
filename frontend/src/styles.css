@@ -472,3 +472,13 @@ button:disabled {
 .react-flow__minimap-node {
   fill: var(--accent);
 }
+
+/* プレビュー環境の表示。データが消えることを常に見せておく */
+.demo-banner {
+  background: color-mix(in srgb, var(--sev-warning) 18%, var(--panel));
+  border: 1px solid var(--sev-warning);
+  border-radius: 8px;
+  padding: 10px 14px;
+  margin-bottom: 16px;
+  font-size: 14px;
+}

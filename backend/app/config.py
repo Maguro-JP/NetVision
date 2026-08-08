@@ -22,5 +22,12 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
+    # プレビュー用のデモ運用。DB を用意せずに画面を触れるようにするための逃げ道で、
+    # 本番運用では使わない。有効にすると
+    #   - 起動時にスキーマを作り、空ならデモデータを流し込む
+    #   - 保存先を書き込み可能な一時領域に寄せる
+    # データは永続しない。画面側にもその旨を出す。
+    demo_mode: bool = False
+
 
 settings = Settings()

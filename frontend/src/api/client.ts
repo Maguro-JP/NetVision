@@ -14,6 +14,7 @@ import type {
   ImportResult,
   MaintenanceContract,
   NetworkInterface,
+  AppMeta,
   DeviceRemediation,
   ExposureRow,
   ExposureSummary,
@@ -395,6 +396,8 @@ export const api = {
     request<ReplacementPlan>(`/replacement/plan${query({ years })}`),
   replacementImpact: (deviceId: number) =>
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
+
+  meta: () => request<AppMeta>("/meta"),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

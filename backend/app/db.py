@@ -15,6 +15,12 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def get_db() -> Iterator[Session]:
+    # デモモードのときだけ、初回アクセスでスキーマとデモデータを用意する。
+    # サーバレスでは startup イベントが走る保証が無いため、ここで面倒を見る。
+    from app.bootstrap import ensure_ready
+
+    ensure_ready()
+
     db = SessionLocal()
     try:
         yield db

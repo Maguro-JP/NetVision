@@ -1,0 +1,12 @@
+# Vercel のサーバレス関数（api/index.py）が使う依存。
+# 開発・本番は backend/pyproject.toml が正で、ここはプレビュー用に合わせて置いている。
+fastapi>=0.115
+sqlalchemy>=2.0.36
+pydantic>=2.9
+pydantic-settings>=2.6
+python-dateutil>=2.9
+openpyxl>=3.1
+python-multipart>=0.0.12
+jinja2>=3.1
+# NETVISION_DATABASE_URL に Postgres を指定したとき用
+psycopg[binary]>=3.2
