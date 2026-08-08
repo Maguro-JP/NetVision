@@ -15,6 +15,7 @@ from app.schemas.topology import (
     SavePositions,
     TopologyGraphRead,
     TopologyStatsRead,
+    VlanRead,
 )
 from app.services import configs as config_service
 from app.services import topology as service
@@ -36,11 +37,21 @@ def get_topology(
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
+@router.get("/vlans", response_model=list[VlanRead])
+def list_vlans(db: DbSession) -> list[VlanRead]:
+    """定義されている VLAN を、載っている機器つきで返す。
+
+    「VLAN 20 はどこまで伸びているのか」を見るための一覧。
+    """
+    return service.vlan_summary(db)
+
+
 @router.get("/export.svg", response_class=Response)
 def export_topology(
     db: DbSession,
     layer: str = Query(default=service.DEFAULT_LAYER),
     title: str = "ネットワーク構成図",
+    vlan: int | None = Query(default=None, description="この VLAN を持つ機器だけを描く"),
 ) -> Response:
     """構成図を SVG で書き出す。
 
@@ -48,8 +59,8 @@ def export_topology(
     Word / PowerPoint / Excel はそのまま挿入できる（Office 2016 以降）。
     画面で整えた配置をそのまま使う。
     """
-    svg = topology_export.export_svg(db, layer, title=title)
-    filename = f"topology-{layer}.svg"
+    svg = topology_export.export_svg(db, layer, title=title, vlan=vlan)
+    filename = f"topology-{layer}{f'-vlan{vlan}' if vlan else ''}.svg"
     return Response(
         content=svg,
         media_type="image/svg+xml; charset=utf-8",

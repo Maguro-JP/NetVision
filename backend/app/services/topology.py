@@ -13,7 +13,7 @@ from math import ceil
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Device, DeviceStatus, DeviceType
+from app.models import Device, DeviceStatus, DeviceType, DeviceVlan
 from app.models.topology import Interface, Link, LinkOrigin, TopologyNode
 from app.services.lifecycle import Severity, evaluate
 
@@ -50,6 +50,7 @@ class TopologyNodeView:
     x: float
     y: float
     placed: bool  # 保存済みの位置か、自動配置か
+    vlans: list[int] = field(default_factory=list)  # この機器に定義されている VLAN
 
 
 @dataclass
@@ -91,6 +92,7 @@ def get_graph(
         for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == layer))
     }
     interface_counts = _interface_counts(db)
+    vlans_by_device = _vlans_by_device(db)
 
     placeholders = _auto_layout([d for d in devices if d.id not in positions])
 
@@ -113,6 +115,7 @@ def get_graph(
                 x=x,
                 y=y,
                 placed=saved is not None,
+                vlans=vlans_by_device.get(device.id, []),
             )
         )
 
@@ -138,6 +141,14 @@ def get_graph(
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
     )
+
+
+def _vlans_by_device(db: Session) -> dict[int, list[int]]:
+    """機器ごとの VLAN 一覧。図で「この VLAN がどこまで伸びているか」を見るのに使う。"""
+    out: dict[int, list[int]] = {}
+    for row in db.scalars(select(DeviceVlan).order_by(DeviceVlan.vlan_id)):
+        out.setdefault(row.device_id, []).append(row.vlan_id)
+    return out
 
 
 def _interface_counts(db: Session) -> dict[int, int]:
@@ -215,6 +226,43 @@ def get_stats(db: Session, layer: str = DEFAULT_LAYER) -> TopologyStats:
         confirmed_links=sum(1 for e in graph.edges if e.confirmed_both_ways),
         isolated_devices=sorted(n.hostname for n in graph.nodes if n.device_id not in connected),
     )
+
+
+@dataclass
+class VlanView:
+    """VLAN 1つ分。どこまで伸びているかを見るための情報。"""
+
+    vlan_id: int
+    name: str | None
+    device_ids: list[int] = field(default_factory=list)
+    device_names: list[str] = field(default_factory=list)
+    access_port_count: int = 0
+
+
+def vlan_summary(db: Session) -> list[VlanView]:
+    """定義されている VLAN を、載っている機器つきで並べる。
+
+    「VLAN 20 はどこまで伸びているのか」に答えるための一覧。
+    名前も返すのは、番号だけでは何のセグメントか分からないため。
+    """
+    names = {d.id: d.hostname for d in db.scalars(select(Device))}
+    views: dict[int, VlanView] = {}
+
+    for row in db.scalars(select(DeviceVlan).order_by(DeviceVlan.vlan_id)):
+        view = views.setdefault(row.vlan_id, VlanView(vlan_id=row.vlan_id, name=row.name))
+        if row.name and not view.name:
+            view.name = row.name
+        if row.device_id not in view.device_ids:
+            view.device_ids.append(row.device_id)
+            view.device_names.append(names.get(row.device_id, f"#{row.device_id}"))
+
+    # アクセスポートが何本あるかは「実際に使われているか」の目安になる
+    for interface in db.scalars(select(Interface).where(Interface.vlan.is_not(None))):
+        view = views.get(interface.vlan)
+        if view is not None:
+            view.access_port_count += 1
+
+    return sorted(views.values(), key=lambda v: v.vlan_id)
 
 
 def suggested_canvas_size(node_count: int) -> tuple[int, int]:

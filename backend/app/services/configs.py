@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Device
+from app.models import Device, DeviceVlan
 from app.models.change_log import ChangeSource
 from app.models.topology import ConfigSnapshot, Interface, Link, LinkOrigin
 from app.services import configparse
@@ -236,6 +236,7 @@ def ingest(
 
         if device is not None:
             _sync_interfaces(db, device, parsed)
+            _sync_vlans(db, device, parsed)
 
             if apply_inventory:
                 for diff in result.diffs:
@@ -268,6 +269,25 @@ def _latest_snapshot(
     else:
         return None
     return db.scalars(stmt.limit(1)).first()
+
+
+def _sync_vlans(db: Session, device: Device, parsed: ParsedConfig) -> None:
+    """その機器に定義されている VLAN を揃える。
+
+    図や一覧で「10」とだけ出ても何のセグメントか分からないので、名前も持つ。
+    """
+    rows = db.scalars(select(DeviceVlan).where(DeviceVlan.device_id == device.id))
+    existing = {v.vlan_id: v for v in rows}
+    for vlan_id, name in parsed.vlans.items():
+        row = existing.pop(vlan_id, None)
+        if row is None:
+            db.add(DeviceVlan(device_id=device.id, vlan_id=vlan_id, name=name or None))
+        elif name and row.name != name:
+            row.name = name
+
+    # Config から消えた VLAN は落とす（最新の Config に揃える）
+    for row in existing.values():
+        db.delete(row)
 
 
 def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:

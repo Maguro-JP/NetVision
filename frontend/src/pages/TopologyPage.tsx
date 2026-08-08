@@ -85,6 +85,8 @@ function shorten(name: string): string {
 function TopologyEditor() {
   const queryClient = useQueryClient();
   const [layer, setLayer] = useState("physical");
+  // 選んだ VLAN を持つ機器だけを残す。空なら全部表示
+  const [selectedVlans, setSelectedVlans] = useState<number[]>([]);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
@@ -100,14 +102,40 @@ function TopologyEditor() {
     queryKey: ["topologyStats", layer],
     queryFn: () => api.getTopologyStats(layer),
   });
+  const { data: vlans } = useQuery({
+    queryKey: ["topologyVlans"],
+    queryFn: () => api.listTopologyVlans(),
+  });
 
   useEffect(() => {
     if (!graph) return;
     const flow = toFlow(graph);
+
+    // VLAN を選んでいるときは、その VLAN を持たない機器を薄くする。
+    // 消さずに残すのは、選んだ VLAN が「どこまで伸びていないか」も
+    // 同時に見えた方が構成を掴みやすいため。
+    if (selectedVlans.length > 0) {
+      const carries = new Set(
+        graph.nodes
+          .filter((n) => n.vlans.some((v) => selectedVlans.includes(v)))
+          .map((n) => String(n.device_id)),
+      );
+      flow.nodes.forEach((n) => {
+        if (!carries.has(n.id)) {
+          n.style = { ...(n.style ?? {}), opacity: 0.22 };
+        }
+      });
+      flow.edges.forEach((e) => {
+        if (!carries.has(String(e.source)) || !carries.has(String(e.target))) {
+          e.style = { ...(e.style ?? {}), opacity: 0.15 };
+        }
+      });
+    }
+
     setNodes(flow.nodes);
     setEdges(flow.edges);
     setDirty(false);
-  }, [graph, setNodes, setEdges]);
+  }, [graph, selectedVlans, setNodes, setEdges]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
@@ -228,7 +256,11 @@ function TopologyEditor() {
         <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
         <a
           className="button"
-          href={api.topologyExportUrl(layer)}
+          href={api.topologyExportUrl(
+            layer,
+            undefined,
+            selectedVlans.length === 1 ? selectedVlans[0] : undefined,
+          )}
           title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
         >
           図をファイルに出す（SVG）
@@ -313,6 +345,44 @@ function TopologyEditor() {
       </div>
 
       <div className="toolbar" style={{ marginTop: 12 }}>
+        {(vlans ?? []).length > 0 && (
+          <div className="vlan-filter">
+            <div className="vlan-filter-head">
+              <strong>VLAN で絞り込む</strong>
+              <span className="muted">
+                選ぶと、その VLAN を持たない機器が薄くなります（どこまで伸びているかを見るため）
+              </span>
+              {selectedVlans.length > 0 && (
+                <button onClick={() => setSelectedVlans([])}>選択を解除</button>
+              )}
+            </div>
+            <div className="vlan-filter-list">
+              {(vlans ?? []).map((vlan) => (
+                <label key={vlan.vlan_id} className="vlan-chip">
+                  <input
+                    type="checkbox"
+                    checked={selectedVlans.includes(vlan.vlan_id)}
+                    onChange={(e) =>
+                      setSelectedVlans((prev) =>
+                        e.target.checked
+                          ? [...prev, vlan.vlan_id]
+                          : prev.filter((v) => v !== vlan.vlan_id),
+                      )
+                    }
+                  />{" "}
+                  <strong>VLAN {vlan.vlan_id}</strong>
+                  {vlan.name && <span> {vlan.name}</span>}
+                  <span className="muted">
+                    {" "}
+                    / {vlan.device_ids.length}台
+                    {vlan.access_port_count > 0 && ` / ${vlan.access_port_count}ポート`}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </div>
+        )}
+
         {legend.map((item) => (
           <span key={item.text} className="topo-legend">
             <span className={`topo-legend-line ${item.className}`} /> {item.text}

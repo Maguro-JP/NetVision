@@ -57,9 +57,23 @@ def _clip(value: str | None, limit: int) -> str:
     return text if len(text) <= limit else text[: limit - 1] + "…"
 
 
-def render_svg(graph: TopologyGraph, *, title: str = "ネットワーク構成図") -> str:
-    """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。"""
+def render_svg(
+    graph: TopologyGraph, *, title: str = "ネットワーク構成図", vlan: int | None = None
+) -> str:
+    """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
+
+    `vlan` を指定すると、その VLAN を持つ機器だけを描く。
+    セグメント単位で資料を作るときに使う。
+    """
     nodes = graph.nodes
+    if vlan is not None:
+        nodes = [n for n in nodes if vlan in n.vlans]
+        keep = {n.device_id for n in nodes}
+        graph = TopologyGraph(
+            layer=graph.layer,
+            nodes=nodes,
+            edges=[e for e in graph.edges if e.source in keep and e.target in keep],
+        )
     if not nodes:
         return _empty_svg(title)
 
@@ -90,7 +104,8 @@ def render_svg(graph: TopologyGraph, *, title: str = "ネットワーク構成�
     )
     parts.append(
         f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
-        f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)} / '
+        f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)}'
+        f"{f' / VLAN {vlan}' if vlan is not None else ''} / "
         f"{len(nodes)}台 {len(graph.edges)}本</text>"
     )
 
@@ -204,5 +219,7 @@ def _empty_svg(title: str) -> str:
     )
 
 
-def export_svg(db: Session, layer: str, *, title: str = "ネットワーク構成図") -> str:
-    return render_svg(get_graph(db, layer), title=title)
+def export_svg(
+    db: Session, layer: str, *, title: str = "ネットワーク構成図", vlan: int | None = None
+) -> str:
+    return render_svg(get_graph(db, layer), title=title, vlan=vlan)

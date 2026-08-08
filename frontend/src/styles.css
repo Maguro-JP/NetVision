@@ -482,3 +482,37 @@ button:disabled {
   margin-bottom: 16px;
   font-size: 14px;
 }
+
+/* VLAN での絞り込み */
+.vlan-filter {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--panel);
+}
+.vlan-filter-head {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+  font-size: 13px;
+}
+.vlan-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.vlan-chip {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 5px 9px;
+  font-size: 12px;
+  cursor: pointer;
+  background: var(--panel-2);
+}
+.vlan-chip:hover {
+  border-color: var(--accent);
+}

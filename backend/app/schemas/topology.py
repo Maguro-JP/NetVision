@@ -22,6 +22,16 @@ class UnresolvedNeighborRead(BaseModel):
     remote_platform: str | None
 
 
+class VlanRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    vlan_id: int
+    name: str | None
+    device_ids: list[int]
+    device_names: list[str]
+    access_port_count: int
+
+
 class IngestResultRead(BaseModel):
     filename: str
     vendor: Vendor
@@ -99,6 +109,7 @@ class TopologyNodeRead(BaseModel):
     x: float
     y: float
     placed: bool
+    vlans: list[int] = []
 
 
 class TopologyEdgeRead(BaseModel):

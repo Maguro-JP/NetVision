@@ -314,6 +314,17 @@ Config の原文は世代ごとに保存され、前の世代との差分を表�
 - 線を選んで削除、レイヤ（物理 / L2 / L3 / 論理）ごとに別の配置を持つ
 - ノードの色は保守期限・EoL のアラート状態と連動します
 
+### VLAN で絞り込む
+
+Config から読み取った VLAN を、番号と名前つきで一覧します。
+チェックを入れると、**その VLAN を持たない機器が薄くなります**。
+
+消さずに薄くするのは、選んだ VLAN が「どこまで伸びていないか」も同時に見えた方が
+構成を掴みやすいためです。「VLAN 20 はどこまで伸びているのか」に図で答えられます。
+
+VLAN を1つだけ選んだ状態で書き出すと、**そのセグメントだけの構成図**になります
+（見出しにも VLAN 番号が入ります）。セグメント単位で資料を作るときに使えます。
+
 ### 図をファイルに出す
 
 「図をファイルに出す（SVG）」で、設計書や報告書に貼れる形で書き出せます。
@@ -671,7 +682,8 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | GET | `/topology/stats` | 結線の統計と未接続機器 |
 | PUT / DELETE | `/topology/positions` | ノード配置の保存・リセット |
 | POST | `/topology/rebuild` | Config から結線を再推定 |
-| GET | `/topology/export.svg` | 構成図を SVG で書き出し（`layer` / `title` 指定可） |
+| GET | `/topology/export.svg` | 構成図を SVG で書き出し（`layer` / `title` / `vlan` 指定可） |
+| GET | `/topology/vlans` | VLAN 一覧（載っている機器・ポート数つき） |
 | POST / PATCH / DELETE | `/topology/links` | 手動での結線の追加・更新・削除 |
 | GET / POST | `/reference/products` | 型番リファレンスの一覧・登録 |
 | PATCH / DELETE | `/reference/products/{id}` | 型番リファレンスの更新・削除 |

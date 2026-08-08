@@ -30,6 +30,10 @@ python3 -m venv .venv && .venv/bin/pip install -e .
 
 ブラウザで <http://127.0.0.1:8000> を開けば使えます。止めるのは `Ctrl+C`。
 
+**これは URL です。ファイルを開くのではありません。** アドレス欄に入れてください。
+将来サーバに置いて全員で使う場合も、変わるのはこの URL のホスト名部分だけです
+（`http://サーバのIP:8000`）。今のうちからブラウザで使っておけば、そのまま移行できます。
+
 ```
 データの置き場所 : /Users/you/.netvision
 DB               : /Users/you/.netvision/netvision.db

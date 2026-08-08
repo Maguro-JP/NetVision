@@ -206,6 +206,15 @@ export interface TopologyNode {
   x: number;
   y: number;
   placed: boolean;
+  vlans: number[];
+}
+
+export interface TopologyVlan {
+  vlan_id: number;
+  name: string | null;
+  device_ids: number[];
+  device_names: string[];
+  access_port_count: number;
 }
 
 export interface TopologyEdge {

@@ -37,6 +37,7 @@ import type {
   TopologyEdge,
   TopologyGraph,
   TopologyStats,
+  TopologyVlan,
   VendorDocument,
   VendorDocumentMatch,
   Vulnerability,
@@ -260,9 +261,10 @@ export const api = {
   resetPositions: (layer: string) =>
     request<{ reset: number }>(`/topology/positions${query({ layer })}`, { method: "DELETE" }),
   rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
+  listTopologyVlans: () => request<TopologyVlan[]>("/topology/vlans"),
   // 構成図を SVG で書き出す（設計書や報告書に貼るため）
-  topologyExportUrl: (layer: string, title?: string) =>
-    `${BASE}/topology/export.svg${query({ layer, title })}`,
+  topologyExportUrl: (layer: string, title?: string, vlan?: number) =>
+    `${BASE}/topology/export.svg${query({ layer, title, vlan })}`,
   createLink: (body: {
     a_device_id: number;
     b_device_id: number;
