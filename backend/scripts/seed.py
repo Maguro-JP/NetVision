@@ -15,6 +15,7 @@ from sqlalchemy import select
 from app.db import SessionLocal
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
 from app.models.change_log import ChangeSource
+from app.models.topology import Link, LinkOrigin
 from app.services.audit import audit_context
 
 TODAY = date.today()
@@ -182,8 +183,39 @@ def _seed(force: bool) -> None:
                 ),
             ]
         )
+
+        # 結線も入れておく。デモで構成図が空だと、何を見せたいのか伝わらない。
+        # 実運用では Config の LLDP / CDP から自動で引かれる部分。
+        wiring = [
+            ("edge-rt-01", "ge-0/0/0", "fw-01", "port1", True),
+            ("fw-01", "port2", "core-sw-01", "GigabitEthernet1/0/24", True),
+            (
+                "core-sw-01",
+                "TenGigabitEthernet1/1/1",
+                "core-sw-02",
+                "TenGigabitEthernet1/1/1",
+                True,
+            ),
+            ("core-sw-01", "GigabitEthernet1/0/1", "acc-sw-osaka-01", "GigabitEthernet0/1", True),
+            # 片側からしか見えていない結線（画面では破線になる）
+            ("core-sw-02", "GigabitEthernet1/0/10", "wlc-01", "GigabitEthernet1", False),
+        ]
+        db.add_all(
+            [
+                Link(
+                    a_device_id=by_host[a].id,
+                    a_interface=a_if,
+                    b_device_id=by_host[b].id,
+                    b_interface=b_if,
+                    origin=LinkOrigin.DISCOVERED,
+                    protocol="lldp",
+                    confirmed_both_ways=confirmed,
+                )
+                for a, a_if, b, b_if, confirmed in wiring
+            ]
+        )
         db.commit()
-        print(f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件")
+        print(f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件 / 結線{len(wiring)}本")
     finally:
         db.close()
 
