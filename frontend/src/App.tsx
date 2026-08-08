@@ -8,6 +8,7 @@ const NAV = [
   { to: "/vulnerabilities", label: "脆弱性" },
   { to: "/insights", label: "最適化の指摘" },
   { to: "/scenarios", label: "将来構成シナリオ" },
+  { to: "/replacement", label: "更改支援" },
   { to: "/changes", label: "変更履歴" },
   { to: "/configs", label: "Configの取り込み" },
   { to: "/documents", label: "ベンダー資料" },

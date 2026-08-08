@@ -14,10 +14,12 @@ import type {
   ImportResult,
   MaintenanceContract,
   NetworkInterface,
+  ImpactReport,
   ProductImportResult,
   PlanOutputs,
   ProductReference,
   RebuildResult,
+  ReplacementPlan,
   ReferenceFreshness,
   RenderResult,
   Scenario,
@@ -350,6 +352,12 @@ export const api = {
   planOutputs: (id: number) => request<PlanOutputs>(`/config-plans/${id}/outputs`),
   planDownloadUrl: (id: number, kind: "current" | "future" | "diff" | "rollback") =>
     `${BASE}/config-plans/${id}/download/${kind}`,
+
+  // --- 更改支援 ---
+  replacementPlan: (years = 5) =>
+    request<ReplacementPlan>(`/replacement/plan${query({ years })}`),
+  replacementImpact: (deviceId: number) =>
+    request<ImpactReport>(`/replacement/impact/${deviceId}`),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

@@ -600,3 +600,42 @@ export interface PlanOutputs {
   future_full: string;
   diff: PlanDiff;
 }
+
+// --- 更改支援 ---
+
+export interface ReplacementTarget {
+  device_id: number;
+  hostname: string;
+  vendor: string | null;
+  model: string | null;
+  site_name: string | null;
+  reason: string;
+  due_on: string | null;
+  severity: string;
+  estimated_cost: number | null;
+  impact_count: number;
+}
+
+export interface FiscalYearPlan {
+  fiscal_year: number;
+  label: string;
+  device_count: number;
+  estimated_cost: number;
+  targets: ReplacementTarget[];
+}
+
+export interface ReplacementPlan {
+  evaluated_on: string;
+  years: FiscalYearPlan[];
+  unscheduled: ReplacementTarget[];
+  total_cost: number;
+  total_devices: number;
+}
+
+export interface ImpactReport {
+  device_id: number;
+  hostname: string;
+  directly_connected: string[];
+  isolated: string[];
+  note: string;
+}

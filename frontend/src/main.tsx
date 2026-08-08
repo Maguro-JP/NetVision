@@ -17,6 +17,7 @@ import ImportPage from "./pages/ImportPage";
 import InsightsPage from "./pages/InsightsPage";
 import ScenarioDetailPage from "./pages/ScenarioDetailPage";
 import ReferencePage from "./pages/ReferencePage";
+import ReplacementPage from "./pages/ReplacementPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import TopologyPage from "./pages/TopologyPage";
 import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
@@ -50,6 +51,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="documents" element={<DocumentsPage />} />
             <Route path="config-templates" element={<ConfigTemplatesPage />} />
             <Route path="config-plans" element={<ConfigPlansPage />} />
+            <Route path="replacement" element={<ReplacementPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
           </Route>
