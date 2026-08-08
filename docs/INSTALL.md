@@ -113,8 +113,6 @@ sudo systemctl enable --now netvision
 
 ---
 
----
-
 ## 何もインストールできない環境の場合
 
 「ソフトのインストールが禁止」「Python すら入っていない」「管理者権限が無い」——
