@@ -441,6 +441,15 @@ button:disabled {
   font-size: 12px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 40%);
 }
+/* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、
+   相手は輪郭を破線にして控えめに出す */
+.topo-node.outside {
+  border: 1px dashed var(--border);
+  border-left: 4px dashed var(--border);
+  background: transparent;
+  box-shadow: none;
+  opacity: 0.85;
+}
 .topo-node.selected {
   outline: 2px solid var(--accent);
 }

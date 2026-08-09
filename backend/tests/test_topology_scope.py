@@ -114,3 +114,77 @@ def test_endpoint_accepts_the_filter(client, db_session):
         "east-core-rt-01",
     }
     assert [n["hostname"] for n in body["nodes"] if n["outside"]] == ["east-core-rt-01"]
+
+
+def build_center(db) -> dict[str, int]:
+    """センターが2台構成で、営業所が2つぶら下がっている形。"""
+    center = Site(name="西日本センター", address="大阪府")
+    branch = Site(name="関西支社", address="大阪府")
+    office_a = Site(name="京都府営業所", address="京都府")
+    office_b = Site(name="奈良県営業所", address="奈良県")
+    db.add_all([center, branch, office_a, office_b])
+    db.flush()
+
+    def router(hostname: str, site: Site) -> Device:
+        device = Device(
+            hostname=hostname,
+            vendor="Cisco",
+            model="ISR4451-X",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db.add(device)
+        return device
+
+    core_a = router("west-core-rt-01", center)
+    core_b = router("west-core-rt-02", center)
+    branch_rt = router("ksi-br-rt-01", branch)
+    kyoto = router("kyoto-rt-01", office_a)
+    kyoto_sw = router("kyoto-rt-02", office_a)
+    nara = router("nara-rt-01", office_b)
+    db.flush()
+
+    for a, b in (
+        (branch_rt, core_a),
+        (branch_rt, core_b),  # センターは2台とも繋がっている
+        (kyoto, branch_rt),
+        (kyoto_sw, branch_rt),  # 同じ営業所から2台繋がっている
+        (nara, branch_rt),
+        (core_a, core_b),  # 対向どうしの線
+    ):
+        db.add(Link(a_device_id=a.id, a_interface="Gi0/0", b_device_id=b.id, b_interface="Gi0/1"))
+    db.commit()
+    return {"branch": branch.id, "center": center.id}
+
+
+def test_each_peer_site_is_represented_by_one_device(db_session):
+    """対向は相手の拠点ごとに1台だけにすること。
+
+    支社を見たいのに、営業所の中まで2台3台と出てくると、肝心の支社が読めない。
+    """
+    ids = build_center(db_session)
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["branch"])
+
+    outside = sorted(n.hostname for n in graph.nodes if n.outside)
+    # 京都府営業所は2台繋がっているが、出るのは1台
+    assert outside == ["kyoto-rt-01", "nara-rt-01", "west-core-rt-01"]
+
+
+def test_the_devices_folded_away_are_counted_not_hidden_silently(db_session):
+    """まとめた分は台数として出す。黙って消すと「1台しかない」と読まれる。"""
+    ids = build_center(db_session)
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["branch"])
+
+    folded = {n.hostname: n.hidden_peers for n in graph.nodes if n.outside}
+    assert folded["kyoto-rt-01"] == 1
+    assert folded["west-core-rt-01"] == 1
+    assert folded["nara-rt-01"] == 0
+
+
+def test_lines_between_two_peers_are_not_drawn(db_session):
+    """対向どうしを結ぶ線は出さない。絞り込んだ範囲の外の話。"""
+    ids = build_center(db_session)
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["branch"])
+
+    inside = {n.device_id for n in graph.nodes if not n.outside}
+    assert all(e.source in inside or e.target in inside for e in graph.edges)

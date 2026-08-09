@@ -215,6 +215,10 @@ export interface TopologyNode {
   vrfs: string[];
   /** この機器で図に出てくるポートの種類（GigabitEthernet など） */
   port_kinds: string[];
+  /** 絞り込みの外にいて、対向として出しているだけの機器 */
+  outside: boolean;
+  /** 同じ拠点にいて、代表1台にまとめた分の台数 */
+  hidden_peers: number;
 }
 
 export interface TopologyVlan {

@@ -19,6 +19,10 @@ export interface DeviceNodeData extends Record<string, unknown> {
   portKinds: string[];
   /** 編集できる状態か。既定は不可（うっかり動かしてしまうため） */
   editable: boolean;
+  /** 絞り込みの外にいて、対向として出しているだけの機器 */
+  outside?: boolean;
+  /** 同じ拠点にいて、代表1台にまとめた分の台数 */
+  hiddenPeers?: number;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
@@ -70,7 +74,8 @@ export default function DeviceNode({
   return (
     <div
       className={
-        `topo-node ${data.severity ? `sev-${data.severity}` : "simple"} ` +
+        `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
+        (data.outside ? "outside " : "") +
         (data.editable ? "editable " : "") +
         (selected ? "selected" : "")
       }
@@ -103,7 +108,17 @@ export default function DeviceNode({
       </div>
       {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
           ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}
-      {data.portKinds.length > 0 && (
+      {/* 対向は簡易表示。見たいのは絞り込んだ側で、相手は「どこへ出ているか」が
+          分かれば足りる。型番や保守状態まで出すと、肝心の側が読みにくくなる */}
+      {data.outside ? (
+        <div className="topo-node-body">
+          <div className="muted">{data.siteName ?? "拠点未登録"}</div>
+          {(data.hiddenPeers ?? 0) > 0 && (
+            <div className="muted">ほかに {data.hiddenPeers} 台（この拠点内）</div>
+          )}
+        </div>
+      ) : null}
+      {!data.outside && data.portKinds.length > 0 && (
         <div className="topo-node-ports">
           {data.portKinds.map((kind, index) => (
             <span key={kind} style={{ color: MEDIA_COLOR[mediaOf(kind)] }}>
@@ -115,7 +130,7 @@ export default function DeviceNode({
       )}
       {/* シンプル表示では機器名だけを出す。現場で見る図に型番や保守状態が
           載っていると、読み違いのもとになるため */}
-      {data.severity && (
+      {data.severity && !data.outside && (
         <>
           <div className="topo-node-body">
             <div>

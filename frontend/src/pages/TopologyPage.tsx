@@ -160,6 +160,8 @@ function toFlow(
       // 番号だけの表示にしたときに、何のポートかを機器側で読ませる
       portKinds: simple ? [] : node.port_kinds,
       editable: options.editable,
+      outside: node.outside,
+      hiddenPeers: node.hidden_peers,
     } satisfies DeviceNodeData,
     draggable: options.editable,
   }));

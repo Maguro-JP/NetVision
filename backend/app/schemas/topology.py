@@ -170,6 +170,7 @@ class TopologyNodeRead(BaseModel):
     vrfs: list[str] = []
     port_kinds: list[str] = []
     outside: bool = False
+    hidden_peers: int = 0
 
 
 class TopologyEdgeRead(BaseModel):

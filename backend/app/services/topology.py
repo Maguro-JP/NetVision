@@ -63,6 +63,8 @@ class TopologyNodeView:
     port_kinds: list[str] = field(default_factory=list)
     # 絞り込みの外にいて、対向として足しただけの機器
     outside: bool = False
+    # 同じ拠点にいて、代表1台にまとめた分の台数
+    hidden_peers: int = 0
 
 
 @dataclass
@@ -231,24 +233,52 @@ def scope_graph(
                 return False
         return True
 
-    keep = {node.device_id for node in graph.nodes if matches(node)}
-    inside = set(keep)
+    inside = {node.device_id for node in graph.nodes if matches(node)}
+    by_id = {node.device_id: node for node in graph.nodes}
+    keep = set(inside)
+    hidden: dict[int, int] = {}
 
     if scope != SCOPE_SITE:
+        # 対向は「向こう側の入口1台」だけにする。
+        # 東京を見たいのに群馬まで出てきては、肝心の東京が読めない。
+        # 相手の拠点ごとに、こちらと一番多く繋がっている1台を代表にする
+        links_to_inside: dict[int, int] = {}
         for edge in graph.edges:
-            if edge.source in inside and edge.target not in inside:
-                keep.add(edge.target)
-            elif edge.target in inside and edge.source not in inside:
-                keep.add(edge.source)
+            for near, far in ((edge.source, edge.target), (edge.target, edge.source)):
+                if near in inside and far not in inside:
+                    links_to_inside[far] = links_to_inside.get(far, 0) + 1
+
+        groups: dict[object, list[int]] = {}
+        for device_id in links_to_inside:
+            node = by_id[device_id]
+            # 拠点が入っていない機器は、まとめずに1台ずつ扱う
+            groups.setdefault(node.site_id if node.site_id is not None else device_id, []).append(
+                device_id
+            )
+
+        for members in groups.values():
+            members.sort(key=lambda i: (-links_to_inside[i], by_id[i].hostname))
+            keep.add(members[0])
+            # 隠した分は数として出す。黙って消すと「そこには1台しかない」と読まれる
+            if len(members) > 1:
+                hidden[members[0]] = len(members) - 1
 
     nodes = [node for node in graph.nodes if node.device_id in keep]
     for node in nodes:
         # 対向として足しただけの機器は、図の上で区別できるようにする
         node.outside = node.device_id not in inside
+        node.hidden_peers = hidden.get(node.device_id, 0)
+
     return TopologyGraph(
         layer=graph.layer,
         nodes=nodes,
-        edges=[e for e in graph.edges if e.source in keep and e.target in keep],
+        # 対向どうしを結ぶ線は出さない。絞り込んだ範囲の外の話で、
+        # そこまで描くと「隣の家の中」まで図に出てくる
+        edges=[
+            e
+            for e in graph.edges
+            if e.source in keep and e.target in keep and (e.source in inside or e.target in inside)
+        ],
         unplaced_count=graph.unplaced_count,
     )
 
