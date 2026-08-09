@@ -188,3 +188,75 @@ def test_lines_between_two_peers_are_not_drawn(db_session):
 
     inside = {n.device_id for n in graph.nodes if not n.outside}
     assert all(e.source in inside or e.target in inside for e in graph.edges)
+
+
+def test_the_kept_devices_are_laid_out_again_so_the_figure_is_not_spread_out(db_session):
+    """絞ったら、その分だけで並べ直すこと。
+
+    座標は網全体を前提に振ってあるので、そのまま出すと数台でも画面いっぱいに
+    散らばって、線を目で追えなくなる。
+    """
+    ids = build(db_session)
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["osaka"])
+
+    width = max(n.x for n in graph.nodes) - min(n.x for n in graph.nodes)
+    height = max(n.y for n in graph.nodes) - min(n.y for n in graph.nodes)
+    # 3台なら、段2つ・横1つ分に収まる
+    assert width <= 600
+    assert height <= 400
+
+
+def test_a_saved_layout_is_not_rearranged(db_session):
+    """人が動かして保存した配置は戻さない。直した意味が無くなる。"""
+    ids = build(db_session)
+    graph = topology.get_graph(db_session)
+    moved = next(n for n in graph.nodes if n.hostname == "osaka-rt-01")
+    moved.x, moved.y, moved.placed = 4321.0, 1234.0, True
+
+    scoped = topology.scope_graph(graph, site_id=ids["osaka"])
+    kept = next(n for n in scoped.nodes if n.hostname == "osaka-rt-01")
+    assert (kept.x, kept.y) == (4321.0, 1234.0)
+
+
+def test_a_wide_tier_is_wrapped(db_session):
+    """同じ段に並びすぎたら折り返すこと。横に伸びると画面に収まらない。"""
+    site = Site(name="関西支社", address="大阪府")
+    other = Site(name="京都府営業所", address="京都府")
+    db_session.add_all([site, other])
+    db_session.flush()
+
+    hub = Device(
+        hostname="ksi-br-rt-01",
+        vendor="Cisco",
+        model="ISR4451-X",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id,
+    )
+    db_session.add(hub)
+    db_session.flush()
+    for index in range(10):
+        leaf = Device(
+            hostname=f"rt-{index:02d}",
+            vendor="NEC",
+            model="IX2215",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db_session.add(leaf)
+        db_session.flush()
+        db_session.add(
+            Link(
+                a_device_id=hub.id,
+                a_interface=f"Gi0/1/{index}",
+                b_device_id=leaf.id,
+                b_interface="Gi0/0",
+            )
+        )
+    db_session.commit()
+
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=site.id)
+    rows: dict[float, int] = {}
+    for node in graph.nodes:
+        rows[round(node.y)] = rows.get(round(node.y), 0) + 1
+    assert len(rows) > 1
+    assert max(rows.values()) <= 6

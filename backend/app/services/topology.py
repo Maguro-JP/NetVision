@@ -38,6 +38,10 @@ TIER_ORDER: dict[DeviceType, int] = {
 _X_SPACING = 300.0
 _Y_SPACING = 200.0
 
+# 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
+_WRAP = 6
+_WRAP_SPACING = 130.0
+
 
 @dataclass
 class TopologyNodeView:
@@ -210,6 +214,7 @@ def scope_graph(
     site_id: int | None = None,
     q: str | None = None,
     scope: str = SCOPE_PEERS,
+    orientation: str = "vertical",
 ) -> TopologyGraph:
     """見たい範囲だけに絞る。
 
@@ -264,6 +269,7 @@ def scope_graph(
                 hidden[members[0]] = len(members) - 1
 
     nodes = [node for node in graph.nodes if node.device_id in keep]
+    _compact(nodes, orientation=orientation)
     for node in nodes:
         # 対向として足しただけの機器は、図の上で区別できるようにする
         node.outside = node.device_id not in inside
@@ -281,6 +287,44 @@ def scope_graph(
         ],
         unplaced_count=graph.unplaced_count,
     )
+
+
+def _compact(nodes: list[TopologyNodeView], *, orientation: str = "vertical") -> None:
+    """絞り込んだ分だけで並べ直す。
+
+    座標は網全体を前提に振ってあるので、数台に絞ると機器が画面いっぱいに
+    散らばって、線を目で追えなくなる。残った機器だけで段を組み直す。
+
+    人が動かして保存した配置が混ざっている場合は何もしない。
+    直した配置を勝手に戻すと、直した意味が無くなる。
+    """
+    if not nodes or any(node.placed for node in nodes):
+        return
+
+    tiers: dict[int, list[TopologyNodeView]] = {}
+    for node in nodes:
+        try:
+            tier = TIER_ORDER.get(DeviceType(node.device_type), 7)
+        except ValueError:
+            tier = 7
+        tiers.setdefault(tier, []).append(node)
+
+    horizontal = orientation == "horizontal"
+    cursor = 0.0
+    for _, members in sorted(tiers.items()):
+        members.sort(key=lambda n: n.hostname)
+        # 1段に並べすぎると横に伸びて画面に収まらない。折り返す
+        rows = [members[i : i + _WRAP] for i in range(0, len(members), _WRAP)]
+        for row in rows:
+            offset = -(len(row) - 1) / 2
+            for position, node in enumerate(row):
+                along = offset + position
+                if horizontal:
+                    node.x, node.y = cursor, along * _Y_SPACING
+                else:
+                    node.x, node.y = along * _X_SPACING, cursor
+            cursor += _WRAP_SPACING
+        cursor += _Y_SPACING - _WRAP_SPACING
 
 
 def _defined_vlans(db: Session) -> dict[int, set[int]]:

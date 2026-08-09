@@ -53,7 +53,7 @@ def get_topology(
     返し、既定では対向（直接つながっている相手）までを足す。
     """
     graph = service.get_graph(db, layer, include_retired=include_retired, orientation=orientation)
-    graph = service.scope_graph(graph, site_id=site_id, q=q, scope=scope)
+    graph = service.scope_graph(graph, site_id=site_id, q=q, scope=scope, orientation=orientation)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
