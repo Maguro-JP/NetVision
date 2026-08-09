@@ -418,7 +418,7 @@ def _compact(
             ordered = sorted(
                 neighbours.get(current, []),
                 key=lambda i: (
-                    _port_key(port_between.get((current, i), "")),
+                    port_key(port_between.get((current, i), "")),
                     by_id[i].hostname,
                 ),
             )
@@ -456,7 +456,7 @@ def _compact(
         node.x, node.y = (down, along) if horizontal else (along, down)
 
 
-def _port_key(name: str) -> tuple:
+def port_key(name: str) -> tuple:
     """ポート名を並べ替えるための鍵。数字は数として見る。
 
     文字列のまま並べると 1/0/10 が 1/0/2 より前に来て、図の並びが

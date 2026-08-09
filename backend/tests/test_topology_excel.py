@@ -219,13 +219,17 @@ def test_both_ends_of_a_link_show_their_port_on_separate_rows(db_session):
         "GigabitEthernet0/1/2",
     ]
 
-    # 上位側と下位側は別の行にある
+    # 上位側は線の左上、下位側は線の右下。行も列も分かれている
     for (row, column), value in cells.items():
-        if value.startswith("GigabitEthernet0/1/"):
-            assert (row + 1, column) in cells or any(
-                r == row + 1 and str(v).startswith("GigabitEthernet1/0/")
-                for (r, _), v in cells.items()
-            )
+        if not value.startswith("GigabitEthernet0/1/"):
+            continue
+        below = [
+            (r, c)
+            for (r, c), v in cells.items()
+            if str(v).startswith("GigabitEthernet1/0/") and r > row
+        ]
+        assert below, "下位側のポートが出ていない"
+        assert any(c > column for _, c in below), "下位側が右に来ていない"
 
 
 def test_the_sheet_leaves_a_margin_at_the_top_left(db_session):

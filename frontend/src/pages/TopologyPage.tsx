@@ -155,10 +155,7 @@ function assignAnchors(graph: TopologyGraph): Map<number, { source: string; targ
     };
     members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
     members.forEach((end, index) => {
-      assigned.set(
-        `${end.edge}:${end.device}`,
-        anchorId(end.side, slotFor(index, members.length)),
-      );
+      assigned.set(`${end.edge}:${end.device}`, anchorId(end.side, slotFor(index, members.length)));
     });
   }
 
@@ -413,10 +410,7 @@ function TopologyEditor() {
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
   useEffect(() => {
-    localStorage.setItem(
-      VIEW_KEY,
-      JSON.stringify({ portStyle, alongLine, simple, orientation }),
-    );
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ portStyle, alongLine, simple, orientation }));
   }, [portStyle, alongLine, simple, orientation]);
 
   // 絞り込みを URL に残す。この画面をそのまま人に送れる
@@ -487,8 +481,13 @@ function TopologyEditor() {
     : undefined;
 
   const updateSide = useMutation({
-    mutationFn: ({ id, body }: { id: number; body: { a_side?: string | null; b_side?: string | null } }) =>
-      api.updateLink(id, body),
+    mutationFn: ({
+      id,
+      body,
+    }: {
+      id: number;
+      body: { a_side?: string | null; b_side?: string | null };
+    }) => api.updateLink(id, body),
     onSuccess: () => {
       setNotice("線の引き出し位置を変えました");
       refresh();
@@ -779,9 +778,7 @@ function TopologyEditor() {
               機器が {stats?.device_count} 台あります。全体図は読めないので、
               <strong>拠点を選ぶ</strong>か<strong>拠点名・機器名で探して</strong>ください。
             </p>
-            <p className="muted">
-              選んだ拠点の対向（直接つながっている上位）までは自動で出ます。
-            </p>
+            <p className="muted">選んだ拠点の対向（直接つながっている上位）までは自動で出ます。</p>
             <button onClick={() => setShowAll(true)}>それでも全体を出す（重くなります）</button>
           </div>
         ) : isLoading ? (
@@ -815,7 +812,9 @@ function TopologyEditor() {
             proOptions={{ hideAttribution: true }}
           >
             <Background gap={24} color="#2a3340" />
-            <Controls />
+            {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
+                押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
+            <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
           </ReactFlow>
         )}
@@ -879,9 +878,7 @@ function TopologyEditor() {
           <div className="vlan-filter">
             <div className="vlan-filter-head">
               <strong>VRF（仮想ルータ）で絞り込む</strong>
-              <span className="muted">
-                同じ線で繋がって見えても、VRF が違えば通信できません
-              </span>
+              <span className="muted">同じ線で繋がって見えても、VRF が違えば通信できません</span>
               <select value={selectedVrf} onChange={(e) => setSelectedVrf(e.target.value)}>
                 <option value="">すべて</option>
                 {(vrfs ?? []).map((vrf) => (

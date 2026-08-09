@@ -9,8 +9,13 @@
 * 機器 = セルを結合して罫線で囲んだ箱
 * 結線 = セルの辺に罫線を引いた折れ線
 
-にする。上位を左、下位を右に並べる。ポート名は線と同じ行に置くと罫線に
-重なって読めなくなるので、上位側は線の上の行、下位側は線の下の行に分ける。
+にする。並べ方は次の規則に従う。図は自動で作るので、規則を決めておかないと
+出すたびに並びが変わって信用されない。
+
+* 上位を左、下位を右に置く
+* 配下は、上位機器のポート番号の若い順に上から並べる（番号は数として比べる）
+* ポート名は線と同じ行に置くと罫線に重なって消えるので、
+  上位側は線の左上に左揃え、下位側は線の右下に右揃えで書く
 
 全体を1枚に描こうとしない。 拠点が数千あるところで全体図は使えないので、
 拠点で絞って出すことを前提にしている。
@@ -30,13 +35,14 @@ from app.services.topology import (
     TIER_ORDER,
     get_graph,
     hierarchy_rank,
+    port_key,
     scope_graph,
 )
 
 # 方眼の細かさ。箱の大きさと、線を通す余白をこれで決める
 BOX_W = 8  # 箱の幅（列）
 BOX_H = 3  # 箱の高さ（行）
-GAP_W = 8  # 段と段の間（列）。ここに縦線と上りポート名が入る
+GAP_W = 16  # 段と段の間（列）。ここに縦線とポート名が入る
 GAP_H = 1  # 箱と箱の間（行）
 
 # 図として見せるので、左と上に余白を取る。見出しは B2 から書き、
@@ -90,10 +96,17 @@ def _layout(
     # 段（種別）だけで親を決めると、拠点ルータ→支社ルータのような
     # 同じ種別が縦に並ぶ構成が全部ばらばらの根になってしまう
     neighbours: dict[int, list[int]] = {}
+    port_between: dict[tuple[int, int], str] = {}
     for edge in graph.edges:
         if edge.source in nodes and edge.target in nodes:
             neighbours.setdefault(edge.source, []).append(edge.target)
             neighbours.setdefault(edge.target, []).append(edge.source)
+            port_between[(edge.source, edge.target)] = edge.source_interface
+            port_between[(edge.target, edge.source)] = edge.target_interface
+
+    def order_of(parent_id: int, child_id: int) -> tuple:
+        # 上位側のポート番号の若い順。画面のトポロジ図と同じ規則にする
+        return (port_key(port_between.get((parent_id, child_id), "")), nodes[child_id].hostname)
 
     order = sorted(
         (n.device_id for n in graph.nodes),
@@ -118,7 +131,9 @@ def _layout(
         queue = [start]
         while queue:
             current = queue.pop(0)
-            for neighbour in sorted(neighbours.get(current, []), key=lambda i: nodes[i].hostname):
+            for neighbour in sorted(
+                neighbours.get(current, []), key=lambda i: order_of(current, i)
+            ):
                 if neighbour in seen:
                     continue
                 seen.add(neighbour)
@@ -161,7 +176,7 @@ def _layout(
         )
         bottom = at_row
         for index, child in enumerate(
-            sorted(children.get(device_id, []), key=lambda i: nodes[i].hostname)
+            sorted(children.get(device_id, []), key=lambda i: order_of(device_id, i))
         ):
             child_row = at_row if index == 0 else bottom + BOX_H + GAP_H
             bottom = max(bottom, walk(child, depth + 1, child_row))
@@ -272,13 +287,13 @@ def to_xlsx(
             return
         down, up = pair
         if down:
-            # 上位機器の下りポート。線の上の行、子へ向かう横線の始まりに置く
+            # 上位機器の下りポートは、線の左上。左揃えで線の始まりから書く
             cell = sheet.cell(row=child.middle - 1, column=bus + 1, value=down)
             cell.font = Font(size=8, color="444444")
             cell.alignment = Alignment(horizontal="left")
         if up:
-            # 下位機器の上りポート。線の下の行、子の箱の手前に置く
-            cell = sheet.cell(row=child.middle, column=max(child.col - 5, bus + 1), value=up)
+            # 下位機器の上りポートは、線の右下。右揃えで箱の手前に寄せる
+            cell = sheet.cell(row=child.middle + 1, column=child.col - 1, value=up)
             cell.font = Font(size=8, color="444444")
             cell.alignment = Alignment(horizontal="right")
 
