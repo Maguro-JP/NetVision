@@ -38,6 +38,28 @@ export function formatRemaining(days: number | null): string {
   return `あと約${(days / 365.25).toFixed(1)}年`;
 }
 
+/**
+ * 日時を、その端末の時刻で表示する。
+ *
+ * API はタイムゾーン付き（UTC）で返すので、変換はブラウザに任せる。
+ * タイムゾーンの付かない文字列を渡されると現地時刻と解釈されてずれるため、
+ * **付いていない場合は UTC として補う**。
+ */
+export function formatTimestamp(value: string | null): string {
+  if (!value) return "—";
+  const normalized = /[zZ]|[+-]\d{2}:?\d{2}$/.test(value) ? value : `${value}Z`;
+  const parsed = new Date(normalized);
+  if (Number.isNaN(parsed.getTime())) return value;
+  return parsed.toLocaleString("ja-JP", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export function formatDate(value: string | null): string {
   if (!value) return "—";
   const [y, m, d] = value.split("-");

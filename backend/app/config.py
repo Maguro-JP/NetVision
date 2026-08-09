@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
+    # 画面や書き出しに出す時刻の地域。DB には UTC で持ち、見せるときだけ変換する。
+    # サーバの時計が UTC でも、資料に載る「◯◯時点」は使う人の時刻でなければ意味が無い。
+    display_timezone: str = "Asia/Tokyo"
+
     # 起動時にテーブルが無ければ作る。1台完結の個人利用（SQLite）向け。
     # 複数人で運用する場合は alembic でマイグレーションするので false のまま。
     auto_create_schema: bool = False

@@ -16,13 +16,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime
 from math import atan2, cos, degrees, sin
 from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
 
-from app.services import portlabel, svglayout
+from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import TopologyGraph, get_graph
@@ -144,7 +143,8 @@ def render_svg(
     )
     parts.append('<rect width="100%" height="100%" fill="#ffffff"/>')
 
-    generated = datetime.now().strftime("%Y-%m-%d %H:%M")
+    # 資料に載る時刻は、サーバの時計ではなく使う人の時刻でなければ意味が無い
+    generated = localtime.format(localtime.now(), with_zone=True)
     parts.append(
         f'<text x="{MARGIN:.0f}" y="30" font-size="18" font-weight="700" fill="#1a1a1a">'
         f"{_esc(title)}</text>"

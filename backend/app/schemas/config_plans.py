@@ -1,10 +1,9 @@
 from __future__ import annotations
 
-from datetime import datetime
-
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.config_plan import PlanStatus
+from app.schemas.types import Timestamp
 
 
 class ConfigPlanBase(BaseModel):
@@ -42,8 +41,8 @@ class ConfigPlanRead(ConfigPlanBase):
     device_id: int
     device_hostname: str | None = None
     revision: int
-    created_at: datetime
-    updated_at: datetime
+    created_at: Timestamp
+    updated_at: Timestamp
 
 
 class CommandRead(BaseModel):

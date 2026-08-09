@@ -4,11 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { IngestResult } from "../api/types";
-
-function formatTimestamp(value: string): string {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("ja-JP", { hour12: false });
-}
+import { formatTimestamp } from "../lib/format";
 
 /** 取り込み1ファイル分の結果。読み取れたものと、台帳との差分を見せる。 */
 function ResultCard({ result }: { result: IngestResult }) {

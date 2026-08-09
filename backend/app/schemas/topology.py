@@ -1,9 +1,9 @@
-from datetime import datetime
 from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.topology import LinkOrigin
+from app.schemas.types import Timestamp
 from app.services.configparse import Vendor
 from app.services.lifecycle import Severity
 
@@ -121,7 +121,7 @@ class ConfigSnapshotRead(BaseModel):
     parsed_serial: str | None
     interface_count: int
     neighbor_count: int
-    created_at: datetime
+    created_at: Timestamp
 
 
 class ConfigSnapshotDetail(ConfigSnapshotRead):

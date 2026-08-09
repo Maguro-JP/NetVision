@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 
 import type { ChangeAction, ChangeLog, ChangeSource } from "../api/types";
+import { formatTimestamp } from "../lib/format";
 
 export const ACTION_LABEL: Record<ChangeAction, string> = {
   create: "追加",
@@ -26,11 +27,6 @@ export const ENTITY_LABEL: Record<string, string> = {
   contract: "保守契約",
   site: "拠点",
 };
-
-function formatTimestamp(value: string): string {
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("ja-JP", { hour12: false });
-}
 
 /** 「A → B」の形で差分を見せる。追加・削除はまとめた内容を出す。 */
 function Diff({ log }: { log: ChangeLog }) {

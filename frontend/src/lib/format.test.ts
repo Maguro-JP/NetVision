@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { formatCurrency, formatDate, formatRemaining } from "./format";
+import { formatCurrency, formatDate, formatRemaining, formatTimestamp } from "./format";
 
 describe("formatRemaining", () => {
   it("未登録は — を返す", () => {
@@ -32,5 +32,30 @@ describe("formatDate / formatCurrency", () => {
   it("金額を円記号と桁区切りで表示する", () => {
     expect(formatCurrency(480000)).toBe("¥480,000");
     expect(formatCurrency(null)).toBe("—");
+  });
+});
+
+describe("formatTimestamp", () => {
+  it("タイムゾーン付きの値を、その端末の時刻で出す", () => {
+    // 13:37 UTC は JST の 22:37。ずれると変更履歴が9時間ずれて見える
+    const text = formatTimestamp("2026-08-09T13:37:30+00:00");
+    expect(text).toContain("2026");
+    expect(text).toContain("22:37");
+  });
+
+  it("タイムゾーンが付いていない値は UTC として扱う", () => {
+    // 付いていない文字列をそのまま Date に渡すと現地時刻と解釈される。
+    // 古い形式が返ってきても、ずれたまま表示しない
+    expect(formatTimestamp("2026-08-09T13:37:30")).toBe(
+      formatTimestamp("2026-08-09T13:37:30Z"),
+    );
+  });
+
+  it("空なら — を返す", () => {
+    expect(formatTimestamp(null)).toBe("—");
+  });
+
+  it("読めない値はそのまま返す", () => {
+    expect(formatTimestamp("不明")).toBe("不明");
   });
 });

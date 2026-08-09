@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import { formatTimestamp } from "../lib/format";
 import type { ConfigPlan, DiffCommand } from "../api/types";
 
 const OUTPUT_TABS = [
@@ -201,7 +202,7 @@ export default function ConfigPlansPage() {
                 </td>
                 <td>{plan.device_hostname ?? "—"}</td>
                 <td>r{plan.revision}</td>
-                <td className="muted">{new Date(plan.updated_at).toLocaleString("ja-JP")}</td>
+                <td className="muted">{formatTimestamp(plan.updated_at)}</td>
                 <td>
                   <button
                     onClick={() => {

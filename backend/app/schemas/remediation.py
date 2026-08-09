@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.remediation import RemediationKind
+from app.schemas.types import Timestamp
 
 
 class RemediationBase(BaseModel):
@@ -53,8 +54,8 @@ class RemediationRead(RemediationBase):
     cve_id: str | None = None
     source_document_title: str | None = None
     config_template_name: str | None = None
-    created_at: datetime
-    updated_at: datetime
+    created_at: Timestamp
+    updated_at: Timestamp
 
 
 class RemediationOptionRead(BaseModel):

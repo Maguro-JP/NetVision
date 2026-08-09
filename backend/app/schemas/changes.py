@@ -1,8 +1,7 @@
-from datetime import datetime
-
 from pydantic import BaseModel
 
 from app.models import ChangeAction, ChangeSource
+from app.schemas.types import Timestamp
 
 
 class ChangeLogRead(BaseModel):
@@ -19,7 +18,7 @@ class ChangeLogRead(BaseModel):
     actor: str | None
     batch_id: str | None
     note: str | None
-    created_at: datetime
+    created_at: Timestamp
 
 
 class ChangeLogPage(BaseModel):

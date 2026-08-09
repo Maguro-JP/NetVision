@@ -486,4 +486,6 @@ def diff_snapshots(older: ConfigSnapshot, newer: ConfigSnapshot) -> str:
 
 
 def _stamp(value: datetime | None) -> str:
-    return value.strftime("%Y-%m-%d %H:%M") if value else ""
+    from app.services import localtime
+
+    return localtime.format(value)

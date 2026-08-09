@@ -85,7 +85,9 @@ def _format(value: object) -> str | None:
     if value is None:
         return None
     if isinstance(value, datetime):
-        return value.strftime("%Y-%m-%d %H:%M")
+        from app.services import localtime
+
+        return localtime.format(value)
     if isinstance(value, date):
         return value.isoformat()
     text = str(value)
