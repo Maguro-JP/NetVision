@@ -209,6 +209,31 @@ def export_link_table(
     )
 
 
+@router.get("/workbook.xlsx", response_class=Response)
+def export_workbook(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    site_id: int | None = Query(default=None, description="この拠点に絞って出す"),
+    scope: str = Query(default=service.SCOPE_PEERS),
+) -> Response:
+    """構成図・結線表・ポート一覧を1つの Excel にまとめて出す。
+
+    構成図はセルの罫線で描いてあるので、**手元で直せる**。行を足す・機器を
+    1台書き足す・注記を入れる、が現場でそのままできる。
+
+    拠点が多い環境では全体を1枚に描いても読めないので、拠点で絞って出す前提。
+    """
+    from app.services import topology_excel
+
+    data = topology_excel.to_xlsx(db, layer, site_id=site_id, scope=scope)
+    name = f"topology-{layer}{f'-site{site_id}' if site_id else ''}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @router.get("/ports.xlsx", response_class=Response)
 def export_port_map(
     db: DbSession,

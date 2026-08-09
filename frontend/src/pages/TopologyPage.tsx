@@ -678,23 +678,16 @@ function TopologyEditor() {
         >
           図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
         </a>
+        {/* Excel はまとめて1つ。ボタンを分けるより、開けば全部入っている方が配りやすい */}
         <a
           className="button"
-          href={api.linkTableUrl(layer, "xlsx", {
+          href={api.workbookUrl(layer, {
             site_id: selectedSite === "" ? undefined : selectedSite,
+            scope,
           })}
-          title="結線表を Excel で出します。作業指示や検収の突合には表の方が使いやすいです"
+          title="構成図（セルの罫線で描いた図）・結線表・ポート一覧を1つの Excel で出します。図は手元で直せます"
         >
-          結線表（Excel）
-        </a>
-        <a
-          className="button"
-          href={api.portMapUrl({
-            site_id: selectedSite === "" ? undefined : selectedSite,
-          })}
-          title="機器ごとのポート割付を Excel で出します。上りポート・下りポート・空きポートが機器単位で並びます"
-        >
-          ポート割付（Excel）
+          Excel で出す（図＋表）
         </a>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>

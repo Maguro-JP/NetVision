@@ -320,6 +320,9 @@ export const api = {
   ) => `${BASE}/topology/export.${format}${query({ layer, ...options })}`,
   portMapUrl: (options: { site_id?: number } = {}) =>
     `${BASE}/topology/ports.xlsx${query({ ...options })}`,
+  // 図・結線表・ポート一覧を1つにまとめた Excel。配るのはこれ1つで済む
+  workbookUrl: (layer: string, options: { site_id?: number; scope?: string } = {}) =>
+    `${BASE}/topology/workbook.xlsx${query({ layer, ...options })}`,
   designConfig: (deviceId: number) =>
     request<{
       device_id: number;
