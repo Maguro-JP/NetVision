@@ -3,17 +3,22 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { TopologyGraph } from "../api/types";
+import type { Site, TopologyGraph } from "../api/types";
+import { BOUNDS, locate } from "../lib/japan";
 
 /* ネットワークを立体で眺めるページ。
  *
  * 平面の構成図は「どこがどこに繋がっているか」を読むためのもので、それは
- * トポロジ図が担当する。こちらは全体の形をつかむための遊びで、上位ほど上、
- * 配下ほど下に並べた層を回して見る。作業には使わない。
+ * トポロジ図が担当する。こちらは全体の形をつかむための遊び。
  *
- * 外部ライブラリは入れない（閉域で動かす前提なので、依存は増やさない）。
- * Canvas に自前で投影するだけで足りる。
+ * 流れている光はランダムに出しているだけで、実際の通信量ではない。
+ * 監視の画面と取り違えられないよう、画面にもそう書いてある。
+ *
+ * 外部ライブラリも外部の地図サービスも使わない（閉域で動かす前提）。
+ * Canvas に自前で投影し、住所から座標を出す表も同梱している。
  */
+
+type Mode = "layer" | "sphere" | "map";
 
 interface Point {
   id: number;
@@ -27,10 +32,17 @@ interface Point {
   phase: number;
   // 光の玉が着いた時刻。しばらく明るくする
   litAt: number;
-  /* 画面に投影した後の位置。線を引くときに使い回す */
+  // 投影した後の位置。線と玉で使い回す
   screenX: number;
   screenY: number;
   scale: number;
+}
+
+interface Packet {
+  from: number;
+  to: number;
+  progress: number;
+  speed: number;
 }
 
 const TYPE_COLOR: Record<string, string> = {
@@ -44,8 +56,15 @@ const TYPE_COLOR: Record<string, string> = {
   other: "#8a94a6",
 };
 
+const MODES: { value: Mode; label: string; hint: string }[] = [
+  { value: "sphere", label: "球", hint: "上下左右前後に広がる形で見ます" },
+  { value: "layer", label: "層", hint: "上位を上に、段ごとの輪で見ます" },
+  { value: "map", label: "地図", hint: "拠点の住所から日本地図に置いて見ます" },
+];
+
 const LAYER_GAP = 150;
 const RADIUS = 240;
+const MAX_PACKETS = 90;
 
 /* 網の中心から数えて何段目かを返す。
  *
@@ -101,65 +120,131 @@ function layersOf(graph: TopologyGraph): Map<number, number> {
   return layers;
 }
 
-/* 段ごとに輪を作って配置する。上位が上、配下が下。 */
-function toPoints(graph: TopologyGraph): Point[] {
-  const layers = layersOf(graph);
+function base(graph: TopologyGraph): Point[] {
+  return graph.nodes.map((node) => ({
+    id: node.device_id,
+    hostname: node.hostname,
+    siteName: node.site_name,
+    deviceType: node.device_type,
+    x: 0,
+    y: 0,
+    z: 0,
+    phase: Math.random() * Math.PI * 2,
+    litAt: -Infinity,
+    screenX: 0,
+    screenY: 0,
+    scale: 1,
+  }));
+}
+
+/* 段ごとの輪。上位が上、配下が下。 */
+function asLayers(points: Point[], layers: Map<number, number>): void {
   const depths = [...new Set(layers.values())].sort((a, b) => a - b);
   const counts = new Map<number, number>();
   for (const hop of layers.values()) counts.set(hop, (counts.get(hop) ?? 0) + 1);
   const index = new Map<number, number>();
 
-  return graph.nodes.map((node) => {
-    const hop = layers.get(node.device_id) ?? 0;
+  for (const point of points) {
+    const hop = layers.get(point.id) ?? 0;
     const position = index.get(hop) ?? 0;
     index.set(hop, position + 1);
     const count = counts.get(hop) ?? 1;
     const angle = (position / count) * Math.PI * 2;
-    // 台数が多い段ほど輪を大きくして、点が重ならないようにする
     const radius = count === 1 ? 0 : Math.max(RADIUS * 0.4, (count * 26) / (Math.PI * 2));
 
-    return {
-      id: node.device_id,
-      hostname: node.hostname,
-      siteName: node.site_name,
-      deviceType: node.device_type,
-      phase: Math.random() * Math.PI * 2,
-      litAt: -Infinity,
-      x: Math.cos(angle) * radius,
-      y: (depths.indexOf(hop) - (depths.length - 1) / 2) * LAYER_GAP,
-      z: Math.sin(angle) * radius,
-      screenX: 0,
-      screenY: 0,
-      scale: 1,
-    };
-  });
+    point.x = Math.cos(angle) * radius;
+    point.y = (depths.indexOf(hop) - (depths.length - 1) / 2) * LAYER_GAP;
+    point.z = Math.sin(angle) * radius;
+  }
 }
 
-/* 線の上を流れる光の玉。通信している様子を眺めるためだけのもので、
- * 実際のトラフィックとは関係が無い。行きと帰りの両方をランダムに流す。 */
-interface Packet {
-  edge: number;
-  from: number;
-  to: number;
-  progress: number;
-  speed: number;
+/* 球。上位を内側、配下を外側の殻に置き、全方向へ線が伸びる形にする。
+ *
+ * 殻の中では黄金角で散らす。等間隔に並べると縞が見えて、
+ * 網ではなく模様に見えてしまう。
+ */
+function asSphere(points: Point[], layers: Map<number, number>): void {
+  const depths = [...new Set(layers.values())].sort((a, b) => a - b);
+  const counts = new Map<number, number>();
+  for (const hop of layers.values()) counts.set(hop, (counts.get(hop) ?? 0) + 1);
+  const index = new Map<number, number>();
+  const golden = Math.PI * (3 - Math.sqrt(5));
+
+  for (const point of points) {
+    const hop = layers.get(point.id) ?? 0;
+    const position = index.get(hop) ?? 0;
+    index.set(hop, position + 1);
+    const count = counts.get(hop) ?? 1;
+    const shell = depths.indexOf(hop);
+    const radius = 90 + shell * (RADIUS / Math.max(depths.length - 1, 1));
+
+    // 殻の上に散らす（1台なら中心付近）
+    const t = count === 1 ? 0.5 : (position + 0.5) / count;
+    const y = 1 - t * 2;
+    const ring = Math.sqrt(Math.max(0, 1 - y * y));
+    const theta = golden * (position + shell * 7);
+
+    point.x = Math.cos(theta) * ring * radius;
+    point.y = y * radius;
+    point.z = Math.sin(theta) * ring * radius;
+  }
 }
 
-const MAX_PACKETS = 90;
+/* 地図。拠点の住所から日本地図に置く。高さは段（上位ほど高い）。
+ *
+ * 住所から位置が分からない機器は地図に置かない。それらしい場所に置くと、
+ * 地図の上では「そこにある」と読まれてしまう。下の余白にまとめる。
+ */
+function asMap(
+  points: Point[],
+  layers: Map<number, number>,
+  addressOf: Map<string, string | null>,
+): number {
+  const depths = [...new Set(layers.values())].sort((a, b) => a - b);
+  const spread = new Map<string, number>();
+  let unknown = 0;
+
+  for (const point of points) {
+    const site = point.siteName ?? "";
+    const at = locate(site, addressOf.get(site) ?? null);
+    const hop = layers.get(point.id) ?? 0;
+    const height = (depths.length - 1 - depths.indexOf(hop)) * 60;
+
+    if (!at) {
+      // 置き場所が無いものは地図の外へ並べる
+      point.x = -420 + (unknown % 12) * 70;
+      point.y = 260 + Math.floor(unknown / 12) * 40;
+      point.z = 320;
+      unknown += 1;
+      continue;
+    }
+
+    // 同じ県に何台もあるので、少しずらして重ならないようにする
+    const seen = spread.get(site) ?? 0;
+    spread.set(site, seen + 1);
+    const jitter = seen === 0 ? 0 : 12 + seen * 4;
+    const angle = seen * 2.4;
+
+    const width = BOUNDS.maxLon - BOUNDS.minLon;
+    const depth = BOUNDS.maxLat - BOUNDS.minLat;
+    point.x = ((at.lon - (BOUNDS.minLon + width / 2)) / width) * 900 + Math.cos(angle) * jitter;
+    point.z = ((BOUNDS.minLat + depth / 2 - at.lat) / depth) * 700 + Math.sin(angle) * jitter;
+    point.y = -height;
+  }
+  return unknown;
+}
 
 export default function SpacePage() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [site, setSite] = useState<number | "">("");
+  const [mode, setMode] = useState<Mode>("sphere");
   const [spin, setSpin] = useState(true);
+  const [flow, setFlow] = useState(true);
   // 見る向き。ドラッグで回す
   const angle = useRef({ yaw: 0.6, pitch: -0.35 });
   const drag = useRef<{ x: number; y: number } | null>(null);
-  const hovered = useRef<Point | null>(null);
 
-  const { data: sites } = useQuery({
-    queryKey: ["sites"],
-    queryFn: () => api.listSites(),
-  });
+  const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
   const { data: graph } = useQuery({
     queryKey: ["topology", "space", site],
     queryFn: () =>
@@ -168,7 +253,27 @@ export default function SpacePage() {
       }),
   });
 
-  const points = useMemo(() => (graph ? toPoints(graph) : []), [graph]);
+  const addressOf = useMemo(
+    () => new Map((sites ?? []).map((item: Site) => [item.name, item.address])),
+    [sites],
+  );
+
+  // 表示を切り替えたら見る向きも合わせる。地図は真上から見ないと形が読めない
+  useEffect(() => {
+    angle.current = mode === "map" ? { yaw: 0, pitch: -1.15 } : { yaw: 0.6, pitch: -0.35 };
+    // 地図は回すと形が読めなくなるので、既定では止めておく
+    setSpin(mode !== "map");
+  }, [mode]);
+
+  const { points, unlocated } = useMemo(() => {
+    if (!graph) return { points: [] as Point[], unlocated: 0 };
+    const made = base(graph);
+    const layers = layersOf(graph);
+    if (mode === "layer") asLayers(made, layers);
+    else if (mode === "sphere") asSphere(made, layers);
+    const missing = mode === "map" ? asMap(made, layers, addressOf) : 0;
+    return { points: made, unlocated: missing };
+  }, [graph, mode, addressOf]);
 
   useEffect(() => {
     const element = canvas.current;
@@ -184,14 +289,16 @@ export default function SpacePage() {
     const packets: Packet[] = [];
     const started = performance.now();
 
+    // 地図では線を弧にする。真っ直ぐ引くと重なって本数が分からない
+    const arc = mode === "map" ? 0.32 : 0;
+
     const draw = () => {
       if (!running) return;
-      const width = (element.width = element.clientWidth * devicePixelRatio);
-      const height = (element.height = element.clientHeight * devicePixelRatio);
+      element.width = element.clientWidth * devicePixelRatio;
+      element.height = element.clientHeight * devicePixelRatio;
       context.setTransform(devicePixelRatio, 0, 0, devicePixelRatio, 0, 0);
-      context.clearRect(0, 0, width, height);
       context.fillStyle = "#0d1117";
-      context.fillRect(0, 0, width, height);
+      context.fillRect(0, 0, element.clientWidth, element.clientHeight);
 
       const now = performance.now();
       const seconds = (now - started) / 1000;
@@ -202,48 +309,90 @@ export default function SpacePage() {
       const cy = element.clientHeight / 2;
       const distance = 900;
 
+      const project = (x: number, y: number, z: number) => {
+        const x1 = x * Math.cos(yaw) - z * Math.sin(yaw);
+        const z1 = x * Math.sin(yaw) + z * Math.cos(yaw);
+        const y2 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
+        const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
+        const scale = distance / (distance + z2 + 400);
+        return { sx: cx + x1 * scale, sy: cy + y2 * scale, scale };
+      };
+
       for (const point of points) {
         // 止まっていると絵に見えるので、少しだけ揺らす
         const driftX = Math.sin(seconds * 0.5 + point.phase) * 6;
         const driftY = Math.sin(seconds * 0.35 + point.phase * 1.7) * 5;
         const driftZ = Math.cos(seconds * 0.45 + point.phase) * 6;
-
-        // y 軸まわりに回し、次に x 軸まわりに傾ける
-        const px = point.x + driftX;
-        const py = point.y + driftY;
-        const pz = point.z + driftZ;
-        const x1 = px * Math.cos(yaw) - pz * Math.sin(yaw);
-        const z1 = px * Math.sin(yaw) + pz * Math.cos(yaw);
-        const y2 = py * Math.cos(pitch) - z1 * Math.sin(pitch);
-        const z2 = py * Math.sin(pitch) + z1 * Math.cos(pitch);
-
-        const scale = distance / (distance + z2 + 400);
-        point.screenX = cx + x1 * scale;
-        point.screenY = cy + y2 * scale;
-        point.scale = scale;
+        const spot = project(point.x + driftX, point.y + driftY, point.z + driftZ);
+        point.screenX = spot.sx;
+        point.screenY = spot.sy;
+        point.scale = spot.scale;
       }
 
-      // 線が先。奥のものから描くと重なりが自然に見える
+      // 線の途中（弧の頂点）。地図では持ち上げて航路のように見せる
+      const control = (a: Point, b: Point) => {
+        if (!arc) return { x: (a.screenX + b.screenX) / 2, y: (a.screenY + b.screenY) / 2 };
+        const midX = (a.x + b.x) / 2;
+        const midZ = (a.z + b.z) / 2;
+        const span = Math.hypot(a.x - b.x, a.z - b.z);
+        const spot = project(midX, (a.y + b.y) / 2 - span * arc, midZ);
+        return { x: spot.sx, y: spot.sy };
+      };
+
+      const at = (a: Point, b: Point, c: { x: number; y: number }, t: number) => {
+        const u = 1 - t;
+        return {
+          x: u * u * a.screenX + 2 * u * t * c.x + t * t * b.screenX,
+          y: u * u * a.screenY + 2 * u * t * c.y + t * t * b.screenY,
+        };
+      };
+
+      // 地図では緯度経度の目盛りを薄く敷く。点だけだと地図に見えない
+      if (mode === "map") {
+        context.strokeStyle = "rgba(124, 196, 255, 0.08)";
+        context.lineWidth = 1;
+        for (let lon = BOUNDS.minLon; lon <= BOUNDS.maxLon; lon += 5) {
+          const width = BOUNDS.maxLon - BOUNDS.minLon;
+          const x = ((lon - (BOUNDS.minLon + width / 2)) / width) * 900;
+          const a = project(x, 0, -350);
+          const b = project(x, 0, 350);
+          context.beginPath();
+          context.moveTo(a.sx, a.sy);
+          context.lineTo(b.sx, b.sy);
+          context.stroke();
+        }
+        for (let lat = BOUNDS.minLat; lat <= BOUNDS.maxLat; lat += 5) {
+          const depth = BOUNDS.maxLat - BOUNDS.minLat;
+          const z = ((BOUNDS.minLat + depth / 2 - lat) / depth) * 700;
+          const a = project(-450, 0, z);
+          const b = project(450, 0, z);
+          context.beginPath();
+          context.moveTo(a.sx, a.sy);
+          context.lineTo(b.sx, b.sy);
+          context.stroke();
+        }
+      }
+
       context.lineWidth = 1;
-      for (const edge of graph?.edges ?? []) {
-        const a = byId.get(edge.source);
-        const b = byId.get(edge.target);
-        if (!a || !b) continue;
+      const curves = new Map<number, { x: number; y: number }>();
+      for (const edge of edges) {
+        const a = byId.get(edge.source)!;
+        const b = byId.get(edge.target)!;
+        const mid = control(a, b);
+        curves.set(edge.id, mid);
         const depth = (a.scale + b.scale) / 2;
-        context.strokeStyle = `rgba(124, 196, 255, ${0.15 + depth * 0.35})`;
+        context.strokeStyle = `rgba(124, 196, 255, ${0.12 + depth * 0.3})`;
         context.beginPath();
         context.moveTo(a.screenX, a.screenY);
-        context.lineTo(b.screenX, b.screenY);
+        context.quadraticCurveTo(mid.x, mid.y, b.screenX, b.screenY);
         context.stroke();
       }
 
-      // 光の玉を流す。行き先はランダムで、行きと帰りの両方がある
-      if (edges.length && packets.length < MAX_PACKETS && Math.random() < 0.35) {
-        const index = Math.floor(Math.random() * edges.length);
-        const edge = edges[index];
+      // 光の玉。行き先はランダムで、行きと帰りの両方がある
+      if (flow && edges.length && packets.length < MAX_PACKETS && Math.random() < 0.35) {
+        const edge = edges[Math.floor(Math.random() * edges.length)];
         const forward = Math.random() < 0.5;
         packets.push({
-          edge: index,
           from: forward ? edge.source : edge.target,
           to: forward ? edge.target : edge.source,
           progress: 0,
@@ -267,29 +416,26 @@ export default function SpacePage() {
           continue;
         }
 
-        const x = from.screenX + (to.screenX - from.screenX) * packet.progress;
-        const y = from.screenY + (to.screenY - from.screenY) * packet.progress;
+        const mid = control(from, to);
+        const head = at(from, to, mid, packet.progress);
+        const tail = at(from, to, mid, Math.max(0, packet.progress - 0.12));
         const scale = from.scale + (to.scale - from.scale) * packet.progress;
 
-        // 尾を引かせる。点だけだと流れているように見えない
-        const tail = Math.max(0, packet.progress - 0.12);
-        const tailX = from.screenX + (to.screenX - from.screenX) * tail;
-        const tailY = from.screenY + (to.screenY - from.screenY) * tail;
-        const gradient = context.createLinearGradient(tailX, tailY, x, y);
+        const gradient = context.createLinearGradient(tail.x, tail.y, head.x, head.y);
         gradient.addColorStop(0, "rgba(160, 220, 255, 0)");
         gradient.addColorStop(1, `rgba(200, 240, 255, ${0.5 + scale * 0.5})`);
         context.strokeStyle = gradient;
         context.lineWidth = 1.6 * scale;
         context.beginPath();
-        context.moveTo(tailX, tailY);
-        context.lineTo(x, y);
+        context.moveTo(tail.x, tail.y);
+        context.lineTo(head.x, head.y);
         context.stroke();
 
         context.fillStyle = "#dff2ff";
         context.shadowColor = "rgba(140, 210, 255, 0.9)";
         context.shadowBlur = 12 * scale;
         context.beginPath();
-        context.arc(x, y, 2.2 * scale, 0, Math.PI * 2);
+        context.arc(head.x, head.y, 2.2 * scale, 0, Math.PI * 2);
         context.fill();
         context.shadowBlur = 0;
       }
@@ -312,7 +458,7 @@ export default function SpacePage() {
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
-        if (point.scale > 0.95 || point === hovered.current) {
+        if (point.scale > 0.95) {
           context.fillStyle = "#c9d4e2";
           context.font = "11px system-ui, sans-serif";
           context.fillText(point.hostname, point.screenX + size + 3, point.screenY + 4);
@@ -326,18 +472,26 @@ export default function SpacePage() {
     return () => {
       running = false;
     };
-  }, [points, graph, spin]);
+  }, [points, graph, spin, flow, mode]);
 
   return (
     <section>
       <h1>立体で眺める</h1>
       <p className="muted">
-        全体の形をつかむための遊びのページです。どこがどこに繋がっているかを読むのは
+        全体の形をつかむための遊びのページです。流れている光はランダムに出しているだけで、
+        実際の通信量ではありません。どこがどこに繋がっているかを読むのは
         <RouterLink to="/topology"> トポロジ図 </RouterLink>
         の方が向いています。ドラッグで回せます。
       </p>
 
       <div className="toolbar">
+        <select value={mode} onChange={(event) => setMode(event.target.value as Mode)}>
+          {MODES.map((item) => (
+            <option key={item.value} value={item.value}>
+              表示: {item.label}
+            </option>
+          ))}
+        </select>
         <select
           value={site}
           onChange={(event) => setSite(event.target.value === "" ? "" : Number(event.target.value))}
@@ -353,8 +507,13 @@ export default function SpacePage() {
           <input type="checkbox" checked={spin} onChange={(e) => setSpin(e.target.checked)} />{" "}
           回し続ける
         </label>
+        <label className="vlan-chip">
+          <input type="checkbox" checked={flow} onChange={(e) => setFlow(e.target.checked)} /> 光を
+          流す
+        </label>
         <span className="muted">
           {graph ? `${graph.nodes.length}台 ${graph.edges.length}本` : "読み込み中…"}
+          {mode === "map" && unlocated > 0 ? ` / 住所から位置が分からない機器 ${unlocated}台` : ""}
         </span>
       </div>
 

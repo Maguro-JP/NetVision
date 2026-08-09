@@ -1,0 +1,82 @@
+/* 都道府県のおおよその位置。
+ *
+ * 住所から地図に置くための表。県庁所在地あたりの緯度経度で、番地までは見ない。
+ * 拠点を地図に散らして全体像を眺めるのが目的なので、この粗さで足りる。
+ *
+ * 外部の地図サービスは引かない。閉域で動かす前提なので、住所から座標を出す
+ * 処理を外に投げられない。表を持っておけば通信なしで済む。
+ */
+
+export interface LatLon {
+  lat: number;
+  lon: number;
+}
+
+export const PREFECTURES: Record<string, LatLon> = {
+  北海道: { lat: 43.06, lon: 141.35 },
+  青森県: { lat: 40.82, lon: 140.74 },
+  岩手県: { lat: 39.7, lon: 141.15 },
+  宮城県: { lat: 38.27, lon: 140.87 },
+  秋田県: { lat: 39.72, lon: 140.1 },
+  山形県: { lat: 38.24, lon: 140.36 },
+  福島県: { lat: 37.75, lon: 140.47 },
+  茨城県: { lat: 36.34, lon: 140.45 },
+  栃木県: { lat: 36.57, lon: 139.88 },
+  群馬県: { lat: 36.39, lon: 139.06 },
+  埼玉県: { lat: 35.86, lon: 139.65 },
+  千葉県: { lat: 35.6, lon: 140.12 },
+  東京都: { lat: 35.69, lon: 139.69 },
+  神奈川県: { lat: 35.45, lon: 139.64 },
+  新潟県: { lat: 37.9, lon: 139.02 },
+  富山県: { lat: 36.7, lon: 137.21 },
+  石川県: { lat: 36.59, lon: 136.63 },
+  福井県: { lat: 36.07, lon: 136.22 },
+  山梨県: { lat: 35.66, lon: 138.57 },
+  長野県: { lat: 36.65, lon: 138.18 },
+  岐阜県: { lat: 35.39, lon: 136.72 },
+  静岡県: { lat: 34.98, lon: 138.38 },
+  愛知県: { lat: 35.18, lon: 136.91 },
+  三重県: { lat: 34.73, lon: 136.51 },
+  滋賀県: { lat: 35.0, lon: 135.87 },
+  京都府: { lat: 35.02, lon: 135.76 },
+  大阪府: { lat: 34.69, lon: 135.52 },
+  兵庫県: { lat: 34.69, lon: 135.18 },
+  奈良県: { lat: 34.69, lon: 135.83 },
+  和歌山県: { lat: 34.23, lon: 135.17 },
+  鳥取県: { lat: 35.5, lon: 134.24 },
+  島根県: { lat: 35.47, lon: 133.05 },
+  岡山県: { lat: 34.66, lon: 133.93 },
+  広島県: { lat: 34.4, lon: 132.46 },
+  山口県: { lat: 34.19, lon: 131.47 },
+  徳島県: { lat: 34.07, lon: 134.56 },
+  香川県: { lat: 34.34, lon: 134.04 },
+  愛媛県: { lat: 33.84, lon: 132.77 },
+  高知県: { lat: 33.56, lon: 133.53 },
+  福岡県: { lat: 33.61, lon: 130.42 },
+  佐賀県: { lat: 33.25, lon: 130.3 },
+  長崎県: { lat: 32.74, lon: 129.87 },
+  熊本県: { lat: 32.79, lon: 130.74 },
+  大分県: { lat: 33.24, lon: 131.61 },
+  宮崎県: { lat: 31.91, lon: 131.42 },
+  鹿児島県: { lat: 31.56, lon: 130.56 },
+  沖縄県: { lat: 26.21, lon: 127.68 },
+};
+
+/* 住所・拠点名から位置を引く。
+ *
+ * 都道府県名が入っていれば拾う。入っていなければ何も返さない。
+ * それらしい場所に置くと、地図の上では「そこにある」と読まれてしまう。
+ */
+export function locate(...texts: (string | null | undefined)[]): LatLon | null {
+  const joined = texts.filter(Boolean).join(" ");
+  for (const [name, position] of Object.entries(PREFECTURES)) {
+    if (joined.includes(name)) return position;
+    // 「東京」「大阪」のように県・府を省いて書かれることも多い
+    const short = name.replace(/[都道府県]$/, "");
+    if (short.length >= 2 && joined.includes(short)) return position;
+  }
+  return null;
+}
+
+/* 日本のだいたいの範囲。地図表示の枠に使う */
+export const BOUNDS = { minLat: 24, maxLat: 46, minLon: 127, maxLon: 146 };
