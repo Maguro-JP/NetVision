@@ -417,6 +417,32 @@ button:disabled {
 .react-flow__edge-textbg {
   fill: var(--panel);
 }
+
+/* ポート名は機器の隣に置く。線に重ならないよう背景を敷いて読ませる */
+.topo-edge-label {
+  position: absolute;
+  pointer-events: none;
+  font-size: 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: rgb(15 20 25 / 82%);
+}
+.topo-edge-label.port {
+  font-weight: 600;
+  /* 回転させても中心がずれないように */
+  transform-origin: center center;
+}
+.topo-edge-label.center {
+  color: var(--muted);
+}
+.topo-edge-label.warning {
+  color: var(--sev-critical);
+  font-weight: 700;
+  /* ポート名と重ならないよう、線の中央から少し下げる */
+  margin-top: 16px;
+}
 .react-flow__handle {
   background: var(--accent);
   width: 7px;

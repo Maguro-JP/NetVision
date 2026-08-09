@@ -111,6 +111,11 @@ def export_topology(
         default="detail",
         description="detail = 型番や状態つき / simple = 機器名と結線だけ",
     ),
+    port_style: str = Query(
+        default="short",
+        description="ポート名の出し方。full = そのまま / short = 略記 / number = 番号だけ",
+    ),
+    along_line: bool = Query(default=False, description="ポート名を線に沿わせて回転する"),
 ) -> Response:
     """構成図を SVG で書き出す。
 
@@ -120,8 +125,20 @@ def export_topology(
 
     `style=simple` は機器名と線だけの図。作業手順書や現場での確認に使う想定で、
     型番・IP・保守状態・VLAN といった付帯情報を一切載せない。
+
+    ポート名は**それぞれの機器側**に置く。1本の線に2つ並べると「左が上位」の
+    ような規則を覚える必要が出て、図の向きが変わると逆に読んでしまうため。
     """
-    svg = topology_export.export_svg(db, layer, title=title, vlan=vlan, vrf=vrf, style=style)
+    svg = topology_export.export_svg(
+        db,
+        layer,
+        title=title,
+        vlan=vlan,
+        vrf=vrf,
+        style=style,
+        port_style=port_style,
+        along_line=along_line,
+    )
     suffix = f"-vlan{vlan}" if vlan else ""
     if vrf:
         suffix += f"-{vrf}"

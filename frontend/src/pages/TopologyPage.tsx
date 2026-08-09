@@ -21,8 +21,17 @@ import { Link as RouterLink } from "react-router-dom";
 import { api } from "../api/client";
 import type { TopologyEdge, TopologyGraph } from "../api/types";
 import DeviceNode, { type DeviceNodeData } from "../components/DeviceNode";
+import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
+import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 
 const NODE_TYPES = { device: DeviceNode };
+const EDGE_TYPES = { port: PortLabeledEdge };
+
+const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
+  { value: "short", label: "略記", hint: "GigabitEthernet1/0/24 → Gi1/0/24" },
+  { value: "number", label: "番号だけ", hint: "種別は色で表します（Gi は青、Te は緑）" },
+  { value: "full", label: "そのまま", hint: "Config に書かれている名前をそのまま出します" },
+];
 
 const LAYERS = [
   { value: "physical", label: "物理構成" },
@@ -36,9 +45,15 @@ const LAYERS = [
  * `simple` は機器名と線だけの表示。現場で使う図に型番や保守状態が載っていると
  * 読み違いのもとになるので、用途で切り替えられるようにしてある。
  */
+interface LabelOptions {
+  portStyle: PortStyle;
+  alongLine: boolean;
+}
+
 function toFlow(
   graph: TopologyGraph,
   simple: boolean,
+  options: LabelOptions,
 ): {
   nodes: Node<DeviceNodeData>[];
   edges: Edge[];
@@ -63,44 +78,34 @@ function toFlow(
     id: String(edge.id),
     source: String(edge.source),
     target: String(edge.target),
-    label: edgeLabel(edge, simple),
-    // 直交ルーティングにすると、機器が格子状に並ぶ構成図で線が読みやすい
-    type: "smoothstep",
+    // ポート名を両端に置くため、独自のエッジで描く
+    type: "port",
     animated: false,
     className:
       `topo-edge ${edge.origin} ${edge.confirmed_both_ways || simple ? "confirmed" : ""}` +
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
       (!simple && (edge.vlan_mismatch.length > 0 || edge.native_mismatch) ? " mismatch" : ""),
-    data: { origin: edge.origin },
+    data: {
+      sourceInterface: edge.source_interface,
+      targetInterface: edge.target_interface,
+      manualLabel: edge.label,
+      portStyle: options.portStyle,
+      alongLine: options.alongLine,
+      hideLabels: false,
+      warning: simple ? null : warningOf(edge),
+    } satisfies PortEdgeData,
   }));
 
   return { nodes, edges };
 }
 
-function edgeLabel(edge: TopologyEdge, simple: boolean): string {
-  const ports = edge.label ?? portLabel(edge);
-  if (simple) return ports;
-
+function warningOf(edge: TopologyEdge): string | null {
   const warnings: string[] = [];
   if (edge.native_mismatch) warnings.push("ネイティブ不一致");
   if (edge.vlan_mismatch.length > 0) {
     warnings.push(`片側のみ VLAN ${edge.vlan_mismatch.slice(0, 4).join(",")}`);
   }
-  return warnings.length ? `${ports}  ⚠ ${warnings.join(" / ")}` : ports;
-}
-
-function portLabel(edge: TopologyEdge): string {
-  const ends = [edge.source_interface, edge.target_interface].filter(Boolean);
-  return ends.length === 2 ? `${shorten(ends[0])} — ${shorten(ends[1])}` : ends[0] ?? "";
-}
-
-/** 図が読めなくなるので、ポート名は略記で出す。 */
-function shorten(name: string): string {
-  return name
-    .replace(/^GigabitEthernet/i, "Gi")
-    .replace(/^TenGigabitEthernet/i, "Te")
-    .replace(/^FastEthernet/i, "Fa")
-    .replace(/^Port-channel/i, "Po");
+  return warnings.length ? warnings.join(" / ") : null;
 }
 
 function TopologyEditor() {
@@ -113,6 +118,9 @@ function TopologyEditor() {
   const [vlanFilter, setVlanFilter] = useState("");
   // 機器名と線だけの表示。現場で使う図では付帯情報がむしろ邪魔になる
   const [simple, setSimple] = useState(false);
+  // ポート名の出し方。長い名前が線に重なると図が読めなくなる
+  const [portStyle, setPortStyle] = useState<PortStyle>("short");
+  const [alongLine, setAlongLine] = useState(false);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
@@ -139,7 +147,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
-    const flow = toFlow(graph, simple);
+    const flow = toFlow(graph, simple, { portStyle, alongLine });
 
     // VLAN / VRF を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
@@ -170,7 +178,7 @@ function TopologyEditor() {
     setNodes(flow.nodes);
     setEdges(flow.edges);
     setDirty(false);
-  }, [graph, selectedVlans, selectedVrf, simple, setNodes, setEdges]);
+  }, [graph, selectedVlans, selectedVrf, simple, portStyle, alongLine, setNodes, setEdges]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
@@ -264,6 +272,18 @@ function TopologyEditor() {
     return keyword ? matched : matched.slice(0, 60);
   }, [vlans, vlanFilter, selectedVlans]);
 
+  /** 実際に使われている種別だけ凡例に出す。使っていない色を並べても読み手が困る。 */
+  const usedMedia = useMemo(() => {
+    const found = new Set<Media>();
+    for (const edge of graph?.edges ?? []) {
+      for (const name of [edge.source_interface, edge.target_interface]) {
+        if (name) found.add(mediaOf(name));
+      }
+    }
+    const order: Media[] = Object.keys(MEDIA_LABEL) as Media[];
+    return order.filter((media) => found.has(media));
+  }, [graph]);
+
   const legend = useMemo(
     () => [
       { className: "topo-edge discovered confirmed", text: "自動推定（両側で確認）" },
@@ -307,12 +327,33 @@ function TopologyEditor() {
           <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
           シンプル表示
         </label>
+        <select
+          value={portStyle}
+          onChange={(e) => setPortStyle(e.target.value as PortStyle)}
+          title={PORT_STYLES.find((item) => item.value === portStyle)?.hint}
+        >
+          {PORT_STYLES.map((item) => (
+            <option key={item.value} value={item.value}>
+              ポート名: {item.label}
+            </option>
+          ))}
+        </select>
+        <label className="vlan-chip" title="ポート名を線の向きに合わせて回転します">
+          <input
+            type="checkbox"
+            checked={alongLine}
+            onChange={(e) => setAlongLine(e.target.checked)}
+          />{" "}
+          線に沿わせる
+        </label>
         <a
           className="button"
           href={api.topologyExportUrl(layer, {
             vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
             vrf: selectedVrf || undefined,
             style: simple ? "simple" : undefined,
+            port_style: portStyle,
+            along_line: alongLine ? "true" : undefined,
           })}
           title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
         >
@@ -377,6 +418,7 @@ function TopologyEditor() {
             nodes={nodes}
             edges={edges}
             nodeTypes={NODE_TYPES}
+            edgeTypes={EDGE_TYPES}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -492,6 +534,17 @@ function TopologyEditor() {
             <span className={`topo-legend-line ${item.className}`} /> {item.text}
           </span>
         ))}
+
+        {usedMedia.length > 0 && (
+          <span className="topo-legend" title="ポート名の色は種別（速度）を表します">
+            ポート種別:{" "}
+            {usedMedia.map((media) => (
+              <strong key={media} style={{ color: MEDIA_COLOR[media], marginLeft: 8 }}>
+                {MEDIA_LABEL[media]}
+              </strong>
+            ))}
+          </span>
+        )}
       </div>
 
       {selectedEdge && (

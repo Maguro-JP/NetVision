@@ -16,11 +16,14 @@
 from __future__ import annotations
 
 from datetime import datetime
+from math import atan2, degrees
 from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
 
+from app.services import portlabel
 from app.services.lifecycle import Severity
+from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import TopologyGraph, get_graph
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
@@ -64,6 +67,8 @@ def render_svg(
     vlan: int | None = None,
     vrf: str | None = None,
     style: str = "detail",
+    port_style: str = "short",
+    along_line: bool = False,
 ) -> str:
     """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
 
@@ -104,6 +109,8 @@ def render_svg(
 
     at = {n.device_id: (n.x + dx, n.y + dy) for n in nodes}
     parts: list[str] = []
+    # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
+    used_media: set[Media] = set()
 
     parts.append(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
@@ -151,24 +158,18 @@ def render_svg(
             f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
         )
 
-        label = edge.label or _interface_label(edge)
-        if label:
-            # 同じ機器から何本も出ていると線が重なり、ラベルも重なって読めなくなる。
-            # 線に沿う位置と、線に対して垂直な向きの両方をずらして散らす。
-            along = 0.5 + ((index % 3) - 1) * 0.14
-            mx = x1 + (x2 - x1) * along
-            my = y1 + (y2 - y1) * along
-            length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
-            offset = ((index % 4) - 1.5) * 13
-            mx += -(y2 - y1) / length * offset
-            my += (x2 - x1) / length * offset
-
-            text = _esc(_clip(label, 28))
-            parts.append(
-                f'<text x="{mx:.0f}" y="{my - 4:.0f}" font-size="10" fill="#5a6270" '
-                f'text-anchor="middle" paint-order="stroke" stroke="#ffffff" '
-                f'stroke-width="3">{text}</text>'
-            )
+        if edge.label:
+            # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
+            parts.append(_center_label(x1, y1, x2, y2, edge.label, index))
+        else:
+            # ポート名は**それぞれの機器側**に置く。1本の線に2つ並べると
+            # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
+            # 逆に読んでしまう。ポートの隣にあれば規則は要らない
+            parts.append(_port_label(x1, y1, x2, y2, edge.source_interface, port_style, along_line))
+            parts.append(_port_label(x2, y2, x1, y1, edge.target_interface, port_style, along_line))
+            for name in (edge.source_interface, edge.target_interface):
+                if name:
+                    used_media.add(portlabel.media_of(name))
 
     # --- 機器 ---
     for node in nodes:
@@ -210,19 +211,104 @@ def render_svg(
         parts.append("</g>")
 
     if not simple:
-        parts.append(_legend(MARGIN, height - LEGEND_H + 10, width))
+        parts.append(_legend(MARGIN, height - LEGEND_H + 10, width, used_media))
     parts.append("</svg>")
     return "\n".join(parts)
 
 
-def _interface_label(edge) -> str:
-    source, target = edge.source_interface or "", edge.target_interface or ""
-    if source and target:
-        return f"{source} — {target}"
-    return source or target
+# ノード枠から、その先どのくらい離してラベルを置くか
+_LABEL_GAP = 10.0
+# 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
+_SIDE_OFFSET = 7.0
 
 
-def _legend(x: float, y: float, width: float) -> str:
+def _port_label(
+    x1: float,
+    y1: float,
+    x2: float,
+    y2: float,
+    name: str,
+    style: str,
+    along_line: bool,
+) -> str:
+    """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
+
+    線の向きは (x1,y1) → (x2,y2)。ノードの矩形と線の交点まで進んでから
+    少し外に出した位置に置くので、**どのポートがどちらの機器のものか**が
+    位置だけで分かる。左右・上下の規則を覚える必要が無くなる。
+
+    ずらす向きは**その端から見た左側**で固定する。両端では線の向きが逆になるので、
+    結果として2つのラベルは線の反対側に出る。機器の間隔が狭くて両端のラベルが
+    近づいても重ならない。
+    """
+    if not name:
+        return ""
+
+    dx, dy = x2 - x1, y2 - y1
+    length = max((dx * dx + dy * dy) ** 0.5, 1.0)
+    ux, uy = dx / length, dy / length
+
+    # ノードの枠を出るまでの距離。矩形の中心から見た交点までを求める
+    edge_distance = _exit_distance(ux, uy)
+    px = x1 + ux * (edge_distance + _LABEL_GAP)
+    py = y1 + uy * (edge_distance + _LABEL_GAP)
+
+    # 線に重ならないよう、線と垂直な向きへずらす
+    px += -uy * _SIDE_OFFSET
+    py += ux * _SIDE_OFFSET
+
+    # そのまま出す指定のときは切り詰めを緩める。長いと分かっていて選んだ表示なので
+    limit = 30 if style == "full" else 18
+    text = _esc(_clip(portlabel.format(name, style), limit))
+    color = MEDIA_COLOR.get(portlabel.media_of(name), "#5a6270")
+
+    if along_line:
+        # 線に沿わせる。ただし上下逆さまにはしない（読めなくなるため半回転させる）
+        angle = (degrees(atan2(dy, dx)) + 180) % 360 - 180  # -180〜180 に正規化
+        flipped = angle > 90 or angle <= -90
+        if flipped:
+            angle += -180 if angle > 0 else 180
+        transform = f' transform="rotate({angle:.1f} {px:.1f} {py:.1f})"'
+        # 半回転させた側は、回した後の座標系では逆向きに伸ばすことになる
+        anchor = "end" if flipped else "start"
+    else:
+        transform = ""
+        # 線が右向きならラベルは右へ、左向きなら左へ出す
+        anchor = "start" if ux > 0.2 else ("end" if ux < -0.2 else "middle")
+
+    return (
+        f'<text x="{px:.1f}" y="{py - 3:.1f}" font-size="10" fill="{color}" '
+        f'text-anchor="{anchor}" paint-order="stroke" stroke="#ffffff" '
+        f'stroke-width="3"{transform}>{text}</text>'
+    )
+
+
+def _exit_distance(ux: float, uy: float) -> float:
+    """ノードの中心から、その向きで枠を出るまでの距離。"""
+    half_w, half_h = NODE_W / 2, NODE_H / 2
+    tx = half_w / abs(ux) if abs(ux) > 1e-6 else float("inf")
+    ty = half_h / abs(uy) if abs(uy) > 1e-6 else float("inf")
+    return min(tx, ty)
+
+
+def _center_label(x1: float, y1: float, x2: float, y2: float, label: str, index: int) -> str:
+    """人が付けた線の名前。同じ機器から何本も出ると重なるので散らす。"""
+    along = 0.5 + ((index % 3) - 1) * 0.14
+    mx = x1 + (x2 - x1) * along
+    my = y1 + (y2 - y1) * along
+    length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
+    offset = ((index % 4) - 1.5) * 13
+    mx += -(y2 - y1) / length * offset
+    my += (x2 - x1) / length * offset
+
+    return (
+        f'<text x="{mx:.0f}" y="{my - 4:.0f}" font-size="10" fill="#5a6270" '
+        f'text-anchor="middle" paint-order="stroke" stroke="#ffffff" '
+        f'stroke-width="3">{_esc(_clip(label, 28))}</text>'
+    )
+
+
+def _legend(x: float, y: float, width: float, media: set[Media] | None = None) -> str:
     parts = [
         f'<line x1="{x:.0f}" y1="{y - 12:.0f}" x2="{width - x:.0f}" y2="{y - 12:.0f}" '
         f'stroke="#dfe3ea" stroke-width="1"/>',
@@ -244,6 +330,24 @@ def _legend(x: float, y: float, width: float) -> str:
         f'<text x="{x:.0f}" y="{y + 24:.0f}" font-size="10" fill="#6b6b6b">'
         "実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>"
     )
+
+    # ポート名を色分けしているので、何色が何かを図の中に残す。
+    # 凡例の無い色分けは、その図だけ見た人には読めない
+    if media:
+        cursor = x + 250
+        parts.append(
+            f'<text x="{cursor:.0f}" y="{y + 24:.0f}" font-size="10" fill="#6b6b6b">'
+            "ポート種別</text>"
+        )
+        cursor += 60
+        for item in sorted(media, key=lambda m: list(MEDIA_LABEL).index(m)):
+            label = MEDIA_LABEL[item]
+            parts.append(
+                f'<text x="{cursor:.0f}" y="{y + 24:.0f}" font-size="10" '
+                f'fill="{MEDIA_COLOR[item]}" font-weight="700">{_esc(label)}</text>'
+            )
+            cursor += 18 + len(label) * 8
+
     return "\n".join(parts)
 
 
@@ -267,5 +371,15 @@ def export_svg(
     vlan: int | None = None,
     vrf: str | None = None,
     style: str = "detail",
+    port_style: str = "short",
+    along_line: bool = False,
 ) -> str:
-    return render_svg(get_graph(db, layer), title=title, vlan=vlan, vrf=vrf, style=style)
+    return render_svg(
+        get_graph(db, layer),
+        title=title,
+        vlan=vlan,
+        vrf=vrf,
+        style=style,
+        port_style=port_style,
+        along_line=along_line,
+    )

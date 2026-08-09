@@ -285,7 +285,16 @@ export const api = {
   // 構成図を SVG で書き出す（設計書や報告書に貼るため）
   topologyExportUrl: (
     layer: string,
-    options: { title?: string; vlan?: number; vrf?: string; style?: string } = {},
+    options: {
+      title?: string;
+      vlan?: number;
+      vrf?: string;
+      style?: string;
+      /** ポート名の出し方。full / short / number */
+      port_style?: string;
+      /** ポート名を線に沿わせて回転する */
+      along_line?: string;
+    } = {},
   ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
   createLink: (body: {
     a_device_id: number;
