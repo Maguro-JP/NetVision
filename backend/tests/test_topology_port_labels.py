@@ -250,3 +250,16 @@ def test_vlan_filter_also_keeps_the_peer():
     svg = render_svg(graph, vlan=20)
     assert "sw-b" in svg
     assert "sw-a" in svg
+
+
+def test_header_counts_the_lines_going_outside():
+    """描いてある線が本数に入っていること。
+
+    見出しが「0本」なのに線が3本ある図は、そこだけで信用を落とす。
+    """
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].site_id = 1
+    graph.nodes[1].site_id = 2
+
+    svg = render_svg(graph, site_id=2)
+    assert "外部へ 1本" in svg

@@ -154,19 +154,24 @@ def render_svg(
     if site_id is not None:
         site_name = next((n.site_name for n in nodes if n.site_name), None)
         scope += f" / {site_name}" if site_name else ""
+    # 対象外へ出ていく線も本数に入れる。描いてある線が数に入っていないと、
+    # 図と見出しが食い違って見える
+    counts = f"{len(nodes)}台 {len(graph.edges)}本"
+    if peers:
+        counts += f"（外部へ {len(peers)}本）"
     if simple:
         # シンプル図でも「いつ時点の何台か」だけは残す。日付の無い構成図は
         # あとから見たときに信用できないため
         parts.append(
             f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
             f'text-anchor="end">{_esc(generated)} 時点{_esc(scope)} / '
-            f"{len(nodes)}台 {len(graph.edges)}本</text>"
+            f"{_esc(counts)}</text>"
         )
     else:
         parts.append(
             f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
             f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)}'
-            f"{_esc(scope)} / {len(nodes)}台 {len(graph.edges)}本</text>"
+            f"{_esc(scope)} / {_esc(counts)}</text>"
         )
 
     # --- 結線（ノードより先に描いて背面に回す） ---
