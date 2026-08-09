@@ -51,7 +51,7 @@ def test_topology_nodes_carry_their_vlans(client):
 def test_vlans_follow_the_latest_config(client):
     """VLAN の定義は最新の Config に揃えること。
 
-    ただし**トランクの許可 VLAN からは消えていない**ので、一覧からは落とさない。
+    ただしトランクの許可 VLAN からは消えていないので、一覧からは落とさない。
     定義が無いのに通しているポートがあるのは、それ自体が直すべき状態なので、
     見えなくしてはいけない。定義の有無は defined_device_ids で区別する。
     """

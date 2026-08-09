@@ -195,7 +195,7 @@ def update_document(document_id: int, payload: DocumentUpdate, db: DbSession) ->
 
 @router.post("/documents/{document_id}/supersede/{successor_id}", response_model=DocumentRead)
 def supersede_document(document_id: int, successor_id: int, db: DbSession) -> DocumentRead:
-    """新しい版を「後継」として結び付ける。**古い版は消さずに残す。**"""
+    """新しい版を「後継」として結び付ける。古い版は消さずに残す。"""
     if document_id == successor_id:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "自分自身は後継にできません")
 
@@ -346,7 +346,7 @@ def templates_for_device(device_id: int, db: DbSession) -> list[ConfigTemplateMa
 def render_template(template_id: int, payload: RenderRequest, db: DbSession) -> RenderResultRead:
     """テンプレートから設定内容を生成する。
 
-    **生成するだけで、実機には投入しない。** 内容を確認して手で流し込む前提。
+    生成するだけで、実機には投入しない。 内容を確認して手で流し込む前提。
     """
     template = _load_template(db, template_id)
 

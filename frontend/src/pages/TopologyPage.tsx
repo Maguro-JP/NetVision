@@ -104,7 +104,7 @@ function sideToward(from: TopologyNode, to: TopologyNode): Side {
  * 各結線の引き出し口を決める。
  *
  * 人が指定していれば従い、していなければ位置関係から選ぶ。
- * **同じ辺に複数本来るときは3か所に散らす**。同じ点から出すと線が重なって、
+ * 同じ辺に複数本来るときは3か所に散らす。同じ点から出すと線が重なって、
  * どのポートがどれか分からなくなる。
  */
 function assignAnchors(graph: TopologyGraph): Map<number, { source: string; target: string }> {

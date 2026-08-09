@@ -1,6 +1,6 @@
 """トポロジを表として書き出す。
 
-図が要らない場面がある。**結線表**（どの機器のどのポートが、どこに繋がっているか）は
+図が要らない場面がある。結線表（どの機器のどのポートが、どこに繋がっているか）は
 現場での作業指示や、工事業者への依頼、検収の突合に使う。そこで欲しいのは絵ではなく
 並べ替え・絞り込みのできる表で、Excel の方が向いている。
 
@@ -48,7 +48,7 @@ def rows(db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = None)
         a, b = nodes.get(edge.source), nodes.get(edge.target)
         if a is None or b is None:
             continue
-        # 拠点で絞るときは、その拠点に**片側でも**掛かっていれば出す。
+        # 拠点で絞るときは、その拠点に片側でも掛かっていれば出す。
         # 拠点をまたぐ回線こそ表で確認したいため
         if site_id is not None and site_id not in (a.site_id, b.site_id):
             continue

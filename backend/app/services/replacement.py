@@ -71,7 +71,7 @@ class ReplacementPlan:
 def _due_and_reason(device: Device, today: date) -> tuple[date | None, str, str]:
     """更改の期日として何を見るか。
 
-    保守期限と EoL のうち**早い方**が実質の期限になる。
+    保守期限と EoL のうち早い方が実質の期限になる。
     保守が切れれば壊れても直せず、EoL を過ぎればそもそも部品が無い。
     """
     status = evaluate(device, today)

@@ -103,7 +103,7 @@ def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
     埋めずに空のままにする（推測で埋めると、後から本物の値が入ったときに
     どちらが正しいか分からなくなる）。
 
-    ただし**型番が読めないときは作らない**。型番はこのツールの中心で、
+    ただし型番が読めないときは作らない。型番はこのツールの中心で、
     EoL も脆弱性も型番で引くため、空のまま登録すると判定できない機器が
     黙って増える。plain な running-config には型番が入っていないことが多く、
     その場合は `show version` を一緒に取り込んでもらう必要がある。
@@ -165,8 +165,8 @@ def ingest(
     - `apply_inventory` … 既存機器の項目を Config の観測値で更新する
     - `create_missing`  … 台帳に無いホスト名なら機器を新規作成する
 
-    既存の値を勝手に上書きしないのが原則だが、**まだ無い機器を作るのは上書きでは
-    ない**ので分けてある。台帳が空の状態から実 Config で立ち上げるときに使う。
+    既存の値を勝手に上書きしないのが原則だが、まだ無い機器を作るのは上書きでは
+    ないので分けてある。台帳が空の状態から実 Config で立ち上げるときに使う。
     """
     parsed = configparse.parse(text)
     device = db.get(Device, device_id) if device_id else _find_device(db, parsed.hostname)

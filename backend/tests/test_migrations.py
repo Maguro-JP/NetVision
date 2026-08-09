@@ -1,7 +1,7 @@
 """マイグレーションで作ったスキーマが、実際に使えること。
 
 `Base.metadata.create_all` で作った DB ではテストが通るのに、alembic で作った DB では
-落ちる、という食い違いが起きうる。**両方が同じ結果になることは自動では保証されない**。
+落ちる、という食い違いが起きうる。両方が同じ結果になることは自動では保証されない。
 
 実際に `server_default=sa.text("now()")` と書いてしまい、SQLite では
 `unknown function: now()` で挿入できない状態になっていた。Postgres では通るので
@@ -43,7 +43,7 @@ def test_every_table_accepts_a_row(migrated: str):
     """既定値が壊れていないこと。
 
     `now()` のように、その DB に無い関数を既定値に書くと、テーブルは作れるのに
-    **挿入の時点で初めて落ちる**。作れたことは動くことを意味しない。
+    挿入の時点で初めて落ちる。作れたことは動くことを意味しない。
     """
     engine = create_engine(migrated)
     inspector = inspect(engine)

@@ -33,7 +33,7 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱（190x78）に加えて、**ポート名を置く余白**を見込む。
+# 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
 # ここが詰まっていると、自動生成した図でラベルの置き場所が無くなる
 _X_SPACING = 300.0
 _Y_SPACING = 200.0
@@ -213,7 +213,7 @@ def scope_graph(
 ) -> TopologyGraph:
     """見たい範囲だけに絞る。
 
-    拠点が数千・数万になると**全体図は誰も見ない**。実際に見るのは
+    拠点が数千・数万になると全体図は誰も見ない。実際に見るのは
     「自分の拠点」と「その上位（対向）まで」で、そこを軽く出せないと
     道具として使えない。既定は対向まで（`peers`）。
 
@@ -305,7 +305,7 @@ def _vlans_by_device(
 ) -> dict[int, list[int]]:
     """機器ごとの VLAN 一覧。図で「この VLAN がどこまで伸びているか」を見るのに使う。
 
-    定義されているものだけでは足りない。**トランクで通しているだけの VLAN** も
+    定義されているものだけでは足りない。トランクで通しているだけの VLAN も
     その機器を経由している以上、経路上に載っているためである。
     """
     out = {device_id: set(values) for device_id, values in defined.items()}
@@ -321,7 +321,7 @@ def _port_kinds(links: list[Link]) -> dict[int, list[str]]:
 
     線のラベルを番号だけにすると、それが何のポートか分からなくなる。
     色で表すこともできるが、色は凡例を探しに行かないと読めない。
-    **機器の箱に種類を書いておけば、視線を動かさずに済む**。
+    機器の箱に種類を書いておけば、視線を動かさずに済む。
     """
     out: dict[int, set[str]] = {}
     for link in links:
@@ -407,7 +407,7 @@ def _auto_layout(
 ) -> dict[int, tuple[float, float]]:
     """種別を段にして並べる初期配置。人が動かすまでの仮置き。
 
-    `orientation="horizontal"` は段を**縦の列**にして、上位を左に置く。
+    `orientation="horizontal"` は段を縦の列にして、上位を左に置く。
     横長の紙や画面に貼るときは、こちらの方が収まりが良い。
     """
     tiers: dict[int, list[Device]] = {}
@@ -507,7 +507,7 @@ def vlan_summary(db: Session) -> list[VlanView]:
     """VLAN を、載っている機器つきで並べる。
 
     「VLAN 20 はどこまで伸びているのか」に答えるための一覧。台帳（人が書いた
-    用途）と実機の観測値を突き合わせ、**どちらか一方にしか無いものも落とさない**。
+    用途）と実機の観測値を突き合わせ、どちらか一方にしか無いものも落とさない。
     台帳に無い VLAN は素性の分からないセグメントなので、むしろ出す価値がある。
     """
     hostnames = {d.id: d.hostname for d in db.scalars(select(Device))}

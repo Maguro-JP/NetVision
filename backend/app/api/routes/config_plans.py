@@ -49,7 +49,7 @@ def _get_plan(db: Session, plan_id: int) -> ConfigPlan:
 def design_config(device_id: int, db: DbSession) -> dict[str, object]:
     """図に描いた構成から、その機器の想定 Config を組み立てて返す。
 
-    新規構築やテスト環境で、**図を描いてから Config を書き起こす**手間を減らすため。
+    新規構築やテスト環境で、図を描いてから Config を書き起こす手間を減らすため。
     図に無い情報（アクセスポート・経路・ACL）は起こせないので、
     その箇所は「要記入」と分かる形で残す。
 

@@ -43,7 +43,7 @@ export function formatRemaining(days: number | null): string {
  *
  * API はタイムゾーン付き（UTC）で返すので、変換はブラウザに任せる。
  * タイムゾーンの付かない文字列を渡されると現地時刻と解釈されてずれるため、
- * **付いていない場合は UTC として補う**。
+ * 付いていない場合は UTC として補う。
  */
 export function formatTimestamp(value: string | null): string {
   if (!value) return "—";
