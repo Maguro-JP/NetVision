@@ -109,29 +109,63 @@ function sideToward(from: TopologyNode, to: TopologyNode): Side {
  */
 function assignAnchors(graph: TopologyGraph): Map<number, { source: string; target: string }> {
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
-  const used = new Map<string, number>(); // 機器 + 辺 → 使った本数
   const out = new Map<number, { source: string; target: string }>();
 
-  const take = (deviceId: number, side: Side): string => {
-    const key = `${deviceId}:${side}`;
-    const index = used.get(key) ?? 0;
-    used.set(key, index + 1);
-    // 中央から使い、増えたら左右へ広げる
-    const order = [1, 0, 2];
-    return anchorId(side, order[index % SLOTS.length]);
-  };
-
+  // まず、どの辺から出すかを決める
+  const ends: { edge: number; device: number; side: Side; other: number }[] = [];
   for (const edge of graph.edges) {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
     if (!source || !target) continue;
-
-    const sourceSide = (edge.source_side as Side | null) ?? sideToward(source, target);
-    const targetSide = (edge.target_side as Side | null) ?? sideToward(target, source);
-    out.set(edge.id, {
-      source: take(edge.source, sourceSide),
-      target: take(edge.target, targetSide),
+    ends.push({
+      edge: edge.id,
+      device: edge.source,
+      side: (edge.source_side as Side | null) ?? sideToward(source, target),
+      other: edge.target,
     });
+    ends.push({
+      edge: edge.id,
+      device: edge.target,
+      side: (edge.target_side as Side | null) ?? sideToward(target, source),
+      other: edge.source,
+    });
+  }
+
+  // 同じ辺に何本も来るときは、相手の並び順で引き出し口を割り当てる。
+  // 出てくる順のまま割り当てると、線どうしが交差する
+  const groups = new Map<string, typeof ends>();
+  for (const end of ends) {
+    const key = `${end.device}:${end.side}`;
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(end);
+  }
+
+  const slotFor = (index: number, count: number): number => {
+    if (count <= 1) return 1; // 1本なら中央
+    // 相手が左にいるものから順に、左の引き出し口へ
+    return Math.min(SLOTS.length - 1, Math.round((index / (count - 1)) * (SLOTS.length - 1)));
+  };
+
+  const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
+  for (const [, members] of groups) {
+    const side = members[0].side;
+    const along = (id: number) => {
+      const node = nodes.get(id);
+      if (!node) return 0;
+      return side === "top" || side === "bottom" ? node.x : node.y;
+    };
+    members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
+    members.forEach((end, index) => {
+      assigned.set(
+        `${end.edge}:${end.device}`,
+        anchorId(end.side, slotFor(index, members.length)),
+      );
+    });
+  }
+
+  for (const edge of graph.edges) {
+    const source = assigned.get(`${edge.id}:${edge.source}`);
+    const target = assigned.get(`${edge.id}:${edge.target}`);
+    if (source && target) out.set(edge.id, { source, target });
   }
   return out;
 }

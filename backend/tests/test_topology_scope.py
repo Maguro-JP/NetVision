@@ -308,3 +308,50 @@ def test_horizontal_orientation_puts_the_upper_device_on_the_left(db_session):
     )
     placed = {n.hostname: (n.x, n.y) for n in graph.nodes}
     assert placed["east-core-rt-01"][0] < placed["osaka-rt-01"][0] < placed["osaka-sw-01"][0]
+
+
+def test_children_are_placed_in_port_order(db_session):
+    """配下は、上位機器のポート番号の順に並べること。
+
+    順不同に並べると線が交差するし、図の並びと実機のポート番号の並びも
+    食い違って読みにくい。
+    """
+    site = Site(name="関西支社", address="大阪府")
+    db_session.add(site)
+    db_session.flush()
+
+    hub = Device(
+        hostname="br-rt-01",
+        vendor="Cisco",
+        model="ISR4451-X",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id,
+    )
+    db_session.add(hub)
+    db_session.flush()
+
+    # わざと名前の順とポートの順を食い違わせる
+    for port, hostname in ((1, "zzz-rt-01"), (2, "mmm-rt-01"), (10, "aaa-rt-01")):
+        leaf = Device(
+            hostname=hostname,
+            vendor="NEC",
+            model="IX2215",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db_session.add(leaf)
+        db_session.flush()
+        db_session.add(
+            Link(
+                a_device_id=hub.id,
+                a_interface=f"GigabitEthernet0/1/{port}",
+                b_device_id=leaf.id,
+                b_interface="GigaEthernet0/0",
+            )
+        )
+    db_session.commit()
+
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=site.id)
+    placed = {n.hostname: n.x for n in graph.nodes}
+    # ポート 1 → 2 → 10 の順に左から並ぶ（文字列順なら 1, 10, 2 になる）
+    assert placed["zzz-rt-01"] < placed["mmm-rt-01"] < placed["aaa-rt-01"]

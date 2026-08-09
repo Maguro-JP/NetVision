@@ -385,6 +385,12 @@ def _compact(
         rank = hierarchy_rank(graph)
 
     neighbours = _adjacency(graph)
+    # 上位側から見たポート名。配下をポート順に並べると、線が交差しにくく、
+    # 図の並びと実機のポート番号の並びも揃う
+    port_between: dict[tuple[int, int], str] = {}
+    for edge in graph.edges:
+        port_between[(edge.source, edge.target)] = edge.source_interface
+        port_between[(edge.target, edge.source)] = edge.target_interface
     order = sorted(
         by_id,
         key=lambda device_id: (
@@ -409,7 +415,14 @@ def _compact(
         queue = [start]
         while queue:
             current = queue.pop(0)
-            for neighbour in sorted(neighbours.get(current, []), key=lambda i: by_id[i].hostname):
+            ordered = sorted(
+                neighbours.get(current, []),
+                key=lambda i: (
+                    _port_key(port_between.get((current, i), "")),
+                    by_id[i].hostname,
+                ),
+            )
+            for neighbour in ordered:
                 if neighbour in seen:
                     continue
                 seen.add(neighbour)
@@ -441,6 +454,19 @@ def _compact(
         along = across.get(device_id, 0.0) * _X_SPACING
         down = depth.get(device_id, 0) * _Y_SPACING
         node.x, node.y = (down, along) if horizontal else (along, down)
+
+
+def _port_key(name: str) -> tuple:
+    """ポート名を並べ替えるための鍵。数字は数として見る。
+
+    文字列のまま並べると 1/0/10 が 1/0/2 より前に来て、図の並びが
+    実機のポート番号と食い違う。
+    """
+    if not name:
+        return (1, (), "")
+    numbers = tuple(int(part) for part in re.findall(r"\d+", name))
+    prefix = re.sub(r"[\d/:.\-]+", "", name).lower()
+    return (0, (prefix, numbers), name)
 
 
 def _tier_of(node: TopologyNodeView) -> int:
