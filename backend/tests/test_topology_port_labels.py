@@ -57,15 +57,19 @@ def graph_of(ax: float, ay: float, bx: float, by: float) -> TopologyGraph:
 
 
 def test_site_filter_keeps_only_that_site():
-    """拠点ごとの構成図が出せること。"""
+    """拠点ごとの構成図が出せること。
+
+    対象の機器だけを本体として描く。拠点外の相手は簡易表示で残す
+    （消すと上位への接続が「無い」ように見えるため）。
+    """
     graph = graph_of(0, 0, 400, 0)
     graph.nodes[0].site_id, graph.nodes[0].site_name = 1, "本社"
     graph.nodes[1].site_id, graph.nodes[1].site_name = 2, "大阪支社"
 
     svg = render_svg(graph, site_id=2)
     assert "sw-b" in svg
-    assert "sw-a" not in svg
     assert "大阪支社" in svg  # 見出しに拠点名が入る
+    # 拠点外の機器は本体としては描かない（詳しい確認は専用のテストで行う）
 
 
 def labels(svg: str) -> dict[str, tuple[float, float]]:
@@ -197,3 +201,52 @@ def test_port_kind_is_coloured_like_its_labels():
     kind = re.search(r'<tspan fill="([^"]+)">GigabitEthernet</tspan>', svg)
     colors = {text: attrs["fill"] for text, attrs in svgread.elements(svg, "port-label")}
     assert kind and kind.group(1) == colors["1/0/1"]
+
+
+def test_peer_outside_the_filter_is_kept_as_a_stub():
+    """絞り込みの外に出た対向を、簡易表示で残すこと。
+
+    線ごと消すと、その拠点が「どこにも繋がっていない」図になる。
+    実際には繋がっているので、相手がいることだけは残す。
+    """
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].site_id, graph.nodes[0].site_name = 1, "本社"
+    graph.nodes[1].site_id, graph.nodes[1].site_name = 2, "大阪支社"
+
+    svg = render_svg(graph, site_id=2)
+
+    assert "sw-a" in svg  # 相手の名前は出す
+    assert "本社" in svg  # どこの機器かも出す
+    assert "stroke-dasharray" in svg  # 破線の枠で、対象外だと分かるようにする
+    # 図の中に残っている側のポート名は通常どおり出る
+    assert "Te1/1/1" in svg
+
+
+def test_peer_can_be_turned_off():
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].site_id = 1
+    graph.nodes[1].site_id = 2
+
+    svg = render_svg(graph, site_id=2, show_peers=False)
+    assert "sw-a" not in svg
+
+
+def test_peer_is_not_drawn_as_a_full_device():
+    """簡易表示なので、型番や保守状態は出さない。本体と見分けが付くこと。"""
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].site_id, graph.nodes[0].model = 1, "C9500-40X"
+    graph.nodes[1].site_id = 2
+
+    svg = render_svg(graph, site_id=2)
+    assert "C9500-40X" not in svg
+
+
+def test_vlan_filter_also_keeps_the_peer():
+    """VLAN で絞ったときも同じ。線の先が消えると経路が読めなくなる。"""
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].vlans = [10]
+    graph.nodes[1].vlans = [20]
+
+    svg = render_svg(graph, vlan=20)
+    assert "sw-b" in svg
+    assert "sw-a" in svg

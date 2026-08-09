@@ -154,7 +154,7 @@ function TopologyEditor() {
     if (!graph) return;
     const flow = toFlow(graph, simple, { portStyle, alongLine });
 
-    // VLAN / VRF を選んでいるときは、該当しない機器を薄くする。
+    // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
     // 同時に見えた方が構成を掴みやすいため。
     const filtering = selectedVlans.length > 0 || selectedVrf !== "" || selectedSite !== "";
@@ -169,15 +169,28 @@ function TopologyEditor() {
           )
           .map((n) => String(n.device_id)),
       );
+
+      // 対象と直接つながっている相手は、薄くしすぎない。
+      // 拠点で絞ったときに上位が消えて見えると、「どこにも繋がっていない」図になる
+      const neighbours = new Set<string>();
+      graph.edges.forEach((e) => {
+        const source = String(e.source);
+        const target = String(e.target);
+        if (matches.has(source) && !matches.has(target)) neighbours.add(target);
+        if (matches.has(target) && !matches.has(source)) neighbours.add(source);
+      });
+
       flow.nodes.forEach((n) => {
-        if (!matches.has(n.id)) {
-          n.style = { ...(n.style ?? {}), opacity: 0.22 };
-        }
+        if (matches.has(n.id)) return;
+        n.style = { ...(n.style ?? {}), opacity: neighbours.has(n.id) ? 0.55 : 0.15 };
       });
       flow.edges.forEach((e) => {
-        if (!matches.has(String(e.source)) || !matches.has(String(e.target))) {
-          e.style = { ...(e.style ?? {}), opacity: 0.15 };
-        }
+        const source = String(e.source);
+        const target = String(e.target);
+        if (matches.has(source) && matches.has(target)) return;
+        // 対象から出ている線は残す。その先に何があるかが分からないと構成が読めない
+        const boundary = matches.has(source) || matches.has(target);
+        e.style = { ...(e.style ?? {}), opacity: boundary ? 0.5 : 0.1 };
       });
     }
 

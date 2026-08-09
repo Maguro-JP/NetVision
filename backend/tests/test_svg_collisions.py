@@ -56,11 +56,15 @@ def edge(edge_id: int, source: int, target: int, a: str, b: str) -> TopologyEdge
 
 
 def node_rects(svg: str) -> list[Rect]:
-    """機器の箱。色帯（幅5）は除く。"""
+    """機器の箱と、絞り込みの外にいる相手の箱。色帯（幅5）は除く。"""
+    from app.services.topology_export import PEER_H, PEER_W
+
     out: list[Rect] = []
     for match in _RECT.finditer(svg):
         x, y, w, h = (float(v) for v in match.groups())
-        if w >= NODE_W - 1 and h >= NODE_H - 1:
+        is_node = w >= NODE_W - 1 and h >= NODE_H - 1
+        is_peer = abs(w - PEER_W) < 1 and abs(h - PEER_H) < 1
+        if is_node or is_peer:
             out.append(Rect(x, y, x + w, y + h))
     return out
 
@@ -246,3 +250,29 @@ def test_auto_layout_output_is_clean():
         for style in ("short", "number", "full"):
             assert_no_overlap(render_svg(graph, port_style=style))
             assert_no_overlap(render_svg(graph, port_style=style, along_line=True))
+
+
+def test_labels_avoid_the_peer_boxes():
+    """絞り込みの外にいる相手の箱にも、ラベルが被らないこと。"""
+    nodes = [
+        node(1, "core-sw-01", 0, 0),
+        node(2, "acc-sw-01", 0, 300),
+        node(3, "edge-rt-01", 400, 0),
+        node(4, "edge-rt-02", 400, 300),
+    ]
+    for target in nodes[:2]:
+        target.site_id = 1
+    for target in nodes[2:]:
+        target.site_id = 2
+
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet1/0/1", "GigabitEthernet1/0/2"),
+        edge(2, 1, 3, "TenGigabitEthernet1/1/1", "TenGigabitEthernet1/1/2"),
+        edge(3, 2, 4, "TenGigabitEthernet1/1/3", "TenGigabitEthernet1/1/4"),
+    ]
+    graph = TopologyGraph(layer="physical", nodes=nodes, edges=edges)
+
+    for style in ("short", "number", "full"):
+        svg = render_svg(graph, site_id=1, port_style=style)
+        assert "edge-rt-01" in svg  # 対向が残っている
+        assert_no_overlap(svg)

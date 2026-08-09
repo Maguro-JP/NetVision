@@ -15,8 +15,9 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
-from math import atan2, degrees
+from math import atan2, cos, degrees, sin
 from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
@@ -72,6 +73,7 @@ def render_svg(
     style: str = "detail",
     port_style: str = "short",
     along_line: bool = False,
+    show_peers: bool = True,
 ) -> str:
     """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
 
@@ -81,8 +83,12 @@ def render_svg(
     `style="simple"` は**機器名と結線だけ**の図。型番・IP・保守状態・VLAN を
     一切載せない。作業手順書や現場での指差し確認では、余計な情報が入っている方が
     読み違いのもとになるため、用途で図を分けられるようにしてある。
+
+    絞り込んだ場合、外に出た対向機器は `show_peers` で簡易表示として残す。
+    線ごと消すと、拠点の図で上位への接続が「無い」ように見えてしまうため。
     """
     simple = style == "simple"
+    everything = graph
     nodes = graph.nodes
     if vlan is not None:
         nodes = [n for n in nodes if vlan in n.vlans]
@@ -90,8 +96,13 @@ def render_svg(
         nodes = [n for n in nodes if vrf in n.vrfs]
     if site_id is not None:
         nodes = [n for n in nodes if n.site_id == site_id]
+
+    peers: list[_Peer] = []
     if nodes is not graph.nodes:
         keep = {n.device_id for n in nodes}
+        # 絞り込みの外に出た相手を、簡易表示で残す。
+        # 線ごと消すと、上位への接続が「無い」ように見えてしまう
+        peers = _boundary_peers(everything, keep) if show_peers else []
         graph = TopologyGraph(
             layer=graph.layer,
             nodes=nodes,
@@ -100,10 +111,10 @@ def render_svg(
     if not nodes:
         return _empty_svg(title)
 
-    min_x = min(n.x for n in nodes)
-    min_y = min(n.y for n in nodes)
-    max_x = max(n.x for n in nodes) + NODE_W
-    max_y = max(n.y for n in nodes) + NODE_H
+    min_x = min([n.x for n in nodes] + [p.x for p in peers])
+    min_y = min([n.y for n in nodes] + [p.y for p in peers])
+    max_x = max([n.x + NODE_W for n in nodes] + [p.x + PEER_W for p in peers])
+    max_y = max([n.y + NODE_H for n in nodes] + [p.y + PEER_H for p in peers])
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
     legend_h = 0.0 if simple else LEGEND_H
@@ -117,10 +128,14 @@ def render_svg(
     # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
     used_media: set[Media] = set()
 
-    # 機器の箱を先に「埋まっている場所」として登録しておく。
+    # 機器の箱と簡易ノードを先に「埋まっている場所」として登録しておく。
     # ラベルはこれを避けて置く。少し広げるのは、枠に文字が接すると読みにくいため
     placement = svglayout.Placement(
         [svglayout.Rect(px, py, px + NODE_W, py + NODE_H).grow(3) for px, py in at.values()]
+        + [
+            svglayout.Rect(p.x + dx, p.y + dy, p.x + dx + PEER_W, p.y + dy + PEER_H).grow(3)
+            for p in peers
+        ]
     )
 
     parts.append(
@@ -193,6 +208,29 @@ def render_svg(
                 if name:
                     used_media.add(portlabel.media_of(name))
 
+    # --- 絞り込みの外にいる対向（簡易表示） ---
+    for peer in peers:
+        anchor = at.get(peer.anchor)
+        if anchor is None:
+            continue
+        px, py = peer.x + dx, peer.y + dy
+        ax, ay = anchor[0] + NODE_W / 2, anchor[1] + NODE_H / 2
+        cx, cy = px + PEER_W / 2, py + PEER_H / 2
+
+        parts.append(
+            f'<line x1="{ax:.0f}" y1="{ay:.0f}" x2="{cx:.0f}" y2="{cy:.0f}" '
+            f'stroke="#8a94a6" stroke-width="1.6"'
+            + ("" if peer.confirmed else ' stroke-dasharray="6 4"')
+            + "/>"
+        )
+        parts.append(_peer_box(px, py, peer, simple))
+        # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
+        parts.append(
+            _port_label(ax, ay, cx, cy, peer.local_interface, port_style, along_line, placement)
+        )
+        if peer.local_interface:
+            used_media.add(portlabel.media_of(peer.local_interface))
+
     # --- 機器 ---
     for node in nodes:
         x, y = at[node.device_id]
@@ -238,6 +276,129 @@ def render_svg(
         parts.append(_legend(MARGIN, height - LEGEND_H + 10, width, used_media))
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+@dataclass
+class _Peer:
+    """絞り込みの外にいる対向機器を、図の端に置くための簡易ノード。
+
+    拠点で絞ったときに上位ルータが図から消えると、その拠点が
+    「どこにも繋がっていない」ように見える。実際には繋がっているので、
+    **相手がいることだけは残す**。ただし本題ではないので、名前と拠点だけに留める。
+    """
+
+    x: float
+    y: float
+    hostname: str
+    site_name: str | None
+    local_interface: str  # 図の中の機器側のポート
+    remote_interface: str  # 相手側のポート
+    anchor: int  # 図の中に残っている側の device_id
+    confirmed: bool
+
+
+# 簡易表示の箱。本題ではないので、機器の箱より小さくする
+PEER_W = 150.0
+PEER_H = 40.0
+# 図の中の機器から、どのくらい離して置くか
+_PEER_DISTANCE = 120.0
+
+
+def _boundary_peers(graph: TopologyGraph, keep: set[int]) -> list[_Peer]:
+    """片側だけが絞り込みに残った結線から、外側の相手を作る。
+
+    位置は**実際の相手の方向**へ伸ばした先に置く。図の外にある機器を
+    そのままの座標で描くと図が無駄に広がるので、距離だけ詰める。
+    向きを合わせておけば、どちら側に出ていく回線かは読み取れる。
+    """
+    positions = {n.device_id: (n.x + NODE_W / 2, n.y + NODE_H / 2) for n in graph.nodes}
+    names = {n.device_id: n for n in graph.nodes}
+
+    # 置いた場所を覚えて、簡易ノード同士が重ならないようにする
+    placement = svglayout.Placement(
+        [
+            svglayout.Rect(n.x, n.y, n.x + NODE_W, n.y + NODE_H).grow(8)
+            for n in graph.nodes
+            if n.device_id in keep
+        ]
+    )
+
+    out: list[_Peer] = []
+    for edge in graph.edges:
+        inside, outside = edge.source, edge.target
+        local, remote = edge.source_interface, edge.target_interface
+        if inside not in keep and outside in keep:
+            inside, outside = outside, inside
+            local, remote = remote, local
+        elif not (inside in keep and outside not in keep):
+            continue
+
+        anchor = positions.get(inside)
+        target = positions.get(outside)
+        peer_node = names.get(outside)
+        if anchor is None or target is None or peer_node is None:
+            continue
+
+        dx, dy = target[0] - anchor[0], target[1] - anchor[1]
+        length = max((dx * dx + dy * dy) ** 0.5, 1.0)
+        ux, uy = dx / length, dy / length
+
+        spot = _place_peer(anchor, (ux, uy), placement)
+        out.append(
+            _Peer(
+                x=spot[0] - PEER_W / 2,
+                y=spot[1] - PEER_H / 2,
+                hostname=peer_node.hostname,
+                site_name=peer_node.site_name,
+                local_interface=local,
+                remote_interface=remote,
+                anchor=inside,
+                confirmed=edge.confirmed_both_ways,
+            )
+        )
+    return out
+
+
+def _place_peer(
+    anchor: tuple[float, float], direction: tuple[float, float], placement: svglayout.Placement
+) -> tuple[float, float]:
+    """簡易ノードの中心を決める。相手の方向を保ったまま、空いている場所を探す。"""
+    ux, uy = direction
+    candidates: list[tuple[float, float]] = []
+    for distance in (_PEER_DISTANCE, _PEER_DISTANCE + 70, _PEER_DISTANCE + 150):
+        for turn in (0.0, 0.35, -0.35, 0.7, -0.7, 1.05, -1.05):
+            rx = ux * cos(turn) - uy * sin(turn)
+            ry = ux * sin(turn) + uy * cos(turn)
+            candidates.append((anchor[0] + rx * distance, anchor[1] + ry * distance))
+
+    rects = [
+        svglayout.Rect(cx - PEER_W / 2, cy - PEER_H / 2, cx + PEER_W / 2, cy + PEER_H / 2).grow(10)
+        for cx, cy in candidates
+    ]
+    index, _ = placement.choose(rects)
+    placement.add(rects[index])
+    return candidates[index]
+
+
+def _peer_box(x: float, y: float, peer: _Peer, simple: bool) -> str:
+    """絞り込みの外にいる相手を、簡易表示で描く。
+
+    **破線の枠と控えめな色**にして、この図の対象ではないことを見た目で示す。
+    実線の箱と同じ見た目にすると、その拠点の機器だと読まれてしまう。
+    """
+    label = _clip(peer.hostname, 20)
+    detail = peer.site_name or "図の対象外"
+    if peer.remote_interface and not simple:
+        detail = f"{detail} / {portlabel.format(peer.remote_interface, 'short')}"
+
+    return (
+        f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{PEER_W:.0f}" height="{PEER_H:.0f}" '
+        f'rx="6" fill="#f2f4f7" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/>'
+        f'<text x="{x + PEER_W / 2:.0f}" y="{y + 18:.0f}" font-size="11" font-weight="700" '
+        f'fill="#4a5364" text-anchor="middle">{_esc(label)}</text>'
+        f'<text x="{x + PEER_W / 2:.0f}" y="{y + 31:.0f}" font-size="9" fill="#7a828f" '
+        f'text-anchor="middle">{_esc(_clip(detail, 26))}</text></g>'
+    )
 
 
 def _port_kinds_line(x: float, y: float, kinds: list[str]) -> str:
@@ -508,6 +669,7 @@ def export_svg(
     style: str = "detail",
     port_style: str = "short",
     along_line: bool = False,
+    show_peers: bool = True,
 ) -> str:
     return render_svg(
         get_graph(db, layer),
@@ -518,4 +680,5 @@ def export_svg(
         style=style,
         port_style=port_style,
         along_line=along_line,
+        show_peers=show_peers,
     )

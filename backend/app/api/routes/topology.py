@@ -117,6 +117,10 @@ def export_topology(
         description="ポート名の出し方。full = そのまま / short = 略記 / number = 番号だけ",
     ),
     along_line: bool = Query(default=False, description="ポート名を線に沿わせて回転する"),
+    show_peers: bool = Query(
+        default=True,
+        description="絞り込みの外に出た対向機器を簡易表示で残す（線ごと消さない）",
+    ),
 ) -> Response:
     """構成図を SVG で書き出す。
 
@@ -129,6 +133,9 @@ def export_topology(
 
     ポート名は**それぞれの機器側**に置く。1本の線に2つ並べると「左が上位」の
     ような規則を覚える必要が出て、図の向きが変わると逆に読んでしまうため。
+
+    絞り込みの外に出た対向機器は、破線の簡易表示として残す。線ごと消すと
+    「その拠点はどこにも繋がっていない」図になってしまうため。
     """
     svg = topology_export.export_svg(
         db,
@@ -140,6 +147,7 @@ def export_topology(
         style=style,
         port_style=port_style,
         along_line=along_line,
+        show_peers=show_peers,
     )
     suffix = f"-vlan{vlan}" if vlan else ""
     if vrf:
