@@ -45,6 +45,43 @@ def _get_plan(db: Session, plan_id: int) -> ConfigPlan:
 # ---------------------------------------------------------------------------
 
 
+@router.get("/devices/{device_id}/design-config", response_model=dict[str, object])
+def design_config(device_id: int, db: DbSession) -> dict[str, object]:
+    """図に描いた構成から、その機器の想定 Config を組み立てて返す。
+
+    新規構築やテスト環境で、**図を描いてから Config を書き起こす**手間を減らすため。
+    図に無い情報（アクセスポート・経路・ACL）は起こせないので、
+    その箇所は「要記入」と分かる形で残す。
+
+    ここでは保存しない。計画として残すときは Config計画を
+    `seed_from=design` で作る。
+    """
+    from app.services import design
+
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"device {device_id} が見つかりません")
+
+    plan = design.collect(db, device)
+    return {
+        "device_id": device.id,
+        "hostname": device.hostname,
+        "body": design.build(db, device),
+        "link_count": len(plan.links),
+        "vlan_count": len(plan.vlans),
+        # 図から起こせた材料を返す。何を根拠に生成したかが見えないと確認できない
+        "links": [
+            {
+                "local_interface": link.local_interface,
+                "peer_hostname": link.peer_hostname,
+                "peer_interface": link.peer_interface,
+                "infrastructure": link.is_infrastructure,
+            }
+            for link in plan.links
+        ],
+    }
+
+
 @router.get("/config-plans", response_model=list[ConfigPlanRead])
 def list_plans(db: DbSession, device_id: int | None = None) -> list[ConfigPlanRead]:
     stmt = select(ConfigPlan).order_by(ConfigPlan.updated_at.desc(), ConfigPlan.id.desc())

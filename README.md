@@ -464,6 +464,16 @@ VLAN の事故はほぼ全部この3つの混同から出ます。混ぜて持�
 > 人が機器を重なるほど寄せた場合は、どう置いても収まらない。そのときは
 > 最も重なりの小さい位置に逃がす。**図が出せなくなる方が困る**ため。
 
+### 図の向きと、表での書き出し
+
+自動配置は**上下**（種別を横の段にする）と**左右**（種別を縦の列にする）を選べます。
+横長の紙や画面に貼るときは左右の方が収まります。人が動かした配置はそのまま残ります。
+
+図が要らない場面もあります。作業指示・工事依頼・検収の突合で欲しいのは、並べ替えと
+絞り込みができる**表**なので、**結線表を Excel / CSV で書き出せます**。
+図で ⚠ が出る食い違い（許可漏れ・ネイティブ不一致）は、表でも「注意」列に出して
+行を色付けします。表だけ見て作業する人が見落とすと意味がないためです。
+
 ### 拠点で絞る
 
 拠点を選ぶと、その拠点の機器だけが残ります。書き出すと**その拠点だけの構成図**に
@@ -839,6 +849,9 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | POST | `/topology/rebuild` | Config から結線を再推定 |
 | GET | `/topology/export.svg` | 構成図を SVG で書き出し（`layer` / `title` / `vlan` / `vrf` / `site_id` / `style` / `port_style` / `along_line` / `show_peers` 指定可） |
 | GET | `/topology/vlans` | VLAN 一覧（台帳＋実機の観測値、載っている機器・ポート数つき） |
+| GET | `/topology/export.xlsx` | 結線表を Excel で書き出し（`layer` / `site_id`） |
+| GET | `/topology/export.csv` | 結線表を CSV で書き出し（`encoding` で Shift_JIS） |
+| GET | `/devices/{id}/design-config` | 図に描いた構成から想定 Config を組み立てる |
 | GET | `/topology/vrfs` | VRF 一覧（載っている機器・RD 不一致の判定つき） |
 | GET / POST | `/topology/vlans/catalog` | VLAN 台帳の一覧・登録 |
 | PUT / DELETE | `/topology/vlans/catalog/{vlan_id}` | VLAN 台帳の更新・削除 |

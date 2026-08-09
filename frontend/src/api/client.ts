@@ -253,8 +253,10 @@ export const api = {
     request<NetworkInterface[]>(`/configs/devices/${deviceId}/interfaces`),
 
   // --- トポロジ ---
-  getTopology: (layer: string, includeRetired = false) =>
-    request<TopologyGraph>(`/topology${query({ layer, include_retired: String(includeRetired) })}`),
+  getTopology: (layer: string, includeRetired = false, orientation = "vertical") =>
+    request<TopologyGraph>(
+      `/topology${query({ layer, include_retired: String(includeRetired), orientation })}`,
+    ),
   getTopologyStats: (layer: string) => request<TopologyStats>(`/topology/stats${query({ layer })}`),
   savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>
     request<{ saved: number }>("/topology/positions", {
@@ -291,12 +293,34 @@ export const api = {
       vrf?: string;
       site_id?: number;
       style?: string;
+      /** 自動配置の向き。vertical / horizontal */
+      orientation?: string;
       /** ポート名の出し方。full / short / number */
       port_style?: string;
       /** ポート名を線に沿わせて回転する */
       along_line?: string;
     } = {},
   ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
+  /** 結線表。図が要らない場面（作業指示・検収）は表の方が使いやすい */
+  linkTableUrl: (
+    layer: string,
+    format: "xlsx" | "csv",
+    options: { site_id?: number; encoding?: string } = {},
+  ) => `${BASE}/topology/export.${format}${query({ layer, ...options })}`,
+  designConfig: (deviceId: number) =>
+    request<{
+      device_id: number;
+      hostname: string;
+      body: string;
+      link_count: number;
+      vlan_count: number;
+      links: {
+        local_interface: string;
+        peer_hostname: string;
+        peer_interface: string;
+        infrastructure: boolean;
+      }[];
+    }>(`/devices/${deviceId}/design-config`),
   createLink: (body: {
     a_device_id: number;
     b_device_id: number;

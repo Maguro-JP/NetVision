@@ -32,6 +32,7 @@ export default function DeviceDetailPage() {
   const queryClient = useQueryClient();
   const [contract, setContract] = useState({ ...EMPTY_CONTRACT });
   const [showForm, setShowForm] = useState(false);
+  const [showDesign, setShowDesign] = useState(false);
 
   const {
     data: device,
@@ -51,6 +52,13 @@ export default function DeviceDetailPage() {
   const { data: interfaces } = useQuery({
     queryKey: ["deviceInterfaces", id],
     queryFn: () => api.listInterfaces(deviceId),
+  });
+
+  // 図から起こす想定 Config。開いたときだけ取りに行く
+  const designConfig = useQuery({
+    queryKey: ["designConfig", id],
+    queryFn: () => api.designConfig(deviceId),
+    enabled: showDesign,
   });
 
   const { data: vulnerabilities } = useQuery({
@@ -221,6 +229,48 @@ export default function DeviceDetailPage() {
           </span>
         </div>
       </div>
+
+      <h2>図から想定 Config を起こす</h2>
+      <p className="muted" style={{ marginTop: -6 }}>
+        トポロジ図に描いた結線と VLAN 台帳から、この機器の Config を組み立てます。
+        <strong>新規構築やテスト環境</strong>で、図を描いてから書き起こす手間を減らすためのものです。
+        図に無い情報（アクセスポート・経路・ACL）は起こせないので、その箇所は印を残します。
+      </p>
+      <div className="toolbar">
+        <button onClick={() => setShowDesign((value) => !value)}>
+          {showDesign ? "閉じる" : "想定 Config を見る"}
+        </button>
+        {designConfig.data && (
+          <span className="muted">
+            結線 {designConfig.data.link_count} 本 / VLAN {designConfig.data.vlan_count} 件から生成
+          </span>
+        )}
+      </div>
+      {showDesign && (
+        <>
+          {designConfig.isLoading && <p className="muted">組み立て中…</p>}
+          {designConfig.error && (
+            <div className="error">{(designConfig.error as Error).message}</div>
+          )}
+          {designConfig.data && (
+            <>
+              {designConfig.data.link_count === 0 && (
+                <div className="empty" style={{ marginBottom: 10 }}>
+                  この機器にはまだ線が引かれていません。
+                  <Link to={`/topology`}> トポロジ図</Link>
+                  で結線してから開くと、ポートの設定まで入ります。
+                </div>
+              )}
+              <pre className="config-preview">{designConfig.data.body}</pre>
+              <p className="muted">
+                そのまま投入せず、内容を確認してください。計画として残す場合は
+                <Link to="/config-plans"> Config計画</Link>
+                で「図から起こす」を選ぶと、差分の生成と収束検証まで通せます。
+              </p>
+            </>
+          )}
+        </>
+      )}
 
       <h2>ポート</h2>
       {!interfaces || interfaces.length === 0 ? (

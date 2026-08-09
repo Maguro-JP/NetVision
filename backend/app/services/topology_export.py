@@ -675,9 +675,10 @@ def export_svg(
     port_style: str = "short",
     along_line: bool = False,
     show_peers: bool = True,
+    orientation: str = "vertical",
 ) -> str:
     return render_svg(
-        get_graph(db, layer),
+        get_graph(db, layer, orientation=orientation),
         title=title,
         vlan=vlan,
         vrf=vrf,

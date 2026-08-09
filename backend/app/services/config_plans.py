@@ -108,7 +108,13 @@ def seed_body(db: Session, device: Device, source: str, template_id: int | None)
     """将来フルの初期値を作る。
 
     まっさらから書くことはまず無いので、現行をコピーして直すのを既定にする。
+    新規構築だけは例外で、そのときは**図に描いた構成**から起こす。
     """
+    if source == "design":
+        from app.services import design
+
+        return design.build(db, device)
+
     if source == "current":
         snapshot = latest_snapshot(db, device.id)
         return snapshot.content if snapshot else ""

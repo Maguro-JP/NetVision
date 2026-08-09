@@ -45,10 +45,17 @@ interface ViewSettings {
   portStyle: PortStyle;
   alongLine: boolean;
   simple: boolean;
+  /** 自動配置の向き。横長の紙や画面に貼るときは左右の方が収まる */
+  orientation: "vertical" | "horizontal";
 }
 
 function loadView(): ViewSettings {
-  const fallback: ViewSettings = { portStyle: "short", alongLine: false, simple: false };
+  const fallback: ViewSettings = {
+    portStyle: "short",
+    alongLine: false,
+    simple: false,
+    orientation: "vertical",
+  };
   try {
     const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}");
     return { ...fallback, ...saved };
@@ -253,6 +260,7 @@ function TopologyEditor() {
   // ポート名の出し方。長い名前が線に重なると図が読めなくなる
   const [portStyle, setPortStyle] = useState<PortStyle>(view.portStyle);
   const [alongLine, setAlongLine] = useState(view.alongLine);
+  const [orientation, setOrientation] = useState(view.orientation);
   // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
   const [editable, setEditable] = useState(false);
   // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
@@ -266,8 +274,8 @@ function TopologyEditor() {
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
 
   const { data: graph, isLoading } = useQuery({
-    queryKey: ["topology", layer],
-    queryFn: () => api.getTopology(layer),
+    queryKey: ["topology", layer, orientation],
+    queryFn: () => api.getTopology(layer, false, orientation),
   });
   const { data: stats } = useQuery({
     queryKey: ["topologyStats", layer],
@@ -347,8 +355,11 @@ function TopologyEditor() {
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
   useEffect(() => {
-    localStorage.setItem(VIEW_KEY, JSON.stringify({ portStyle, alongLine, simple }));
-  }, [portStyle, alongLine, simple]);
+    localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ portStyle, alongLine, simple, orientation }),
+    );
+  }, [portStyle, alongLine, simple, orientation]);
 
   // 絞り込みを URL に残す。この画面をそのまま人に送れる
   useEffect(() => {
@@ -563,6 +574,14 @@ function TopologyEditor() {
           シンプル表示
         </label>
         <select
+          value={orientation}
+          onChange={(e) => setOrientation(e.target.value as "vertical" | "horizontal")}
+          title="自動配置の向きを変えます。人が動かした配置はそのまま残ります"
+        >
+          <option value="vertical">並び: 上下</option>
+          <option value="horizontal">並び: 左右</option>
+        </select>
+        <select
           value={portStyle}
           onChange={(e) => setPortStyle(e.target.value as PortStyle)}
           title={PORT_STYLES.find((item) => item.value === portStyle)?.hint}
@@ -590,10 +609,20 @@ function TopologyEditor() {
             style: simple ? "simple" : undefined,
             port_style: portStyle,
             along_line: alongLine ? "true" : undefined,
+            orientation,
           })}
           title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
         >
           図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
+        </a>
+        <a
+          className="button"
+          href={api.linkTableUrl(layer, "xlsx", {
+            site_id: selectedSite === "" ? undefined : selectedSite,
+          })}
+          title="結線表を Excel で出します。作業指示や検収の突合には表の方が使いやすいです"
+        >
+          結線表（Excel）
         </a>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>

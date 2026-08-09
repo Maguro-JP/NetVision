@@ -759,3 +759,18 @@ button:disabled {
     -webkit-overflow-scrolling: touch;
   }
 }
+
+/* 生成した Config の下見。長いので高さを切って、中でスクロールさせる */
+.config-preview {
+  max-height: 460px;
+  overflow: auto;
+  margin: 0 0 10px;
+  padding: 12px 14px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre;
+}

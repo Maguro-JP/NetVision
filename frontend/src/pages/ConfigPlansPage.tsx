@@ -166,6 +166,7 @@ export default function ConfigPlansPage() {
                 onChange={(e) => setForm((f) => ({ ...f, seed_from: e.target.value }))}
               >
                 <option value="current">現行 config をコピーして直す</option>
+                <option value="design">図に描いた構成から起こす（新規構築・テスト）</option>
                 <option value="blank">白紙から書く</option>
               </select>
             </div>

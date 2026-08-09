@@ -20,7 +20,8 @@ class ConfigPlanBase(BaseModel):
 class ConfigPlanCreate(ConfigPlanBase):
     device_id: int
     # 将来フルの初期値をどこから作るか
-    seed_from: str = Field(default="current", pattern="^(current|template|blank)$")
+    # design = 図に描いた構成から起こす（新規構築・テスト環境向け）
+    seed_from: str = Field(default="current", pattern="^(current|template|blank|design)$")
     template_id: int | None = None
 
 

@@ -95,7 +95,11 @@ class TopologyGraph:
 
 
 def get_graph(
-    db: Session, layer: str = DEFAULT_LAYER, *, include_retired: bool = False
+    db: Session,
+    layer: str = DEFAULT_LAYER,
+    *,
+    include_retired: bool = False,
+    orientation: str = "vertical",
 ) -> TopologyGraph:
     devices = list(
         db.scalars(
@@ -127,7 +131,9 @@ def get_graph(
     # 使っていないポートまで並べると、機器の箱が読めなくなる
     port_kinds = _port_kinds(links)
 
-    placeholders = _auto_layout([d for d in devices if d.id not in positions])
+    placeholders = _auto_layout(
+        [d for d in devices if d.id not in positions], orientation=orientation
+    )
 
     nodes: list[TopologyNodeView] = []
     for device in devices:
@@ -284,20 +290,32 @@ def _interface_counts(db: Session) -> dict[int, int]:
     return counts
 
 
-def _auto_layout(devices: list[Device]) -> dict[int, tuple[float, float]]:
-    """種別を段にして並べる初期配置。人が動かすまでの仮置き。"""
+def _auto_layout(
+    devices: list[Device], orientation: str = "vertical"
+) -> dict[int, tuple[float, float]]:
+    """種別を段にして並べる初期配置。人が動かすまでの仮置き。
+
+    `orientation="horizontal"` は段を**縦の列**にして、上位を左に置く。
+    横長の紙や画面に貼るときは、こちらの方が収まりが良い。
+    """
     tiers: dict[int, list[Device]] = {}
     for device in devices:
         tier = TIER_ORDER.get(device.device_type, 7)
         tiers.setdefault(tier, []).append(device)
 
+    horizontal = orientation == "horizontal"
     positions: dict[int, tuple[float, float]] = {}
     for tier, members in sorted(tiers.items()):
         members.sort(key=lambda d: d.hostname)
         # 段の中央に寄せて並べる
         offset = -(len(members) - 1) / 2
         for index, device in enumerate(members):
-            positions[device.id] = ((offset + index) * _X_SPACING, tier * _Y_SPACING)
+            along = offset + index
+            if horizontal:
+                # 段を左から右へ。段の中は縦に並ぶので、箱の高さを基準に詰める
+                positions[device.id] = (tier * _X_SPACING, along * _Y_SPACING)
+            else:
+                positions[device.id] = (along * _X_SPACING, tier * _Y_SPACING)
     return positions
 
 

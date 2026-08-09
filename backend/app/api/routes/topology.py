@@ -36,9 +36,13 @@ def get_topology(
     db: DbSession,
     layer: str = Query(default=service.DEFAULT_LAYER, description="physical / l2 / l3 など"),
     include_retired: bool = False,
+    orientation: str = Query(
+        default="vertical",
+        description="自動配置の向き。vertical = 上下 / horizontal = 左右",
+    ),
 ) -> TopologyGraphRead:
     """図に描くためのノードと結線を返す。位置は保存済みのものを優先する。"""
-    graph = service.get_graph(db, layer, include_retired=include_retired)
+    graph = service.get_graph(db, layer, include_retired=include_retired, orientation=orientation)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
@@ -121,6 +125,10 @@ def export_topology(
         default=True,
         description="絞り込みの外に出た対向機器を簡易表示で残す（線ごと消さない）",
     ),
+    orientation: str = Query(
+        default="vertical",
+        description="自動配置の向き。vertical = 上下 / horizontal = 左右",
+    ),
 ) -> Response:
     """構成図を SVG で書き出す。
 
@@ -148,6 +156,7 @@ def export_topology(
         port_style=port_style,
         along_line=along_line,
         show_peers=show_peers,
+        orientation=orientation,
     )
     suffix = f"-vlan{vlan}" if vlan else ""
     if vrf:
@@ -161,6 +170,50 @@ def export_topology(
         content=svg,
         media_type="image/svg+xml; charset=utf-8",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/export.xlsx", response_class=Response)
+def export_link_table(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    site_id: int | None = Query(default=None, description="この拠点に掛かる結線だけを出す"),
+) -> Response:
+    """結線表を Excel で書き出す。
+
+    図が要らない場面がある。作業指示・工事依頼・検収の突合で欲しいのは、
+    並べ替えと絞り込みができる**表**なので、そちらは Excel で出す。
+
+    拠点で絞る場合、**片側でもその拠点に掛かっていれば出す**。
+    拠点をまたぐ回線こそ表で確認したいため。
+    """
+    from app.services import topology_table
+
+    data = topology_table.to_xlsx(db, layer, site_id=site_id)
+    name = f"links-{layer}{f'-site{site_id}' if site_id else ''}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
+@router.get("/export.csv", response_class=Response)
+def export_link_table_csv(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    site_id: int | None = Query(default=None),
+    encoding: str = Query(default="utf-8", description="utf-8 / shift_jis"),
+) -> Response:
+    """結線表を CSV で書き出す。Excel が無い環境向け。"""
+    from app.services import topology_table
+
+    data = topology_table.to_csv(db, layer, site_id=site_id, encoding=encoding)
+    name = f"links-{layer}{f'-site{site_id}' if site_id else ''}.csv"
+    return Response(
+        content=data,
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
     )
 
 
