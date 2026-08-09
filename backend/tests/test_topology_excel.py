@@ -119,3 +119,46 @@ def test_endpoint(client):
     response = client.get(f"{API}/topology/workbook.xlsx")
     assert response.status_code == 200, response.text
     assert response.content[:2] == b"PK"
+
+
+def test_the_upper_device_is_decided_by_the_whole_network_not_by_link_count(db_session):
+    """上下を「繋がっている本数」で決めないこと。
+
+    支社ルータは配下の拠点が多いぶん本数が多い。本数で並べると、
+    センターより支社が上に来てしまう。
+    """
+    from app.services import topology
+    from app.services.topology_excel import hierarchy_rank
+
+    site = Site(name="関西支社", address="大阪府")
+    db_session.add(site)
+    db_session.flush()
+
+    def router(hostname: str) -> Device:
+        device = Device(
+            hostname=hostname,
+            vendor="Cisco",
+            model="ISR4451-X",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db_session.add(device)
+        return device
+
+    core = router("center-rt-01")
+    branch = router("branch-rt-01")
+    stations = [router(f"station-{i}-rt-01") for i in range(4)]
+    upstream = router("hq-rt-01")
+    db_session.flush()
+
+    pairs = [(upstream, core), (core, branch)] + [(branch, s) for s in stations]
+    for a, b in pairs:
+        db_session.add(
+            Link(a_device_id=a.id, a_interface="Gi0/0", b_device_id=b.id, b_interface="Gi0/1")
+        )
+    db_session.commit()
+
+    rank = hierarchy_rank(topology.get_graph(db_session))
+    # 本数は branch(5) > core(2) だが、上位は core 側
+    assert rank[core.id] < rank[branch.id]
+    assert rank[branch.id] < rank[stations[0].id]

@@ -56,12 +56,78 @@ class _Placed:
         return self.row + BOX_H // 2
 
 
-def _layout(graph, ports: dict[int, topology_ports.DevicePorts]) -> list[_Placed]:
+def _adjacency(graph) -> dict[int, list[int]]:
+    out: dict[int, list[int]] = {n.device_id: [] for n in graph.nodes}
+    for edge in graph.edges:
+        if edge.source in out and edge.target in out:
+            out[edge.source].append(edge.target)
+            out[edge.target].append(edge.source)
+    return out
+
+
+def _far(start: int, adjacency: dict[int, list[int]]) -> tuple[int, dict[int, int]]:
+    """`start` から一番遠い機器と、各機器までの距離。"""
+    distance = {start: 0}
+    queue = [start]
+    last = start
+    while queue:
+        current = queue.pop(0)
+        last = current
+        for neighbour in adjacency.get(current, []):
+            if neighbour not in distance:
+                distance[neighbour] = distance[current] + 1
+                queue.append(neighbour)
+    return last, distance
+
+
+def hierarchy_rank(graph) -> dict[int, int]:
+    """網全体の「上位からの遠さ」。小さいほど上位。
+
+    繋がっている本数では上下は決まらない。支社ルータは配下の拠点が多いぶん
+    本数が多くなり、センターより上に見えてしまう。
+
+    代わりに**網の中心**を求める。端から端（一番長い経路）の真ん中にいるのは
+    センター側なので、そこからのホップ数を上下の目安にする。
+    木構造の網ではこれがよく合う。
+    """
+    adjacency = _adjacency(graph)
+    if not adjacency:
+        return {}
+
+    ranks: dict[int, int] = {}
+    remaining = set(adjacency)
+    while remaining:
+        # 島ごとに求める。繋がっていない機器同士の上下は比べようがない
+        seed = min(remaining)
+        end_a, _ = _far(seed, adjacency)
+        end_b, from_a = _far(end_a, adjacency)
+        _, from_b = _far(end_b, adjacency)
+        # 端から端への経路の真ん中にある機器を中心とする
+        component = [device_id for device_id in from_a if device_id in remaining]
+        centre = min(
+            component,
+            key=lambda device_id: (
+                max(from_a.get(device_id, 0), from_b.get(device_id, 0)),
+                device_id,
+            ),
+        )
+        _, distance = _far(centre, adjacency)
+        for device_id in component:
+            ranks[device_id] = distance.get(device_id, 0)
+            remaining.discard(device_id)
+    return ranks
+
+
+def _layout(
+    graph,
+    ports: dict[int, topology_ports.DevicePorts],
+    rank: dict[int, int] | None = None,
+) -> list[_Placed]:
     """上位を左にした木に並べる。
 
-    根は「段が一番上（外部に近い）機器」。そこから幅優先でたどって親子を決める。
-    絞り込みの外にいる機器（対向）を優先して根にするので、
-    拠点だけを出したときも「どこから来ているか」が左端に出る。
+    根は網全体で見て一番上位の機器（`hierarchy_rank` が小さいもの）。
+    そこから幅優先でたどって親子を決める。拠点だけを出したときも、
+    その拠点の上位（対向）が左端に来る。
     """
     nodes = {n.device_id: n for n in graph.nodes}
     tier = {
@@ -84,12 +150,10 @@ def _layout(graph, ports: dict[int, topology_ports.DevicePorts]) -> list[_Placed
     order = sorted(
         (n.device_id for n in graph.nodes),
         key=lambda device_id: (
+            # 網全体で見た「上位からの遠さ」。本数で決めると、配下の多い
+            # 支社ルータがセンターより上に来てしまう
+            (rank or {}).get(device_id, 0),
             tier[device_id],
-            # 絞り込みの外にいる機器は上位（対向）。そこを起点にすると
-            # 「どこから来ているか」が左端に出る
-            not nodes[device_id].outside,
-            # 上位ほど枝が多い。同じ段なら繋がっている数が多い方を上に置く
-            -len(neighbours.get(device_id, [])),
             nodes[device_id].hostname,
         ),
     )
@@ -117,7 +181,12 @@ def _layout(graph, ports: dict[int, topology_ports.DevicePorts]) -> list[_Placed
     placed: list[_Placed] = []
     row = _HEADER_ROWS + 1
 
-    def walk(device_id: int, depth: int) -> None:
+    def walk(device_id: int, depth: int, at_row: int) -> int:
+        """自分を `at_row` に置き、子を右へ並べる。使った一番下の行を返す。
+
+        最初の子は**親と同じ行**に置く。1台ずつ下げると、上位から下位へ
+        一直線に繋がっているだけの構成が階段状になって、紙が横にも縦にも伸びる。
+        """
         nonlocal row
         node = nodes[device_id]
         entry = topology_ports.DevicePorts(
@@ -136,18 +205,22 @@ def _layout(graph, ports: dict[int, topology_ports.DevicePorts]) -> list[_Placed
                 model=node.model,
                 site_name=node.site_name or "",
                 depth=depth,
-                row=row,
+                row=at_row,
                 uplinks=[p.interface for p in detail.uplinks],
                 downlinks=[p.interface for p in detail.downlinks],
                 parent=parent.get(device_id),
             )
         )
-        row += BOX_H + GAP_H
-        for child in sorted(children.get(device_id, []), key=lambda i: nodes[i].hostname):
-            walk(child, depth + 1)
+        bottom = at_row
+        for index, child in enumerate(
+            sorted(children.get(device_id, []), key=lambda i: nodes[i].hostname)
+        ):
+            child_row = at_row if index == 0 else bottom + BOX_H + GAP_H
+            bottom = max(bottom, walk(child, depth + 1, child_row))
+        return bottom
 
     for root in roots:
-        walk(root, 0)
+        row = walk(root, 0, row) + BOX_H + GAP_H
     return placed
 
 
@@ -166,9 +239,14 @@ def to_xlsx(
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
-    graph = scope_graph(get_graph(db, layer), site_id=site_id, scope=scope)
+    whole = get_graph(db, layer)
+    # 上下関係は**網全体**で見る。拠点だけを切り出した中で決めると、
+    # その拠点でたまたま枝の多い機器が一番上に来てしまう
+    rank = hierarchy_rank(whole)
+
+    graph = scope_graph(whole, site_id=site_id, scope=scope)
     ports = {p.device_id: p for p in topology_ports.collect(db)}
-    placed = _layout(graph, ports)
+    placed = _layout(graph, ports, rank)
 
     workbook = Workbook()
     sheet = workbook.active
@@ -192,6 +270,15 @@ def to_xlsx(
 
     outside = {n.device_id for n in graph.nodes if n.outside}
     by_id = {p.device_id: p for p in placed}
+    # どのポート同士で繋がっているか。機器の並び順ではなく、線ごとに引く
+    port_of: dict[tuple[int, int], tuple[str, str]] = {}
+    for edge in graph.edges:
+        port_of.setdefault(
+            (edge.source, edge.target), (edge.source_interface, edge.target_interface)
+        )
+        port_of.setdefault(
+            (edge.target, edge.source), (edge.target_interface, edge.source_interface)
+        )
 
     def draw_box(entry: _Placed) -> None:
         col, row = entry.col, entry.row
@@ -226,14 +313,21 @@ def to_xlsx(
         for c in range(bus, child.col):
             _line_top(sheet, child.middle, c, line)
 
-        # 上りポート名は子の箱の左（＝線の上）に書く。機器の隣にあれば
-        # 「どちらのポートか」を覚えなくて済む
-        if child.uplinks:
-            label = sheet.cell(
-                row=child.middle - 1, column=max(child.col - 4, bus), value=child.uplinks[0]
-            )
-            label.font = Font(size=8, color="444444")
-            label.alignment = Alignment(horizontal="right")
+        # ポート名は**その機器の隣**に書く。親の右に下りポート、子の左に上りポート。
+        # 線の真ん中に2つ並べると「どちらがどちら側か」を覚える必要が出る
+        pair = port_of.get((parent_entry.device_id, child.device_id))
+        if pair:
+            down, up = pair
+            if down:
+                cell = sheet.cell(
+                    row=parent_entry.middle - 1, column=parent_entry.col + BOX_W, value=down
+                )
+                cell.font = Font(size=8, color="444444")
+                cell.alignment = Alignment(horizontal="left")
+            if up:
+                cell = sheet.cell(row=child.middle - 1, column=max(child.col - 5, bus), value=up)
+                cell.font = Font(size=8, color="444444")
+                cell.alignment = Alignment(horizontal="right")
 
     for entry in placed:
         draw_box(entry)
