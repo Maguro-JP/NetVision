@@ -4,7 +4,7 @@ import { Link as RouterLink } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Site, TopologyGraph } from "../api/types";
-import { BOUNDS, locate } from "../lib/japan";
+import { BOUNDS, COASTLINE, locate } from "../lib/japan";
 
 /* ネットワークを立体で眺めるページ。
  *
@@ -18,7 +18,7 @@ import { BOUNDS, locate } from "../lib/japan";
  * Canvas に自前で投影し、住所から座標を出す表も同梱している。
  */
 
-type Mode = "layer" | "sphere" | "map";
+type Mode = "layer" | "sphere" | "tree" | "map";
 
 interface Point {
   id: number;
@@ -59,6 +59,7 @@ const TYPE_COLOR: Record<string, string> = {
 const MODES: { value: Mode; label: string; hint: string }[] = [
   { value: "sphere", label: "球", hint: "上下左右前後に広がる形で見ます" },
   { value: "layer", label: "層", hint: "上位を上に、段ごとの輪で見ます" },
+  { value: "tree", label: "木", hint: "上位から枝分かれする形で見ます" },
   { value: "map", label: "地図", hint: "拠点の住所から日本地図に置いて見ます" },
 ];
 
@@ -190,6 +191,65 @@ function asSphere(points: Point[], layers: Map<number, number>): void {
   }
 }
 
+/* 緯度経度を地図の平面（x が東西、z が南北）に置く。 */
+function onMap(lat: number, lon: number): { x: number; z: number } {
+  const width = BOUNDS.maxLon - BOUNDS.minLon;
+  const depth = BOUNDS.maxLat - BOUNDS.minLat;
+  return {
+    x: ((lon - (BOUNDS.minLon + width / 2)) / width) * 900,
+    z: ((BOUNDS.minLat + depth / 2 - lat) / depth) * 700,
+  };
+}
+
+/* 木。親から枝分かれさせて、枝ごとに向きを変える。
+ *
+ * 層と違って、同じ段でも系統ごとにまとまるので、どの支社の配下かが見える。
+ */
+function asTree(points: Point[], graph: TopologyGraph, layers: Map<number, number>): void {
+  const byId = new Map(points.map((p) => [p.id, p]));
+  const near = new Map<number, number[]>();
+  for (const point of points) near.set(point.id, []);
+  for (const edge of graph.edges) {
+    near.get(edge.source)?.push(edge.target);
+    near.get(edge.target)?.push(edge.source);
+  }
+
+  const order = [...byId.keys()].sort(
+    (a, b) => (layers.get(a) ?? 0) - (layers.get(b) ?? 0) || a - b,
+  );
+  const seen = new Set<number>();
+
+  // 根から順に、子を扇状に広げていく
+  const place = (id: number, depth: number, centre: number, spread: number) => {
+    const point = byId.get(id)!;
+    const radius = depth === 0 ? 0 : 90 + depth * 90;
+    point.x = Math.cos(centre) * radius;
+    point.y = depth * 110 - 160;
+    point.z = Math.sin(centre) * radius;
+
+    const kids = (near.get(id) ?? []).filter((child) => !seen.has(child));
+    kids.forEach((child) => seen.add(child));
+    kids.forEach((child, index) => {
+      const step = spread / Math.max(kids.length, 1);
+      const angle = centre - spread / 2 + step * (index + 0.5);
+      place(child, depth + 1, angle, Math.min(spread, step * 2.2));
+    });
+  };
+
+  const roots = order.filter((id) => (layers.get(id) ?? 0) === (layers.get(order[0]) ?? 0));
+  roots.forEach((id, index) => {
+    if (seen.has(id)) return;
+    seen.add(id);
+    place(id, 0, (index / Math.max(roots.length, 1)) * Math.PI * 2, Math.PI * 2);
+  });
+  for (const id of order) {
+    if (!seen.has(id)) {
+      seen.add(id);
+      place(id, 0, Math.random() * Math.PI * 2, Math.PI * 2);
+    }
+  }
+}
+
 /* 地図。拠点の住所から日本地図に置く。高さは段（上位ほど高い）。
  *
  * 住所から位置が分からない機器は地図に置かない。それらしい場所に置くと、
@@ -225,10 +285,9 @@ function asMap(
     const jitter = seen === 0 ? 0 : 12 + seen * 4;
     const angle = seen * 2.4;
 
-    const width = BOUNDS.maxLon - BOUNDS.minLon;
-    const depth = BOUNDS.maxLat - BOUNDS.minLat;
-    point.x = ((at.lon - (BOUNDS.minLon + width / 2)) / width) * 900 + Math.cos(angle) * jitter;
-    point.z = ((BOUNDS.minLat + depth / 2 - at.lat) / depth) * 700 + Math.sin(angle) * jitter;
+    const spot = onMap(at.lat, at.lon);
+    point.x = spot.x + Math.cos(angle) * jitter;
+    point.z = spot.z + Math.sin(angle) * jitter;
     point.y = -height;
   }
   return unknown;
@@ -271,6 +330,7 @@ export default function SpacePage() {
     const layers = layersOf(graph);
     if (mode === "layer") asLayers(made, layers);
     else if (mode === "sphere") asSphere(made, layers);
+    else if (mode === "tree") asTree(made, graph, layers);
     const missing = mode === "map" ? asMap(made, layers, addressOf) : 0;
     return { points: made, unlocated: missing };
   }, [graph, mode, addressOf]);
@@ -347,28 +407,37 @@ export default function SpacePage() {
         };
       };
 
-      // 地図では緯度経度の目盛りを薄く敷く。点だけだと地図に見えない
+      // 地図では輪郭と目盛りを薄く敷く。点だけだと地図に見えない
       if (mode === "map") {
-        context.strokeStyle = "rgba(124, 196, 255, 0.08)";
+        context.strokeStyle = "rgba(124, 196, 255, 0.07)";
         context.lineWidth = 1;
         for (let lon = BOUNDS.minLon; lon <= BOUNDS.maxLon; lon += 5) {
-          const width = BOUNDS.maxLon - BOUNDS.minLon;
-          const x = ((lon - (BOUNDS.minLon + width / 2)) / width) * 900;
-          const a = project(x, 0, -350);
-          const b = project(x, 0, 350);
+          const a = project(onMap(0, lon).x, 0, -350);
+          const b = project(onMap(0, lon).x, 0, 350);
           context.beginPath();
           context.moveTo(a.sx, a.sy);
           context.lineTo(b.sx, b.sy);
           context.stroke();
         }
         for (let lat = BOUNDS.minLat; lat <= BOUNDS.maxLat; lat += 5) {
-          const depth = BOUNDS.maxLat - BOUNDS.minLat;
-          const z = ((BOUNDS.minLat + depth / 2 - lat) / depth) * 700;
-          const a = project(-450, 0, z);
-          const b = project(450, 0, z);
+          const a = project(-450, 0, onMap(lat, 0).z);
+          const b = project(450, 0, onMap(lat, 0).z);
           context.beginPath();
           context.moveTo(a.sx, a.sy);
           context.lineTo(b.sx, b.sy);
+          context.stroke();
+        }
+
+        context.strokeStyle = "rgba(150, 210, 255, 0.35)";
+        context.lineWidth = 1.2;
+        for (const island of COASTLINE) {
+          context.beginPath();
+          island.forEach((at, index) => {
+            const spot = onMap(at.lat, at.lon);
+            const screen = project(spot.x, 0, spot.z);
+            if (index === 0) context.moveTo(screen.sx, screen.sy);
+            else context.lineTo(screen.sx, screen.sy);
+          });
           context.stroke();
         }
       }
@@ -441,8 +510,11 @@ export default function SpacePage() {
       }
 
       const sorted = [...points].sort((a, b) => a.scale - b.scale);
+      // 地図では丸を小さくする。主役は線を流れる光の方
+      const dot = mode === "map" ? 1.2 : 4;
+      const grow = mode === "map" ? 1.8 : 5;
       for (const point of sorted) {
-        const size = 4 + point.scale * 5;
+        const size = dot + point.scale * grow;
         // 玉が届いた直後は明るくする（0.6 秒ほどで戻す）
         const lit = Math.max(0, 1 - (now - point.litAt) / 600);
         context.fillStyle = TYPE_COLOR[point.deviceType] ?? TYPE_COLOR.other;
@@ -458,7 +530,7 @@ export default function SpacePage() {
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
-        if (point.scale > 0.95) {
+        if (point.scale > 0.95 && mode !== "map") {
           context.fillStyle = "#c9d4e2";
           context.font = "11px system-ui, sans-serif";
           context.fillText(point.hostname, point.screenX + size + 3, point.screenY + 4);
