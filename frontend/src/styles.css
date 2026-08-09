@@ -783,3 +783,18 @@ button:disabled {
   line-height: 1.6;
   white-space: pre;
 }
+
+/* 立体表示のキャンバス。線と点だけなので、背景は暗いままにする */
+.space-canvas {
+  width: 100%;
+  height: calc(100vh - 260px);
+  min-height: 420px;
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  background: #0d1117;
+  touch-action: none;
+  cursor: grab;
+}
+.space-canvas:active {
+  cursor: grabbing;
+}
