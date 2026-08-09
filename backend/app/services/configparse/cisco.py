@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import vlanlist
+from app.services.configparse import tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
@@ -60,6 +60,7 @@ def parse(text: str, vendor: Vendor = Vendor.CISCO_IOS) -> ParsedConfig:
     _parse_cdp_detail(text, parsed)
     _parse_lldp_detail(text, parsed)
     _parse_neighbor_table(text, parsed)
+    tunnels.parse_block_style(text, parsed)
 
     return parsed
 

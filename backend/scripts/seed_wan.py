@@ -21,7 +21,7 @@ from __future__ import annotations
 
 from sqlalchemy.orm import Session
 
-from app.models import Device, DeviceType, Site
+from app.models import Device, DeviceTunnel, DeviceType, Site
 from app.models.topology import Interface, Link, LinkOrigin
 from app.services.configparse import normalize
 
@@ -152,6 +152,9 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
     devices: list[Device] = []
     links: list[tuple[str, str, str, str]] = []
     interfaces: list[tuple[str, str]] = []
+    # (機器, トンネル名, 種別, 宛先IP, 説明)。物理では支社を経由していても、
+    # 論理ではセンターと直結して見える——そのズレを図で見せるために入れる
+    tunnels: list[tuple[str, str, str, str, str]] = []
 
     def site(name: str, address: str) -> Site:
         entry = Site(name=name, address=address)
@@ -277,6 +280,16 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
             # 「空きがどれだけあるか」を割付表で見せるため
             interfaces.extend((station_sw, f"GigabitEthernet1/0/{port}") for port in range(1, 25))
             interfaces.append((station_sw, "GigabitEthernet1/0/25"))
+            # 拠点からセンターへは IPsec で直に張る。物理は支社経由、論理は直結
+            tunnels.append(
+                (
+                    station_rt,
+                    "Tunnel0",
+                    "ipsec",
+                    f"10.{1 if side == 'east' else 2}.0.1",
+                    f"{'東' if side == 'east' else '西'}日本センター向け",
+                )
+            )
 
     db.add_all(devices)
     db.flush()
@@ -309,6 +322,20 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
     )
     db.add_all(
         [
+            DeviceTunnel(
+                device_id=by_host[host].id,
+                name=name,
+                kind=kind,
+                source=None,
+                destination=destination,
+                description=description,
+            )
+            for host, name, kind, destination, description in tunnels
+            if host in by_host
+        ]
+    )
+    db.add_all(
+        [
             Interface(
                 device_id=by_host[host].id,
                 name=name,
@@ -324,4 +351,5 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
         "devices": len(devices),
         "links": len(links),
         "interfaces": len(interfaces),
+        "tunnels": len(tunnels),
     }

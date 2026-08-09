@@ -21,6 +21,7 @@ from app.models.topology import (
     LinkOrigin,
     TopologyNode,
 )
+from app.models.tunnel import DeviceTunnel
 from app.models.vlan import DeviceVlan, DeviceVrf, Vlan
 
 __all__ = [
@@ -57,6 +58,7 @@ __all__ = [
     "ScenarioStatus",
     "DeviceVlan",
     "DeviceVrf",
+    "DeviceTunnel",
     "Vlan",
     "Site",
 ]

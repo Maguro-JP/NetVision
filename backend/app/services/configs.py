@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Device, DeviceVlan, DeviceVrf
+from app.models import Device, DeviceTunnel, DeviceVlan, DeviceVrf
 from app.models.change_log import ChangeSource
 from app.models.topology import ConfigSnapshot, Interface, Link, LinkOrigin
 from app.services import configparse
@@ -237,6 +237,7 @@ def ingest(
         if device is not None:
             _sync_vlans(db, device, parsed)
             _sync_vrfs(db, device, parsed)
+            _sync_tunnels(db, device, parsed)
             _sync_interfaces(db, device, parsed)
 
             if apply_inventory:
@@ -307,6 +308,37 @@ def _sync_vrfs(db: Session, device: Device, parsed: ParsedConfig) -> None:
             continue
         row.rd = vrf.rd or row.rd
         row.description = vrf.description or row.description
+
+    for row in existing.values():
+        db.delete(row)
+
+
+def _sync_tunnels(db: Session, device: Device, parsed: ParsedConfig) -> None:
+    """その機器に張られているトンネルを揃える。論理構成図の材料。"""
+    rows = db.scalars(select(DeviceTunnel).where(DeviceTunnel.device_id == device.id))
+    existing = {t.name: t for t in rows}
+
+    for tunnel in parsed.tunnels:
+        row = existing.pop(tunnel.name, None)
+        if row is None:
+            db.add(
+                DeviceTunnel(
+                    device_id=device.id,
+                    name=tunnel.name,
+                    kind=tunnel.kind,
+                    source=tunnel.source,
+                    destination=tunnel.destination,
+                    vrf=tunnel.vrf,
+                    description=tunnel.description,
+                )
+            )
+            continue
+        # 最新の Config に合わせる。消えた設定を残すと、無い経路が図に出る
+        row.kind = tunnel.kind
+        row.source = tunnel.source
+        row.destination = tunnel.destination
+        row.vrf = tunnel.vrf
+        row.description = tunnel.description
 
     for row in existing.values():
         db.delete(row)

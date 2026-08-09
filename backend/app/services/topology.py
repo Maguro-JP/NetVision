@@ -103,6 +103,16 @@ def get_graph(
     include_retired: bool = False,
     orientation: str = "vertical",
 ) -> TopologyGraph:
+    if layer == "logical":
+        # 論理図はトンネルから組み立てる。物理の結線とは別の話なので、
+        # 同じ関数の中で分岐させて、呼び出し側（画面・書き出し）は同じままにする
+        from app.services import topology_logical
+
+        graph = topology_logical.build(
+            db, include_retired=include_retired, orientation=orientation
+        ).graph
+        return _apply_saved_positions(db, graph)
+
     devices = list(
         db.scalars(
             select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
@@ -171,6 +181,20 @@ def get_graph(
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
     )
+
+
+def _apply_saved_positions(db: Session, graph: TopologyGraph) -> TopologyGraph:
+    """人が動かした位置を反映する。図の種類が違っても、直した配置は残す。"""
+    saved = {
+        node.device_id: node
+        for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == graph.layer))
+    }
+    for node in graph.nodes:
+        position = saved.get(node.device_id)
+        if position is not None:
+            node.x, node.y, node.placed = position.x, position.y, True
+    graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
+    return graph
 
 
 SCOPE_ALL = "all"

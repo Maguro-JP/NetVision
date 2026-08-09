@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import vlanlist
+from app.services.configparse import tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
@@ -150,6 +150,7 @@ def _parse_ix(text: str) -> ParsedConfig:
 
     _parse_ix_vrfs(text, parsed)
     _parse_ix_lldp(text, parsed)
+    tunnels.parse_block_style(text, parsed)
     return parsed
 
 
@@ -298,6 +299,7 @@ def _parse_qx(text: str) -> ParsedConfig:
     _parse_qx_vpn_instances(text, parsed)
 
     _parse_qx_lldp(text, parsed)
+    tunnels.parse_block_style(text, parsed)
     return parsed
 
 

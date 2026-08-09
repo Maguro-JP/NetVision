@@ -81,6 +81,26 @@ class ParsedVrf:
 
 
 @dataclass
+class ParsedTunnel:
+    """トンネル1本分（GRE / IPsec など）。
+
+    論理構成図の材料。物理では「拠点→支社→センター」と辿っていても、
+    論理ではセンターと直結して見えることがある。**そのズレが障害切り分けの
+    肝**になるので、物理と別に持つ。
+
+    宛先は IP でしか書かれていないことが多い。相手機器の特定は、
+    台帳の管理IP・インターフェースIP と突き合わせて後から行う。
+    """
+
+    name: str
+    kind: str | None = None  # gre / ipsec / vxlan など、設定に書かれていた種別
+    source: str | None = None  # 送信元 IP、またはインターフェース名
+    destination: str | None = None
+    vrf: str | None = None
+    description: str | None = None
+
+
+@dataclass
 class ParsedNeighbor:
     """隣接情報。ここから物理結線を推定する。"""
 
@@ -107,6 +127,18 @@ class ParsedConfig:
     neighbors: list[ParsedNeighbor] = field(default_factory=list)
     vlans: dict[int, str] = field(default_factory=dict)
     vrfs: list[ParsedVrf] = field(default_factory=list)
+    tunnels: list[ParsedTunnel] = field(default_factory=list)
+
+    def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
+        """同じトンネルが複数箇所に出てきたらまとめる。"""
+        for existing in self.tunnels:
+            if normalize(existing.name) == normalize(tunnel.name):
+                for name in ("kind", "source", "destination", "vrf", "description"):
+                    if getattr(existing, name) is None:
+                        setattr(existing, name, getattr(tunnel, name))
+                return existing
+        self.tunnels.append(tunnel)
+        return tunnel
 
     def add_interface(self, interface: ParsedInterface) -> ParsedInterface:
         """同じポートが複数箇所に出てきたらまとめる（config と show 出力の両方に出るため）。"""

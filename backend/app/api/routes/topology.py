@@ -57,6 +57,32 @@ def get_topology(
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
+@router.get("/tunnels")
+def list_tunnels(db: DbSession) -> dict:
+    """トンネル（論理構成図の材料）の状況を返す。
+
+    相手が特定できなかったものを**必ず一緒に返す**。黙って落とすと
+    「トンネルが無い」と読まれるが、実際には台帳に無い相手（他社側の装置や
+    クラウド）に張っていることが普通にある。
+    """
+    from app.services import topology_logical
+
+    result = topology_logical.build(db)
+    return {
+        "tunnel_count": len(result.graph.edges),
+        "device_count": len(result.graph.nodes),
+        "unresolved": [
+            {
+                "device": item.device,
+                "name": item.name,
+                "destination": item.destination,
+                "kind": item.kind,
+            }
+            for item in result.unresolved
+        ],
+    }
+
+
 @router.get("/vlans", response_model=list[VlanRead])
 def list_vlans(db: DbSession) -> list[VlanRead]:
     """定義されている VLAN を、載っている機器つきで返す。

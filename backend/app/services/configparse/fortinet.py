@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 
+from app.services.configparse import tunnels
 from app.services.configparse.base import ParsedConfig, ParsedInterface, ParsedVrf, Vendor
 
 _HOSTNAME = re.compile(r'^\s*set hostname\s+"?([^"\n]+)"?', re.MULTILINE)
@@ -37,6 +38,7 @@ def parse(text: str) -> ParsedConfig:
 
     _parse_interfaces(text, parsed)
     _parse_vdoms(text, parsed)
+    tunnels.parse_fortios(text, parsed)
     return parsed
 
 
