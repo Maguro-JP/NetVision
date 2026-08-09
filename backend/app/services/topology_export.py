@@ -174,6 +174,10 @@ def render_svg(
             f"{_esc(scope)} / {_esc(counts)}</text>"
         )
 
+    # 同じ機器同士を何本も結んでいる場合（LAG など）に、線を平行にずらすための番号。
+    # 中心同士を直線で結ぶだけだと**完全に重なって1本に見える**
+    parallel = _parallel_index(graph)
+
     # --- 結線（ノードより先に描いて背面に回す） ---
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
@@ -181,6 +185,14 @@ def render_svg(
             continue
         x1, y1 = source[0] + NODE_W / 2, source[1] + NODE_H / 2
         x2, y2 = target[0] + NODE_W / 2, target[1] + NODE_H / 2
+
+        shift = parallel.get(edge.id, 0.0)
+        if shift:
+            length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
+            offset_x = -(y2 - y1) / length * shift
+            offset_y = (x2 - x1) / length * shift
+            x1, y1 = x1 + offset_x, y1 + offset_y
+            x2, y2 = x2 + offset_x, y2 + offset_y
 
         # 両側から確認できた結線は実線、片側だけのものは破線にする。
         # シンプル図では全部実線にする。破線は「取り込みの確からしさ」の話で、
@@ -385,6 +397,29 @@ def _place_peer(
     return candidates[index]
 
 
+def _parallel_index(graph: TopologyGraph) -> dict[int, float]:
+    """同じ機器同士を結ぶ線を、平行にずらす量を決める。
+
+    中心と中心を直線で結ぶだけだと、2本目以降が1本目に完全に重なる。
+    **図の上では1本に見えるのに、実際は2本ある**という読み違いを生む。
+    LAG や冗長リンクでは普通に起きる。
+    """
+    groups: dict[tuple[int, int], list[int]] = {}
+    for edge in graph.edges:
+        key = (min(edge.source, edge.target), max(edge.source, edge.target))
+        groups.setdefault(key, []).append(edge.id)
+
+    out: dict[int, float] = {}
+    for members in groups.values():
+        if len(members) < 2:
+            continue
+        # 束の中央を元の線の位置に保つ
+        center = (len(members) - 1) / 2
+        for index, edge_id in enumerate(members):
+            out[edge_id] = (index - center) * _PARALLEL_GAP
+    return out
+
+
 def _peer_box(x: float, y: float, peer: _Peer, simple: bool) -> str:
     """絞り込みの外にいる相手を、簡易表示で描く。
 
@@ -433,6 +468,8 @@ _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
 _SIDE_OFFSET = 7.0
 _LABEL_FONT = 10.0
+# 同じ機器同士を結ぶ線を、何 px ずつ離して描くか
+_PARALLEL_GAP = 11.0
 
 
 def _port_label(

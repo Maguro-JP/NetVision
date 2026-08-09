@@ -276,3 +276,36 @@ def test_labels_avoid_the_peer_boxes():
         svg = render_svg(graph, site_id=1, port_style=style)
         assert "edge-rt-01" in svg  # 対向が残っている
         assert_no_overlap(svg)
+
+
+def test_parallel_links_do_not_draw_on_top_of_each_other():
+    """同じ機器同士を結ぶ線が、重なって1本に見えないこと。
+
+    LAG や冗長リンクでは普通に起きる。図で1本に見えると、
+    **実際は2本あるのに1本だと読まれる**。
+    """
+    import re
+
+    nodes = [node(1, "core-sw-01", 0, 0), node(2, "core-sw-02", 400, 0)]
+    edges = [
+        edge(1, 1, 2, "TenGigabitEthernet1/1/1", "TenGigabitEthernet1/1/1"),
+        edge(2, 1, 2, "TenGigabitEthernet1/1/2", "TenGigabitEthernet1/1/2"),
+        edge(3, 1, 2, "TenGigabitEthernet1/1/3", "TenGigabitEthernet1/1/3"),
+    ]
+    svg = render_svg(TopologyGraph(layer="physical", nodes=nodes, edges=edges))
+
+    lines = re.findall(r'<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"', svg)
+    drawn = [tuple(line) for line in lines]
+    assert len(drawn) == len(set(drawn)), f"線が重なっています: {drawn}"
+
+
+def test_a_single_link_is_not_shifted():
+    """1本しか無いときは、元の位置のまま引くこと。"""
+    import re
+
+    nodes = [node(1, "sw-a", 0, 0), node(2, "sw-b", 400, 0)]
+    edges = [edge(1, 1, 2, "GigabitEthernet1/0/1", "GigabitEthernet1/0/2")]
+    svg = render_svg(TopologyGraph(layer="physical", nodes=nodes, edges=edges))
+
+    line = re.search(r'<line x1="([-\d.]+)" y1="([-\d.]+)" x2="([-\d.]+)" y2="([-\d.]+)"', svg)
+    assert line and line.group(2) == line.group(4)  # 水平のまま
