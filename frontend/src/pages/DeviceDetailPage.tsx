@@ -166,7 +166,13 @@ export default function DeviceDetailPage() {
         <div>
           <span className="k">設置場所</span>
           <span>
-            {device.site_name ?? "—"}
+            {device.site_id ? (
+              <Link to={`/topology?site=${device.site_id}`} title="この拠点の構成図を開きます">
+                {device.site_name ?? "—"}
+              </Link>
+            ) : (
+              (device.site_name ?? "—")
+            )}
             {device.rack ? ` / ${device.rack}` : ""}
             {device.rack_unit ? ` ${device.rack_unit}` : ""}
           </span>

@@ -201,7 +201,8 @@ h2 {
 
 table {
   width: 100%;
-  border-collapse: collapse;
+  border-collapse: separate;
+  border-spacing: 0;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
@@ -213,18 +214,54 @@ td {
   padding: 9px 12px;
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
+  vertical-align: middle;
 }
 th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
   background: var(--panel-2);
   color: var(--muted);
   font-weight: 600;
   font-size: 12px;
+  /* sticky にすると border-bottom が一緒にスクロールしてしまうので影で代える */
+  box-shadow: inset 0 -1px 0 var(--border);
+  border-bottom: none;
+}
+/* 数量は右揃えの方が桁を比べやすい */
+th.num,
+td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+/* 日付・バージョンなど、桁がずれると読みにくいもの */
+td.mono {
+  font-variant-numeric: tabular-nums;
 }
 tbody tr:last-child td {
   border-bottom: none;
 }
+/* 1行おきに薄く敷く。列が多い表で行を追いやすくする */
+tbody tr:nth-child(even) {
+  background: rgb(255 255 255 / 1.5%);
+}
 tbody tr:hover {
   background: var(--panel-2);
+}
+/* 表の中のボタンは行の高さを膨らませない */
+td button {
+  padding: 4px 9px;
+  font-size: 13px;
+}
+td input,
+td select {
+  padding: 5px 8px;
+}
+/* 説明文のように長いものは折り返す */
+td.wrap {
+  white-space: normal;
+  min-width: 200px;
+  max-width: 420px;
 }
 
 .badge {

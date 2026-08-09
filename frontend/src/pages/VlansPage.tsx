@@ -203,7 +203,7 @@ export default function VlansPage() {
                         </div>
                       )}
                     </td>
-                    <td className="muted" style={{ fontSize: 12 }}>
+                    <td className="muted num" style={{ fontSize: 12 }}>
                       アクセス {vlan.access_port_count} / トランク {vlan.trunk_port_count}
                       {vlan.native_port_count > 0 && ` / ネイティブ ${vlan.native_port_count}`}
                     </td>

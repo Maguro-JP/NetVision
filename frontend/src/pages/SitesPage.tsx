@@ -81,9 +81,17 @@ export default function SitesPage() {
               <tr key={site.id}>
                 <td>
                   <Link to={`/devices?site_id=${site.id}`}>{site.name}</Link>
+                  {" "}
+                  <Link
+                    to={`/topology?site=${site.id}`}
+                    className="muted"
+                    title="この拠点だけの構成図を開きます"
+                  >
+                    図で見る
+                  </Link>
                 </td>
                 <td className="muted">{site.address ?? "—"}</td>
-                <td>{site.device_count}</td>
+                <td className="num">{site.device_count}</td>
                 <td>
                   <button
                     className="danger"

@@ -33,8 +33,16 @@ export default function DeviceTable({ devices }: { devices: Device[] }) {
             <td>
               {d.vendor} / {d.model}
             </td>
-            <td className="muted">{d.os_version ?? "—"}</td>
-            <td className="muted">{d.site_name ?? "—"}</td>
+            <td className="muted mono">{d.os_version ?? "—"}</td>
+            <td className="muted">
+              {d.site_id ? (
+                <Link to={`/topology?site=${d.site_id}`} title="この拠点だけの構成図を開きます">
+                  {d.site_name ?? "—"}
+                </Link>
+              ) : (
+                (d.site_name ?? "—")
+              )}
+            </td>
             <td>
               {formatDate(d.lifecycle.maintenance_end)}
               <span className="muted">

@@ -16,7 +16,7 @@ import {
 import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
+import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { TopologyEdge, TopologyGraph } from "../api/types";
@@ -32,6 +32,25 @@ const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
   { value: "number", label: "番号だけ", hint: "種別は色で表します（Gi は青、Te は緑）" },
   { value: "full", label: "そのまま", hint: "Config に書かれている名前をそのまま出します" },
 ];
+
+/** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
+const VIEW_KEY = "netvision.topology.view";
+
+interface ViewSettings {
+  portStyle: PortStyle;
+  alongLine: boolean;
+  simple: boolean;
+}
+
+function loadView(): ViewSettings {
+  const fallback: ViewSettings = { portStyle: "short", alongLine: false, simple: false };
+  try {
+    const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}");
+    return { ...fallback, ...saved };
+  } catch {
+    return fallback;
+  }
+}
 
 const LAYERS = [
   { value: "physical", label: "物理構成" },
@@ -112,19 +131,26 @@ function warningOf(edge: TopologyEdge): string | null {
 
 function TopologyEditor() {
   const queryClient = useQueryClient();
+  // 他の画面から「この拠点を図で見る」で飛んで来られるようにする
+  const [params, setParams] = useSearchParams();
   const [layer, setLayer] = useState("physical");
+  const view = loadView();
   // 選んだ VLAN を持つ機器だけを残す。空なら全部表示
-  const [selectedVlans, setSelectedVlans] = useState<number[]>([]);
-  const [selectedVrf, setSelectedVrf] = useState<string>("");
+  const [selectedVlans, setSelectedVlans] = useState<number[]>(() =>
+    params.get("vlan") ? [Number(params.get("vlan"))] : [],
+  );
+  const [selectedVrf, setSelectedVrf] = useState<string>(() => params.get("vrf") ?? "");
   // 拠点で絞る。現場では自分の拠点だけを見たいことが多い
-  const [selectedSite, setSelectedSite] = useState<number | "">("");
+  const [selectedSite, setSelectedSite] = useState<number | "">(() =>
+    params.get("site") ? Number(params.get("site")) : "",
+  );
   // VLAN が数百ある現場ではチェックボックスを全部出しても選べない
   const [vlanFilter, setVlanFilter] = useState("");
   // 機器名と線だけの表示。現場で使う図では付帯情報がむしろ邪魔になる
-  const [simple, setSimple] = useState(false);
+  const [simple, setSimple] = useState(view.simple);
   // ポート名の出し方。長い名前が線に重なると図が読めなくなる
-  const [portStyle, setPortStyle] = useState<PortStyle>("short");
-  const [alongLine, setAlongLine] = useState(false);
+  const [portStyle, setPortStyle] = useState<PortStyle>(view.portStyle);
+  const [alongLine, setAlongLine] = useState(view.alongLine);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
@@ -208,6 +234,21 @@ function TopologyEditor() {
     setNodes,
     setEdges,
   ]);
+
+  // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
+  // 毎回チェックし直さずに済むようにする
+  useEffect(() => {
+    localStorage.setItem(VIEW_KEY, JSON.stringify({ portStyle, alongLine, simple }));
+  }, [portStyle, alongLine, simple]);
+
+  // 絞り込みを URL に残す。この画面をそのまま人に送れる
+  useEffect(() => {
+    const next = new URLSearchParams();
+    if (selectedSite !== "") next.set("site", String(selectedSite));
+    if (selectedVrf) next.set("vrf", selectedVrf);
+    if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
+    setParams(next, { replace: true });
+  }, [selectedSite, selectedVrf, selectedVlans, setParams]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
