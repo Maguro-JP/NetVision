@@ -269,7 +269,14 @@ def scope_graph(
                 hidden[members[0]] = len(members) - 1
 
     nodes = [node for node in graph.nodes if node.device_id in keep]
-    _compact(nodes, orientation=orientation)
+    # 上下関係は網全体で見る。切り出した中だけで決めると、その範囲で
+    # たまたま真ん中にいる機器が最上位になってしまう
+    _compact(
+        nodes,
+        [e for e in graph.edges if e.source in keep and e.target in keep],
+        rank=hierarchy_rank(graph),
+        orientation=orientation,
+    )
     for node in nodes:
         # 対向として足しただけの機器は、図の上で区別できるようにする
         node.outside = node.device_id not in inside
@@ -289,11 +296,82 @@ def scope_graph(
     )
 
 
-def _compact(nodes: list[TopologyNodeView], *, orientation: str = "vertical") -> None:
-    """絞り込んだ分だけで並べ直す。
+def _adjacency(graph) -> dict[int, list[int]]:
+    out: dict[int, list[int]] = {n.device_id: [] for n in graph.nodes}
+    for edge in graph.edges:
+        if edge.source in out and edge.target in out:
+            out[edge.source].append(edge.target)
+            out[edge.target].append(edge.source)
+    return out
 
-    座標は網全体を前提に振ってあるので、数台に絞ると機器が画面いっぱいに
-    散らばって、線を目で追えなくなる。残った機器だけで段を組み直す。
+
+def _far(start: int, adjacency: dict[int, list[int]]) -> tuple[int, dict[int, int]]:
+    """`start` から一番遠い機器と、各機器までの距離。"""
+    distance = {start: 0}
+    queue = [start]
+    last = start
+    while queue:
+        current = queue.pop(0)
+        last = current
+        for neighbour in adjacency.get(current, []):
+            if neighbour not in distance:
+                distance[neighbour] = distance[current] + 1
+                queue.append(neighbour)
+    return last, distance
+
+
+def hierarchy_rank(graph) -> dict[int, int]:
+    """網全体の「上位からの遠さ」。小さいほど上位。
+
+    繋がっている本数では上下は決まらない。支社ルータは配下の拠点が多いぶん
+    本数が多くなり、センターより上に見えてしまう。
+
+    代わりに網の中心を求める。端から端（一番長い経路）の真ん中にいるのは
+    センター側なので、そこからのホップ数を上下の目安にする。
+    木構造の網ではこれがよく合う。
+    """
+    adjacency = _adjacency(graph)
+    if not adjacency:
+        return {}
+
+    ranks: dict[int, int] = {}
+    remaining = set(adjacency)
+    while remaining:
+        # 島ごとに求める。繋がっていない機器同士の上下は比べようがない
+        seed = min(remaining)
+        end_a, _ = _far(seed, adjacency)
+        end_b, from_a = _far(end_a, adjacency)
+        _, from_b = _far(end_b, adjacency)
+        # 端から端への経路の真ん中にある機器を中心とする
+        component = [device_id for device_id in from_a if device_id in remaining]
+        centre = min(
+            component,
+            key=lambda device_id: (
+                max(from_a.get(device_id, 0), from_b.get(device_id, 0)),
+                device_id,
+            ),
+        )
+        _, distance = _far(centre, adjacency)
+        for device_id in component:
+            ranks[device_id] = distance.get(device_id, 0)
+            remaining.discard(device_id)
+    return ranks
+
+
+def _compact(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView] | None = None,
+    *,
+    rank: dict[int, int] | None = None,
+    orientation: str = "vertical",
+) -> None:
+    """絞り込んだ分だけで、上下（左右）の関係が分かる木に並べ直す。
+
+    座標は網全体を前提に振ってあるので、数台に絞ると機器が散らばり、
+    線を目で追えなくなる。ここで残った機器だけを並べ直す。
+
+    並べ方は木。上位を上（横向きなら左）に置き、その配下を1段下へ広げる。
+    同じ段に上位も下位も混ぜると、線が機器の間を横切って重なってしまう。
 
     人が動かして保存した配置が混ざっている場合は何もしない。
     直した配置を勝手に戻すと、直した意味が無くなる。
@@ -301,30 +379,75 @@ def _compact(nodes: list[TopologyNodeView], *, orientation: str = "vertical") ->
     if not nodes or any(node.placed for node in nodes):
         return
 
-    tiers: dict[int, list[TopologyNodeView]] = {}
-    for node in nodes:
-        try:
-            tier = TIER_ORDER.get(DeviceType(node.device_type), 7)
-        except ValueError:
-            tier = 7
-        tiers.setdefault(tier, []).append(node)
+    by_id = {node.device_id: node for node in nodes}
+    graph = TopologyGraph(layer="", nodes=nodes, edges=list(edges or []))
+    if rank is None:
+        rank = hierarchy_rank(graph)
+
+    neighbours = _adjacency(graph)
+    order = sorted(
+        by_id,
+        key=lambda device_id: (
+            rank.get(device_id, 0),
+            _tier_of(by_id[device_id]),
+            by_id[device_id].hostname,
+        ),
+    )
+
+    # 上位から幅優先でたどって親子を決める。段（種別）だけで決めると、
+    # 拠点ルータと支社ルータのように同じ種別が縦に並ぶ構成を表現できない
+    depth: dict[int, int] = {}
+    children: dict[int, list[int]] = {}
+    seen: set[int] = set()
+    roots: list[int] = []
+    for start in order:
+        if start in seen:
+            continue
+        roots.append(start)
+        seen.add(start)
+        depth[start] = 0
+        queue = [start]
+        while queue:
+            current = queue.pop(0)
+            for neighbour in sorted(neighbours.get(current, []), key=lambda i: by_id[i].hostname):
+                if neighbour in seen:
+                    continue
+                seen.add(neighbour)
+                depth[neighbour] = depth[current] + 1
+                children.setdefault(current, []).append(neighbour)
+                queue.append(neighbour)
+
+    # 葉から順に横位置を決め、親は子の中央に置く。これで線が交差しない
+    slot = 0.0
+    across: dict[int, float] = {}
+
+    def place(device_id: int) -> float:
+        nonlocal slot
+        kids = children.get(device_id, [])
+        if not kids:
+            across[device_id] = slot
+            slot += 1.0
+            return across[device_id]
+        spots = [place(kid) for kid in kids]
+        across[device_id] = (spots[0] + spots[-1]) / 2
+        return across[device_id]
+
+    for root in roots:
+        place(root)
+        slot += 1.0  # 島の間を1つ空ける
 
     horizontal = orientation == "horizontal"
-    cursor = 0.0
-    for _, members in sorted(tiers.items()):
-        members.sort(key=lambda n: n.hostname)
-        # 1段に並べすぎると横に伸びて画面に収まらない。折り返す
-        rows = [members[i : i + _WRAP] for i in range(0, len(members), _WRAP)]
-        for row in rows:
-            offset = -(len(row) - 1) / 2
-            for position, node in enumerate(row):
-                along = offset + position
-                if horizontal:
-                    node.x, node.y = cursor, along * _Y_SPACING
-                else:
-                    node.x, node.y = along * _X_SPACING, cursor
-            cursor += _WRAP_SPACING
-        cursor += _Y_SPACING - _WRAP_SPACING
+    for device_id, node in by_id.items():
+        along = across.get(device_id, 0.0) * _X_SPACING
+        down = depth.get(device_id, 0) * _Y_SPACING
+        node.x, node.y = (down, along) if horizontal else (along, down)
+
+
+def _tier_of(node: TopologyNodeView) -> int:
+    try:
+        return TIER_ORDER.get(DeviceType(node.device_type), 7)
+    except ValueError:
+        return 7
 
 
 def _defined_vlans(db: Session) -> dict[int, set[int]]:

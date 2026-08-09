@@ -24,7 +24,13 @@ from sqlalchemy.orm import Session
 
 from app.models.device import DeviceType
 from app.services import localtime, topology_ports, topology_table
-from app.services.topology import DEFAULT_LAYER, TIER_ORDER, get_graph, scope_graph
+from app.services.topology import (
+    DEFAULT_LAYER,
+    TIER_ORDER,
+    get_graph,
+    hierarchy_rank,
+    scope_graph,
+)
 
 # 方眼の細かさ。箱の大きさと、線を通す余白をこれで決める
 BOX_W = 8  # 箱の幅（列）
@@ -54,68 +60,6 @@ class _Placed:
     @property
     def middle(self) -> int:
         return self.row + BOX_H // 2
-
-
-def _adjacency(graph) -> dict[int, list[int]]:
-    out: dict[int, list[int]] = {n.device_id: [] for n in graph.nodes}
-    for edge in graph.edges:
-        if edge.source in out and edge.target in out:
-            out[edge.source].append(edge.target)
-            out[edge.target].append(edge.source)
-    return out
-
-
-def _far(start: int, adjacency: dict[int, list[int]]) -> tuple[int, dict[int, int]]:
-    """`start` から一番遠い機器と、各機器までの距離。"""
-    distance = {start: 0}
-    queue = [start]
-    last = start
-    while queue:
-        current = queue.pop(0)
-        last = current
-        for neighbour in adjacency.get(current, []):
-            if neighbour not in distance:
-                distance[neighbour] = distance[current] + 1
-                queue.append(neighbour)
-    return last, distance
-
-
-def hierarchy_rank(graph) -> dict[int, int]:
-    """網全体の「上位からの遠さ」。小さいほど上位。
-
-    繋がっている本数では上下は決まらない。支社ルータは配下の拠点が多いぶん
-    本数が多くなり、センターより上に見えてしまう。
-
-    代わりに網の中心を求める。端から端（一番長い経路）の真ん中にいるのは
-    センター側なので、そこからのホップ数を上下の目安にする。
-    木構造の網ではこれがよく合う。
-    """
-    adjacency = _adjacency(graph)
-    if not adjacency:
-        return {}
-
-    ranks: dict[int, int] = {}
-    remaining = set(adjacency)
-    while remaining:
-        # 島ごとに求める。繋がっていない機器同士の上下は比べようがない
-        seed = min(remaining)
-        end_a, _ = _far(seed, adjacency)
-        end_b, from_a = _far(end_a, adjacency)
-        _, from_b = _far(end_b, adjacency)
-        # 端から端への経路の真ん中にある機器を中心とする
-        component = [device_id for device_id in from_a if device_id in remaining]
-        centre = min(
-            component,
-            key=lambda device_id: (
-                max(from_a.get(device_id, 0), from_b.get(device_id, 0)),
-                device_id,
-            ),
-        )
-        _, distance = _far(centre, adjacency)
-        for device_id in component:
-            ranks[device_id] = distance.get(device_id, 0)
-            remaining.discard(device_id)
-    return ranks
 
 
 def _layout(

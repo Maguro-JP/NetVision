@@ -17,7 +17,8 @@ from tests.conftest import API
 def build(db) -> dict[str, int]:
     tokyo = Site(name="東日本センター", address="東京都")
     osaka = Site(name="大阪府営業所", address="大阪府")
-    db.add_all([tokyo, osaka])
+    kobe_site = Site(name="兵庫県営業所", address="兵庫県")
+    db.add_all([tokyo, osaka, kobe_site])
     db.flush()
 
     center = Device(
@@ -41,10 +42,38 @@ def build(db) -> dict[str, int]:
         device_type=DeviceType.SWITCH,
         site_id=osaka.id,
     )
-    db.add_all([center, station_rt, station_sw])
+    # 上下がはっきりする程度の深さを持たせる。3台の一直線だと、
+    # どちら側が上位かは形からは決まらない
+    hq = Device(
+        hostname="hq-rt-01",
+        vendor="Juniper",
+        model="MX304",
+        device_type=DeviceType.ROUTER,
+        site_id=tokyo.id,
+    )
+    kobe = Device(
+        hostname="kobe-rt-01",
+        vendor="NEC",
+        model="IX2215",
+        device_type=DeviceType.ROUTER,
+        site_id=kobe_site.id,
+    )
+    db.add_all([center, station_rt, station_sw, hq, kobe])
     db.flush()
     db.add_all(
         [
+            Link(
+                a_device_id=hq.id,
+                a_interface="ge-0/0/0",
+                b_device_id=center.id,
+                b_interface="ge-0/0/0",
+            ),
+            Link(
+                a_device_id=kobe.id,
+                a_interface="GigaEthernet0/0",
+                b_device_id=center.id,
+                b_interface="ge-0/0/2",
+            ),
             Link(
                 a_device_id=station_rt.id,
                 a_interface="GigaEthernet0/0",
@@ -99,7 +128,7 @@ def test_search_matches_site_name_not_only_hostname(db_session):
 def test_no_filter_returns_everything(db_session):
     build(db_session)
     graph = topology.scope_graph(topology.get_graph(db_session))
-    assert len(graph.nodes) == 3
+    assert len(graph.nodes) == 5
     assert all(not n.outside for n in graph.nodes)
 
 
@@ -218,11 +247,13 @@ def test_a_saved_layout_is_not_rearranged(db_session):
     assert (kept.x, kept.y) == (4321.0, 1234.0)
 
 
-def test_a_wide_tier_is_wrapped(db_session):
-    """同じ段に並びすぎたら折り返すこと。横に伸びると画面に収まらない。"""
+def test_many_peers_are_spread_out_instead_of_overlapping(db_session):
+    """対向が多くても、線が重ならないように広げること。
+
+    同じ段に並べると機器の間を線が横切って、どれがどれだか分からなくなる。
+    """
     site = Site(name="関西支社", address="大阪府")
-    other = Site(name="京都府営業所", address="京都府")
-    db_session.add_all([site, other])
+    db_session.add(site)
     db_session.flush()
 
     hub = Device(
@@ -255,8 +286,25 @@ def test_a_wide_tier_is_wrapped(db_session):
     db_session.commit()
 
     graph = topology.scope_graph(topology.get_graph(db_session), site_id=site.id)
-    rows: dict[float, int] = {}
-    for node in graph.nodes:
-        rows[round(node.y)] = rows.get(round(node.y), 0) + 1
-    assert len(rows) > 1
-    assert max(rows.values()) <= 6
+    placed = {n.hostname: (n.x, n.y) for n in graph.nodes}
+
+    # 上位は上、配下は1段下
+    assert placed["ksi-br-rt-01"][1] < placed["rt-00"][1]
+    # 配下は同じ段に並び、重ならない
+    row = sorted(x for name, (x, y) in placed.items() if name != "ksi-br-rt-01")
+    assert len({y for name, (x, y) in placed.items() if name != "ksi-br-rt-01"}) == 1
+    assert all(b - a >= 200 for a, b in zip(row, row[1:], strict=False))
+    # 上位は配下の中央に来る
+    assert row[0] < placed["ksi-br-rt-01"][0] < row[-1]
+
+
+def test_horizontal_orientation_puts_the_upper_device_on_the_left(db_session):
+    """左右に並べるときは、上位が左・配下が右。"""
+    ids = build(db_session)
+    graph = topology.scope_graph(
+        topology.get_graph(db_session, orientation="horizontal"),
+        site_id=ids["osaka"],
+        orientation="horizontal",
+    )
+    placed = {n.hostname: (n.x, n.y) for n in graph.nodes}
+    assert placed["east-core-rt-01"][0] < placed["osaka-rt-01"][0] < placed["osaka-sw-01"][0]
