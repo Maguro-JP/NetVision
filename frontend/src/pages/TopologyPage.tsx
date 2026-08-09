@@ -627,6 +627,15 @@ function TopologyEditor() {
         >
           結線表（Excel）
         </a>
+        <a
+          className="button"
+          href={api.portMapUrl({
+            site_id: selectedSite === "" ? undefined : selectedSite,
+          })}
+          title="機器ごとのポート割付を Excel で出します。上りポート・下りポート・空きポートが機器単位で並びます"
+        >
+          ポート割付（Excel）
+        </a>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>
         </RouterLink>

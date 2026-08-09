@@ -198,6 +198,28 @@ def export_link_table(
     )
 
 
+@router.get("/ports.xlsx", response_class=Response)
+def export_port_map(
+    db: DbSession,
+    site_id: int | None = Query(default=None, description="この拠点の機器だけを出す"),
+) -> Response:
+    """機器ごとのポート割付を Excel で書き出す。
+
+    結線表は「線」から見た表だが、増設のときに聞かれるのは**機器から見た**話で、
+    何ポートあって、上位のどこへ上がっていて、下に何がぶら下がっていて、
+    どこが空いているか。それを1枚目（一覧）と2枚目（結線図）で出す。
+    """
+    from app.services import topology_ports
+
+    data = topology_ports.to_xlsx(db, site_id=site_id)
+    name = f"ports{f'-site{site_id}' if site_id else ''}.xlsx"
+    return Response(
+        content=data,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{name}"'},
+    )
+
+
 @router.get("/export.csv", response_class=Response)
 def export_link_table_csv(
     db: DbSession,

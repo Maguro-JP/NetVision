@@ -307,6 +307,8 @@ export const api = {
     format: "xlsx" | "csv",
     options: { site_id?: number; encoding?: string } = {},
   ) => `${BASE}/topology/export.${format}${query({ layer, ...options })}`,
+  portMapUrl: (options: { site_id?: number } = {}) =>
+    `${BASE}/topology/ports.xlsx${query({ ...options })}`,
   designConfig: (deviceId: number) =>
     request<{
       device_id: number;
