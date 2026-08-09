@@ -26,6 +26,7 @@ interface Point {
   hostname: string;
   siteName: string | null;
   deviceType: string;
+  severity: string;
   x: number;
   y: number;
   z: number;
@@ -55,6 +56,14 @@ const TYPE_COLOR: Record<string, string> = {
   wireless_ap: "#ffe9b0",
   server: "#c0c8d4",
   other: "#8a94a6",
+};
+
+/* 状態の色。ふだんの機器は控えめにして、要注意のものだけ強く出す。
+ * 全部が同じ明るさだと、見てほしいものが埋もれる。 */
+const ALERT_COLOR: Record<string, string> = {
+  expired: "#ff5f56",
+  critical: "#ff7b3d",
+  warning: "#ffc24b",
 };
 
 const MODES: { value: Mode; label: string; hint: string }[] = [
@@ -128,6 +137,7 @@ function base(graph: TopologyGraph): Point[] {
     hostname: node.hostname,
     siteName: node.site_name,
     deviceType: node.device_type,
+    severity: node.severity,
     x: 0,
     y: 0,
     z: 0,
@@ -298,11 +308,14 @@ export default function SpacePage() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [site, setSite] = useState<number | "">("");
   const [mode, setMode] = useState<Mode>("sphere");
-  const [spin, setSpin] = useState(true);
+  const [speed, setSpeed] = useState(0.0012);
   const [flow, setFlow] = useState(true);
   // 見る向き。ドラッグで回す
   const angle = useRef({ yaw: 0.6, pitch: -0.35 });
-  const drag = useRef<{ x: number; y: number } | null>(null);
+  // 中心の位置と拡大率。Shift か右ボタンのドラッグで動かし、ホイールで寄る
+  const pan = useRef({ x: 0, y: 0 });
+  const zoom = useRef(1);
+  const drag = useRef<{ x: number; y: number; pan: boolean } | null>(null);
 
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
   const { data: graph } = useQuery({
@@ -321,8 +334,10 @@ export default function SpacePage() {
   // 表示を切り替えたら見る向きも合わせる。地図は真上から見ないと形が読めない
   useEffect(() => {
     angle.current = mode === "map" ? { yaw: 0, pitch: -1.15 } : { yaw: 0.6, pitch: -0.35 };
+    pan.current = { x: 0, y: 0 };
+    zoom.current = 1;
     // 地図は回すと形が読めなくなるので、既定では止めておく
-    setSpin(mode !== "map");
+    setSpeed(mode === "map" ? 0 : 0.0012);
   }, [mode]);
 
   const { points, unlocated } = useMemo(() => {
@@ -363,12 +378,13 @@ export default function SpacePage() {
 
       const now = performance.now();
       const seconds = (now - started) / 1000;
-      if (spin && !drag.current) angle.current.yaw += 0.003;
+      if (speed && !drag.current) angle.current.yaw += speed;
 
       const { yaw, pitch } = angle.current;
-      const cx = element.clientWidth / 2;
-      const cy = element.clientHeight / 2;
+      const cx = element.clientWidth / 2 + pan.current.x;
+      const cy = element.clientHeight / 2 + pan.current.y;
       const distance = 900;
+      const magnify = zoom.current;
 
       const project = (x: number, y: number, z: number) => {
         const x1 = x * Math.cos(yaw) - z * Math.sin(yaw);
@@ -376,7 +392,7 @@ export default function SpacePage() {
         const y2 = y * Math.cos(pitch) - z1 * Math.sin(pitch);
         const z2 = y * Math.sin(pitch) + z1 * Math.cos(pitch);
         const scale = distance / (distance + z2 + 400);
-        return { sx: cx + x1 * scale, sy: cy + y2 * scale, scale };
+        return { sx: cx + x1 * scale * magnify, sy: cy + y2 * scale * magnify, scale };
       };
 
       for (const point of points) {
@@ -513,14 +529,20 @@ export default function SpacePage() {
 
       const sorted = [...points].sort((a, b) => a.scale - b.scale);
       // 地図では丸を小さくする。主役は線を流れる光の方
-      const dot = mode === "map" ? 1.2 : 4;
-      const grow = mode === "map" ? 1.8 : 5;
+      const dot = mode === "map" ? 1.0 : 2.4;
+      const grow = mode === "map" ? 1.4 : 3.2;
       for (const point of sorted) {
-        const size = dot + point.scale * grow;
+        const alert = ALERT_COLOR[point.severity];
+        const size = (dot + point.scale * grow) * (alert ? 1.5 : 1);
         // 玉が届いた直後は明るくする（0.6 秒ほどで戻す）
         const lit = Math.max(0, 1 - (now - point.litAt) / 600);
-        context.fillStyle = TYPE_COLOR[point.deviceType] ?? TYPE_COLOR.other;
-        context.globalAlpha = 0.35 + point.scale * 0.65;
+        context.fillStyle = alert ?? TYPE_COLOR[point.deviceType] ?? TYPE_COLOR.other;
+        // ふだんの機器は控えめに。要注意のものだけはっきり出す
+        context.globalAlpha = alert ? 0.75 + point.scale * 0.25 : 0.2 + point.scale * 0.4;
+        if (alert) {
+          context.shadowColor = alert;
+          context.shadowBlur = 10 * point.scale;
+        }
         if (lit > 0) {
           context.shadowColor = "rgba(190, 235, 255, 0.9)";
           context.shadowBlur = 18 * lit * point.scale;
@@ -546,7 +568,7 @@ export default function SpacePage() {
     return () => {
       running = false;
     };
-  }, [points, graph, spin, flow, mode]);
+  }, [points, graph, speed, flow, mode]);
 
   return (
     <section>
@@ -555,7 +577,8 @@ export default function SpacePage() {
         全体の形をつかむための遊びのページです。流れている光はランダムに出しているだけで、
         実際の通信量ではありません。どこがどこに繋がっているかを読むのは
         <RouterLink to="/topology"> トポロジ図 </RouterLink>
-        の方が向いています。ドラッグで回せます。
+        の方が向いています。ドラッグで回す、Shift か右ボタンのドラッグで位置をずらす、
+        ホイールで寄る／引く、です。
       </p>
 
       <div className="toolbar">
@@ -577,14 +600,25 @@ export default function SpacePage() {
             </option>
           ))}
         </select>
-        <label className="vlan-chip">
-          <input type="checkbox" checked={spin} onChange={(e) => setSpin(e.target.checked)} />{" "}
-          回し続ける
-        </label>
+        <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
+          <option value={0}>回転: 止める</option>
+          <option value={0.0006}>回転: ゆっくり</option>
+          <option value={0.0012}>回転: 普通</option>
+          <option value={0.003}>回転: 速い</option>
+        </select>
         <label className="vlan-chip">
           <input type="checkbox" checked={flow} onChange={(e) => setFlow(e.target.checked)} /> 光を
           流す
         </label>
+        <button
+          onClick={() => {
+            pan.current = { x: 0, y: 0 };
+            zoom.current = 1;
+            angle.current = mode === "map" ? { yaw: 0, pitch: -1.15 } : { yaw: 0.6, pitch: -0.35 };
+          }}
+        >
+          位置を戻す
+        </button>
         <span className="muted">
           {graph ? `${graph.nodes.length}台 ${graph.edges.length}本` : "読み込み中…"}
           {mode === "map" && unlocated > 0 ? ` / 住所から位置が分からない機器 ${unlocated}台` : ""}
@@ -594,8 +628,14 @@ export default function SpacePage() {
       <canvas
         ref={canvas}
         className="space-canvas"
+        onContextMenu={(event) => event.preventDefault()}
         onPointerDown={(event) => {
-          drag.current = { x: event.clientX, y: event.clientY };
+          // 右ボタンか Shift 併用で中心をずらす。ふつうのドラッグは回転
+          drag.current = {
+            x: event.clientX,
+            y: event.clientY,
+            pan: event.button === 2 || event.shiftKey,
+          };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerUp={() => {
@@ -603,10 +643,20 @@ export default function SpacePage() {
         }}
         onPointerMove={(event) => {
           if (!drag.current) return;
-          angle.current.yaw += (event.clientX - drag.current.x) * 0.008;
-          angle.current.pitch += (event.clientY - drag.current.y) * 0.008;
-          angle.current.pitch = Math.max(-1.4, Math.min(1.4, angle.current.pitch));
-          drag.current = { x: event.clientX, y: event.clientY };
+          const dx = event.clientX - drag.current.x;
+          const dy = event.clientY - drag.current.y;
+          if (drag.current.pan) {
+            pan.current.x += dx;
+            pan.current.y += dy;
+          } else {
+            angle.current.yaw += dx * 0.008;
+            angle.current.pitch += dy * 0.008;
+            angle.current.pitch = Math.max(-1.4, Math.min(1.4, angle.current.pitch));
+          }
+          drag.current = { ...drag.current, x: event.clientX, y: event.clientY };
+        }}
+        onWheel={(event) => {
+          zoom.current = Math.max(0.3, Math.min(4, zoom.current * (event.deltaY < 0 ? 1.1 : 0.9)));
         }}
       />
     </section>
