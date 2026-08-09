@@ -455,13 +455,16 @@ function TopologyEditor() {
 
   const onConnect = useCallback(
     (connection: Connection) => {
+      // ロック中は React Flow 側でも掴めないようにしてあるが、ここでも止める。
+      // 結線は保存が走るので、見た目の制御だけに任せない
+      if (!editable) return;
       if (connection.source === connection.target) return;
       setEdges((current) =>
         addEdge({ ...connection, type: "smoothstep", className: "topo-edge manual" }, current),
       );
       createLink.mutate(connection);
     },
-    [createLink, setEdges],
+    [createLink, editable, setEdges],
   );
 
   /** 選択中のものは常に出す。消えると外せなくなるため。 */

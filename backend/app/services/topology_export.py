@@ -178,6 +178,20 @@ def render_svg(
     # 中心同士を直線で結ぶだけだと**完全に重なって1本に見える**
     parallel = _parallel_index(graph)
 
+    # 迂回の判定に使う箱。線の当事者になっていない機器だけを障害物として扱う
+    boxes = {
+        n.device_id: svglayout.Rect(
+            at[n.device_id][0],
+            at[n.device_id][1],
+            at[n.device_id][0] + NODE_W,
+            at[n.device_id][1] + NODE_H,
+        )
+        for n in nodes
+    }
+    peer_boxes = [
+        svglayout.Rect(p.x + dx, p.y + dy, p.x + dx + PEER_W, p.y + dy + PEER_H) for p in peers
+    ]
+
     # --- 結線（ノードより先に描いて背面に回す） ---
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
@@ -199,26 +213,35 @@ def render_svg(
         # 現場で見る図に混ぜると「未接続」と読み違えられるため
         dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
         stroke = "#4a5364" if simple else "#8a94a6"
+        obstacles = [
+            rect.grow(2.0)
+            for device_id, rect in boxes.items()
+            if device_id not in (edge.source, edge.target)
+        ] + [rect.grow(2.0) for rect in peer_boxes]
+        points = _route((x1, y1), (x2, y2), obstacles)
         parts.append(
-            f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
+            f'<polyline points="{_path_points(points)}" fill="none" '
             f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
         )
+        # ポート名の向きは、その端から出ていく最初の区間で決める
+        nx1, ny1 = points[1]
+        nx2, ny2 = points[-2]
 
         if edge.label:
             # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
-            parts.append(_center_label(x1, y1, x2, y2, edge.label, placement))
+            parts.append(_center_label(*_path_middle(points), edge.label, placement))
         else:
             # ポート名は**それぞれの機器側**に置く。1本の線に2つ並べると
             # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
             # 逆に読んでしまう。ポートの隣にあれば規則は要らない
             parts.append(
                 _port_label(
-                    x1, y1, x2, y2, edge.source_interface, port_style, along_line, placement
+                    x1, y1, nx1, ny1, edge.source_interface, port_style, along_line, placement
                 )
             )
             parts.append(
                 _port_label(
-                    x2, y2, x1, y1, edge.target_interface, port_style, along_line, placement
+                    x2, y2, nx2, ny2, edge.target_interface, port_style, along_line, placement
                 )
             )
             for name in (edge.source_interface, edge.target_interface):
@@ -234,8 +257,16 @@ def render_svg(
         ax, ay = anchor[0] + NODE_W / 2, anchor[1] + NODE_H / 2
         cx, cy = px + PEER_W / 2, py + PEER_H / 2
 
+        obstacles = [
+            rect.grow(2.0) for device_id, rect in boxes.items() if device_id != peer.anchor
+        ] + [
+            svglayout.Rect(q.x + dx, q.y + dy, q.x + dx + PEER_W, q.y + dy + PEER_H).grow(2.0)
+            for q in peers
+            if q is not peer
+        ]
+        points = _route((ax, ay), (cx, cy), obstacles)
         parts.append(
-            f'<line x1="{ax:.0f}" y1="{ay:.0f}" x2="{cx:.0f}" y2="{cy:.0f}" '
+            f'<polyline points="{_path_points(points)}" fill="none" '
             f'stroke="#8a94a6" stroke-width="1.6"'
             + ("" if peer.confirmed else ' stroke-dasharray="6 4"')
             + "/>"
@@ -243,7 +274,7 @@ def render_svg(
         parts.append(_peer_box(px, py, peer, simple))
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
         parts.append(
-            _port_label(ax, ay, cx, cy, peer.local_interface, port_style, along_line, placement)
+            _port_label(ax, ay, *points[1], peer.local_interface, port_style, along_line, placement)
         )
         if peer.local_interface:
             used_media.add(portlabel.media_of(peer.local_interface))
@@ -395,6 +426,104 @@ def _place_peer(
     index, _ = placement.choose(rects)
     placement.add(rects[index])
     return candidates[index]
+
+
+_ROUTE_CLEAR = 16.0  # 迂回するときに箱から離す距離
+
+
+def _route(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    obstacles: list[svglayout.Rect],
+    depth: int = 0,
+) -> list[tuple[float, float]]:
+    """関係の無い機器の箱を避けて通る折れ線を返す。
+
+    直線で結ぶと、間にある機器の上を通ってしまうことがある。図の上では
+    「通過」と「接続」を見分けられないので、**その機器にも繋がっている**と
+    読まれてしまう。専用線が FW を貫いて見えるのがこれ。
+
+    迂回は上下左右の4方向を試し、他の箱にも当たらず、遠回りの少ないものを採る。
+    どうしても避けられない場合は直線のまま出す。線を消す方が誤解を招くため。
+    """
+    blockers = [rect for rect in obstacles if svglayout.segment_hits(rect, p1, p2)]
+    if not blockers:
+        return [p1, p2]
+    if depth >= 3:
+        return [p1, p2]
+
+    # 邪魔をしている箱をまとめて1つの塊として避ける。1個ずつ避けると、
+    # 避けた先にまた次の箱がいて、堂々巡りになる
+    hit = svglayout.Rect(
+        min(rect.x1 for rect in blockers),
+        min(rect.y1 for rect in blockers),
+        max(rect.x2 for rect in blockers),
+        max(rect.y2 for rect in blockers),
+    )
+    mid_x, mid_y = (hit.x1 + hit.x2) / 2, (hit.y1 + hit.y2) / 2
+    left, right = hit.x1 - _ROUTE_CLEAR, hit.x2 + _ROUTE_CLEAR
+    top, bottom = hit.y1 - _ROUTE_CLEAR, hit.y2 + _ROUTE_CLEAR
+    # 辺の外側と、角の外側。斜めの線は角を回る方が短く済む
+    candidates = [
+        (mid_x, top),
+        (mid_x, bottom),
+        (left, mid_y),
+        (right, mid_y),
+        (left, top),
+        (right, top),
+        (left, bottom),
+        (right, bottom),
+    ]
+    # 候補ごとに**実際に両側を引き直して**から選ぶ。
+    # 「この方向なら空いている」を1手だけ見て決めると、避けた先にまた箱がいる
+    best: list[tuple[float, float]] | None = None
+    best_cost: tuple[int, float] | None = None
+    for point in candidates:
+        route = _route(p1, point, obstacles, depth + 1)[:-1] + _route(
+            point, p2, obstacles, depth + 1
+        )
+        cost = (_residual(route, obstacles), _length(route))
+        if best_cost is None or cost < best_cost:
+            best, best_cost = route, cost
+        if cost[0] == 0 and depth > 0:
+            break  # 奥の階層では、通れる道が見つかった時点で十分
+
+    points = best or [p1, p2]
+
+    # 同じ点が続くと、そこだけ向きが決まらない。折れ線から落とす
+    out = [points[0]]
+    for point in points[1:]:
+        if abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
+            out.append(point)
+    return out if len(out) > 1 else [p1, p2]
+
+
+def _residual(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]) -> int:
+    """引き直しても、まだ箱を通ってしまっている区間の数。"""
+    return sum(
+        1
+        for a, b in zip(route, route[1:], strict=False)
+        for rect in obstacles
+        if svglayout.segment_hits(rect, a, b)
+    )
+
+
+def _length(route: list[tuple[float, float]]) -> float:
+    return sum(
+        ((b[0] - a[0]) ** 2 + (b[1] - a[1]) ** 2) ** 0.5
+        for a, b in zip(route, route[1:], strict=False)
+    )
+
+
+def _path_points(points: list[tuple[float, float]]) -> str:
+    return " ".join(f"{x:.0f},{y:.0f}" for x, y in points)
+
+
+def _path_middle(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
+    """折れ線の真ん中にあたる区間を返す。中央ラベルの置き場所に使う。"""
+    index = max(len(points) // 2 - 1, 0)
+    (x1, y1), (x2, y2) = points[index], points[index + 1]
+    return x1, y1, x2, y2
 
 
 def _parallel_index(graph: TopologyGraph) -> dict[int, float]:

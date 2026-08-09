@@ -94,6 +94,37 @@ def text_rect(
     return Rect(min(xs), min(ys), max(xs), max(ys))
 
 
+def segment_hits(rect: Rect, p1: tuple[float, float], p2: tuple[float, float]) -> bool:
+    """線分が矩形の内側を通るか。
+
+    線を機器の箱の上に引くと、その機器に**繋がっているように見える**。
+    通過なのか接続なのかは図からは区別できないので、当たったら迂回させる。
+    """
+    (x1, y1), (x2, y2) = p1, p2
+
+    # 端点がそもそも中にあるなら当たり
+    for x, y in (p1, p2):
+        if rect.x1 <= x <= rect.x2 and rect.y1 <= y <= rect.y2:
+            return True
+
+    # 線分を媒介変数で表し、矩形の各軸について通過する区間を求める（slab 法）
+    low, high = 0.0, 1.0
+    for delta, start, lo, hi in (
+        (x2 - x1, x1, rect.x1, rect.x2),
+        (y2 - y1, y1, rect.y1, rect.y2),
+    ):
+        if abs(delta) < 1e-9:
+            if start < lo or start > hi:
+                return False
+            continue
+        t1, t2 = (lo - start) / delta, (hi - start) / delta
+        low = max(low, min(t1, t2))
+        high = min(high, max(t1, t2))
+        if low > high:
+            return False
+    return True
+
+
 class Placement:
     """置いたものを覚えておいて、次の当たり判定に使う。"""
 
