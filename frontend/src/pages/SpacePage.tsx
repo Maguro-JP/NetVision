@@ -4,7 +4,8 @@ import { Link as RouterLink } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Site, TopologyGraph } from "../api/types";
-import { BOUNDS, COASTLINE, locate } from "../lib/japan";
+import { COASTLINE } from "../lib/coastline";
+import { BOUNDS, locate } from "../lib/japan";
 
 /* ネットワークを立体で眺めるページ。
  *
@@ -428,16 +429,17 @@ export default function SpacePage() {
           context.stroke();
         }
 
-        context.strokeStyle = "rgba(150, 210, 255, 0.35)";
+        context.strokeStyle = "rgba(150, 210, 255, 0.5)";
         context.lineWidth = 1.2;
         for (const island of COASTLINE) {
           context.beginPath();
-          island.forEach((at, index) => {
-            const spot = onMap(at.lat, at.lon);
+          island.forEach(([lon, lat], index) => {
+            const spot = onMap(lat, lon);
             const screen = project(spot.x, 0, spot.z);
             if (index === 0) context.moveTo(screen.sx, screen.sy);
             else context.lineTo(screen.sx, screen.sy);
           });
+          context.closePath();
           context.stroke();
         }
       }
