@@ -87,6 +87,7 @@ interface Settings {
   link: number; // 線の明るさ
   labels: boolean; // 手前の機器名を出すか
   alerts: boolean; // 要注意の機器を強調するか
+  turning: boolean; // 回すか止めるか（速さは覚えたまま）
 }
 
 const DEFAULTS: Settings = {
@@ -98,7 +99,13 @@ const DEFAULTS: Settings = {
   link: 1,
   labels: true,
   alerts: true,
+  turning: true,
 };
+
+/* この拡大率より引くと、拠点ごとに1つの玉へまとめる。
+ * ネットワークは小さなネットワークの集まりなので、引いたときは
+ * 拠点そのものを1点として見た方が形が分かる。寄れば中身が出る。 */
+const CLUSTER_ZOOM = 1.5;
 
 const SETTINGS_KEY = "netvision.space.settings";
 
@@ -373,6 +380,71 @@ function Slider({
   );
 }
 
+/* 拠点ごとに1つへまとめた見え方を作る。
+ *
+ * 位置は所属する機器の平均。線は拠点間に1本だけ引く。
+ * 拠点をまたがない結線（拠点の中の配線）は、まとめた側には出さない。 */
+function clusterOf(
+  points: Point[],
+  edges: { source: number; target: number }[],
+): {
+  points: Point[];
+  edges: { id: number; source: number; target: number }[];
+  counts: Map<number, number>;
+} {
+  const groups = new Map<string, Point[]>();
+  for (const point of points) {
+    const key = point.siteName ?? "拠点未登録";
+    (groups.get(key) ?? groups.set(key, []).get(key)!).push(point);
+  }
+
+  const clusterId = new Map<number, number>();
+  const made: Point[] = [];
+  const counts = new Map<number, number>();
+  let next = -1;
+  const rank: Record<string, number> = { expired: 3, critical: 2, warning: 1 };
+
+  for (const [name, members] of groups) {
+    const id = next--;
+    for (const member of members) clusterId.set(member.id, id);
+    counts.set(id, members.length);
+    // 状態は一番悪いものに合わせる。まとめたせいで見落とすのは避ける
+    const worst = members.reduce(
+      (severity, member) =>
+        (rank[member.severity] ?? 0) > (rank[severity] ?? 0) ? member.severity : severity,
+      "ok",
+    );
+    made.push({
+      id,
+      hostname: name,
+      siteName: name,
+      deviceType: "other",
+      severity: worst,
+      x: members.reduce((total, m) => total + m.x, 0) / members.length,
+      y: members.reduce((total, m) => total + m.y, 0) / members.length,
+      z: members.reduce((total, m) => total + m.z, 0) / members.length,
+      phase: members[0].phase,
+      litAt: -Infinity,
+      screenX: 0,
+      screenY: 0,
+      scale: 1,
+    });
+  }
+
+  const seen = new Set<string>();
+  const links: { id: number; source: number; target: number }[] = [];
+  for (const edge of edges) {
+    const a = clusterId.get(edge.source);
+    const b = clusterId.get(edge.target);
+    if (a === undefined || b === undefined || a === b) continue;
+    const key = a < b ? `${a}:${b}` : `${b}:${a}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    links.push({ id: links.length + 1, source: a, target: b });
+  }
+  return { points: made, edges: links, counts };
+}
+
 export default function SpacePage() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [site, setSite] = useState<number | "">("");
@@ -430,6 +502,9 @@ export default function SpacePage() {
     return { points: made, unlocated: missing };
   }, [graph, mode, addressOf]);
 
+  // 引いたときに見せる、拠点ごとにまとめた形
+  const clustered = useMemo(() => (graph ? clusterOf(points, graph.edges) : null), [points, graph]);
+
   useEffect(() => {
     const element = canvas.current;
     if (!element) return;
@@ -437,11 +512,26 @@ export default function SpacePage() {
     if (!context) return;
 
     let running = true;
-    const byId = new Map(points.map((p) => [p.id, p]));
-    const edges = (graph?.edges ?? []).filter(
-      (edge) => byId.has(edge.source) && byId.has(edge.target),
-    );
-    const packets: Packet[] = [];
+    const detail = {
+      points,
+      byId: new Map(points.map((p) => [p.id, p])),
+      edges: (graph?.edges ?? []).filter(
+        (edge) =>
+          points.some((p) => p.id === edge.source) && points.some((p) => p.id === edge.target),
+      ) as { id: number; source: number; target: number }[],
+      counts: new Map<number, number>(),
+    };
+    const summary = clustered
+      ? {
+          points: clustered.points,
+          byId: new Map(clustered.points.map((p) => [p.id, p])),
+          edges: clustered.edges,
+          counts: clustered.counts,
+        }
+      : detail;
+
+    let packets: Packet[] = [];
+    let showing = summary;
     const started = performance.now();
 
     // 地図では線を弧にする。真っ直ぐ引くと重なって本数が分からない
@@ -457,7 +547,18 @@ export default function SpacePage() {
 
       const now = performance.now();
       const seconds = (now - started) / 1000;
-      if (spin.current && !drag.current) angle.current.yaw += spin.current;
+
+      // 引いているうちは拠点ごとの玉、寄ると中の機器が出る
+      const wanted = zoom.current < CLUSTER_ZOOM ? summary : detail;
+      if (wanted !== showing) {
+        showing = wanted;
+        packets = [];
+      }
+      const { points: shown, byId, edges, counts } = showing;
+      // 地図は回さない。形が読めなくなる
+      if (spin.current && settings.turning && !drag.current && mode !== "map") {
+        angle.current.yaw += spin.current;
+      }
 
       const { yaw, pitch } = angle.current;
       const cx = element.clientWidth / 2 + pan.current.x;
@@ -474,7 +575,7 @@ export default function SpacePage() {
         return { sx: cx + x1 * scale * magnify, sy: cy + y2 * scale * magnify, scale };
       };
 
-      for (const point of points) {
+      for (const point of shown) {
         // 止まっていると絵に見えるので、少しだけ揺らす
         const sway = settings.drift;
         const driftX = Math.sin(seconds * 0.5 + point.phase) * sway;
@@ -607,13 +708,16 @@ export default function SpacePage() {
         context.shadowBlur = 0;
       }
 
-      const sorted = [...points].sort((a, b) => a.scale - b.scale);
+      const sorted = [...shown].sort((a, b) => a.scale - b.scale);
       // 地図では丸を小さくする。主役は線を流れる光の方
       const dot = (mode === "map" ? 1.0 : 2.4) * settings.dot;
       const grow = (mode === "map" ? 1.4 : 3.2) * settings.dot;
       for (const point of sorted) {
         const alert = settings.alerts ? ALERT_COLOR[point.severity] : undefined;
-        const size = (dot + point.scale * grow) * (alert ? 1.5 : 1);
+        // まとめた玉は、抱えている台数だけ大きくする
+        const held = counts.get(point.id) ?? 0;
+        const bulk = held ? 1 + Math.min(1.6, Math.log2(held + 1) * 0.45) : 1;
+        const size = (dot + point.scale * grow) * (alert ? 1.5 : 1) * bulk;
         // 玉が届いた直後は明るくする（0.6 秒ほどで戻す）
         const lit = Math.max(0, 1 - (now - point.litAt) / 600);
         context.fillStyle = alert ?? TYPE_COLOR[point.deviceType] ?? TYPE_COLOR.other;
@@ -622,6 +726,10 @@ export default function SpacePage() {
         if (alert) {
           context.shadowColor = alert;
           context.shadowBlur = 10 * point.scale;
+        } else if (held) {
+          // 拠点の玉は、中にネットワークがあることが分かるように光らせる
+          context.shadowColor = "rgba(150, 210, 255, 0.8)";
+          context.shadowBlur = 8 + Math.min(14, held);
         }
         if (lit > 0) {
           context.shadowColor = "rgba(190, 235, 255, 0.9)";
@@ -634,7 +742,7 @@ export default function SpacePage() {
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
-        if (settings.labels && point.scale > 0.95 && mode !== "map") {
+        if (settings.labels && (held ? point.scale > 0.8 : point.scale > 0.95) && mode !== "map") {
           context.fillStyle = "#c9d4e2";
           context.font = "11px system-ui, sans-serif";
           context.fillText(point.hostname, point.screenX + size + 3, point.screenY + 4);
@@ -648,7 +756,7 @@ export default function SpacePage() {
     return () => {
       running = false;
     };
-  }, [points, graph, settings, mode]);
+  }, [points, clustered, graph, settings, mode]);
 
   return (
     <section>
@@ -658,7 +766,8 @@ export default function SpacePage() {
         実際の通信量ではありません。どこがどこに繋がっているかを読むのは
         <RouterLink to="/topology"> トポロジ図 </RouterLink>
         の方が向いています。ドラッグで回す、Shift か右ボタンのドラッグで位置をずらす、
-        ホイールで寄る／引く、です。
+        ホイールで寄る／引く、です。引いているうちは拠点ごとの玉にまとまり、寄るとその中の
+        機器が出ます。
       </p>
 
       <div className="toolbar">
@@ -680,6 +789,17 @@ export default function SpacePage() {
             </option>
           ))}
         </select>
+        <label className="vlan-chip" title="速さは覚えたまま、回転だけ止めます">
+          <input
+            type="checkbox"
+            checked={settings.turning}
+            onChange={(event) => set("turning", event.target.checked)}
+            disabled={mode === "map"}
+          />{" "}
+          回す
+        </label>
+        <button onClick={() => (zoom.current = Math.min(4, zoom.current * 1.3))}>寄る ＋</button>
+        <button onClick={() => (zoom.current = Math.max(0.3, zoom.current / 1.3))}>引く －</button>
         <button
           onClick={() => {
             pan.current = { x: 0, y: 0 };
@@ -799,9 +919,12 @@ export default function SpacePage() {
             pan.current.x += dx;
             pan.current.y += dy;
           } else {
-            angle.current.yaw += dx * 0.008;
+            if (mode !== "map") angle.current.yaw += dx * 0.008;
             angle.current.pitch += dy * 0.008;
-            angle.current.pitch = Math.max(-1.4, Math.min(1.4, angle.current.pitch));
+            if (mode === "map") {
+              // 地図は水平（0）から真上（-90度）までだけ。裏返すと読めない
+              angle.current.pitch = Math.max(-Math.PI / 2, Math.min(0, angle.current.pitch));
+            }
             // 手を離したあとも、回した向きにそのまま回り続ける
             drag.current.spin = dx * 0.0006;
           }
