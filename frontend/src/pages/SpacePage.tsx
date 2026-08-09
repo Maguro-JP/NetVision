@@ -75,7 +75,42 @@ const MODES: { value: Mode; label: string; hint: string }[] = [
 
 const LAYER_GAP = 150;
 const RADIUS = 240;
-const MAX_PACKETS = 90;
+
+/* 見え方の設定。好みが分かれるところなので、全部その場で変えられるようにする。
+ * 端末に覚えさせるので、開き直しても選び直さずに済む。 */
+interface Settings {
+  spin: number; // 回転の速さ。負なら逆回り
+  drift: number; // 放置中の揺れの大きさ
+  flow: number; // 光の玉の出やすさ（0 で出さない）
+  flowSpeed: number; // 光の玉の速さ
+  dot: number; // 機器の丸の大きさ
+  link: number; // 線の明るさ
+  labels: boolean; // 手前の機器名を出すか
+  alerts: boolean; // 要注意の機器を強調するか
+}
+
+const DEFAULTS: Settings = {
+  spin: 0.0012,
+  drift: 6,
+  flow: 0.35,
+  flowSpeed: 1,
+  dot: 1,
+  link: 1,
+  labels: true,
+  alerts: true,
+};
+
+const SETTINGS_KEY = "netvision.space.settings";
+
+function loadSettings(): Settings {
+  try {
+    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}") };
+  } catch {
+    return DEFAULTS;
+  }
+}
+
+const MAX_PACKETS = 160;
 
 /* 網の中心から数えて何段目かを返す。
  *
@@ -304,18 +339,55 @@ function asMap(
   return unknown;
 }
 
+/* 調整用のつまみ。数値も出しておかないと、どこまで動かしたか分からなくなる。 */
+function Slider({
+  label,
+  hint,
+  min,
+  max,
+  step,
+  value,
+  onChange,
+}: {
+  label: string;
+  hint?: string;
+  min: number;
+  max: number;
+  step: number;
+  value: number;
+  onChange: (value: number) => void;
+}) {
+  return (
+    <label className="space-slider" title={hint}>
+      <span>{label}</span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(event) => onChange(Number(event.target.value))}
+      />
+      <span className="muted">{value}</span>
+    </label>
+  );
+}
+
 export default function SpacePage() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
   const [site, setSite] = useState<number | "">("");
   const [mode, setMode] = useState<Mode>("sphere");
-  const [speed, setSpeed] = useState(0.0012);
-  const [flow, setFlow] = useState(true);
+  const [settings, setSettings] = useState<Settings>(loadSettings);
+  const set = <K extends keyof Settings>(key: K, value: Settings[K]) =>
+    setSettings((current) => ({ ...current, [key]: value }));
   // 見る向き。ドラッグで回す
   const angle = useRef({ yaw: 0.6, pitch: -0.35 });
+  // 実際に効いている回転。人が回した向きをそのまま引き継ぐ
+  const spin = useRef(settings.spin);
   // 中心の位置と拡大率。Shift か右ボタンのドラッグで動かし、ホイールで寄る
   const pan = useRef({ x: 0, y: 0 });
   const zoom = useRef(1);
-  const drag = useRef<{ x: number; y: number; pan: boolean } | null>(null);
+  const drag = useRef<{ x: number; y: number; pan: boolean; spin: number } | null>(null);
 
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
   const { data: graph } = useQuery({
@@ -336,9 +408,16 @@ export default function SpacePage() {
     angle.current = mode === "map" ? { yaw: 0, pitch: -1.15 } : { yaw: 0.6, pitch: -0.35 };
     pan.current = { x: 0, y: 0 };
     zoom.current = 1;
-    // 地図は回すと形が読めなくなるので、既定では止めておく
-    setSpeed(mode === "map" ? 0 : 0.0012);
+    // 地図は回すと形が読めなくなるので、切り替えた直後は止めておく
+    spin.current = mode === "map" ? 0 : settings.spin;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode]);
+
+  // 設定は端末に覚えさせる
+  useEffect(() => {
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
+    spin.current = settings.spin;
+  }, [settings]);
 
   const { points, unlocated } = useMemo(() => {
     if (!graph) return { points: [] as Point[], unlocated: 0 };
@@ -378,7 +457,7 @@ export default function SpacePage() {
 
       const now = performance.now();
       const seconds = (now - started) / 1000;
-      if (speed && !drag.current) angle.current.yaw += speed;
+      if (spin.current && !drag.current) angle.current.yaw += spin.current;
 
       const { yaw, pitch } = angle.current;
       const cx = element.clientWidth / 2 + pan.current.x;
@@ -397,9 +476,10 @@ export default function SpacePage() {
 
       for (const point of points) {
         // 止まっていると絵に見えるので、少しだけ揺らす
-        const driftX = Math.sin(seconds * 0.5 + point.phase) * 6;
-        const driftY = Math.sin(seconds * 0.35 + point.phase * 1.7) * 5;
-        const driftZ = Math.cos(seconds * 0.45 + point.phase) * 6;
+        const sway = settings.drift;
+        const driftX = Math.sin(seconds * 0.5 + point.phase) * sway;
+        const driftY = Math.sin(seconds * 0.35 + point.phase * 1.7) * sway * 0.8;
+        const driftZ = Math.cos(seconds * 0.45 + point.phase) * sway;
         const spot = project(point.x + driftX, point.y + driftY, point.z + driftZ);
         point.screenX = spot.sx;
         point.screenY = spot.sy;
@@ -468,7 +548,7 @@ export default function SpacePage() {
         const mid = control(a, b);
         curves.set(edge.id, mid);
         const depth = (a.scale + b.scale) / 2;
-        context.strokeStyle = `rgba(124, 196, 255, ${0.12 + depth * 0.3})`;
+        context.strokeStyle = `rgba(124, 196, 255, ${(0.12 + depth * 0.3) * settings.link})`;
         context.beginPath();
         context.moveTo(a.screenX, a.screenY);
         context.quadraticCurveTo(mid.x, mid.y, b.screenX, b.screenY);
@@ -476,14 +556,14 @@ export default function SpacePage() {
       }
 
       // 光の玉。行き先はランダムで、行きと帰りの両方がある
-      if (flow && edges.length && packets.length < MAX_PACKETS && Math.random() < 0.35) {
+      if (edges.length && packets.length < MAX_PACKETS && Math.random() < settings.flow) {
         const edge = edges[Math.floor(Math.random() * edges.length)];
         const forward = Math.random() < 0.5;
         packets.push({
           from: forward ? edge.source : edge.target,
           to: forward ? edge.target : edge.source,
           progress: 0,
-          speed: 0.006 + Math.random() * 0.012,
+          speed: (0.006 + Math.random() * 0.012) * settings.flowSpeed,
         });
       }
 
@@ -529,10 +609,10 @@ export default function SpacePage() {
 
       const sorted = [...points].sort((a, b) => a.scale - b.scale);
       // 地図では丸を小さくする。主役は線を流れる光の方
-      const dot = mode === "map" ? 1.0 : 2.4;
-      const grow = mode === "map" ? 1.4 : 3.2;
+      const dot = (mode === "map" ? 1.0 : 2.4) * settings.dot;
+      const grow = (mode === "map" ? 1.4 : 3.2) * settings.dot;
       for (const point of sorted) {
-        const alert = ALERT_COLOR[point.severity];
+        const alert = settings.alerts ? ALERT_COLOR[point.severity] : undefined;
         const size = (dot + point.scale * grow) * (alert ? 1.5 : 1);
         // 玉が届いた直後は明るくする（0.6 秒ほどで戻す）
         const lit = Math.max(0, 1 - (now - point.litAt) / 600);
@@ -554,7 +634,7 @@ export default function SpacePage() {
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
-        if (point.scale > 0.95 && mode !== "map") {
+        if (settings.labels && point.scale > 0.95 && mode !== "map") {
           context.fillStyle = "#c9d4e2";
           context.font = "11px system-ui, sans-serif";
           context.fillText(point.hostname, point.screenX + size + 3, point.screenY + 4);
@@ -568,7 +648,7 @@ export default function SpacePage() {
     return () => {
       running = false;
     };
-  }, [points, graph, speed, flow, mode]);
+  }, [points, graph, settings, mode]);
 
   return (
     <section>
@@ -600,16 +680,6 @@ export default function SpacePage() {
             </option>
           ))}
         </select>
-        <select value={speed} onChange={(event) => setSpeed(Number(event.target.value))}>
-          <option value={0}>回転: 止める</option>
-          <option value={0.0006}>回転: ゆっくり</option>
-          <option value={0.0012}>回転: 普通</option>
-          <option value={0.003}>回転: 速い</option>
-        </select>
-        <label className="vlan-chip">
-          <input type="checkbox" checked={flow} onChange={(e) => setFlow(e.target.checked)} /> 光を
-          流す
-        </label>
         <button
           onClick={() => {
             pan.current = { x: 0, y: 0 };
@@ -625,6 +695,80 @@ export default function SpacePage() {
         </span>
       </div>
 
+      <details className="space-settings">
+        <summary>見え方を調整する</summary>
+        <div className="space-controls">
+          <Slider
+            label="回転"
+            hint="負の値で逆回り。図をドラッグで回すと、その向きと速さがここに入ります"
+            min={-0.02}
+            max={0.02}
+            step={0.0002}
+            value={settings.spin}
+            onChange={(value) => set("spin", value)}
+          />
+          <Slider
+            label="ゆれ"
+            hint="放置中に機器が揺れる幅"
+            min={0}
+            max={20}
+            step={1}
+            value={settings.drift}
+            onChange={(value) => set("drift", value)}
+          />
+          <Slider
+            label="光の量"
+            hint="線を流れる光の出やすさ。0 で出しません"
+            min={0}
+            max={1}
+            step={0.05}
+            value={settings.flow}
+            onChange={(value) => set("flow", value)}
+          />
+          <Slider
+            label="光の速さ"
+            min={0.2}
+            max={3}
+            step={0.1}
+            value={settings.flowSpeed}
+            onChange={(value) => set("flowSpeed", value)}
+          />
+          <Slider
+            label="機器の大きさ"
+            min={0.3}
+            max={3}
+            step={0.1}
+            value={settings.dot}
+            onChange={(value) => set("dot", value)}
+          />
+          <Slider
+            label="線の明るさ"
+            min={0.2}
+            max={3}
+            step={0.1}
+            value={settings.link}
+            onChange={(value) => set("link", value)}
+          />
+          <label className="vlan-chip">
+            <input
+              type="checkbox"
+              checked={settings.labels}
+              onChange={(event) => set("labels", event.target.checked)}
+            />{" "}
+            手前の機器名を出す
+          </label>
+          <label className="vlan-chip" title="保守切れ・期限間近の機器を強い色にします">
+            <input
+              type="checkbox"
+              checked={settings.alerts}
+              onChange={(event) => set("alerts", event.target.checked)}
+            />{" "}
+            要注意を強調する
+          </label>
+          <button onClick={() => setSettings(DEFAULTS)}>既定に戻す</button>
+        </div>
+      </details>
+
       <canvas
         ref={canvas}
         className="space-canvas"
@@ -635,11 +779,17 @@ export default function SpacePage() {
             x: event.clientX,
             y: event.clientY,
             pan: event.button === 2 || event.shiftKey,
+            spin: 0,
           };
           event.currentTarget.setPointerCapture(event.pointerId);
         }}
         onPointerUp={() => {
+          // 最後に動かした向きと速さを、そのまま自動回転に渡す
+          const released = drag.current;
           drag.current = null;
+          if (released && !released.pan && released.spin) {
+            set("spin", Math.max(-0.02, Math.min(0.02, released.spin)));
+          }
         }}
         onPointerMove={(event) => {
           if (!drag.current) return;
@@ -652,6 +802,8 @@ export default function SpacePage() {
             angle.current.yaw += dx * 0.008;
             angle.current.pitch += dy * 0.008;
             angle.current.pitch = Math.max(-1.4, Math.min(1.4, angle.current.pitch));
+            // 手を離したあとも、回した向きにそのまま回り続ける
+            drag.current.spin = dx * 0.0006;
           }
           drag.current = { ...drag.current, x: event.clientX, y: event.clientY };
         }}

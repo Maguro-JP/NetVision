@@ -25,7 +25,12 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family:
-    system-ui, -apple-system, "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, sans-serif;
+    system-ui,
+    -apple-system,
+    "Hiragino Kaku Gothic ProN",
+    "Noto Sans JP",
+    Meiryo,
+    sans-serif;
   font-size: 14px;
 }
 
@@ -155,8 +160,6 @@ a:hover {
   padding: 24px 28px 60px;
   overflow-x: auto;
 }
-
-
 
 h1 {
   font-size: 22px;
@@ -797,4 +800,30 @@ button:disabled {
 }
 .space-canvas:active {
   cursor: grabbing;
+}
+
+/* 立体表示の調整つまみ。数が多いので折り畳んでおく */
+.space-settings {
+  margin: 10px 0;
+}
+.space-settings summary {
+  cursor: pointer;
+  color: var(--muted);
+  font-size: 13px;
+}
+.space-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 18px;
+  align-items: center;
+  padding: 10px 2px 2px;
+}
+.space-slider {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
+.space-slider input {
+  width: 120px;
 }
