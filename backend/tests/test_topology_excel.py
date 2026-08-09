@@ -162,3 +162,85 @@ def test_the_upper_device_is_decided_by_the_whole_network_not_by_link_count(db_s
     # 本数は branch(5) > core(2) だが、上位は core 側
     assert rank[core.id] < rank[branch.id]
     assert rank[branch.id] < rank[stations[0].id]
+
+
+def test_both_ends_of_a_link_show_their_port_on_separate_rows(db_session):
+    """1本の線に、上位側と下位側のポート名が両方出ること。
+
+    同じ行に書くと罫線と重なって読めなくなるので、上下の行に分ける。
+    上位機器に配下が何台あっても、線ごとにその機器のポートが出る。
+    """
+    site = Site(name="関西支社", address="大阪府")
+    db_session.add(site)
+    db_session.flush()
+
+    parent = Device(
+        hostname="br-rt-01",
+        vendor="Cisco",
+        model="ISR4451-X",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id,
+    )
+    db_session.add(parent)
+    db_session.flush()
+    for index in range(3):
+        child = Device(
+            hostname=f"sw-{index:02d}",
+            vendor="Cisco",
+            model="C9300-48P",
+            device_type=DeviceType.SWITCH,
+            site_id=site.id,
+        )
+        db_session.add(child)
+        db_session.flush()
+        db_session.add(
+            Link(
+                a_device_id=parent.id,
+                a_interface=f"GigabitEthernet0/1/{index}",
+                b_device_id=child.id,
+                b_interface="GigabitEthernet1/0/1",
+            )
+        )
+    db_session.commit()
+
+    sheet = sheet_of(db_session)["構成図"]
+    cells = {
+        (cell.row, cell.column): str(cell.value)
+        for row in sheet.iter_rows()
+        for cell in row
+        if cell.value
+    }
+
+    # 上位側のポートは、配下の数だけ出る（1本しか出ないのは取りこぼし）
+    downlinks = [v for v in cells.values() if v.startswith("GigabitEthernet0/1/")]
+    assert sorted(downlinks) == [
+        "GigabitEthernet0/1/0",
+        "GigabitEthernet0/1/1",
+        "GigabitEthernet0/1/2",
+    ]
+
+    # 上位側と下位側は別の行にある
+    for (row, column), value in cells.items():
+        if value.startswith("GigabitEthernet0/1/"):
+            assert (row + 1, column) in cells or any(
+                r == row + 1 and str(v).startswith("GigabitEthernet1/0/")
+                for (r, _), v in cells.items()
+            )
+
+
+def test_the_sheet_leaves_a_margin_at_the_top_left(db_session):
+    """見出しは B2 から。1台目の箱の左にも余白を空ける。"""
+    build(db_session)
+    sheet = sheet_of(db_session)["構成図"]
+
+    assert sheet["A1"].value is None
+    assert sheet["B2"].value == "構成図"
+
+    boxes = [
+        cell.column
+        for row in sheet.iter_rows()
+        for cell in row
+        if cell.value and "\n" in str(cell.value)
+    ]
+    # 一番左の箱の手前に、上りポート名を書ける幅がある
+    assert min(boxes) >= 4

@@ -9,7 +9,8 @@
 * 機器 = セルを結合して罫線で囲んだ箱
 * 結線 = セルの辺に罫線を引いた折れ線
 
-にする。上位を左、下位を右に並べ、機器の左に上りポート、右に下りポートを書く。
+にする。上位を左、下位を右に並べる。ポート名は線と同じ行に置くと罫線に
+重なって読めなくなるので、上位側は線の上の行、下位側は線の下の行に分ける。
 
 全体を1枚に描こうとしない。 拠点が数千あるところで全体図は使えないので、
 拠点で絞って出すことを前提にしている。
@@ -38,7 +39,10 @@ BOX_H = 3  # 箱の高さ（行）
 GAP_W = 8  # 段と段の間（列）。ここに縦線と上りポート名が入る
 GAP_H = 1  # 箱と箱の間（行）
 
-_HEADER_ROWS = 3  # 見出しの分
+# 図として見せるので、左と上に余白を取る。見出しは B2 から書き、
+# 1台目の箱の左にも、上りポート名を書ける幅を空けておく
+COL_START = 2 + GAP_W // 2  # 箱を置き始める列
+ROW_START = 4  # 箱を置き始める行（B2 の見出しの下）
 
 
 @dataclass
@@ -55,7 +59,7 @@ class _Placed:
 
     @property
     def col(self) -> int:
-        return 1 + self.depth * (BOX_W + GAP_W)
+        return COL_START + self.depth * (BOX_W + GAP_W)
 
     @property
     def middle(self) -> int:
@@ -123,7 +127,7 @@ def _layout(
                 queue.append(neighbour)
 
     placed: list[_Placed] = []
-    row = _HEADER_ROWS + 1
+    row = ROW_START
 
     def walk(device_id: int, depth: int, at_row: int) -> int:
         """自分を `at_row` に置き、子を右へ並べる。使った一番下の行を返す。
@@ -203,11 +207,11 @@ def to_xlsx(
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     generated = localtime.format(localtime.now(), with_zone=True)
-    title = sheet.cell(row=1, column=1, value="構成図")
+    title = sheet.cell(row=2, column=2, value="構成図")
     title.font = Font(bold=True, size=14)
     sheet.cell(
-        row=2,
-        column=1,
+        row=3,
+        column=2,
         value=f"{generated} 時点 / {len(graph.nodes)}台 {len(graph.edges)}本"
         + (" / 上位を左、下位を右に並べています" if placed else ""),
     ).font = Font(size=9, color="666666")
@@ -244,7 +248,11 @@ def to_xlsx(
                 )
 
     def draw_link(child: _Placed, parent_entry: _Placed) -> None:
-        """親の右端から子の左端へ、縦横だけの折れ線を引く。"""
+        """親の右端から子の左端へ、縦横だけの折れ線を引く。
+
+        ポート名は線と同じ行に書くと罫線に重なって読めなくなるので、
+        上位側は線の上の行、下位側は線の下の行に分けて書く。
+        """
         bus = parent_entry.col + BOX_W + GAP_W // 2
         # 親側の横線
         for c in range(parent_entry.col + BOX_W, bus + 1):
@@ -257,21 +265,22 @@ def to_xlsx(
         for c in range(bus, child.col):
             _line_top(sheet, child.middle, c, line)
 
-        # ポート名はその機器の隣に書く。親の右に下りポート、子の左に上りポート。
-        # 線の真ん中に2つ並べると「どちらがどちら側か」を覚える必要が出る
+        # ポート名は、その機器の側に書く。線ごとに引くので、
+        # 配下が何台あっても親側のポートがそれぞれ出る
         pair = port_of.get((parent_entry.device_id, child.device_id))
-        if pair:
-            down, up = pair
-            if down:
-                cell = sheet.cell(
-                    row=parent_entry.middle - 1, column=parent_entry.col + BOX_W, value=down
-                )
-                cell.font = Font(size=8, color="444444")
-                cell.alignment = Alignment(horizontal="left")
-            if up:
-                cell = sheet.cell(row=child.middle - 1, column=max(child.col - 5, bus), value=up)
-                cell.font = Font(size=8, color="444444")
-                cell.alignment = Alignment(horizontal="right")
+        if not pair:
+            return
+        down, up = pair
+        if down:
+            # 上位機器の下りポート。線の上の行、子へ向かう横線の始まりに置く
+            cell = sheet.cell(row=child.middle - 1, column=bus + 1, value=down)
+            cell.font = Font(size=8, color="444444")
+            cell.alignment = Alignment(horizontal="left")
+        if up:
+            # 下位機器の上りポート。線の下の行、子の箱の手前に置く
+            cell = sheet.cell(row=child.middle, column=max(child.col - 5, bus + 1), value=up)
+            cell.font = Font(size=8, color="444444")
+            cell.alignment = Alignment(horizontal="right")
 
     for entry in placed:
         draw_box(entry)
@@ -283,7 +292,7 @@ def to_xlsx(
     depth_max = max((e.depth for e in placed), default=0)
     for column in range(1, (depth_max + 1) * (BOX_W + GAP_W) + GAP_W + 1):
         sheet.column_dimensions[get_column_letter(column)].width = 3.2
-    for row in range(_HEADER_ROWS + 1, (placed[-1].row + BOX_H + 2) if placed else 40):
+    for row in range(ROW_START, (placed[-1].row + BOX_H + 2) if placed else 40):
         sheet.row_dimensions[row].height = 14
     sheet.sheet_view.showGridLines = False
 
