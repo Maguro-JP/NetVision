@@ -1,4 +1,5 @@
 import { Handle, Position } from "@xyflow/react";
+import { Fragment } from "react";
 
 import type { DeviceType, Severity } from "../api/types";
 import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
@@ -16,7 +17,36 @@ export interface DeviceNodeData extends Record<string, unknown> {
   interfaceCount: number;
   /** この機器で図に出てくるポートの種類。線のラベルを短くしても読めるようにする */
   portKinds: string[];
+  /** 編集できる状態か。既定は不可（うっかり動かしてしまうため） */
+  editable: boolean;
 }
+
+/** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
+export const SIDES = ["top", "bottom", "left", "right"] as const;
+export type Side = (typeof SIDES)[number];
+export const SLOTS = [0.25, 0.5, 0.75];
+
+const POSITION_OF: Record<Side, Position> = {
+  top: Position.Top,
+  bottom: Position.Bottom,
+  left: Position.Left,
+  right: Position.Right,
+};
+
+export function anchorId(side: Side, slot: number): string {
+  return `${side}-${slot}`;
+}
+
+const ANCHORS = SIDES.flatMap((side) =>
+  SLOTS.map((ratio, slot) => ({
+    id: anchorId(side, slot),
+    position: POSITION_OF[side],
+    style:
+      side === "top" || side === "bottom"
+        ? { left: `${ratio * 100}%` }
+        : { top: `${ratio * 100}%` },
+  })),
+);
 
 /** 種別ごとの記号。アイコン画像を持たずに一目で区別できるようにする。 */
 const TYPE_GLYPH: Record<DeviceType, string> = {
@@ -41,14 +71,31 @@ export default function DeviceNode({
     <div
       className={
         `topo-node ${data.severity ? `sev-${data.severity}` : "simple"} ` +
+        (data.editable ? "editable " : "") +
         (selected ? "selected" : "")
       }
     >
-      {/* 上下左右どこからでも線を引けるようにする */}
-      <Handle type="target" position={Position.Top} />
-      <Handle type="source" position={Position.Bottom} />
-      <Handle type="target" position={Position.Left} id="left" />
-      <Handle type="source" position={Position.Right} id="right" />
+      {/* 上下左右の各辺に3か所ずつ引き出し口を置く。
+          下の中央からしか出せないと、横に並べた機器の線が遠回りになる。
+          同じ辺に何本も来るときは、3か所に散らして重なりを避ける */}
+      {ANCHORS.map((anchor) => (
+        <Fragment key={anchor.id}>
+          <Handle
+            type="target"
+            id={`t-${anchor.id}`}
+            position={anchor.position}
+            style={anchor.style}
+            isConnectable={data.editable}
+          />
+          <Handle
+            type="source"
+            id={`s-${anchor.id}`}
+            position={anchor.position}
+            style={anchor.style}
+            isConnectable={data.editable}
+          />
+        </Fragment>
+      ))}
 
       <div className="topo-node-head">
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>

@@ -19,8 +19,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { TopologyEdge, TopologyGraph } from "../api/types";
-import DeviceNode, { type DeviceNodeData } from "../components/DeviceNode";
+import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
+import DeviceNode, {
+  SLOTS,
+  anchorId,
+  type DeviceNodeData,
+  type Side,
+} from "../components/DeviceNode";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
 import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 
@@ -67,6 +72,57 @@ const LAYERS = [
 interface LabelOptions {
   portStyle: PortStyle;
   alongLine: boolean;
+  editable: boolean;
+}
+
+/** 機器の中心から見て、相手がどちら側にいるか。 */
+function sideToward(from: TopologyNode, to: TopologyNode): Side {
+  const dx = to.x - from.x;
+  const dy = to.y - from.y;
+  // 箱は横長なので、横方向は少し厳しめに見ないと斜めの線が横に付いてしまう
+  return Math.abs(dx) * 0.75 > Math.abs(dy)
+    ? dx > 0
+      ? "right"
+      : "left"
+    : dy > 0
+      ? "bottom"
+      : "top";
+}
+
+/**
+ * 各結線の引き出し口を決める。
+ *
+ * 人が指定していれば従い、していなければ位置関係から選ぶ。
+ * **同じ辺に複数本来るときは3か所に散らす**。同じ点から出すと線が重なって、
+ * どのポートがどれか分からなくなる。
+ */
+function assignAnchors(graph: TopologyGraph): Map<number, { source: string; target: string }> {
+  const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
+  const used = new Map<string, number>(); // 機器 + 辺 → 使った本数
+  const out = new Map<number, { source: string; target: string }>();
+
+  const take = (deviceId: number, side: Side): string => {
+    const key = `${deviceId}:${side}`;
+    const index = used.get(key) ?? 0;
+    used.set(key, index + 1);
+    // 中央から使い、増えたら左右へ広げる
+    const order = [1, 0, 2];
+    return anchorId(side, order[index % SLOTS.length]);
+  };
+
+  for (const edge of graph.edges) {
+    const source = nodes.get(edge.source);
+    const target = nodes.get(edge.target);
+    if (!source || !target) continue;
+
+    const sourceSide = (edge.source_side as Side | null) ?? sideToward(source, target);
+    const targetSide = (edge.target_side as Side | null) ?? sideToward(target, source);
+    out.set(edge.id, {
+      source: take(edge.source, sourceSide),
+      target: take(edge.target, targetSide),
+    });
+  }
+  return out;
 }
 
 function toFlow(
@@ -92,13 +148,20 @@ function toFlow(
       interfaceCount: simple ? 0 : node.interface_count,
       // 番号だけの表示にしたときに、何のポートかを機器側で読ませる
       portKinds: simple ? [] : node.port_kinds,
+      editable: options.editable,
     } satisfies DeviceNodeData,
+    draggable: options.editable,
   }));
+
+  const anchors = assignAnchors(graph);
 
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),
     source: String(edge.source),
     target: String(edge.target),
+    // 引き出し口は位置関係から選ぶ（人が指定していればそちら）
+    sourceHandle: `s-${anchors.get(edge.id)?.source ?? "bottom-1"}`,
+    targetHandle: `t-${anchors.get(edge.id)?.target ?? "top-1"}`,
     // ポート名を両端に置くため、独自のエッジで描く
     type: "port",
     animated: false,
@@ -129,6 +192,45 @@ function warningOf(edge: TopologyEdge): string | null {
   return warnings.length ? warnings.join(" / ") : null;
 }
 
+const SIDE_LABEL: Record<string, string> = {
+  auto: "自動",
+  top: "上",
+  bottom: "下",
+  left: "左",
+  right: "右",
+};
+
+/** 線をどの辺から出すかを選ぶ。自動に戻せることが大事（間違えても直せる）。 */
+function SidePicker({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null;
+  onChange: (side: string | null) => void;
+}) {
+  return (
+    <label className="vlan-chip">
+      {label} 側{" "}
+      <select
+        value={value ?? "auto"}
+        onChange={(event) => onChange(event.target.value === "auto" ? null : event.target.value)}
+      >
+        {Object.entries(SIDE_LABEL).map(([key, text]) => (
+          <option key={key} value={key}>
+            {text}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
+function nodeName(graph: TopologyGraph | undefined, deviceId: number): string {
+  return graph?.nodes.find((n) => n.device_id === deviceId)?.hostname ?? `#${deviceId}`;
+}
+
 function TopologyEditor() {
   const queryClient = useQueryClient();
   // 他の画面から「この拠点を図で見る」で飛んで来られるようにする
@@ -151,6 +253,11 @@ function TopologyEditor() {
   // ポート名の出し方。長い名前が線に重なると図が読めなくなる
   const [portStyle, setPortStyle] = useState<PortStyle>(view.portStyle);
   const [alongLine, setAlongLine] = useState(view.alongLine);
+  // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
+  const [editable, setEditable] = useState(false);
+  // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
+  // 動かした位置が画面に残ってしまうため、明示的に作り直す合図を持つ
+  const [revision, setRevision] = useState(0);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
@@ -178,7 +285,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
-    const flow = toFlow(graph, simple, { portStyle, alongLine });
+    const flow = toFlow(graph, simple, { portStyle, alongLine, editable });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
@@ -231,6 +338,8 @@ function TopologyEditor() {
     simple,
     portStyle,
     alongLine,
+    editable,
+    revision,
     setNodes,
     setEdges,
   ]);
@@ -253,6 +362,9 @@ function TopologyEditor() {
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
     queryClient.invalidateQueries({ queryKey: ["topologyStats"] });
+    // 取得結果が前と同じ内容だと参照が変わらず、画面が作り直されない。
+    // 「リセットしたのに戻らない」のはこれが原因なので、合図を出しておく
+    setRevision((value) => value + 1);
   };
 
   const save = useMutation({
@@ -296,6 +408,19 @@ function TopologyEditor() {
       }),
     onSuccess: () => {
       setNotice("結線を追加しました");
+      refresh();
+    },
+  });
+
+  const selectedEdgeData = selectedEdge
+    ? graph?.edges.find((e) => String(e.id) === selectedEdge.id)
+    : undefined;
+
+  const updateSide = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: { a_side?: string | null; b_side?: string | null } }) =>
+      api.updateLink(id, body),
+    onSuccess: () => {
+      setNotice("線の引き出し位置を変えました");
       refresh();
     },
   });
@@ -367,11 +492,31 @@ function TopologyEditor() {
     <>
       <h1>トポロジ図</h1>
       <p className="subtitle">
-        Config の LLDP / CDP から結線を推定して描きます。ノードをドラッグして配置を整え、
-        ノード同士をつなげば手動で線を引けます。配置は保存され、機器が増えても崩れません。
+        Config の LLDP / CDP から結線を推定して描きます。
+        {editable ? (
+          <>
+            <strong>編集中です。</strong>
+            機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
+            線を選ぶと、どの辺から出すかも変えられます。
+            <strong>「配置を保存」を押すまで反映されません。</strong>
+          </>
+        ) : (
+          <>図は動かせません。並べ替えたいときは「編集する」を押してください。</>
+        )}
       </p>
 
       <div className="toolbar">
+        <button
+          className={editable ? "primary" : ""}
+          onClick={() => setEditable((value) => !value)}
+          title={
+            editable
+              ? "編集を終える。以後はドラッグしても動きません"
+              : "機器の移動・結線の追加ができるようになります"
+          }
+        >
+          {editable ? "🔓 編集中" : "🔒 編集する"}
+        </button>
         <select value={layer} onChange={(e) => setLayer(e.target.value)}>
           {LAYERS.map((item) => (
             <option key={item.value} value={item.value}>
@@ -391,19 +536,27 @@ function TopologyEditor() {
             </option>
           ))}
         </select>
-        <button className="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
-          {dirty ? "配置を保存" : "保存済み"}
-        </button>
-        <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
-          Config から結線を作り直す
-        </button>
-        <button
-          onClick={() => {
-            if (confirm("配置をリセットして自動レイアウトに戻しますか？")) reset.mutate();
-          }}
-        >
-          配置をリセット
-        </button>
+        {editable && (
+          <>
+            <button
+              className="primary"
+              disabled={!dirty || save.isPending}
+              onClick={() => save.mutate()}
+            >
+              {dirty ? "配置を保存" : "保存済み"}
+            </button>
+            <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
+              Config から結線を作り直す
+            </button>
+            <button
+              onClick={() => {
+                if (confirm("配置をリセットして自動レイアウトに戻しますか？")) reset.mutate();
+              }}
+            >
+              配置をリセット
+            </button>
+          </>
+        )}
         <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
         <label className="vlan-chip" title="機器名と結線だけの表示に切り替えます">
           <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
@@ -502,6 +655,9 @@ function TopologyEditor() {
             edges={edges}
             nodeTypes={NODE_TYPES}
             edgeTypes={EDGE_TYPES}
+            nodesDraggable={editable}
+            nodesConnectable={editable}
+            elementsSelectable
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -632,11 +788,49 @@ function TopologyEditor() {
 
       {selectedEdge && (
         <div className="card" style={{ marginTop: 12 }}>
-          選択中の結線: <strong>{String(selectedEdge.label ?? "")}</strong>
+          <div>
+            選択中の結線:{" "}
+            <strong>
+              {selectedEdgeData
+                ? `${nodeName(graph, selectedEdgeData.source)} ${
+                    selectedEdgeData.source_interface
+                  } — ${nodeName(graph, selectedEdgeData.target)} ${
+                    selectedEdgeData.target_interface
+                  }`
+                : ""}
+            </strong>
+          </div>
+
+          {editable && selectedEdgeData && (
+            <>
+              <p className="muted" style={{ margin: "8px 0 4px" }}>
+                線を出す位置を変えられます。既定は位置関係から自動で決めています。
+              </p>
+              <div className="toolbar" style={{ marginBottom: 0 }}>
+                <SidePicker
+                  label={nodeName(graph, selectedEdgeData.source)}
+                  value={selectedEdgeData.source_side}
+                  onChange={(side) =>
+                    updateSide.mutate({ id: selectedEdgeData.id, body: { a_side: side } })
+                  }
+                />
+                <SidePicker
+                  label={nodeName(graph, selectedEdgeData.target)}
+                  value={selectedEdgeData.target_side}
+                  onChange={(side) =>
+                    updateSide.mutate({ id: selectedEdgeData.id, body: { b_side: side } })
+                  }
+                />
+              </div>
+            </>
+          )}
+
           <div className="actions">
-            <button className="danger" onClick={() => removeLink.mutate(Number(selectedEdge.id))}>
-              この結線を削除
-            </button>
+            {editable && (
+              <button className="danger" onClick={() => removeLink.mutate(Number(selectedEdge.id))}>
+                この結線を削除
+              </button>
+            )}
             <button onClick={() => setSelectedEdge(null)}>選択を解除</button>
           </div>
         </div>

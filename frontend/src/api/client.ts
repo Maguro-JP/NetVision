@@ -304,7 +304,17 @@ export const api = {
     b_interface?: string;
     label?: string | null;
   }) => request<TopologyEdge>("/topology/links", { method: "POST", body: JSON.stringify(body) }),
-  updateLink: (id: number, body: { a_interface?: string; b_interface?: string; label?: string }) =>
+  updateLink: (
+    id: number,
+    body: {
+      a_interface?: string;
+      b_interface?: string;
+      label?: string;
+      /** 図の上でどの辺から線を出すか。null に戻すと自動に任せる */
+      a_side?: string | null;
+      b_side?: string | null;
+    },
+  ) =>
     request<TopologyEdge>(`/topology/links/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),

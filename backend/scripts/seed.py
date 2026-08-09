@@ -224,6 +224,31 @@ def _seed(force: bool) -> None:
                 for a, a_if, b, b_if, confirmed in wiring
             ]
         )
+        # 人が引いた線と、同じ機器間の2本目。
+        # 前者は自動推定と区別が付くこと、後者は同じ辺に複数本来たときに
+        # 引き出し口が散ることを、デモで見せるために入れてある
+        db.add_all(
+            [
+                Link(
+                    a_device_id=by_host["core-sw-01"].id,
+                    a_interface="TenGigabitEthernet1/1/2",
+                    b_device_id=by_host["core-sw-02"].id,
+                    b_interface="TenGigabitEthernet1/1/2",
+                    origin=LinkOrigin.DISCOVERED,
+                    protocol="lldp",
+                    confirmed_both_ways=True,
+                ),
+                Link(
+                    a_device_id=by_host["edge-rt-01"].id,
+                    a_interface="ge-0/0/3",
+                    b_device_id=by_host["acc-sw-osaka-01"].id,
+                    b_interface="GigabitEthernet0/24",
+                    origin=LinkOrigin.MANUAL,
+                    label="本社⇔大阪 専用線",
+                    confirmed_both_ways=False,
+                ),
+            ]
+        )
         # VLAN も入れておく。デモで絞り込みを試せないと、機能があること自体が伝わらない。
         # 実運用では Config の `vlan 10 / name USERS` から取り込まれる部分。
         segments = [

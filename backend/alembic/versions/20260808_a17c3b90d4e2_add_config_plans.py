@@ -43,8 +43,12 @@ def upgrade() -> None:
         sa.Column("scenario_id", sa.Integer(), nullable=True),
         sa.Column("body", sa.Text(), nullable=False),
         sa.Column("vendor", sa.String(length=32), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
         sa.Column("revision", sa.Integer(), nullable=False),
         sa.ForeignKeyConstraint(["device_id"], ["devices.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["base_snapshot_id"], ["config_snapshots.id"], ondelete="SET NULL"),

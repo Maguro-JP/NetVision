@@ -277,7 +277,12 @@ export interface TopologyEdge {
   native_vlan: number | null;
   native_mismatch: boolean;
   vrf: string | null;
+  /** 人が指定した引き出し位置。null なら位置関係から自動で決める */
+  source_side: LinkSide | null;
+  target_side: LinkSide | null;
 }
+
+export type LinkSide = "top" | "bottom" | "left" | "right";
 
 export interface TopologyGraph {
   layer: string;

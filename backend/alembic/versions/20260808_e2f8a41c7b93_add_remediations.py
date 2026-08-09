@@ -50,8 +50,12 @@ def upgrade() -> None:
         sa.Column("verified_by", sa.String(length=120), nullable=True),
         sa.Column("verified_on", sa.Date(), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
         sa.ForeignKeyConstraint(["vulnerability_id"], ["vulnerabilities.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["source_document_id"], ["documents.id"], ondelete="SET NULL"),
         sa.ForeignKeyConstraint(

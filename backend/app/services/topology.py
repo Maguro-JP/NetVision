@@ -81,6 +81,9 @@ class TopologyEdgeView:
     native_vlan: int | None = None
     native_mismatch: bool = False  # 両端でネイティブ VLAN が食い違っている
     vrf: str | None = None
+    # 人が指定した引き出し位置。空なら図の側で位置関係から決める
+    source_side: str | None = None
+    target_side: str | None = None
 
 
 @dataclass
@@ -269,6 +272,8 @@ def _edge_view(
         native_vlan=a_native or b_native,
         native_mismatch=bool(a_native and b_native and a_native != b_native),
         vrf=(a.vrf if a else None) or (b.vrf if b else None),
+        source_side=link.a_side,
+        target_side=link.b_side,
     )
 
 

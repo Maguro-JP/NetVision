@@ -25,7 +25,9 @@ def upgrade() -> None:
         sa.Column("device_id", sa.Integer(), nullable=False),
         sa.Column("vlan_id", sa.Integer(), nullable=False),
         sa.Column("name", sa.String(length=120), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
         sa.ForeignKeyConstraint(["device_id"], ["devices.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint("device_id", "vlan_id", name="uq_device_vlan"),

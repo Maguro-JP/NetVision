@@ -127,6 +127,10 @@ class Link(Base):
     )
     protocol: Mapped[str | None] = mapped_column(String(16), default=None)  # cdp / lldp
     label: Mapped[str | None] = mapped_column(String(120), default=None)
+    # 図の上で線を機器のどの辺から出すか（top / bottom / left / right）。
+    # 空なら位置関係から自動で決める。人が直した場合だけ覚える
+    a_side: Mapped[str | None] = mapped_column(String(8), default=None)
+    b_side: Mapped[str | None] = mapped_column(String(8), default=None)
     # 双方向で確認できた結線は信頼度が高い
     confirmed_both_ways: Mapped[bool] = mapped_column(Boolean, default=False)
 

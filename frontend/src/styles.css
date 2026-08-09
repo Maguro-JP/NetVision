@@ -567,6 +567,21 @@ button:disabled {
   /* ポート名と重ならないよう、線の中央から少し下げる */
   margin-top: 16px;
 }
+/* 引き出し口は編集中だけ見せる。常に出ていると図が点だらけになる */
+.react-flow__handle {
+  opacity: 0;
+  pointer-events: none;
+}
+.topo-node.editable .react-flow__handle {
+  opacity: 0.75;
+  pointer-events: all;
+}
+/* 拡大は transform で書かない。React Flow が位置決めに transform を使っており、
+   上書きすると引き出し口がずれる */
+.topo-node.editable .react-flow__handle:hover {
+  opacity: 1;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 35%, transparent);
+}
 .react-flow__handle {
   background: var(--accent);
   width: 7px;

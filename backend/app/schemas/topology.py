@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -185,6 +186,8 @@ class TopologyEdgeRead(BaseModel):
     native_vlan: int | None = None
     native_mismatch: bool = False
     vrf: str | None = None
+    source_side: str | None = None
+    target_side: str | None = None
 
 
 class TopologyGraphRead(BaseModel):
@@ -213,12 +216,18 @@ class LinkCreate(BaseModel):
     label: str | None = None
 
 
+SIDES = ("top", "bottom", "left", "right")
+
+
 class LinkUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     a_interface: str | None = Field(default=None, max_length=120)
     b_interface: str | None = Field(default=None, max_length=120)
     label: str | None = None
+    # 図の上でどの辺から線を出すか。null に戻すと自動に任せる
+    a_side: Literal["top", "bottom", "left", "right"] | None = None
+    b_side: Literal["top", "bottom", "left", "right"] | None = None
 
 
 class LinkRead(BaseModel):
@@ -233,6 +242,8 @@ class LinkRead(BaseModel):
     protocol: str | None
     label: str | None
     confirmed_both_ways: bool
+    a_side: str | None = None
+    b_side: str | None = None
 
 
 class TopologyStatsRead(BaseModel):

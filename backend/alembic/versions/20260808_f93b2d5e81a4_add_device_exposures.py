@@ -50,8 +50,12 @@ def upgrade() -> None:
         sa.Column("reopened_on", sa.Date(), nullable=True),
         sa.Column("reopen_reason", sa.Text(), nullable=True),
         sa.Column("first_seen_on", sa.Date(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.text("now()")),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
         sa.ForeignKeyConstraint(["device_id"], ["devices.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["vulnerability_id"], ["vulnerabilities.id"], ondelete="CASCADE"),
         sa.ForeignKeyConstraint(["remediation_id"], ["remediations.id"], ondelete="SET NULL"),

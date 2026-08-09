@@ -30,8 +30,12 @@ def upgrade() -> None:
         sa.Column("owner", sa.String(length=120), nullable=True),
         sa.Column("subnet", sa.String(length=64), nullable=True),
         sa.Column("notes", sa.Text(), nullable=True),
-        sa.Column("created_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "created_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
     )
     op.create_index("ix_vlans_vlan_id", "vlans", ["vlan_id"], unique=True)
 
@@ -47,7 +51,9 @@ def upgrade() -> None:
         sa.Column("name", sa.String(length=120), nullable=False),
         sa.Column("rd", sa.String(length=64), nullable=True),
         sa.Column("description", sa.String(length=255), nullable=True),
-        sa.Column("updated_at", sa.DateTime(timezone=True), server_default=sa.func.now()),
+        sa.Column(
+            "updated_at", sa.DateTime(timezone=True), server_default=sa.text("CURRENT_TIMESTAMP")
+        ),
         sa.UniqueConstraint("device_id", "name", name="uq_device_vrf"),
     )
     op.create_index("ix_device_vrfs_device_id", "device_vrfs", ["device_id"])
