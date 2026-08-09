@@ -23,6 +23,10 @@ interface Point {
   x: number;
   y: number;
   z: number;
+  // 揺れの位相。全部が同じ動きをすると機械的に見える
+  phase: number;
+  // 光の玉が着いた時刻。しばらく明るくする
+  litAt: number;
   /* 画面に投影した後の位置。線を引くときに使い回す */
   screenX: number;
   screenY: number;
@@ -119,6 +123,8 @@ function toPoints(graph: TopologyGraph): Point[] {
       hostname: node.hostname,
       siteName: node.site_name,
       deviceType: node.device_type,
+      phase: Math.random() * Math.PI * 2,
+      litAt: -Infinity,
       x: Math.cos(angle) * radius,
       y: (depths.indexOf(hop) - (depths.length - 1) / 2) * LAYER_GAP,
       z: Math.sin(angle) * radius,
@@ -128,6 +134,18 @@ function toPoints(graph: TopologyGraph): Point[] {
     };
   });
 }
+
+/* 線の上を流れる光の玉。通信している様子を眺めるためだけのもので、
+ * 実際のトラフィックとは関係が無い。行きと帰りの両方をランダムに流す。 */
+interface Packet {
+  edge: number;
+  from: number;
+  to: number;
+  progress: number;
+  speed: number;
+}
+
+const MAX_PACKETS = 90;
 
 export default function SpacePage() {
   const canvas = useRef<HTMLCanvasElement | null>(null);
@@ -160,6 +178,11 @@ export default function SpacePage() {
 
     let running = true;
     const byId = new Map(points.map((p) => [p.id, p]));
+    const edges = (graph?.edges ?? []).filter(
+      (edge) => byId.has(edge.source) && byId.has(edge.target),
+    );
+    const packets: Packet[] = [];
+    const started = performance.now();
 
     const draw = () => {
       if (!running) return;
@@ -170,6 +193,8 @@ export default function SpacePage() {
       context.fillStyle = "#0d1117";
       context.fillRect(0, 0, width, height);
 
+      const now = performance.now();
+      const seconds = (now - started) / 1000;
       if (spin && !drag.current) angle.current.yaw += 0.003;
 
       const { yaw, pitch } = angle.current;
@@ -178,11 +203,19 @@ export default function SpacePage() {
       const distance = 900;
 
       for (const point of points) {
+        // 止まっていると絵に見えるので、少しだけ揺らす
+        const driftX = Math.sin(seconds * 0.5 + point.phase) * 6;
+        const driftY = Math.sin(seconds * 0.35 + point.phase * 1.7) * 5;
+        const driftZ = Math.cos(seconds * 0.45 + point.phase) * 6;
+
         // y 軸まわりに回し、次に x 軸まわりに傾ける
-        const x1 = point.x * Math.cos(yaw) - point.z * Math.sin(yaw);
-        const z1 = point.x * Math.sin(yaw) + point.z * Math.cos(yaw);
-        const y2 = point.y * Math.cos(pitch) - z1 * Math.sin(pitch);
-        const z2 = point.y * Math.sin(pitch) + z1 * Math.cos(pitch);
+        const px = point.x + driftX;
+        const py = point.y + driftY;
+        const pz = point.z + driftZ;
+        const x1 = px * Math.cos(yaw) - pz * Math.sin(yaw);
+        const z1 = px * Math.sin(yaw) + pz * Math.cos(yaw);
+        const y2 = py * Math.cos(pitch) - z1 * Math.sin(pitch);
+        const z2 = py * Math.sin(pitch) + z1 * Math.cos(pitch);
 
         const scale = distance / (distance + z2 + 400);
         point.screenX = cx + x1 * scale;
@@ -204,14 +237,78 @@ export default function SpacePage() {
         context.stroke();
       }
 
+      // 光の玉を流す。行き先はランダムで、行きと帰りの両方がある
+      if (edges.length && packets.length < MAX_PACKETS && Math.random() < 0.35) {
+        const index = Math.floor(Math.random() * edges.length);
+        const edge = edges[index];
+        const forward = Math.random() < 0.5;
+        packets.push({
+          edge: index,
+          from: forward ? edge.source : edge.target,
+          to: forward ? edge.target : edge.source,
+          progress: 0,
+          speed: 0.006 + Math.random() * 0.012,
+        });
+      }
+
+      for (let i = packets.length - 1; i >= 0; i -= 1) {
+        const packet = packets[i];
+        const from = byId.get(packet.from);
+        const to = byId.get(packet.to);
+        if (!from || !to) {
+          packets.splice(i, 1);
+          continue;
+        }
+        packet.progress += packet.speed;
+        if (packet.progress >= 1) {
+          // 着いた先を少し光らせる。届いたことが分かる
+          to.litAt = now;
+          packets.splice(i, 1);
+          continue;
+        }
+
+        const x = from.screenX + (to.screenX - from.screenX) * packet.progress;
+        const y = from.screenY + (to.screenY - from.screenY) * packet.progress;
+        const scale = from.scale + (to.scale - from.scale) * packet.progress;
+
+        // 尾を引かせる。点だけだと流れているように見えない
+        const tail = Math.max(0, packet.progress - 0.12);
+        const tailX = from.screenX + (to.screenX - from.screenX) * tail;
+        const tailY = from.screenY + (to.screenY - from.screenY) * tail;
+        const gradient = context.createLinearGradient(tailX, tailY, x, y);
+        gradient.addColorStop(0, "rgba(160, 220, 255, 0)");
+        gradient.addColorStop(1, `rgba(200, 240, 255, ${0.5 + scale * 0.5})`);
+        context.strokeStyle = gradient;
+        context.lineWidth = 1.6 * scale;
+        context.beginPath();
+        context.moveTo(tailX, tailY);
+        context.lineTo(x, y);
+        context.stroke();
+
+        context.fillStyle = "#dff2ff";
+        context.shadowColor = "rgba(140, 210, 255, 0.9)";
+        context.shadowBlur = 12 * scale;
+        context.beginPath();
+        context.arc(x, y, 2.2 * scale, 0, Math.PI * 2);
+        context.fill();
+        context.shadowBlur = 0;
+      }
+
       const sorted = [...points].sort((a, b) => a.scale - b.scale);
       for (const point of sorted) {
         const size = 4 + point.scale * 5;
+        // 玉が届いた直後は明るくする（0.6 秒ほどで戻す）
+        const lit = Math.max(0, 1 - (now - point.litAt) / 600);
         context.fillStyle = TYPE_COLOR[point.deviceType] ?? TYPE_COLOR.other;
         context.globalAlpha = 0.35 + point.scale * 0.65;
+        if (lit > 0) {
+          context.shadowColor = "rgba(190, 235, 255, 0.9)";
+          context.shadowBlur = 18 * lit * point.scale;
+        }
         context.beginPath();
-        context.arc(point.screenX, point.screenY, size, 0, Math.PI * 2);
+        context.arc(point.screenX, point.screenY, size + lit * 2, 0, Math.PI * 2);
         context.fill();
+        context.shadowBlur = 0;
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
