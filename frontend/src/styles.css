@@ -71,16 +71,58 @@ a:hover {
   display: none;
 }
 
+/* グループごとに線で区切る。どこまでが1まとまりかを見た目で示す */
 .nav-group {
-  margin-bottom: 14px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+}
+.nav-group:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+.nav-group.folded {
+  padding: 4px 0;
 }
 .nav-group-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
   padding: 4px 20px;
+  background: transparent;
+  border: none;
+  border-radius: 0;
   color: var(--muted);
   font-size: 11px;
   font-weight: 700;
   letter-spacing: 0.08em;
-  opacity: 0.75;
+  text-align: left;
+}
+.nav-group-label:hover {
+  color: var(--text);
+  border-color: transparent;
+}
+.nav-caret {
+  font-size: 9px;
+  opacity: 0.8;
+}
+/* 畳んだグループには件数を出す。中身が消えたわけではないと分かるように */
+.nav-count {
+  margin-left: auto;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 10px;
+}
+
+.sidebar-pin {
+  display: block;
+  margin: 12px 20px 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 12px;
+  cursor: pointer;
 }
 
 .brand {
@@ -615,6 +657,16 @@ button:disabled {
   .layout,
   .layout.collapsed {
     grid-template-columns: 1fr;
+  }
+  /* 常時表示のときは重ねずに場所を取る。図は狭くなるが、
+     メニューが勝手に消えない方を選んだということなので、それに従う */
+  .layout.pinned {
+    grid-template-columns: 200px 1fr;
+  }
+  .layout.pinned .sidebar {
+    position: static;
+    width: auto;
+    box-shadow: none;
   }
   .sidebar {
     position: fixed;

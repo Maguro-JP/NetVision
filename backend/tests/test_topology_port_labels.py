@@ -11,8 +11,7 @@ from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.topology import TopologyEdgeView, TopologyGraph, TopologyNodeView
 from app.services.topology_export import NODE_H, NODE_W, render_svg
-
-_TEXT = re.compile(r'<text x="([\d.]+)" y="([\d.]+)"[^>]*>([^<]*)</text>')
+from tests import svgread
 
 
 def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
@@ -70,7 +69,7 @@ def test_site_filter_keeps_only_that_site():
 
 
 def labels(svg: str) -> dict[str, tuple[float, float]]:
-    return {m.group(3): (float(m.group(1)), float(m.group(2))) for m in _TEXT.finditer(svg)}
+    return svgread.positions(svg)
 
 
 def centers(svg: str) -> dict[str, tuple[float, float]]:
@@ -146,9 +145,8 @@ def test_port_style_full_keeps_the_whole_name():
 def test_media_colours_are_applied():
     """1G と 10G が同じ色だと、色分けの意味が無い。"""
     svg = render_svg(graph_of(0, 0, 400, 0))
-    giga = re.search(r'fill="([^"]+)"[^>]*>Gi1/0/1<', svg)
-    ten = re.search(r'fill="([^"]+)"[^>]*>Te1/1/1<', svg)
-    assert giga and ten and giga.group(1) != ten.group(1)
+    colors = {text: attrs["fill"] for text, attrs in svgread.elements(svg, "port-label")}
+    assert colors["Gi1/0/1"] != colors["Te1/1/1"]
 
 
 def test_legend_explains_the_colours():
@@ -197,5 +195,5 @@ def test_port_kind_is_coloured_like_its_labels():
     """
     svg = render_svg(graph_of(0, 0, 400, 0), port_style="number")
     kind = re.search(r'<tspan fill="([^"]+)">GigabitEthernet</tspan>', svg)
-    label = re.search(r'fill="([^"]+)"[^>]*>1/0/1<', svg)
-    assert kind and label and kind.group(1) == label.group(1)
+    colors = {text: attrs["fill"] for text, attrs in svgread.elements(svg, "port-label")}
+    assert kind and kind.group(1) == colors["1/0/1"]

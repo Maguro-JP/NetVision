@@ -51,70 +51,126 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
   },
 ];
 
-const STORAGE_KEY = "netvision.sidebar";
+const OPEN_KEY = "netvision.sidebar";
+const PIN_KEY = "netvision.sidebar.pinned";
+const FOLDED_KEY = "netvision.sidebar.folded";
 
 /** タブレットくらいの幅では、メニューを出しっぱなしにすると図が潰れる。 */
 const NARROW = "(max-width: 900px)";
+
+function isNarrow(): boolean {
+  return window.matchMedia(NARROW).matches;
+}
+
+function readList(key: string): string[] {
+  try {
+    const saved = JSON.parse(localStorage.getItem(key) ?? "[]");
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return [];
+  }
+}
 
 export default function App() {
   // プレビュー環境かどうか。データが消えることを黙っていると事故のもとになる
   const { data: meta } = useQuery({ queryKey: ["meta"], queryFn: () => api.meta() });
   const location = useLocation();
 
-  // 画面の広さで初期値を決める。狭い端末では畳んだ状態から始める
+  // 常時表示。画面が狭くても閉じずに出したままにする
+  const [pinned, setPinned] = useState(() => localStorage.getItem(PIN_KEY) === "true");
   const [open, setOpen] = useState(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
+    const saved = localStorage.getItem(OPEN_KEY);
     if (saved === "open") return true;
     if (saved === "closed") return false;
-    return !window.matchMedia(NARROW).matches;
+    return !isNarrow();
   });
+  // 畳んだグループ。項目が何処にあるか分からなくなるのが一番困るので、
+  // 既定は全部開いた状態にしておく
+  const [folded, setFolded] = useState<string[]>(() => readList(FOLDED_KEY));
 
-  useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, open ? "open" : "closed");
-  }, [open]);
+  useEffect(() => localStorage.setItem(OPEN_KEY, open ? "open" : "closed"), [open]);
+  useEffect(() => localStorage.setItem(PIN_KEY, String(pinned)), [pinned]);
+  useEffect(() => localStorage.setItem(FOLDED_KEY, JSON.stringify(folded)), [folded]);
 
   // 狭い画面ではメニューが図に覆いかぶさるので、選んだら閉じる。
-  // 広い画面では出したままの方が使いやすいので閉じない
+  // 常時表示にしている場合と、広い画面では閉じない
   useEffect(() => {
-    if (window.matchMedia(NARROW).matches) setOpen(false);
-  }, [location.pathname]);
+    if (!pinned && isNarrow()) setOpen(false);
+  }, [location.pathname, pinned]);
+
+  // 常時表示に切り替えたら、その場で開く
+  useEffect(() => {
+    if (pinned) setOpen(true);
+  }, [pinned]);
+
+  const toggleGroup = (label: string) =>
+    setFolded((current) =>
+      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
+    );
 
   return (
-    <div className={`layout ${open ? "" : "collapsed"}`}>
+    <div className={`layout ${open ? "" : "collapsed"} ${pinned ? "pinned" : ""}`}>
       <aside className="sidebar">
         <div className="brand">
           Net<span>Vision</span>
         </div>
         <nav className="nav">
-          {NAV_GROUPS.map((group) => (
-            <div key={group.label} className="nav-group">
-              <div className="nav-group-label">{group.label}</div>
-              {group.items.map((item) => (
-                <NavLink
-                  key={item.to}
-                  to={item.to}
-                  className={({ isActive }) => (isActive ? "active" : "")}
+          {NAV_GROUPS.map((group) => {
+            // 今いる画面が入っているグループは畳まない。開いて探す手間を無くす
+            const current = group.items.some((item) => item.to === location.pathname);
+            const collapsed = folded.includes(group.label) && !current;
+
+            return (
+              <div key={group.label} className={`nav-group ${collapsed ? "folded" : ""}`}>
+                <button
+                  className="nav-group-label"
+                  onClick={() => toggleGroup(group.label)}
+                  aria-expanded={!collapsed}
+                  title={collapsed ? "開く" : "畳む"}
                 >
-                  {item.label}
-                </NavLink>
-              ))}
-            </div>
-          ))}
+                  <span className="nav-caret">{collapsed ? "▸" : "▾"}</span>
+                  {group.label}
+                  {collapsed && <span className="nav-count">{group.items.length}</span>}
+                </button>
+                {!collapsed &&
+                  group.items.map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      className={({ isActive }) => (isActive ? "active" : "")}
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+              </div>
+            );
+          })}
         </nav>
+
+        <label className="sidebar-pin" title="画面が狭くてもメニューを出したままにします">
+          <input
+            type="checkbox"
+            checked={pinned}
+            onChange={(event) => setPinned(event.target.checked)}
+          />{" "}
+          常時表示
+        </label>
       </aside>
 
       {/* 狭い画面でメニューを開いたとき、外側を触れば閉じられるようにする */}
-      {open && <div className="sidebar-scrim" onClick={() => setOpen(false)} />}
+      {open && !pinned && <div className="sidebar-scrim" onClick={() => setOpen(false)} />}
 
       <main className="main">
-        <button
-          className="sidebar-toggle"
-          onClick={() => setOpen((value) => !value)}
-          aria-expanded={open}
-          title={open ? "メニューを隠す" : "メニューを出す"}
-        >
-          ☰<span className="sidebar-toggle-text"> メニュー</span>
-        </button>
+        {!pinned && (
+          <button
+            className="sidebar-toggle"
+            onClick={() => setOpen((value) => !value)}
+            aria-expanded={open}
+            title={open ? "メニューを隠す" : "メニューを出す"}
+          >
+            ☰<span className="sidebar-toggle-text"> メニュー</span>
+          </button>
+        )}
 
         {meta?.demo_mode && (
           <div className="demo-banner">

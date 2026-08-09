@@ -21,7 +21,7 @@ from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
 
-from app.services import portlabel
+from app.services import portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import TopologyGraph, get_graph
@@ -117,6 +117,12 @@ def render_svg(
     # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
     used_media: set[Media] = set()
 
+    # 機器の箱を先に「埋まっている場所」として登録しておく。
+    # ラベルはこれを避けて置く。少し広げるのは、枠に文字が接すると読みにくいため
+    placement = svglayout.Placement(
+        [svglayout.Rect(px, py, px + NODE_W, py + NODE_H).grow(3) for px, py in at.values()]
+    )
+
     parts.append(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
         f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="{FONT}">'
@@ -149,7 +155,7 @@ def render_svg(
         )
 
     # --- 結線（ノードより先に描いて背面に回す） ---
-    for index, edge in enumerate(graph.edges):
+    for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
             continue
@@ -168,13 +174,21 @@ def render_svg(
 
         if edge.label:
             # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
-            parts.append(_center_label(x1, y1, x2, y2, edge.label, index))
+            parts.append(_center_label(x1, y1, x2, y2, edge.label, placement))
         else:
             # ポート名は**それぞれの機器側**に置く。1本の線に2つ並べると
             # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
             # 逆に読んでしまう。ポートの隣にあれば規則は要らない
-            parts.append(_port_label(x1, y1, x2, y2, edge.source_interface, port_style, along_line))
-            parts.append(_port_label(x2, y2, x1, y1, edge.target_interface, port_style, along_line))
+            parts.append(
+                _port_label(
+                    x1, y1, x2, y2, edge.source_interface, port_style, along_line, placement
+                )
+            )
+            parts.append(
+                _port_label(
+                    x2, y2, x1, y1, edge.target_interface, port_style, along_line, placement
+                )
+            )
             for name in (edge.source_interface, edge.target_interface):
                 if name:
                     used_media.add(portlabel.media_of(name))
@@ -252,6 +266,7 @@ def _port_kinds_line(x: float, y: float, kinds: list[str]) -> str:
 _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
 _SIDE_OFFSET = 7.0
+_LABEL_FONT = 10.0
 
 
 def _port_label(
@@ -262,6 +277,7 @@ def _port_label(
     name: str,
     style: str,
     along_line: bool,
+    placement: svglayout.Placement,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -269,9 +285,8 @@ def _port_label(
     少し外に出した位置に置くので、**どのポートがどちらの機器のものか**が
     位置だけで分かる。左右・上下の規則を覚える必要が無くなる。
 
-    ずらす向きは**その端から見た左側**で固定する。両端では線の向きが逆になるので、
-    結果として2つのラベルは線の反対側に出る。機器の間隔が狭くて両端のラベルが
-    近づいても重ならない。
+    置き場所は候補を良い順に試し、**機器の箱や他のラベルと重ならない場所**を採る。
+    自動生成の図で文字が被っているのは道具側の不備なので、当たり判定を通す。
     """
     if not name:
         return ""
@@ -280,18 +295,6 @@ def _port_label(
     length = max((dx * dx + dy * dy) ** 0.5, 1.0)
     ux, uy = dx / length, dy / length
 
-    # ノードの枠を出るまでの距離。矩形の中心から見た交点までを求める
-    edge_distance = _exit_distance(ux, uy)
-    px = x1 + ux * (edge_distance + _LABEL_GAP)
-    py = y1 + uy * (edge_distance + _LABEL_GAP)
-
-    # 線に重ならないよう、線と垂直な向きへずらす
-    px += -uy * _SIDE_OFFSET
-    py += ux * _SIDE_OFFSET
-
-    # そのまま出す指定のときは切り詰めを緩める。長いと分かっていて選んだ表示なので
-    limit = 30 if style == "full" else 18
-    text = _esc(_clip(portlabel.format(name, style), limit))
     color = MEDIA_COLOR.get(portlabel.media_of(name), "#5a6270")
 
     if along_line:
@@ -300,19 +303,105 @@ def _port_label(
         flipped = angle > 90 or angle <= -90
         if flipped:
             angle += -180 if angle > 0 else 180
-        transform = f' transform="rotate({angle:.1f} {px:.1f} {py:.1f})"'
-        # 半回転させた側は、回した後の座標系では逆向きに伸ばすことになる
         anchor = "end" if flipped else "start"
     else:
-        transform = ""
+        angle = 0.0
         # 線が右向きならラベルは右へ、左向きなら左へ出す
         anchor = "start" if ux > 0.2 else ("end" if ux < -0.2 else "middle")
 
+    # 候補を良い順に並べる。線に沿って少しずつ機器から離し、
+    # それぞれについて線の左右と、線から離す量を変える。
+    # 最初のものが本来置きたい位置で、後ろほど妥協した位置になる。
+    #
+    # **線の中点は越えない。** 越えると相手側の機器の方が近くなり、
+    # 「どちらのポートか」が位置で分からなくなる。それでは元も子もない
+    base = _exit_distance(ux, uy) + _LABEL_GAP
+    limit = length * 0.45
+    spots = [
+        (
+            x1 + ux * (base + step) - uy * offset * side,
+            y1 + uy * (base + step) + ux * offset * side,
+        )
+        for step, offset, side in _candidate_offsets(base, limit)
+    ]
+
+    # 置けないときは**文字を短くする**。重ねるくらいなら略した方がまし。
+    # 略した場合は元の名前を title に入れて、画面で開けば読めるようにする
+    chosen: tuple[str, int, svglayout.Rect] | None = None
+    fallback: tuple[str, int, svglayout.Rect] | None = None
+    for text in _label_variants(name, style):
+        rects = [
+            svglayout.text_rect(px, py - 3, text, _LABEL_FONT, anchor, angle) for px, py in spots
+        ]
+        index, fits = placement.choose(rects)
+        if fits:
+            chosen = (text, index, rects[index])
+            break
+        if fallback is None:
+            fallback = (text, index, rects[index])
+
+    text, index, rect = chosen or fallback  # type: ignore[misc]
+    px, py = spots[index]
+    # 出力時に座標を丸める分だけ余裕を持たせる。ぎりぎりで置くと、
+    # 丸めた結果わずかに重なることがある
+    placement.add(rect.grow(1.0))
+
+    transform = f' transform="rotate({angle:.1f} {px:.1f} {py:.1f})"' if angle else ""
+    title = f"<title>{_esc(name)}</title>" if text != name else ""
     return (
-        f'<text x="{px:.1f}" y="{py - 3:.1f}" font-size="10" fill="{color}" '
+        f'<text class="port-label" x="{px:.1f}" y="{py - 3:.1f}" '
+        f'font-size="{_LABEL_FONT:.0f}" fill="{color}" '
         f'text-anchor="{anchor}" paint-order="stroke" stroke="#ffffff" '
-        f'stroke-width="3"{transform}>{text}</text>'
+        f'stroke-width="3"{transform}>{title}{_esc(text)}</text>'
     )
+
+
+def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, float]]:
+    """ラベルを置く候補を（線に沿う距離, 線から離す量, 左右）で並べる。
+
+    近いほど良いので、2つのずらし量の合計が小さい順にする。1本の線に何本も
+    束ねている構成（LAG など）では同じ場所に何個も置くことになるため、
+    **線に沿う方向と垂直な方向の両方**に逃がせないと必ずどこかで被る。
+    """
+    steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
+    offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
+
+    out: list[tuple[float, float, float, float]] = []
+    for step_index, step in enumerate(steps):
+        # 中点を越えると相手側の機器の方が近くなり、どちらのポートか分からなくなる
+        if step and base + step > limit:
+            break
+        for offset_index, offset in enumerate(offsets):
+            for side in (1.0, -1.0):
+                rank = step_index + offset_index * 1.2
+                out.append((rank, step, offset, side))
+
+    out.sort(key=lambda item: item[0])
+    return [(step, offset, side) for _, step, offset, side in out]
+
+
+def _label_variants(name: str, style: str) -> list[str]:
+    """指定された表記から順に、短くしていく候補。
+
+    置き場所が無いときに重ねてしまうと図が読めなくなる。
+    **入りきらないなら略す**方を選ぶ。指定より長くはしない。
+    """
+    order = ["full", "short", "number"]
+    start = order.index(style) if style in order else 1
+
+    out: list[str] = []
+    for candidate in order[start:]:
+        text = _clip(portlabel.format(name, candidate), 30 if candidate == "full" else 18)
+        if text and text not in out:
+            out.append(text)
+
+    # それでも入らない場合の最後の手段。番号の末尾だけ残す
+    tail = portlabel.split(name)[1]
+    if tail:
+        short = tail.rsplit("/", 1)[-1]
+        if short not in out:
+            out.append(short)
+    return out
 
 
 def _exit_distance(ux: float, uy: float) -> float:
@@ -323,20 +412,33 @@ def _exit_distance(ux: float, uy: float) -> float:
     return min(tx, ty)
 
 
-def _center_label(x1: float, y1: float, x2: float, y2: float, label: str, index: int) -> str:
-    """人が付けた線の名前。同じ機器から何本も出ると重なるので散らす。"""
-    along = 0.5 + ((index % 3) - 1) * 0.14
-    mx = x1 + (x2 - x1) * along
-    my = y1 + (y2 - y1) * along
-    length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
-    offset = ((index % 4) - 1.5) * 13
-    mx += -(y2 - y1) / length * offset
-    my += (x2 - x1) / length * offset
+def _center_label(
+    x1: float, y1: float, x2: float, y2: float, label: str, placement: svglayout.Placement
+) -> str:
+    """人が付けた線の名前。線の中ほどに置き、空いているところを探す。"""
+    text = _clip(label, 28)
+    spots = [
+        (
+            x1
+            + (x2 - x1) * along
+            - (y2 - y1) / max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0) * off,
+            y1
+            + (y2 - y1) * along
+            + (x2 - x1) / max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0) * off,
+        )
+        for along in (0.5, 0.38, 0.62, 0.28, 0.72)
+        for off in (0.0, -13.0, 13.0)
+    ]
+    rects = [svglayout.text_rect(px, py - 4, text, _LABEL_FONT, "middle") for px, py in spots]
+    index, _ = placement.choose(rects)
+    px, py = spots[index]
+    placement.add(rects[index].grow(1.0))
 
     return (
-        f'<text x="{mx:.0f}" y="{my - 4:.0f}" font-size="10" fill="#5a6270" '
+        f'<text class="edge-label" x="{px:.0f}" y="{py - 4:.0f}" '
+        f'font-size="{_LABEL_FONT:.0f}" fill="#5a6270" '
         f'text-anchor="middle" paint-order="stroke" stroke="#ffffff" '
-        f'stroke-width="3">{_esc(_clip(label, 28))}</text>'
+        f'stroke-width="3">{_esc(text)}</text>'
     )
 
 

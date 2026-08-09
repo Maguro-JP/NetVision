@@ -33,8 +33,10 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-_X_SPACING = 240.0
-_Y_SPACING = 160.0
+# 自動配置の間隔。機器の箱（190x78）に加えて、**ポート名を置く余白**を見込む。
+# ここが詰まっていると、自動生成した図でラベルの置き場所が無くなる
+_X_SPACING = 300.0
+_Y_SPACING = 200.0
 
 
 @dataclass
