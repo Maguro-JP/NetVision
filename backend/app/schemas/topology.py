@@ -169,6 +169,7 @@ class TopologyNodeRead(BaseModel):
     vlans: list[int] = []
     vrfs: list[str] = []
     port_kinds: list[str] = []
+    outside: bool = False
 
 
 class TopologyEdgeRead(BaseModel):

@@ -253,9 +253,20 @@ export const api = {
     request<NetworkInterface[]>(`/configs/devices/${deviceId}/interfaces`),
 
   // --- トポロジ ---
-  getTopology: (layer: string, includeRetired = false, orientation = "vertical") =>
+  getTopology: (
+    layer: string,
+    includeRetired = false,
+    orientation = "vertical",
+    // 拠点が多い環境では全体図は使わない。絞った分＋対向だけを取る
+    filter: { site_id?: number; q?: string; scope?: string } = {},
+  ) =>
     request<TopologyGraph>(
-      `/topology${query({ layer, include_retired: String(includeRetired), orientation })}`,
+      `/topology${query({
+        layer,
+        include_retired: String(includeRetired),
+        orientation,
+        ...filter,
+      })}`,
     ),
   getTopologyStats: (layer: string) => request<TopologyStats>(`/topology/stats${query({ layer })}`),
   savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>

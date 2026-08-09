@@ -27,6 +27,7 @@ from app.models.change_log import ChangeSource
 from app.models.topology import Interface, Link, LinkOrigin
 from app.services.audit import audit_context
 from app.services.configparse import normalize
+from scripts.seed_wan import seed_wan
 
 TODAY = date.today()
 
@@ -54,9 +55,11 @@ def _seed(force: bool) -> None:
             db.commit()
 
         hq = Site(name="本社データセンター", address="東京都千代田区")
-        branch = Site(name="大阪支社", address="大阪府大阪市")
-        db.add_all([hq, branch])
+        db.add(hq)
         db.flush()
+        # 出口・FW・コアは同じ拠点に置く。回線が拠点をまたいで往復するような
+        # 構成は実際には引かない。デモでも、あり得ない絵を見せない
+        branch = hq
 
         devices = [
             Device(
@@ -118,7 +121,7 @@ def _seed(force: bool) -> None:
                 eol_date=_d(900),
             ),
             Device(
-                hostname="acc-sw-osaka-01",
+                hostname="acc-sw-01",
                 vendor="Cisco",
                 model="C2960X-48TS-L",
                 device_type=DeviceType.SWITCH,
@@ -184,7 +187,7 @@ def _seed(force: bool) -> None:
                     annual_cost=260000,
                 ),
                 MaintenanceContract(
-                    device_id=by_host["acc-sw-osaka-01"].id,
+                    device_id=by_host["acc-sw-01"].id,
                     provider="ネットワンシステムズ",
                     service_level="平日日中",
                     start_date=date(2019, 4, 1),
@@ -206,7 +209,7 @@ def _seed(force: bool) -> None:
                 "TenGigabitEthernet1/1/1",
                 True,
             ),
-            ("core-sw-01", "GigabitEthernet1/0/1", "acc-sw-osaka-01", "GigabitEthernet0/1", True),
+            ("core-sw-01", "GigabitEthernet1/0/1", "acc-sw-01", "GigabitEthernet0/1", True),
             # 片側からしか見えていない結線（画面では破線になる）
             ("core-sw-02", "GigabitEthernet1/0/10", "wlc-01", "GigabitEthernet1", False),
         ]
@@ -241,10 +244,10 @@ def _seed(force: bool) -> None:
                 Link(
                     a_device_id=by_host["edge-rt-01"].id,
                     a_interface="ge-0/0/3",
-                    b_device_id=by_host["acc-sw-osaka-01"].id,
+                    b_device_id=by_host["acc-sw-01"].id,
                     b_interface="GigabitEthernet0/24",
                     origin=LinkOrigin.MANUAL,
-                    label="本社⇔大阪 専用線",
+                    label="本社⇔西日本センター 専用線",
                     confirmed_both_ways=False,
                 ),
             ]
@@ -252,9 +255,9 @@ def _seed(force: bool) -> None:
         # VLAN も入れておく。デモで絞り込みを試せないと、機能があること自体が伝わらない。
         # 実運用では Config の `vlan 10 / name USERS` から取り込まれる部分。
         segments = [
-            (10, "USERS", ["core-sw-01", "core-sw-02", "acc-sw-osaka-01"]),
+            (10, "USERS", ["core-sw-01", "core-sw-02", "acc-sw-01"]),
             (20, "SERVERS", ["core-sw-01", "core-sw-02"]),
-            (30, "MGMT", ["core-sw-01", "core-sw-02", "acc-sw-osaka-01", "wlc-01"]),
+            (30, "MGMT", ["core-sw-01", "core-sw-02", "acc-sw-01", "wlc-01"]),
             (40, "WIFI", ["core-sw-02", "wlc-01"]),
         ]
         db.add_all(
@@ -296,14 +299,14 @@ def _seed(force: bool) -> None:
         )
 
         # ポートの VLAN 設定。アクセス / ネイティブ / トランクを分けて持つ。
-        # acc-sw-osaka-01 側だけ VLAN 20 を許可していない状態にしてあり、
+        # acc-sw-01 側だけ VLAN 20 を許可していない状態にしてあり、
         # 「片側だけ許可漏れ」が図の上でどう出るかを試せるようにしてある
         ports = [
             ("core-sw-01", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
             ("core-sw-02", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
             ("core-sw-01", "GigabitEthernet1/0/1", "trunk", None, 999, "10,20,30"),
-            ("acc-sw-osaka-01", "GigabitEthernet0/1", "trunk", None, 999, "10,30"),
-            ("acc-sw-osaka-01", "GigabitEthernet0/10", "access", 10, None, None),
+            ("acc-sw-01", "GigabitEthernet0/1", "trunk", None, 999, "10,30"),
+            ("acc-sw-01", "GigabitEthernet0/10", "access", 10, None, None),
             ("core-sw-02", "GigabitEthernet1/0/10", "trunk", None, 1, "30,40"),
             ("wlc-01", "GigabitEthernet1", "trunk", None, 999, "30,40"),
         ]
@@ -334,9 +337,14 @@ def _seed(force: bool) -> None:
             ]
         )
         db.commit()
+
+        # 全国規模の広域網。数台のサンプルだけだと「拠点が増えたときにどう使うか」を
+        # 試せない。拠点を選ぶ・対向まで見る・名前で探す、が要る規模を入れておく
+        wan = seed_wan(db, by_host["edge-rt-01"])
         print(
-            f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件 / "
-            f"結線{len(wiring)}本 / VLAN{len(segments)}件 / ポート{len(ports)}件"
+            f"投入完了: 拠点{1 + wan['sites']}件 / 機器{len(devices) + wan['devices']}台 / "
+            f"保守契約5件 / 結線{len(wiring) + wan['links']}本 / "
+            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件"
         )
     finally:
         db.close()

@@ -40,9 +40,20 @@ def get_topology(
         default="vertical",
         description="自動配置の向き。vertical = 上下 / horizontal = 左右",
     ),
+    site_id: int | None = Query(default=None, description="この拠点の機器に絞る"),
+    q: str | None = Query(default=None, description="機器名・拠点名・管理IPで探す"),
+    scope: str = Query(
+        default=service.SCOPE_PEERS,
+        description="絞ったときにどこまで出すか。peers = 対向まで / site = 絞った分だけ",
+    ),
 ) -> TopologyGraphRead:
-    """図に描くためのノードと結線を返す。位置は保存済みのものを優先する。"""
+    """図に描くためのノードと結線を返す。位置は保存済みのものを優先する。
+
+    拠点が多い環境では全体図は使わない。`site_id` や `q` で絞った分だけを
+    返し、既定では対向（直接つながっている相手）までを足す。
+    """
     graph = service.get_graph(db, layer, include_retired=include_retired, orientation=orientation)
+    graph = service.scope_graph(graph, site_id=site_id, q=q, scope=scope)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 

@@ -41,6 +41,10 @@ const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
 /** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
 const VIEW_KEY = "netvision.topology.view";
 
+// これを超えたら、絞らずに全体を描かない。全国規模になると全体図は読めないし、
+// 描くだけで重い。拠点を選ぶか、名前で探してもらう
+const WIDE_LIMIT = 40;
+
 interface ViewSettings {
   portStyle: PortStyle;
   alongLine: boolean;
@@ -253,6 +257,13 @@ function TopologyEditor() {
   const [selectedSite, setSelectedSite] = useState<number | "">(() =>
     params.get("site") ? Number(params.get("site")) : "",
   );
+  // 機器名・拠点名で探す。拠点が数百を超えると一覧から選ぶのは無理がある
+  const [search, setSearch] = useState(() => params.get("q") ?? "");
+  const [appliedSearch, setAppliedSearch] = useState(search);
+  // 絞ったときにどこまで出すか。既定は対向まで（拠点だけだと線が1本も出ない）
+  const [scope, setScope] = useState<"peers" | "site">("peers");
+  // 絞らずに全体を出すのは、台数が少ないときだけ既定にする
+  const [showAll, setShowAll] = useState(false);
   // VLAN が数百ある現場ではチェックボックスを全部出しても選べない
   const [vlanFilter, setVlanFilter] = useState("");
   // 機器名と線だけの表示。現場で使う図では付帯情報がむしろ邪魔になる
@@ -273,13 +284,24 @@ function TopologyEditor() {
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
 
-  const { data: graph, isLoading } = useQuery({
-    queryKey: ["topology", layer, orientation],
-    queryFn: () => api.getTopology(layer, false, orientation),
-  });
+  const scoped = selectedSite !== "" || appliedSearch.trim() !== "";
   const { data: stats } = useQuery({
     queryKey: ["topologyStats", layer],
     queryFn: () => api.getTopologyStats(layer),
+  });
+  // 全体図は台数が増えると読めないし、描くだけで重い。
+  // 絞っていないときは、小さい構成のときだけ自動で出す
+  const tooWide = !scoped && !showAll && (stats?.device_count ?? 0) > WIDE_LIMIT;
+
+  const { data: graph, isLoading } = useQuery({
+    queryKey: ["topology", layer, orientation, selectedSite, appliedSearch, scope],
+    queryFn: () =>
+      api.getTopology(layer, false, orientation, {
+        site_id: selectedSite === "" ? undefined : selectedSite,
+        q: appliedSearch.trim() || undefined,
+        scope,
+      }),
+    enabled: !tooWide,
   });
   const { data: vlans } = useQuery({
     queryKey: ["topologyVlans"],
@@ -365,10 +387,11 @@ function TopologyEditor() {
   useEffect(() => {
     const next = new URLSearchParams();
     if (selectedSite !== "") next.set("site", String(selectedSite));
+    if (appliedSearch.trim()) next.set("q", appliedSearch.trim());
     if (selectedVrf) next.set("vrf", selectedVrf);
     if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
     setParams(next, { replace: true });
-  }, [selectedSite, selectedVrf, selectedVlans, setParams]);
+  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, setParams]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
@@ -550,6 +573,42 @@ function TopologyEditor() {
             </option>
           ))}
         </select>
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            setAppliedSearch(search);
+          }}
+          style={{ display: "contents" }}
+        >
+          <input
+            type="search"
+            value={search}
+            placeholder="拠点名・機器名で探す"
+            onChange={(event) => setSearch(event.target.value)}
+            onBlur={() => setAppliedSearch(search)}
+            title="拠点名・機器名・管理IPで探します。全国規模になると一覧からは選べません"
+            style={{ minWidth: 180 }}
+          />
+          {appliedSearch && (
+            <button
+              type="button"
+              onClick={() => {
+                setSearch("");
+                setAppliedSearch("");
+              }}
+            >
+              検索を消す
+            </button>
+          )}
+        </form>
+        <select
+          value={scope}
+          onChange={(event) => setScope(event.target.value as "peers" | "site")}
+          title="絞ったときに、その先（対向）まで出すかどうか"
+        >
+          <option value="peers">範囲: 対向まで</option>
+          <option value="site">範囲: 絞った分だけ</option>
+        </select>
         {editable && (
           <>
             <button
@@ -562,15 +621,16 @@ function TopologyEditor() {
             <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
               Config から結線を作り直す
             </button>
-            <button
-              onClick={() => {
-                if (confirm("配置をリセットして自動レイアウトに戻しますか？")) reset.mutate();
-              }}
-            >
-              配置をリセット
-            </button>
           </>
         )}
+        {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
+        <button
+          onClick={() => {
+            if (confirm("配置をリセットして自動レイアウトに戻しますか？")) reset.mutate();
+          }}
+        >
+          配置をリセット
+        </button>
         <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
         <label className="vlan-chip" title="機器名と結線だけの表示に切り替えます">
           <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
@@ -682,7 +742,20 @@ function TopologyEditor() {
       )}
 
       <div className="topo-canvas">
-        {isLoading ? (
+        {tooWide ? (
+          // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
+          // それでも見たい人のために、出す手段は残しておく
+          <div className="empty" style={{ margin: 40 }}>
+            <p>
+              機器が {stats?.device_count} 台あります。全体図は読めないので、
+              <strong>拠点を選ぶ</strong>か<strong>拠点名・機器名で探して</strong>ください。
+            </p>
+            <p className="muted">
+              選んだ拠点の対向（直接つながっている上位）までは自動で出ます。
+            </p>
+            <button onClick={() => setShowAll(true)}>それでも全体を出す（重くなります）</button>
+          </div>
+        ) : isLoading ? (
           <p className="muted" style={{ padding: 20 }}>
             読み込み中…
           </p>

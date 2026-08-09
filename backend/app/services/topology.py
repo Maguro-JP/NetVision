@@ -61,6 +61,8 @@ class TopologyNodeView:
     # この機器で図に出てくるポートの種類（GigabitEthernet など）。
     # 線のラベルを番号だけにしても、ここを見れば何のポートか分かるようにするため
     port_kinds: list[str] = field(default_factory=list)
+    # 絞り込みの外にいて、対向として足しただけの機器
+    outside: bool = False
 
 
 @dataclass
@@ -168,6 +170,62 @@ def get_graph(
         nodes=nodes,
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
+    )
+
+
+SCOPE_ALL = "all"
+SCOPE_SITE = "site"
+SCOPE_PEERS = "peers"
+
+
+def scope_graph(
+    graph: TopologyGraph,
+    *,
+    site_id: int | None = None,
+    q: str | None = None,
+    scope: str = SCOPE_PEERS,
+) -> TopologyGraph:
+    """見たい範囲だけに絞る。
+
+    拠点が数千・数万になると**全体図は誰も見ない**。実際に見るのは
+    「自分の拠点」と「その上位（対向）まで」で、そこを軽く出せないと
+    道具として使えない。既定は対向まで（`peers`）。
+
+    対向まで含めるのは、拠点だけに絞ると線が1本も出ず「どこにも繋がって
+    いない」図になってしまうため。
+    """
+    keyword = (q or "").strip().lower()
+    if site_id is None and not keyword:
+        return graph
+
+    def matches(node: TopologyNodeView) -> bool:
+        if site_id is not None and node.site_id != site_id:
+            return False
+        if keyword:
+            haystack = f"{node.hostname} {node.site_name or ''} {node.mgmt_ip or ''}".lower()
+            if keyword not in haystack:
+                return False
+        return True
+
+    keep = {node.device_id for node in graph.nodes if matches(node)}
+    inside = set(keep)
+
+    if scope != SCOPE_SITE:
+        for edge in graph.edges:
+            if edge.source in inside and edge.target not in inside:
+                keep.add(edge.target)
+            elif edge.target in inside and edge.source not in inside:
+                keep.add(edge.source)
+
+    nodes = [node for node in graph.nodes if node.device_id in keep]
+    for node in nodes:
+        # 対向として足しただけの機器は、図の上で区別できるようにする
+        node.outside = node.device_id not in inside
+    return TopologyGraph(
+        layer=graph.layer,
+        nodes=nodes,
+        edges=[e for e in graph.edges if e.source in keep and e.target in keep],
+        unplaced_count=graph.unplaced_count,
     )
 
 
