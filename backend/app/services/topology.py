@@ -7,6 +7,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -15,7 +16,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
 from app.models.topology import Interface, Link, LinkOrigin, TopologyNode
-from app.services.configparse import normalize, vlanlist
+from app.services.configparse import expand, normalize, vlanlist
 from app.services.lifecycle import Severity, evaluate
 
 DEFAULT_LAYER = "physical"
@@ -44,6 +45,7 @@ class TopologyNodeView:
     model: str
     device_type: str
     status: str
+    site_id: int | None
     site_name: str | None
     mgmt_ip: str | None
     severity: Severity
@@ -54,6 +56,9 @@ class TopologyNodeView:
     # この機器に載っている VLAN。定義されているものと、トランクで通しているものの合計
     vlans: list[int] = field(default_factory=list)
     vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルータ
+    # この機器で図に出てくるポートの種類（GigabitEthernet など）。
+    # 線のラベルを番号だけにしても、ここを見れば何のポートか分かるようにするため
+    port_kinds: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -108,6 +113,15 @@ def get_graph(
     vrfs_by_device = _vrfs_by_device(db)
     ports = {(i.device_id, normalize(i.name)): i for i in interfaces}
 
+    links = [
+        link
+        for link in db.scalars(select(Link))
+        if link.a_device_id in visible_ids and link.b_device_id in visible_ids
+    ]
+    # 図に出てくるポートの種類は、線が繋がっているポートだけを見る。
+    # 使っていないポートまで並べると、機器の箱が読めなくなる
+    port_kinds = _port_kinds(links)
+
     placeholders = _auto_layout([d for d in devices if d.id not in positions])
 
     nodes: list[TopologyNodeView] = []
@@ -122,6 +136,7 @@ def get_graph(
                 model=device.model,
                 device_type=str(device.device_type),
                 status=str(device.status),
+                site_id=device.site_id,
                 site_name=device.site.name if device.site else None,
                 mgmt_ip=device.mgmt_ip,
                 severity=evaluate(device).overall_severity,
@@ -131,14 +146,11 @@ def get_graph(
                 placed=saved is not None,
                 vlans=vlans_by_device.get(device.id, []),
                 vrfs=vrfs_by_device.get(device.id, []),
+                port_kinds=port_kinds.get(device.id, []),
             )
         )
 
-    edges = [
-        _edge_view(link, ports, defined)
-        for link in db.scalars(select(Link))
-        if link.a_device_id in visible_ids and link.b_device_id in visible_ids
-    ]
+    edges = [_edge_view(link, ports, defined) for link in links]
 
     return TopologyGraph(
         layer=layer,
@@ -179,6 +191,35 @@ def _vlans_by_device(
         if carried:
             out.setdefault(interface.device_id, set()).update(carried)
     return {device_id: sorted(values) for device_id, values in out.items()}
+
+
+def _port_kinds(links: list[Link]) -> dict[int, list[str]]:
+    """機器ごとに、図に出てくるポートの正式名を集める。
+
+    線のラベルを番号だけにすると、それが何のポートか分からなくなる。
+    色で表すこともできるが、色は凡例を探しに行かないと読めない。
+    **機器の箱に種類を書いておけば、視線を動かさずに済む**。
+    """
+    out: dict[int, set[str]] = {}
+    for link in links:
+        for device_id, name in (
+            (link.a_device_id, link.a_interface),
+            (link.b_device_id, link.b_interface),
+        ):
+            kind = _kind_of(name)
+            if kind:
+                out.setdefault(device_id, set()).add(kind)
+    return {device_id: sorted(kinds) for device_id, kinds in out.items()}
+
+
+def _kind_of(name: str) -> str | None:
+    """`GigabitEthernet1/0/24` → `GigabitEthernet`。番号を落とした部分。"""
+    if not name:
+        return None
+    expanded = expand(name)
+    match = re.match(r"^([A-Za-z][A-Za-z\-]*)", expanded)
+    # Juniper の `ge-0/0/1` は接頭辞にハイフンが付くので落とす
+    return match.group(1).rstrip("-") if match else None
 
 
 def _vrfs_by_device(db: Session) -> dict[int, list[str]]:

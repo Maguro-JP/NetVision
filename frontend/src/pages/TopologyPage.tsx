@@ -71,6 +71,8 @@ function toFlow(
       siteName: simple ? null : node.site_name,
       mgmtIp: simple ? null : node.mgmt_ip,
       interfaceCount: simple ? 0 : node.interface_count,
+      // 番号だけの表示にしたときに、何のポートかを機器側で読ませる
+      portKinds: simple ? [] : node.port_kinds,
     } satisfies DeviceNodeData,
   }));
 
@@ -114,6 +116,8 @@ function TopologyEditor() {
   // 選んだ VLAN を持つ機器だけを残す。空なら全部表示
   const [selectedVlans, setSelectedVlans] = useState<number[]>([]);
   const [selectedVrf, setSelectedVrf] = useState<string>("");
+  // 拠点で絞る。現場では自分の拠点だけを見たいことが多い
+  const [selectedSite, setSelectedSite] = useState<number | "">("");
   // VLAN が数百ある現場ではチェックボックスを全部出しても選べない
   const [vlanFilter, setVlanFilter] = useState("");
   // 機器名と線だけの表示。現場で使う図では付帯情報がむしろ邪魔になる
@@ -144,6 +148,7 @@ function TopologyEditor() {
     queryKey: ["topologyVrfs"],
     queryFn: () => api.listTopologyVrfs(),
   });
+  const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
 
   useEffect(() => {
     if (!graph) return;
@@ -152,14 +157,15 @@ function TopologyEditor() {
     // VLAN / VRF を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
     // 同時に見えた方が構成を掴みやすいため。
-    const filtering = selectedVlans.length > 0 || selectedVrf !== "";
+    const filtering = selectedVlans.length > 0 || selectedVrf !== "" || selectedSite !== "";
     if (filtering) {
       const matches = new Set(
         graph.nodes
           .filter(
             (n) =>
               (selectedVlans.length === 0 || n.vlans.some((v) => selectedVlans.includes(v))) &&
-              (selectedVrf === "" || n.vrfs.includes(selectedVrf)),
+              (selectedVrf === "" || n.vrfs.includes(selectedVrf)) &&
+              (selectedSite === "" || n.site_id === selectedSite),
           )
           .map((n) => String(n.device_id)),
       );
@@ -178,7 +184,17 @@ function TopologyEditor() {
     setNodes(flow.nodes);
     setEdges(flow.edges);
     setDirty(false);
-  }, [graph, selectedVlans, selectedVrf, simple, portStyle, alongLine, setNodes, setEdges]);
+  }, [
+    graph,
+    selectedVlans,
+    selectedVrf,
+    selectedSite,
+    simple,
+    portStyle,
+    alongLine,
+    setNodes,
+    setEdges,
+  ]);
 
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["topology"] });
@@ -309,6 +325,18 @@ function TopologyEditor() {
             </option>
           ))}
         </select>
+        <select
+          value={selectedSite}
+          onChange={(e) => setSelectedSite(e.target.value === "" ? "" : Number(e.target.value))}
+          title="拠点で絞り込みます。書き出すとその拠点だけの構成図になります"
+        >
+          <option value="">拠点: すべて</option>
+          {(sites ?? []).map((site) => (
+            <option key={site.id} value={site.id}>
+              拠点: {site.name}
+            </option>
+          ))}
+        </select>
         <button className="primary" disabled={!dirty || save.isPending} onClick={() => save.mutate()}>
           {dirty ? "配置を保存" : "保存済み"}
         </button>
@@ -351,6 +379,7 @@ function TopologyEditor() {
           href={api.topologyExportUrl(layer, {
             vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
             vrf: selectedVrf || undefined,
+            site_id: selectedSite === "" ? undefined : selectedSite,
             style: simple ? "simple" : undefined,
             port_style: portStyle,
             along_line: alongLine ? "true" : undefined,

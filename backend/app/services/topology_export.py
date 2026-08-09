@@ -43,7 +43,9 @@ SEVERITY_LABEL: dict[str, str] = {
 }
 
 NODE_W = 190.0
-NODE_H = 62.0
+# ポートの種類（GigabitEthernet など）を箱の中に1行入れる分の高さを含む。
+# 線のラベルを番号だけにしても、機器を見れば何のポートか分かるようにするため
+NODE_H = 78.0
 MARGIN = 48.0
 LEGEND_H = 62.0
 
@@ -66,14 +68,15 @@ def render_svg(
     title: str = "ネットワーク構成図",
     vlan: int | None = None,
     vrf: str | None = None,
+    site_id: int | None = None,
     style: str = "detail",
     port_style: str = "short",
     along_line: bool = False,
 ) -> str:
     """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
 
-    `vlan` / `vrf` を指定すると、それに載っている機器だけを描く。
-    セグメント単位・VRF 単位で資料を作るときに使う。
+    `vlan` / `vrf` / `site_id` を指定すると、それに載っている機器だけを描く。
+    セグメント単位・VRF 単位・拠点単位で資料を作るときに使う。
 
     `style="simple"` は**機器名と結線だけ**の図。型番・IP・保守状態・VLAN を
     一切載せない。作業手順書や現場での指差し確認では、余計な情報が入っている方が
@@ -85,6 +88,8 @@ def render_svg(
         nodes = [n for n in nodes if vlan in n.vlans]
     if vrf is not None:
         nodes = [n for n in nodes if vrf in n.vrfs]
+    if site_id is not None:
+        nodes = [n for n in nodes if n.site_id == site_id]
     if nodes is not graph.nodes:
         keep = {n.device_id for n in nodes}
         graph = TopologyGraph(
@@ -125,6 +130,9 @@ def render_svg(
     )
     scope = f"{f' / VLAN {vlan}' if vlan is not None else ''}"
     scope += f"{f' / VRF {vrf}' if vrf else ''}"
+    if site_id is not None:
+        site_name = next((n.site_name for n in nodes if n.site_name), None)
+        scope += f" / {site_name}" if site_name else ""
     if simple:
         # シンプル図でも「いつ時点の何台か」だけは残す。日付の無い構成図は
         # あとから見たときに信用できないため
@@ -208,12 +216,36 @@ def render_svg(
                 f'<text x="{x + 14:.0f}" y="{y + 52:.0f}" font-size="10" fill="#7a828f">'
                 f"{_esc(_clip(detail, 26))}</text>"
             )
+        if node.port_kinds:
+            parts.append(_port_kinds_line(x + 14, y + 68, node.port_kinds))
         parts.append("</g>")
 
     if not simple:
         parts.append(_legend(MARGIN, height - LEGEND_H + 10, width, used_media))
     parts.append("</svg>")
     return "\n".join(parts)
+
+
+def _port_kinds_line(x: float, y: float, kinds: list[str]) -> str:
+    """機器の箱に、その機器で使われているポートの種類を書く。
+
+    線のラベルを番号だけにすると何のポートか分からなくなる。色でも表せるが、
+    色は凡例を探しに行かないと読めない。**機器の隣に名前があれば視線が動かない**。
+    ラベルと同じ色を使うので、種類が複数あっても線と対応が付く。
+    """
+    spans: list[str] = []
+    budget = 36  # 箱の幅（190px）に 9px の文字で収まるおおよその数
+    for index, kind in enumerate(kinds):
+        if budget <= 0:
+            spans.append('<tspan fill="#7a828f"> ほか</tspan>')
+            break
+        color = MEDIA_COLOR.get(portlabel.media_of(kind), "#5a6270")
+        separator = " / " if index else ""
+        text = _clip(kind, budget)
+        budget -= len(text) + len(separator)
+        spans.append(f'<tspan fill="{color}">{_esc(separator + text)}</tspan>')
+
+    return f'<text x="{x:.0f}" y="{y:.0f}" font-size="9">{"".join(spans)}</text>'
 
 
 # ノード枠から、その先どのくらい離してラベルを置くか
@@ -370,6 +402,7 @@ def export_svg(
     title: str = "ネットワーク構成図",
     vlan: int | None = None,
     vrf: str | None = None,
+    site_id: int | None = None,
     style: str = "detail",
     port_style: str = "short",
     along_line: bool = False,
@@ -379,6 +412,7 @@ def export_svg(
         title=title,
         vlan=vlan,
         vrf=vrf,
+        site_id=site_id,
         style=style,
         port_style=port_style,
         along_line=along_line,

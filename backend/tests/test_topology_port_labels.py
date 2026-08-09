@@ -23,6 +23,7 @@ def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
         model="C9300",
         device_type="switch",
         status="active",
+        site_id=None,
         site_name=None,
         mgmt_ip=None,
         severity=Severity.OK,
@@ -30,6 +31,7 @@ def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
         x=x,
         y=y,
         placed=True,
+        port_kinds=["GigabitEthernet"],
     )
 
 
@@ -53,6 +55,18 @@ def graph_of(ax: float, ay: float, bx: float, by: float) -> TopologyGraph:
         nodes=[node(1, "sw-a", ax, ay), node(2, "sw-b", bx, by)],
         edges=[edge(1, 2, "GigabitEthernet1/0/1", "TenGigabitEthernet1/1/1")],
     )
+
+
+def test_site_filter_keeps_only_that_site():
+    """拠点ごとの構成図が出せること。"""
+    graph = graph_of(0, 0, 400, 0)
+    graph.nodes[0].site_id, graph.nodes[0].site_name = 1, "本社"
+    graph.nodes[1].site_id, graph.nodes[1].site_name = 2, "大阪支社"
+
+    svg = render_svg(graph, site_id=2)
+    assert "sw-b" in svg
+    assert "sw-a" not in svg
+    assert "大阪支社" in svg  # 見出しに拠点名が入る
 
 
 def labels(svg: str) -> dict[str, tuple[float, float]]:
@@ -162,3 +176,26 @@ def test_manual_label_still_goes_in_the_middle():
     found = labels(svg)
     assert "本社⇔支社 専用線" in found
     assert "Gi1/0/1" not in found
+
+
+def test_device_box_carries_the_port_kind():
+    """番号だけの表示にしても、機器の箱を見れば何のポートか分かること。
+
+    色でも表せるが、色は凡例を探しに行かないと読めない。名前が機器の隣に
+    あれば視線が動かない。
+    """
+    svg = render_svg(graph_of(0, 0, 400, 0), port_style="number")
+    assert "GigabitEthernet" in svg
+    # 線のラベルは番号だけになっている
+    assert "Gi1/0/1" not in labels(svg)
+
+
+def test_port_kind_is_coloured_like_its_labels():
+    """機器の箱の種類名と、線のラベルの色が揃っていること。
+
+    種類が複数あるとき、色が対応の手がかりになる。
+    """
+    svg = render_svg(graph_of(0, 0, 400, 0), port_style="number")
+    kind = re.search(r'<tspan fill="([^"]+)">GigabitEthernet</tspan>', svg)
+    label = re.search(r'fill="([^"]+)"[^>]*>1/0/1<', svg)
+    assert kind and label and kind.group(1) == label.group(1)

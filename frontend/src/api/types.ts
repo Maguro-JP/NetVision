@@ -203,6 +203,7 @@ export interface TopologyNode {
   model: string;
   device_type: DeviceType;
   status: DeviceStatus;
+  site_id: number | null;
   site_name: string | null;
   mgmt_ip: string | null;
   severity: Severity;
@@ -212,6 +213,8 @@ export interface TopologyNode {
   placed: boolean;
   vlans: number[];
   vrfs: string[];
+  /** この機器で図に出てくるポートの種類（GigabitEthernet など） */
+  port_kinds: string[];
 }
 
 export interface TopologyVlan {

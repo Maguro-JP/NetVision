@@ -107,6 +107,7 @@ def export_topology(
     title: str = "ネットワーク構成図",
     vlan: int | None = Query(default=None, description="この VLAN を持つ機器だけを描く"),
     vrf: str | None = Query(default=None, description="この VRF に属する機器だけを描く"),
+    site_id: int | None = Query(default=None, description="この拠点の機器だけを描く"),
     style: str = Query(
         default="detail",
         description="detail = 型番や状態つき / simple = 機器名と結線だけ",
@@ -135,6 +136,7 @@ def export_topology(
         title=title,
         vlan=vlan,
         vrf=vrf,
+        site_id=site_id,
         style=style,
         port_style=port_style,
         along_line=along_line,
@@ -142,6 +144,8 @@ def export_topology(
     suffix = f"-vlan{vlan}" if vlan else ""
     if vrf:
         suffix += f"-{vrf}"
+    if site_id:
+        suffix += f"-site{site_id}"
     if style == "simple":
         suffix += "-simple"
     filename = f"topology-{layer}{suffix}.svg"

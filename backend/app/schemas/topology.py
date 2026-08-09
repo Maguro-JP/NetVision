@@ -157,6 +157,7 @@ class TopologyNodeRead(BaseModel):
     model: str
     device_type: str
     status: str
+    site_id: int | None = None
     site_name: str | None
     mgmt_ip: str | None
     severity: Severity
@@ -166,6 +167,7 @@ class TopologyNodeRead(BaseModel):
     placed: bool
     vlans: list[int] = []
     vrfs: list[str] = []
+    port_kinds: list[str] = []
 
 
 class TopologyEdgeRead(BaseModel):

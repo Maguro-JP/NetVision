@@ -42,11 +42,45 @@ a:hover {
   grid-template-columns: 220px 1fr;
   min-height: 100vh;
 }
+/* メニューを畳んだ状態。図を広く使いたいときと、画面の狭い端末向け */
+.layout.collapsed {
+  grid-template-columns: 0 1fr;
+}
 
 .sidebar {
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 20px 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.layout.collapsed .sidebar {
+  display: none;
+}
+
+/* 開閉ボタン。画面が広いときは控えめに、狭いときは押しやすく */
+.sidebar-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  margin-bottom: 12px;
+  font-size: 15px;
+  line-height: 1;
+}
+.sidebar-scrim {
+  display: none;
+}
+
+.nav-group {
+  margin-bottom: 14px;
+}
+.nav-group-label {
+  padding: 4px 20px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  opacity: 0.75;
 }
 
 .brand {
@@ -79,6 +113,8 @@ a:hover {
   padding: 24px 28px 60px;
   overflow-x: auto;
 }
+
+
 
 h1 {
   font-size: 22px;
@@ -368,6 +404,15 @@ button:disabled {
 .topo-node-body {
   line-height: 1.45;
 }
+/* ポートの種類。線のラベルを短くしても、ここを見れば何のポートか分かる */
+.topo-node-ports {
+  margin-top: 3px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
 .topo-node-foot {
   margin-top: 5px;
   font-size: 11px;
@@ -561,4 +606,52 @@ button:disabled {
 .table-wrap {
   overflow-x: auto;
   max-width: 100%;
+}
+
+/* --- タブレット・狭い画面 ---
+   現場ではタブレットで図を見ることがある。メニューが常に幅を取ると
+   図の面積が足りなくなるので、重ねて出して選んだら閉じる形にする。 */
+@media (max-width: 900px) {
+  .layout,
+  .layout.collapsed {
+    grid-template-columns: 1fr;
+  }
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 240px;
+    z-index: 30;
+    box-shadow: 4px 0 18px rgb(0 0 0 / 45%);
+  }
+  .layout.collapsed .sidebar {
+    display: none;
+  }
+  .sidebar-scrim {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgb(0 0 0 / 45%);
+    z-index: 20;
+  }
+  .main {
+    padding: 16px 14px 48px;
+  }
+  /* 指で押す前提なので、少し大きくする */
+  .sidebar-toggle {
+    padding: 9px 14px;
+    font-size: 17px;
+  }
+  .nav a {
+    padding: 12px 20px;
+  }
+  .topo-canvas {
+    height: 70vh;
+  }
+  /* 表は画面に収まらないので、横スクロールを前提にする */
+  .table-wrap,
+  .main {
+    -webkit-overflow-scrolling: touch;
+  }
 }

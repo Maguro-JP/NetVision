@@ -2,6 +2,7 @@ import { Handle, Position } from "@xyflow/react";
 
 import type { DeviceType, Severity } from "../api/types";
 import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
+import { MEDIA_COLOR, mediaOf } from "../lib/portlabel";
 
 export interface DeviceNodeData extends Record<string, unknown> {
   hostname: string;
@@ -13,6 +14,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   siteName: string | null;
   mgmtIp: string | null;
   interfaceCount: number;
+  /** この機器で図に出てくるポートの種類。線のラベルを短くしても読めるようにする */
+  portKinds: string[];
 }
 
 /** 種別ごとの記号。アイコン画像を持たずに一目で区別できるようにする。 */
@@ -51,6 +54,18 @@ export default function DeviceNode({
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
         <span className="topo-hostname">{data.hostname}</span>
       </div>
+      {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
+          ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}
+      {data.portKinds.length > 0 && (
+        <div className="topo-node-ports">
+          {data.portKinds.map((kind, index) => (
+            <span key={kind} style={{ color: MEDIA_COLOR[mediaOf(kind)] }}>
+              {index > 0 && <span className="muted"> / </span>}
+              {kind}
+            </span>
+          ))}
+        </div>
+      )}
       {/* シンプル表示では機器名だけを出す。現場で見る図に型番や保守状態が
           載っていると、読み違いのもとになるため */}
       {data.severity && (

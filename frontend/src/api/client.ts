@@ -289,6 +289,7 @@ export const api = {
       title?: string;
       vlan?: number;
       vrf?: string;
+      site_id?: number;
       style?: string;
       /** ポート名の出し方。full / short / number */
       port_style?: string;
