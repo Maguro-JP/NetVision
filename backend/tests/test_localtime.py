@@ -65,3 +65,32 @@ def test_exported_diagram_carries_the_local_time(client):
     )
     svg = client.get(f"{API}/topology/export.svg").text
     assert "JST" in svg
+
+
+def test_broken_setting_falls_back_but_says_so(monkeypatch, caplog):
+    """設定が読めないときに、黙って UTC に戻らないこと。
+
+    UTC 表示のまま気づかれないのが一番困る。画面が出なくなるのは避けつつ、
+    ログには残す。Windows で tzdata が入っていない場合もここに来る。
+    """
+    from app.config import settings
+    from app.services import localtime as module
+
+    monkeypatch.setattr(settings, "display_timezone", "Nowhere/Nothing")
+    monkeypatch.setattr(module, "_warned", False)
+
+    with caplog.at_level("WARNING"):
+        text = module.format(datetime(2026, 8, 9, 13, 37, 30))
+
+    assert text == "2026-08-09 13:37"  # UTC のまま出る
+    assert "Nowhere/Nothing" in caplog.text
+
+
+def test_tzdata_is_available():
+    """Windows には zoneinfo のデータベースが無い。
+
+    tzdata を同梱していないと、配布したバンドルで黙って UTC 表示に戻る。
+    """
+    from zoneinfo import ZoneInfo
+
+    assert ZoneInfo("Asia/Tokyo") is not None

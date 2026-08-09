@@ -15,6 +15,9 @@ dependencies = [
     "openpyxl>=3.1",
     "python-multipart>=0.0.12",
     "jinja2>=3.1",
+    # Windows には zoneinfo のデータベースが無い。入れておかないと
+    # ZoneInfo("Asia/Tokyo") が失敗し、黙って UTC 表示に戻る
+    "tzdata>=2024.1",
 ]
 
 [project.optional-dependencies]

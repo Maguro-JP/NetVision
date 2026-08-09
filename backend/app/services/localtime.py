@@ -9,18 +9,38 @@ DB には **UTC** で持つ。拠点や利用者が増えても基準が1つで�
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+import logging
+from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
 
-def zone() -> ZoneInfo:
-    """表示に使う地域。設定が壊れていても落とさず UTC に倒す。"""
+_warned = False
+
+
+def zone() -> tzinfo:
+    """表示に使う地域。
+
+    設定が壊れていても画面が出なくなる方が困るので UTC に倒すが、
+    **黙って倒さない**。UTC 表示のまま気づかれないのが一番困るため、
+    一度だけ警告を出す。
+
+    Windows には zoneinfo のデータベースが無いので `tzdata` を同梱している。
+    """
+    global _warned
     try:
         return ZoneInfo(settings.display_timezone)
-    except Exception:  # 設定ミスで画面が出なくなる方が困る
-        return ZoneInfo("UTC")
+    except Exception:
+        if not _warned:
+            logger.warning(
+                "表示用のタイムゾーン %s を読めませんでした。UTC で表示します。"
+                "（Windows では tzdata が必要です）",
+                settings.display_timezone,
+            )
+            _warned = True
+        return UTC
 
 
 def as_utc(value: datetime) -> datetime:
