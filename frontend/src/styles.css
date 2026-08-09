@@ -341,6 +341,15 @@ button:disabled {
 .topo-node.sev-ok {
   border-left-color: var(--sev-ok);
 }
+/* シンプル表示。機器名だけを大きく出し、状態の色は付けない */
+.topo-node.simple {
+  border-left-color: var(--border);
+  padding: 14px 10px;
+  text-align: center;
+}
+.topo-node.simple .topo-hostname {
+  font-size: 15px;
+}
 
 .topo-node-head {
   display: flex;
@@ -392,6 +401,11 @@ button:disabled {
 .react-flow__edge.topo-edge.manual .react-flow__edge-path {
   stroke: var(--accent);
   stroke-dasharray: none;
+}
+/* 両端で VLAN の食い違いがある結線。気づけないと意味が無いので目立たせる */
+.react-flow__edge.topo-edge.mismatch .react-flow__edge-path {
+  stroke: var(--sev-critical);
+  stroke-width: 2.6;
 }
 .react-flow__edge.selected .react-flow__edge-path {
   stroke-width: 3.5;
@@ -515,4 +529,10 @@ button:disabled {
 }
 .vlan-chip:hover {
   border-color: var(--accent);
+}
+
+/* 列の多い表（ポート一覧・VLAN 台帳）。画面幅を超えたら中だけ横スクロールさせる */
+.table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
 }

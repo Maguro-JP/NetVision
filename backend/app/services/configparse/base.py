@@ -25,16 +25,59 @@ class NeighborProtocol(enum.StrEnum):
 
 @dataclass
 class ParsedInterface:
+    """ポート1つ分。
+
+    VLAN は3つの顔を分けて持つ。混ぜると現場の判断に使えないため。
+
+    - `vlan` … アクセス VLAN（そのポートに繋いだ端末が乗るセグメント）
+    - `native_vlan` … トランクのタグ無し VLAN。片側だけ変えると通信が漏れる
+    - `trunk_vlans` … トランクで許可している VLAN。ここが両端で食い違うと不通になる
+    """
+
     name: str
     description: str | None = None
     ip_address: str | None = None
     vlan: int | None = None
-    mode: str | None = None  # access / trunk / routed
+    mode: str | None = None  # access / trunk / hybrid / routed
+    native_vlan: int | None = None
+    trunk_vlans: list[int] = field(default_factory=list)
+    # 許可 VLAN を書いていないトランクは「全部通す」。番号を並べて持つと
+    # 4094個になるので、意味の方を持っておき、実際の集合は機器の定義 VLAN で解決する
+    trunk_all: bool = False
+    trunk_excluded: set[int] = field(default_factory=set)  # `except` 指定の除外分
+    vrf: str | None = None
     enabled: bool = True
 
     @property
     def key(self) -> str:
         return normalize(self.name)
+
+    def carried_vlans(self, defined: set[int] | None = None) -> set[int]:
+        """このポートが運ぶ VLAN すべて。図でセグメントを追うのに使う。
+
+        `defined` はその機器に定義されている VLAN。「全部通す」トランクは
+        ここと突き合わせて実際の集合にする。
+        """
+        out = set(self.trunk_vlans)
+        if self.trunk_all and defined:
+            out |= defined - self.trunk_excluded
+        for value in (self.vlan, self.native_vlan):
+            if value is not None:
+                out.add(value)
+        return out
+
+
+@dataclass
+class ParsedVrf:
+    """機器の中に切った仮想ルータ（VRF / VPN インスタンス / VDOM）。
+
+    経路表が分かれるので、同じ図に見えていても VRF が違えば通信できない。
+    「繋がっているのに通らない」の原因になりやすいところなので、明示的に持つ。
+    """
+
+    name: str
+    rd: str | None = None  # route-distinguisher
+    description: str | None = None
 
 
 @dataclass
@@ -63,14 +106,18 @@ class ParsedConfig:
     interfaces: list[ParsedInterface] = field(default_factory=list)
     neighbors: list[ParsedNeighbor] = field(default_factory=list)
     vlans: dict[int, str] = field(default_factory=dict)
+    vrfs: list[ParsedVrf] = field(default_factory=list)
 
     def add_interface(self, interface: ParsedInterface) -> ParsedInterface:
         """同じポートが複数箇所に出てきたらまとめる（config と show 出力の両方に出るため）。"""
         for existing in self.interfaces:
             if existing.key == interface.key:
-                for name in ("description", "ip_address", "vlan", "mode"):
+                for name in ("description", "ip_address", "vlan", "mode", "native_vlan", "vrf"):
                     if getattr(existing, name) is None:
                         setattr(existing, name, getattr(interface, name))
+                if interface.trunk_vlans and not existing.trunk_vlans:
+                    existing.trunk_vlans = interface.trunk_vlans
+                existing.trunk_all = existing.trunk_all or interface.trunk_all
                 return existing
         interface.name = expand(interface.name)
         self.interfaces.append(interface)
@@ -91,3 +138,13 @@ class ParsedConfig:
                     existing.remote_platform = neighbor.remote_platform
                 return
         self.neighbors.append(neighbor)
+
+    def add_vrf(self, vrf: ParsedVrf) -> ParsedVrf:
+        """同じ VRF が定義箇所と参照箇所の両方に出てくるのでまとめる。"""
+        for existing in self.vrfs:
+            if existing.name == vrf.name:
+                existing.rd = existing.rd or vrf.rd
+                existing.description = existing.description or vrf.description
+                return existing
+        self.vrfs.append(vrf)
+        return vrf

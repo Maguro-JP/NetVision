@@ -18,12 +18,15 @@ from app.models import (
     DeviceStatus,
     DeviceType,
     DeviceVlan,
+    DeviceVrf,
     MaintenanceContract,
     Site,
+    Vlan,
 )
 from app.models.change_log import ChangeSource
-from app.models.topology import Link, LinkOrigin
+from app.models.topology import Interface, Link, LinkOrigin
 from app.services.audit import audit_context
+from app.services.configparse import normalize
 
 TODAY = date.today()
 
@@ -236,10 +239,79 @@ def _seed(force: bool) -> None:
                 for host in hosts
             ]
         )
+
+        # VLAN 台帳。実機の名前（USERS）と、人が書く用途は別に持つ。
+        # VLAN 20 だけ台帳に入れないでおくと「未登録」の見え方が試せる
+        db.add_all(
+            [
+                Vlan(
+                    vlan_id=10,
+                    name="全社ユーザ",
+                    purpose="社員端末（有線）",
+                    owner="情報システム部",
+                    subnet="10.10.0.0/16",
+                ),
+                Vlan(
+                    vlan_id=30,
+                    name="管理セグメント",
+                    purpose="機器の管理IP・監視",
+                    owner="情報システム部",
+                    subnet="192.168.30.0/24",
+                ),
+                Vlan(vlan_id=40, name="無線", purpose="社内 Wi-Fi", owner="情報システム部"),
+                # 設計しただけで、まだどの機器にも入っていない VLAN
+                Vlan(vlan_id=50, name="来客用", purpose="ゲスト Wi-Fi（インターネットのみ）"),
+                Vlan(
+                    vlan_id=999,
+                    name="未使用",
+                    purpose="トランクのネイティブVLAN専用（通信させない）",
+                    owner="情報システム部",
+                ),
+            ]
+        )
+
+        # ポートの VLAN 設定。アクセス / ネイティブ / トランクを分けて持つ。
+        # acc-sw-osaka-01 側だけ VLAN 20 を許可していない状態にしてあり、
+        # 「片側だけ許可漏れ」が図の上でどう出るかを試せるようにしてある
+        ports = [
+            ("core-sw-01", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
+            ("core-sw-02", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
+            ("core-sw-01", "GigabitEthernet1/0/1", "trunk", None, 999, "10,20,30"),
+            ("acc-sw-osaka-01", "GigabitEthernet0/1", "trunk", None, 999, "10,30"),
+            ("acc-sw-osaka-01", "GigabitEthernet0/10", "access", 10, None, None),
+            ("core-sw-02", "GigabitEthernet1/0/10", "trunk", None, 1, "30,40"),
+            ("wlc-01", "GigabitEthernet1", "trunk", None, 999, "30,40"),
+        ]
+        db.add_all(
+            [
+                Interface(
+                    device_id=by_host[host].id,
+                    name=name,
+                    normalized_name=normalize(name),
+                    mode=mode,
+                    vlan=access,
+                    native_vlan=native,
+                    trunk_vlans=trunk,
+                )
+                for host, name, mode, access, native, trunk in ports
+            ]
+        )
+
+        # VRF。ルータの中を社内系と顧客系に分けている想定
+        db.add_all(
+            [
+                DeviceVrf(device_id=by_host[host].id, name=name, rd=rd, description=description)
+                for host, name, rd, description in [
+                    ("core-sw-01", "SHANAI", "65000:100", "社内系"),
+                    ("core-sw-02", "SHANAI", "65000:100", "社内系"),
+                    ("core-sw-01", "KOKYAKU", "65000:200", "顧客提供系"),
+                ]
+            ]
+        )
         db.commit()
         print(
             f"投入完了: 拠点2件 / 機器{len(devices)}台 / 保守契約5件 / "
-            f"結線{len(wiring)}本 / VLAN{len(segments)}件"
+            f"結線{len(wiring)}本 / VLAN{len(segments)}件 / ポート{len(ports)}件"
         )
     finally:
         db.close()

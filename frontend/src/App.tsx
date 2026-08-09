@@ -6,6 +6,7 @@ import { api } from "./api/client";
 const NAV = [
   { to: "/dashboard", label: "ダッシュボード" },
   { to: "/topology", label: "トポロジ図" },
+  { to: "/vlans", label: "VLAN 台帳" },
   { to: "/devices", label: "機器一覧" },
   { to: "/sites", label: "拠点" },
   { to: "/vulnerabilities", label: "脆弱性" },

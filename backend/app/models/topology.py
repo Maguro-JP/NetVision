@@ -77,8 +77,14 @@ class Interface(Base):
     normalized_name: Mapped[str] = mapped_column(String(120), index=True)
     description: Mapped[str | None] = mapped_column(String(255), default=None)
     ip_address: Mapped[str | None] = mapped_column(String(64), default=None)
+    # アクセス VLAN。トランクの場合はここは空で、native_vlan / trunk_vlans を見る
     vlan: Mapped[int | None] = mapped_column(Integer, default=None)
     mode: Mapped[str | None] = mapped_column(String(20), default=None)
+    native_vlan: Mapped[int | None] = mapped_column(Integer, default=None)
+    # 許可 VLAN を `10,20,30-40` の形で持つ。1ポートに数十載ることがあるので、
+    # 行に展開せず畳んで入れる。`all`（全許可）はその語をそのまま入れる
+    trunk_vlans: Mapped[str | None] = mapped_column(String(512), default=None)
+    vrf: Mapped[str | None] = mapped_column(String(120), default=None, index=True)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(

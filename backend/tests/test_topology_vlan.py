@@ -49,7 +49,12 @@ def test_topology_nodes_carry_their_vlans(client):
 
 
 def test_vlans_follow_the_latest_config(client):
-    """Config から消えた VLAN は残さない（最新の Config に揃える）。"""
+    """VLAN の定義は最新の Config に揃えること。
+
+    ただし**トランクの許可 VLAN からは消えていない**ので、一覧からは落とさない。
+    定義が無いのに通しているポートがあるのは、それ自体が直すべき状態なので、
+    見えなくしてはいけない。定義の有無は defined_device_ids で区別する。
+    """
     client.post(
         f"{API}/configs/upload",
         files=[
@@ -73,9 +78,13 @@ def test_vlans_follow_the_latest_config(client):
         files=[("files", ("qx-sw-01.txt", trimmed.encode(), "text/plain"))],
     )
 
-    after = {v["vlan_id"] for v in client.get(f"{API}/topology/vlans").json()}
-    assert 20 not in after
-    assert 10 in after
+    after = client.get(f"{API}/topology/vlans").json()
+    servers = next(v for v in after if v["vlan_id"] == 20)
+    assert servers["defined_device_ids"] == []  # 定義は消えた
+    assert servers["device_ids"]  # トランクは通したままなので残る
+
+    users = next(v for v in after if v["vlan_id"] == 10)
+    assert users["defined_device_ids"]
 
 
 def test_export_can_be_filtered_by_vlan(client):

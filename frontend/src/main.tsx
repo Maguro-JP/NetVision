@@ -22,6 +22,7 @@ import RemediationPage from "./pages/RemediationPage";
 import ReplacementPage from "./pages/ReplacementPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import TopologyPage from "./pages/TopologyPage";
+import VlansPage from "./pages/VlansPage";
 import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
 import SitesPage from "./pages/SitesPage";
 import "./styles.css";
@@ -45,6 +46,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="sites" element={<SitesPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="topology" element={<TopologyPage />} />
+            <Route path="vlans" element={<VlansPage />} />
             <Route path="configs" element={<ConfigsPage />} />
             <Route path="changes" element={<ChangesPage />} />
             <Route path="insights" element={<InsightsPage />} />

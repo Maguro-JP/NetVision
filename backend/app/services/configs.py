@@ -15,12 +15,12 @@ from datetime import datetime
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Device, DeviceVlan
+from app.models import Device, DeviceVlan, DeviceVrf
 from app.models.change_log import ChangeSource
 from app.models.topology import ConfigSnapshot, Interface, Link, LinkOrigin
 from app.services import configparse
 from app.services.audit import audit_context
-from app.services.configparse import ParsedConfig, Vendor, normalize, normalize_hostname
+from app.services.configparse import ParsedConfig, Vendor, normalize, normalize_hostname, vlanlist
 
 # Config から台帳へ反映できる項目
 INVENTORY_FIELDS = ("vendor", "model", "serial_number", "os_name", "os_version")
@@ -235,8 +235,9 @@ def ingest(
         result.snapshot_id = snapshot.id
 
         if device is not None:
-            _sync_interfaces(db, device, parsed)
             _sync_vlans(db, device, parsed)
+            _sync_vrfs(db, device, parsed)
+            _sync_interfaces(db, device, parsed)
 
             if apply_inventory:
                 for diff in result.diffs:
@@ -290,6 +291,40 @@ def _sync_vlans(db: Session, device: Device, parsed: ParsedConfig) -> None:
         db.delete(row)
 
 
+def _sync_vrfs(db: Session, device: Device, parsed: ParsedConfig) -> None:
+    """その機器に切られている仮想ルータ（VRF / VPN インスタンス / VDOM）を揃える。"""
+    rows = db.scalars(select(DeviceVrf).where(DeviceVrf.device_id == device.id))
+    existing = {v.name: v for v in rows}
+
+    for vrf in parsed.vrfs:
+        row = existing.pop(vrf.name, None)
+        if row is None:
+            db.add(
+                DeviceVrf(
+                    device_id=device.id, name=vrf.name, rd=vrf.rd, description=vrf.description
+                )
+            )
+            continue
+        row.rd = vrf.rd or row.rd
+        row.description = vrf.description or row.description
+
+    for row in existing.values():
+        db.delete(row)
+
+
+def _trunk_column(item) -> str | None:
+    """許可 VLAN を1カラムに畳む。
+
+    `all`（全許可）は番号に展開せずその語のまま入れる。展開してしまうと、
+    あとから VLAN が増えたときに古い一覧が残ってしまう。
+    """
+    if item.trunk_all:
+        if item.trunk_excluded:
+            return f"all except {vlanlist.format_ranges(item.trunk_excluded)}"
+        return "all"
+    return vlanlist.format_ranges(item.trunk_vlans) or None
+
+
 def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
     """最新の Config に載っているインターフェースへ揃える。"""
     existing = {
@@ -311,6 +346,9 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.ip_address = item.ip_address
         interface.vlan = item.vlan
         interface.mode = item.mode
+        interface.native_vlan = item.native_vlan
+        interface.trunk_vlans = _trunk_column(item)
+        interface.vrf = item.vrf
         interface.enabled = item.enabled
 
     # Config から消えたポートは実機に無いということなので削除する

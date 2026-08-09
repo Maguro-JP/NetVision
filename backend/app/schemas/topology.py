@@ -23,13 +23,65 @@ class UnresolvedNeighborRead(BaseModel):
 
 
 class VlanRead(BaseModel):
+    """図の絞り込みに使う VLAN 1つ分。台帳と実機の観測値を合わせたもの。"""
+
     model_config = ConfigDict(from_attributes=True)
 
     vlan_id: int
     name: str | None
+    purpose: str | None = None
+    owner: str | None = None
+    subnet: str | None = None
+    in_catalog: bool = False
+    observed_names: list[str] = []
     device_ids: list[int]
     device_names: list[str]
+    defined_device_ids: list[int] = []
     access_port_count: int
+    trunk_port_count: int = 0
+    native_port_count: int = 0
+
+
+class VrfRead(BaseModel):
+    """機器の中に切られた仮想ルータ。名前でまとめてある。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    rd: str | None
+    description: str | None
+    device_ids: list[int]
+    device_names: list[str]
+    interface_count: int
+    rd_mismatch: bool
+
+
+class VlanCatalogRead(BaseModel):
+    """VLAN 台帳の1行。人が用途を書く側。"""
+
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    vlan_id: int
+    name: str | None
+    purpose: str | None
+    owner: str | None
+    subnet: str | None
+    notes: str | None
+
+
+class VlanCatalogWrite(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=120)
+    purpose: str | None = Field(default=None, max_length=255)
+    owner: str | None = Field(default=None, max_length=120)
+    subnet: str | None = Field(default=None, max_length=64)
+    notes: str | None = None
+
+
+class VlanCatalogCreate(VlanCatalogWrite):
+    vlan_id: int = Field(ge=1, le=4094)
 
 
 class IngestResultRead(BaseModel):
@@ -92,6 +144,9 @@ class InterfaceRead(BaseModel):
     ip_address: str | None
     vlan: int | None
     mode: str | None
+    native_vlan: int | None = None
+    trunk_vlans: str | None = None
+    vrf: str | None = None
     enabled: bool
 
 
@@ -110,6 +165,7 @@ class TopologyNodeRead(BaseModel):
     y: float
     placed: bool
     vlans: list[int] = []
+    vrfs: list[str] = []
 
 
 class TopologyEdgeRead(BaseModel):
@@ -122,6 +178,11 @@ class TopologyEdgeRead(BaseModel):
     protocol: str | None
     label: str | None
     confirmed_both_ways: bool
+    vlans: list[int] = []
+    vlan_mismatch: list[int] = []
+    native_vlan: int | None = None
+    native_mismatch: bool = False
+    vrf: str | None = None
 
 
 class TopologyGraphRead(BaseModel):

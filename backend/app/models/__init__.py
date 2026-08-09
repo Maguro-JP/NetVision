@@ -21,7 +21,7 @@ from app.models.topology import (
     LinkOrigin,
     TopologyNode,
 )
-from app.models.vlan import DeviceVlan
+from app.models.vlan import DeviceVlan, DeviceVrf, Vlan
 
 __all__ = [
     "ChangeAction",
@@ -56,5 +56,7 @@ __all__ = [
     "ScenarioItem",
     "ScenarioStatus",
     "DeviceVlan",
+    "DeviceVrf",
+    "Vlan",
     "Site",
 ]

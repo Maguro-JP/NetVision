@@ -13,8 +13,9 @@ from math import ceil
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.models import Device, DeviceStatus, DeviceType, DeviceVlan
+from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
 from app.models.topology import Interface, Link, LinkOrigin, TopologyNode
+from app.services.configparse import normalize, vlanlist
 from app.services.lifecycle import Severity, evaluate
 
 DEFAULT_LAYER = "physical"
@@ -50,7 +51,9 @@ class TopologyNodeView:
     x: float
     y: float
     placed: bool  # 保存済みの位置か、自動配置か
-    vlans: list[int] = field(default_factory=list)  # この機器に定義されている VLAN
+    # この機器に載っている VLAN。定義されているものと、トランクで通しているものの合計
+    vlans: list[int] = field(default_factory=list)
+    vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルータ
 
 
 @dataclass
@@ -64,6 +67,13 @@ class TopologyEdgeView:
     protocol: str | None
     label: str | None
     confirmed_both_ways: bool
+    # この線が実際に運んでいる VLAN。両端のポート設定を突き合わせて出す
+    vlans: list[int] = field(default_factory=list)
+    # 片側にしか無い VLAN。トランクの許可漏れはここに出る
+    vlan_mismatch: list[int] = field(default_factory=list)
+    native_vlan: int | None = None
+    native_mismatch: bool = False  # 両端でネイティブ VLAN が食い違っている
+    vrf: str | None = None
 
 
 @dataclass
@@ -92,7 +102,11 @@ def get_graph(
         for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == layer))
     }
     interface_counts = _interface_counts(db)
-    vlans_by_device = _vlans_by_device(db)
+    interfaces = list(db.scalars(select(Interface)))
+    defined = _defined_vlans(db)
+    vlans_by_device = _vlans_by_device(interfaces, defined)
+    vrfs_by_device = _vrfs_by_device(db)
+    ports = {(i.device_id, normalize(i.name)): i for i in interfaces}
 
     placeholders = _auto_layout([d for d in devices if d.id not in positions])
 
@@ -116,21 +130,12 @@ def get_graph(
                 y=y,
                 placed=saved is not None,
                 vlans=vlans_by_device.get(device.id, []),
+                vrfs=vrfs_by_device.get(device.id, []),
             )
         )
 
     edges = [
-        TopologyEdgeView(
-            id=link.id,
-            source=link.a_device_id,
-            target=link.b_device_id,
-            source_interface=link.a_interface,
-            target_interface=link.b_interface,
-            origin=link.origin,
-            protocol=link.protocol,
-            label=link.label,
-            confirmed_both_ways=link.confirmed_both_ways,
-        )
+        _edge_view(link, ports, defined)
         for link in db.scalars(select(Link))
         if link.a_device_id in visible_ids and link.b_device_id in visible_ids
     ]
@@ -143,12 +148,85 @@ def get_graph(
     )
 
 
-def _vlans_by_device(db: Session) -> dict[int, list[int]]:
-    """機器ごとの VLAN 一覧。図で「この VLAN がどこまで伸びているか」を見るのに使う。"""
-    out: dict[int, list[int]] = {}
-    for row in db.scalars(select(DeviceVlan).order_by(DeviceVlan.vlan_id)):
-        out.setdefault(row.device_id, []).append(row.vlan_id)
+def _defined_vlans(db: Session) -> dict[int, set[int]]:
+    """機器ごとに「定義されている」VLAN。`all` 許可のトランクを解くのにも使う。"""
+    out: dict[int, set[int]] = {}
+    for row in db.scalars(select(DeviceVlan)):
+        out.setdefault(row.device_id, set()).add(row.vlan_id)
     return out
+
+
+def port_vlans(interface: Interface, defined: set[int]) -> set[int]:
+    """1ポートが運ぶ VLAN。アクセス・ネイティブ・トランク許可を合わせたもの。"""
+    out = vlanlist.expand_column(interface.trunk_vlans, defined)
+    for value in (interface.vlan, interface.native_vlan):
+        if value is not None:
+            out.add(value)
+    return out
+
+
+def _vlans_by_device(
+    interfaces: list[Interface], defined: dict[int, set[int]]
+) -> dict[int, list[int]]:
+    """機器ごとの VLAN 一覧。図で「この VLAN がどこまで伸びているか」を見るのに使う。
+
+    定義されているものだけでは足りない。**トランクで通しているだけの VLAN** も
+    その機器を経由している以上、経路上に載っているためである。
+    """
+    out = {device_id: set(values) for device_id, values in defined.items()}
+    for interface in interfaces:
+        carried = port_vlans(interface, defined.get(interface.device_id, set()))
+        if carried:
+            out.setdefault(interface.device_id, set()).update(carried)
+    return {device_id: sorted(values) for device_id, values in out.items()}
+
+
+def _vrfs_by_device(db: Session) -> dict[int, list[str]]:
+    out: dict[int, list[str]] = {}
+    for row in db.scalars(select(DeviceVrf).order_by(DeviceVrf.name)):
+        out.setdefault(row.device_id, []).append(row.name)
+    return out
+
+
+def _edge_view(
+    link: Link, ports: dict[tuple[int, str], Interface], defined: dict[int, set[int]]
+) -> TopologyEdgeView:
+    """結線1本分。両端のポート設定から、その線が何を運んでいるかを出す。
+
+    片側でしか許可していない VLAN は `vlan_mismatch` に出す。トランクの
+    許可漏れは「繋がっているのに通らない」の典型で、図の上で気づけると早い。
+    """
+    a = ports.get((link.a_device_id, normalize(link.a_interface)))
+    b = ports.get((link.b_device_id, normalize(link.b_interface)))
+
+    a_vlans = port_vlans(a, defined.get(link.a_device_id, set())) if a else set()
+    b_vlans = port_vlans(b, defined.get(link.b_device_id, set())) if b else set()
+
+    if a_vlans and b_vlans:
+        carried, mismatch = a_vlans & b_vlans, a_vlans ^ b_vlans
+    else:
+        # 片側しか Config を取り込んでいない場合。分かっている方をそのまま出す
+        carried, mismatch = a_vlans or b_vlans, set()
+
+    a_native = a.native_vlan if a else None
+    b_native = b.native_vlan if b else None
+
+    return TopologyEdgeView(
+        id=link.id,
+        source=link.a_device_id,
+        target=link.b_device_id,
+        source_interface=link.a_interface,
+        target_interface=link.b_interface,
+        origin=link.origin,
+        protocol=link.protocol,
+        label=link.label,
+        confirmed_both_ways=link.confirmed_both_ways,
+        vlans=sorted(carried),
+        vlan_mismatch=sorted(mismatch),
+        native_vlan=a_native or b_native,
+        native_mismatch=bool(a_native and b_native and a_native != b_native),
+        vrf=(a.vrf if a else None) or (b.vrf if b else None),
+    )
 
 
 def _interface_counts(db: Session) -> dict[int, int]:
@@ -233,36 +311,125 @@ class VlanView:
     """VLAN 1つ分。どこまで伸びているかを見るための情報。"""
 
     vlan_id: int
-    name: str | None
+    name: str | None  # 表示に使う名前（台帳があればそちら、無ければ実機の名前）
+    purpose: str | None = None
+    owner: str | None = None
+    subnet: str | None = None
+    in_catalog: bool = False  # 台帳に登録済みか。未登録は「素性が分からない VLAN」
+    observed_names: list[str] = field(default_factory=list)  # 実機に書かれている名前
     device_ids: list[int] = field(default_factory=list)
     device_names: list[str] = field(default_factory=list)
+    defined_device_ids: list[int] = field(default_factory=list)  # VLAN を定義している機器
     access_port_count: int = 0
+    trunk_port_count: int = 0
+    native_port_count: int = 0
 
 
 def vlan_summary(db: Session) -> list[VlanView]:
-    """定義されている VLAN を、載っている機器つきで並べる。
+    """VLAN を、載っている機器つきで並べる。
 
-    「VLAN 20 はどこまで伸びているのか」に答えるための一覧。
-    名前も返すのは、番号だけでは何のセグメントか分からないため。
+    「VLAN 20 はどこまで伸びているのか」に答えるための一覧。台帳（人が書いた
+    用途）と実機の観測値を突き合わせ、**どちらか一方にしか無いものも落とさない**。
+    台帳に無い VLAN は素性の分からないセグメントなので、むしろ出す価値がある。
     """
-    names = {d.id: d.hostname for d in db.scalars(select(Device))}
+    hostnames = {d.id: d.hostname for d in db.scalars(select(Device))}
+    catalog = {row.vlan_id: row for row in db.scalars(select(Vlan))}
+    defined = _defined_vlans(db)
     views: dict[int, VlanView] = {}
 
-    for row in db.scalars(select(DeviceVlan).order_by(DeviceVlan.vlan_id)):
-        view = views.setdefault(row.vlan_id, VlanView(vlan_id=row.vlan_id, name=row.name))
-        if row.name and not view.name:
-            view.name = row.name
-        if row.device_id not in view.device_ids:
-            view.device_ids.append(row.device_id)
-            view.device_names.append(names.get(row.device_id, f"#{row.device_id}"))
+    def view_for(vlan_id: int) -> VlanView:
+        view = views.get(vlan_id)
+        if view is None:
+            entry = catalog.get(vlan_id)
+            view = VlanView(
+                vlan_id=vlan_id,
+                name=entry.name if entry else None,
+                purpose=entry.purpose if entry else None,
+                owner=entry.owner if entry else None,
+                subnet=entry.subnet if entry else None,
+                in_catalog=entry is not None,
+            )
+            views[vlan_id] = view
+        return view
 
-    # アクセスポートが何本あるかは「実際に使われているか」の目安になる
-    for interface in db.scalars(select(Interface).where(Interface.vlan.is_not(None))):
-        view = views.get(interface.vlan)
-        if view is not None:
-            view.access_port_count += 1
+    for vlan_id in catalog:
+        view_for(vlan_id)
+
+    for row in db.scalars(select(DeviceVlan).order_by(DeviceVlan.vlan_id)):
+        view = view_for(row.vlan_id)
+        if row.name and row.name not in view.observed_names:
+            view.observed_names.append(row.name)
+        if row.device_id not in view.defined_device_ids:
+            view.defined_device_ids.append(row.device_id)
+
+    # ポートの設定から「実際に載っている機器」を出す。定義だけの VLAN と、
+    # トランクを通っているだけの VLAN の両方が拾える
+    for interface in db.scalars(select(Interface)):
+        carried = port_vlans(interface, defined.get(interface.device_id, set()))
+        for vlan_id in carried:
+            view = view_for(vlan_id)
+            if interface.device_id not in view.device_ids:
+                view.device_ids.append(interface.device_id)
+        if interface.vlan is not None:
+            view_for(interface.vlan).access_port_count += 1
+        if interface.native_vlan is not None:
+            view_for(interface.native_vlan).native_port_count += 1
+        for vlan_id in vlanlist.expand_column(
+            interface.trunk_vlans, defined.get(interface.device_id, set())
+        ):
+            view_for(vlan_id).trunk_port_count += 1
+
+    for view in views.values():
+        for device_id in view.defined_device_ids:
+            if device_id not in view.device_ids:
+                view.device_ids.append(device_id)
+        view.device_ids.sort()
+        view.device_names = [hostnames.get(i, f"#{i}") for i in view.device_ids]
+        # 台帳に名前が無ければ実機の名前で代用する。番号だけよりは判断できる
+        if not view.name and view.observed_names:
+            view.name = view.observed_names[0]
 
     return sorted(views.values(), key=lambda v: v.vlan_id)
+
+
+@dataclass
+class VrfView:
+    """VRF 1つ分。同じ名前の VRF がどの機器に切られているかをまとめる。"""
+
+    name: str
+    rd: str | None = None
+    description: str | None = None
+    device_ids: list[int] = field(default_factory=list)
+    device_names: list[str] = field(default_factory=list)
+    interface_count: int = 0
+    rd_mismatch: bool = False  # 機器ごとに RD が食い違っている
+
+
+def vrf_summary(db: Session) -> list[VrfView]:
+    """機器の中に切られた仮想ルータを、名前ごとにまとめて返す。
+
+    同じ VRF 名が複数台にあるのが普通（拠点をまたいで同じ VRF を延ばす）ので、
+    名前を軸にする。RD が機器ごとに食い違っていれば印を付ける。
+    """
+    hostnames = {d.id: d.hostname for d in db.scalars(select(Device))}
+    views: dict[str, VrfView] = {}
+
+    for row in db.scalars(select(DeviceVrf).order_by(DeviceVrf.name)):
+        view = views.setdefault(row.name, VrfView(name=row.name))
+        if row.rd and view.rd and row.rd != view.rd:
+            view.rd_mismatch = True
+        view.rd = view.rd or row.rd
+        view.description = view.description or row.description
+        if row.device_id not in view.device_ids:
+            view.device_ids.append(row.device_id)
+            view.device_names.append(hostnames.get(row.device_id, f"#{row.device_id}"))
+
+    for interface in db.scalars(select(Interface).where(Interface.vrf.is_not(None))):
+        view = views.get(interface.vrf)
+        if view is not None:
+            view.interface_count += 1
+
+    return sorted(views.values(), key=lambda v: v.name)
 
 
 def suggested_canvas_size(node_count: int) -> tuple[int, int]:

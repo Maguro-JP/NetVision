@@ -9,11 +9,13 @@ from __future__ import annotations
 
 import re
 
+from app.services.configparse import vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
     ParsedInterface,
     ParsedNeighbor,
+    ParsedVrf,
     Vendor,
 )
 
@@ -52,6 +54,7 @@ def parse(text: str, vendor: Vendor = Vendor.CISCO_IOS) -> ParsedConfig:
 
     _parse_version(text, parsed)
     _parse_inventory(text, parsed)
+    _parse_vrfs(text, parsed)
     _parse_interfaces(text, parsed)
     _parse_vlans(text, parsed)
     _parse_cdp_detail(text, parsed)
@@ -103,6 +106,9 @@ def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
 
 def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     current: ParsedInterface | None = None
+    # 許可 VLAN を明示したポート。書いていないトランクは「全部通す」が既定なので、
+    # 「書いていない」と「none と書いた」を取り違えないよう覚えておく
+    allowed_written: set[str] = set()
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -133,12 +139,65 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         elif body.startswith("switchport access vlan "):
             current.vlan = int(body.rsplit(maxsplit=1)[-1])
             current.mode = current.mode or "access"
+        elif body.startswith("switchport trunk native vlan "):
+            current.native_vlan = int(body.rsplit(maxsplit=1)[-1])
+        elif body.startswith("switchport trunk allowed vlan"):
+            allowed_written.add(current.key)
+            _apply_allowed_vlan(current, body)
         elif body.startswith("switchport mode "):
             current.mode = body.rsplit(maxsplit=1)[-1]
+        elif body.startswith(("vrf forwarding ", "ip vrf forwarding ")):
+            current.vrf = body.rsplit(maxsplit=1)[-1]
         elif body == "shutdown":
             current.enabled = False
         elif body == "no switchport":
             current.mode = "routed"
+
+    for interface in parsed.interfaces:
+        if interface.mode == "trunk" and interface.key not in allowed_written:
+            interface.trunk_all = True
+
+
+def _apply_allowed_vlan(interface: ParsedInterface, body: str) -> None:
+    """`switchport trunk allowed vlan [add|remove] ...` を反映する。
+
+    `add` は複数行に分かれて出てくるので、足し込まないと途中までしか読めない。
+    `remove` / `except` も、書いてある通りに引かないと実機と食い違う。
+    """
+    rest = body[len("switchport trunk allowed vlan") :].strip()
+    if not rest:
+        return
+
+    verb = ""
+    for candidate in ("add", "remove", "except", "none"):
+        if rest == candidate or rest.startswith(candidate + " "):
+            verb = candidate
+            rest = rest[len(candidate) :].strip()
+            break
+
+    if verb == "none":
+        interface.trunk_vlans = []
+        interface.trunk_all = False
+        return
+    if vlanlist.is_all(rest):
+        interface.trunk_all = True
+        interface.trunk_vlans = []
+        return
+
+    values = vlanlist.parse_ranges(rest)
+    if not values:
+        return
+    if verb == "add":
+        interface.trunk_vlans = sorted(set(interface.trunk_vlans) | set(values))
+    elif verb == "remove":
+        interface.trunk_vlans = [v for v in interface.trunk_vlans if v not in set(values)]
+    elif verb == "except":
+        # 「これ以外全部」。全部側は機器の定義 VLAN で解決するので、除外だけ覚えておく
+        interface.trunk_all = True
+        interface.trunk_excluded = set(values)
+    else:
+        interface.trunk_vlans = values
+        interface.trunk_all = False
 
 
 def _prefix_length(netmask: str) -> int:
@@ -162,6 +221,35 @@ def _parse_vlans(text: str, parsed: ParsedConfig) -> None:
             current = None
         elif not raw.startswith(" "):
             current = None
+
+
+_VRF_DEF = re.compile(r"^(?:vrf definition|ip vrf)\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def _parse_vrfs(text: str, parsed: ParsedConfig) -> None:
+    """`vrf definition NAME`（新形式）と `ip vrf NAME`（旧形式）の両方を読む。
+
+    IOS-XE は新形式だが、現場には旧形式のまま動いている機器も残っている。
+    """
+    current: ParsedVrf | None = None
+    for raw in text.splitlines():
+        stripped = raw.strip()
+        match = _VRF_DEF.match(stripped)
+        if match and not raw.startswith(" "):
+            current = parsed.add_vrf(ParsedVrf(name=match.group(1)))
+            continue
+        if current is None:
+            continue
+        if not raw.startswith(" "):
+            current = None
+            continue
+        if stripped.startswith("rd "):
+            current.rd = stripped[len("rd ") :].strip()
+        elif stripped.startswith("description "):
+            current.description = stripped[len("description ") :].strip()
+
+    # インターフェース側にしか出てこない VRF もある（定義が別ファイルの場合）ので、
+    # `vrf forwarding` の参照は _parse_interfaces のあとに拾い直す
 
 
 def _parse_cdp_detail(text: str, parsed: ParsedConfig) -> None:

@@ -12,6 +12,7 @@ from app.services.configparse.base import (
     ParsedConfig,
     ParsedInterface,
     ParsedNeighbor,
+    ParsedVrf,
     Vendor,
 )
 from app.services.configparse.ifname import expand, normalize, normalize_hostname
@@ -52,19 +53,33 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     vendor = vendor or detect_vendor(text)
 
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
-        return cisco.parse(text, vendor)
-    if vendor is Vendor.JUNIPER:
-        return juniper.parse(text)
-    if vendor is Vendor.FORTINET:
-        return fortinet.parse(text)
-    if vendor in (Vendor.NEC_IX, Vendor.NEC_QX):
-        return nec.parse(text, vendor)
+        parsed = cisco.parse(text, vendor)
+    elif vendor is Vendor.JUNIPER:
+        parsed = juniper.parse(text)
+    elif vendor is Vendor.FORTINET:
+        parsed = fortinet.parse(text)
+    elif vendor in (Vendor.NEC_IX, Vendor.NEC_QX):
+        parsed = nec.parse(text, vendor)
+    else:
+        # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
+        parsed = cisco.parse(text, Vendor.UNKNOWN)
+        parsed.vendor = Vendor.UNKNOWN
+        parsed.os_name = None
 
-    # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
-    fallback = cisco.parse(text, Vendor.UNKNOWN)
-    fallback.vendor = Vendor.UNKNOWN
-    fallback.os_name = None
-    return fallback
+    _collect_referenced_vrfs(parsed)
+    return parsed
+
+
+def _collect_referenced_vrfs(parsed: ParsedConfig) -> None:
+    """ポートから参照されているのに定義が見当たらない VRF も一覧に載せる。
+
+    定義部分が別ファイルだったり、取り込んだのが抜粋だったりする。
+    「ポートは VRF に入っているのに VRF が無いことになる」方が困るので、
+    参照側からも起こしておく。
+    """
+    for interface in parsed.interfaces:
+        if interface.vrf:
+            parsed.add_vrf(ParsedVrf(name=interface.vrf))
 
 
 __all__ = [
@@ -72,6 +87,7 @@ __all__ = [
     "ParsedConfig",
     "ParsedInterface",
     "ParsedNeighbor",
+    "ParsedVrf",
     "VENDOR_LABELS",
     "VENDOR_NAMES",
     "Vendor",

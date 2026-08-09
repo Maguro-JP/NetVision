@@ -38,6 +38,9 @@ import type {
   TopologyGraph,
   TopologyStats,
   TopologyVlan,
+  TopologyVrf,
+  VlanCatalogEntry,
+  VlanCatalogWrite,
   VendorDocument,
   VendorDocumentMatch,
   Vulnerability,
@@ -262,9 +265,28 @@ export const api = {
     request<{ reset: number }>(`/topology/positions${query({ layer })}`, { method: "DELETE" }),
   rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
   listTopologyVlans: () => request<TopologyVlan[]>("/topology/vlans"),
+  listTopologyVrfs: () => request<TopologyVrf[]>("/topology/vrfs"),
+
+  // --- VLAN 台帳（人が用途を書く側。Config の取り込みでは上書きされない）---
+  listVlanCatalog: () => request<VlanCatalogEntry[]>("/topology/vlans/catalog"),
+  saveVlanCatalog: (vlanId: number, body: VlanCatalogWrite) =>
+    request<VlanCatalogEntry>(`/topology/vlans/catalog/${vlanId}`, {
+      method: "PUT",
+      body: JSON.stringify(body),
+    }),
+  deleteVlanCatalog: (vlanId: number) =>
+    request<void>(`/topology/vlans/catalog/${vlanId}`, { method: "DELETE" }),
+  adoptObservedVlans: (overwrite = false) =>
+    request<{ created: number; updated: number }>(
+      `/topology/vlans/catalog/adopt${query({ overwrite: String(overwrite) })}`,
+      { method: "POST" },
+    ),
+
   // 構成図を SVG で書き出す（設計書や報告書に貼るため）
-  topologyExportUrl: (layer: string, title?: string, vlan?: number) =>
-    `${BASE}/topology/export.svg${query({ layer, title, vlan })}`,
+  topologyExportUrl: (
+    layer: string,
+    options: { title?: string; vlan?: number; vrf?: string; style?: string } = {},
+  ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
   createLink: (body: {
     a_device_id: number;
     b_device_id: number;

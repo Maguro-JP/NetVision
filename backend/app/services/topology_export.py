@@ -58,16 +58,29 @@ def _clip(value: str | None, limit: int) -> str:
 
 
 def render_svg(
-    graph: TopologyGraph, *, title: str = "ネットワーク構成図", vlan: int | None = None
+    graph: TopologyGraph,
+    *,
+    title: str = "ネットワーク構成図",
+    vlan: int | None = None,
+    vrf: str | None = None,
+    style: str = "detail",
 ) -> str:
     """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
 
-    `vlan` を指定すると、その VLAN を持つ機器だけを描く。
-    セグメント単位で資料を作るときに使う。
+    `vlan` / `vrf` を指定すると、それに載っている機器だけを描く。
+    セグメント単位・VRF 単位で資料を作るときに使う。
+
+    `style="simple"` は**機器名と結線だけ**の図。型番・IP・保守状態・VLAN を
+    一切載せない。作業手順書や現場での指差し確認では、余計な情報が入っている方が
+    読み違いのもとになるため、用途で図を分けられるようにしてある。
     """
+    simple = style == "simple"
     nodes = graph.nodes
     if vlan is not None:
         nodes = [n for n in nodes if vlan in n.vlans]
+    if vrf is not None:
+        nodes = [n for n in nodes if vrf in n.vrfs]
+    if nodes is not graph.nodes:
         keep = {n.device_id for n in nodes}
         graph = TopologyGraph(
             layer=graph.layer,
@@ -83,10 +96,11 @@ def render_svg(
     max_y = max(n.y for n in nodes) + NODE_H
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
+    legend_h = 0.0 if simple else LEGEND_H
     dx = MARGIN - min_x
     dy = MARGIN + 34.0 - min_y
     width = max_x - min_x + MARGIN * 2
-    height = max_y - min_y + MARGIN * 2 + 34.0 + LEGEND_H
+    height = max_y - min_y + MARGIN * 2 + 34.0 + legend_h
 
     at = {n.device_id: (n.x + dx, n.y + dy) for n in nodes}
     parts: list[str] = []
@@ -102,12 +116,22 @@ def render_svg(
         f'<text x="{MARGIN:.0f}" y="30" font-size="18" font-weight="700" fill="#1a1a1a">'
         f"{_esc(title)}</text>"
     )
-    parts.append(
-        f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
-        f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)}'
-        f"{f' / VLAN {vlan}' if vlan is not None else ''} / "
-        f"{len(nodes)}台 {len(graph.edges)}本</text>"
-    )
+    scope = f"{f' / VLAN {vlan}' if vlan is not None else ''}"
+    scope += f"{f' / VRF {vrf}' if vrf else ''}"
+    if simple:
+        # シンプル図でも「いつ時点の何台か」だけは残す。日付の無い構成図は
+        # あとから見たときに信用できないため
+        parts.append(
+            f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
+            f'text-anchor="end">{_esc(generated)} 時点{_esc(scope)} / '
+            f"{len(nodes)}台 {len(graph.edges)}本</text>"
+        )
+    else:
+        parts.append(
+            f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
+            f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)}'
+            f"{_esc(scope)} / {len(nodes)}台 {len(graph.edges)}本</text>"
+        )
 
     # --- 結線（ノードより先に描いて背面に回す） ---
     for index, edge in enumerate(graph.edges):
@@ -117,11 +141,14 @@ def render_svg(
         x1, y1 = source[0] + NODE_W / 2, source[1] + NODE_H / 2
         x2, y2 = target[0] + NODE_W / 2, target[1] + NODE_H / 2
 
-        # 両側から確認できた結線は実線、片側だけのものは破線にする
-        dash = "" if edge.confirmed_both_ways else ' stroke-dasharray="6 4"'
+        # 両側から確認できた結線は実線、片側だけのものは破線にする。
+        # シンプル図では全部実線にする。破線は「取り込みの確からしさ」の話で、
+        # 現場で見る図に混ぜると「未接続」と読み違えられるため
+        dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
+        stroke = "#4a5364" if simple else "#8a94a6"
         parts.append(
             f'<line x1="{x1:.0f}" y1="{y1:.0f}" x2="{x2:.0f}" y2="{y2:.0f}" '
-            f'stroke="#8a94a6" stroke-width="1.6"{dash}/>'
+            f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
         )
 
         label = edge.label or _interface_label(edge)
@@ -146,6 +173,18 @@ def render_svg(
     # --- 機器 ---
     for node in nodes:
         x, y = at[node.device_id]
+        if simple:
+            # 名前だけ。枠は輪郭が分かる程度の細さに留める
+            parts.append(
+                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
+                f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
+                f'stroke-width="1.6"/>'
+                f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 5:.0f}" font-size="14" '
+                f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
+                f"{_esc(_clip(node.hostname, 22))}</text></g>"
+            )
+            continue
+
         color = SEVERITY_COLOR.get(str(node.severity), SEVERITY_COLOR[str(Severity.UNKNOWN)])
         parts.append(
             f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" height="{NODE_H:.0f}" '
@@ -170,7 +209,8 @@ def render_svg(
             )
         parts.append("</g>")
 
-    parts.append(_legend(MARGIN, height - LEGEND_H + 10, width))
+    if not simple:
+        parts.append(_legend(MARGIN, height - LEGEND_H + 10, width))
     parts.append("</svg>")
     return "\n".join(parts)
 
@@ -220,6 +260,12 @@ def _empty_svg(title: str) -> str:
 
 
 def export_svg(
-    db: Session, layer: str, *, title: str = "ネットワーク構成図", vlan: int | None = None
+    db: Session,
+    layer: str,
+    *,
+    title: str = "ネットワーク構成図",
+    vlan: int | None = None,
+    vrf: str | None = None,
+    style: str = "detail",
 ) -> str:
-    return render_svg(get_graph(db, layer), title=title, vlan=vlan)
+    return render_svg(get_graph(db, layer), title=title, vlan=vlan, vrf=vrf, style=style)

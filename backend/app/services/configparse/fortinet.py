@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse.base import ParsedConfig, ParsedInterface, Vendor
+from app.services.configparse.base import ParsedConfig, ParsedInterface, ParsedVrf, Vendor
 
 _HOSTNAME = re.compile(r'^\s*set hostname\s+"?([^"\n]+)"?', re.MULTILINE)
 _VERSION = re.compile(r"#config-version=([\w.\-]+):", re.MULTILINE)
@@ -36,7 +36,28 @@ def parse(text: str) -> ParsedConfig:
         parsed.model = match.group(1)
 
     _parse_interfaces(text, parsed)
+    _parse_vdoms(text, parsed)
     return parsed
+
+
+def _parse_vdoms(text: str, parsed: ParsedConfig) -> None:
+    """VDOM を仮想ルータとして扱う。
+
+    FortiGate で「1台の中にルータを分ける」のは VDOM なので、他ベンダーの
+    VRF と同じ列に並べておいた方が、機器をまたいで見るときに揃う。
+    """
+    in_vdom = False
+    for raw in text.splitlines():
+        line = raw.strip()
+        if line in ("config vdom", "config global"):
+            in_vdom = line == "config vdom"
+            continue
+        if in_vdom:
+            match = re.match(r'^edit\s+"?([^"\n]+)"?$', line)
+            if match:
+                parsed.add_vrf(ParsedVrf(name=match.group(1), description="VDOM"))
+            elif line == "end":
+                in_vdom = False
 
 
 def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
@@ -73,6 +94,8 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             )
         elif line.startswith("set vlanid "):
             current.vlan = int(line.rsplit(maxsplit=1)[-1])
+        elif line.startswith("set vdom "):
+            current.vrf = line[len("set vdom ") :].strip().strip('"')
         elif line == "set status down":
             current.enabled = False
         elif line == "next":

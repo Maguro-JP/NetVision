@@ -47,6 +47,12 @@ export default function DeviceDetailPage() {
     queryFn: () => api.documentsForDevice(deviceId),
   });
 
+  // ポートの VLAN 設定。アクセス / ネイティブ / トランクを分けて見せる
+  const { data: interfaces } = useQuery({
+    queryKey: ["deviceInterfaces", id],
+    queryFn: () => api.listInterfaces(deviceId),
+  });
+
   const { data: vulnerabilities } = useQuery({
     queryKey: ["deviceVulnerabilities", id],
     queryFn: () => api.vulnerabilityMatches(deviceId),
@@ -209,6 +215,68 @@ export default function DeviceDetailPage() {
           </span>
         </div>
       </div>
+
+      <h2>ポート</h2>
+      {!interfaces || interfaces.length === 0 ? (
+        <div className="empty">
+          Config を取り込むと、ポートと VLAN の設定がここに出ます。
+        </div>
+      ) : (
+        <>
+          <p className="muted" style={{ marginTop: -6 }}>
+            実機の Config から読み取った内容です。アクセス・ネイティブ・トランクは
+            別々に持っています（混ぜると片側だけの食い違いが見えなくなるため）。
+          </p>
+          <div className="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>ポート</th>
+                  <th>説明</th>
+                  <th>モード</th>
+                  <th>アクセス VLAN</th>
+                  <th>ネイティブ VLAN</th>
+                  <th>トランク許可 VLAN</th>
+                  <th>VRF</th>
+                  <th>IP</th>
+                  <th>状態</th>
+                </tr>
+              </thead>
+              <tbody>
+                {interfaces.map((port) => (
+                  <tr key={port.id}>
+                    <td>
+                      <strong>{port.name}</strong>
+                    </td>
+                    <td className="muted">{port.description ?? "—"}</td>
+                    <td>{port.mode ?? "—"}</td>
+                    <td>{port.vlan ?? "—"}</td>
+                    <td>{port.native_vlan ?? "—"}</td>
+                    <td
+                      title={
+                        port.trunk_vlans === "all"
+                          ? "許可 VLAN を書いていないトランクです。定義されている VLAN が全部通ります"
+                          : undefined
+                      }
+                    >
+                      {port.trunk_vlans ?? "—"}
+                    </td>
+                    <td>{port.vrf ?? "—"}</td>
+                    <td className="muted">{port.ip_address ?? "—"}</td>
+                    <td>
+                      {port.enabled ? (
+                        <span className="badge ok">up</span>
+                      ) : (
+                        <span className="badge unknown">shutdown</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
 
       <h2>保守契約</h2>
       {device.contracts.length === 0 ? (

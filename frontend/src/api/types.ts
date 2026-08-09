@@ -187,6 +187,10 @@ export interface NetworkInterface {
   ip_address: string | null;
   vlan: number | null;
   mode: string | null;
+  native_vlan: number | null;
+  /** 許可 VLAN。`10,20,30-40` か `all` の形で入る */
+  trunk_vlans: string | null;
+  vrf: string | null;
   enabled: boolean;
 }
 
@@ -207,15 +211,51 @@ export interface TopologyNode {
   y: number;
   placed: boolean;
   vlans: number[];
+  vrfs: string[];
 }
 
 export interface TopologyVlan {
   vlan_id: number;
+  /** 表示に使う名前。台帳にあればそちら、無ければ実機の名前 */
   name: string | null;
+  purpose: string | null;
+  owner: string | null;
+  subnet: string | null;
+  /** 台帳に登録済みか。未登録は素性の分からないセグメント */
+  in_catalog: boolean;
+  /** 実機の Config に書かれている名前 */
+  observed_names: string[];
   device_ids: number[];
   device_names: string[];
+  /** VLAN を定義している機器。空ならトランクを通っているだけ */
+  defined_device_ids: number[];
   access_port_count: number;
+  trunk_port_count: number;
+  native_port_count: number;
 }
+
+export interface TopologyVrf {
+  name: string;
+  rd: string | null;
+  description: string | null;
+  device_ids: number[];
+  device_names: string[];
+  interface_count: number;
+  /** 同じ VRF 名なのに機器ごとに RD が違う */
+  rd_mismatch: boolean;
+}
+
+export interface VlanCatalogEntry {
+  id: number;
+  vlan_id: number;
+  name: string | null;
+  purpose: string | null;
+  owner: string | null;
+  subnet: string | null;
+  notes: string | null;
+}
+
+export type VlanCatalogWrite = Partial<Omit<VlanCatalogEntry, "id" | "vlan_id">>;
 
 export interface TopologyEdge {
   id: number;
@@ -227,6 +267,13 @@ export interface TopologyEdge {
   protocol: string | null;
   label: string | null;
   confirmed_both_ways: boolean;
+  /** この線が実際に運んでいる VLAN（両端の設定を突き合わせたもの） */
+  vlans: number[];
+  /** 片側にしか無い VLAN。トランクの許可漏れ */
+  vlan_mismatch: number[];
+  native_vlan: number | null;
+  native_mismatch: boolean;
+  vrf: string | null;
 }
 
 export interface TopologyGraph {
