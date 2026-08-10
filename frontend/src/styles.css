@@ -889,3 +889,46 @@ button:disabled {
   border: 1px solid var(--warning, #d9a441);
   color: var(--warning, #d9a441);
 }
+
+/* 機器の画面に Config を放り込むところ */
+.config-drop {
+  margin: 6px 0 14px;
+}
+
+.config-drop .dropzone {
+  padding: 18px;
+  border: 1px dashed var(--border, #3a4356);
+  border-radius: 8px;
+  text-align: center;
+  cursor: pointer;
+  line-height: 1.7;
+}
+
+.config-drop .dropzone.over {
+  border-color: var(--accent, #3b82f6);
+  border-style: solid;
+  background: rgb(59 130 246 / 8%);
+}
+
+.config-drop .dropzone.busy {
+  cursor: progress;
+  opacity: 0.7;
+}
+
+.config-drop .drop-option {
+  display: inline-block;
+  margin-top: 8px;
+  font-size: 0.88rem;
+}
+
+.config-drop .drop-result {
+  margin-top: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--border, #3a4356);
+  border-radius: 6px;
+}
+
+.config-drop .drop-result ul {
+  margin: 6px 0 0;
+  padding-left: 18px;
+}

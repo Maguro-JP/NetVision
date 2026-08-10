@@ -64,12 +64,37 @@ def health() -> dict[str, str]:
 
 @app.get("/api/v1/meta", tags=["meta"])
 def meta() -> dict[str, object]:
-    """画面側が動作モードを知るための情報。"""
+    """画面側が動作モードを知るための情報。
+
+    版とスキーマの世代も返す。版を上げたあとに「本当に入れ替わったか」を
+    確かめる先が無いと、上げ忘れや入れ替え漏れに気づけない。閉域では
+    画面を開いて確かめられることが大事なので、API から見えるようにしておく。
+    """
     return {
         "demo_mode": settings.demo_mode,
         "warning_days": settings.warning_days,
         "critical_days": settings.critical_days,
+        "version": app.version,
+        "schema_revision": _schema_revision(),
     }
+
+
+def _schema_revision() -> str | None:
+    """いま DB に入っているスキーマの世代（Alembic のリビジョン）。
+
+    版を上げてもスキーマが古いままだと、動くように見えて一部の画面だけ
+    落ちる。上げたあとに突き合わせられるよう、番号を見えるところに出す。
+    """
+    from sqlalchemy import text
+
+    from app.db import engine
+
+    try:
+        with engine.connect() as connection:
+            return connection.execute(text("select version_num from alembic_version")).scalar()
+    except Exception:
+        # 1台完結モードは Alembic を通さずに表を作るので、この表は無い
+        return None
 
 
 def _mount_frontend(directory: str) -> None:

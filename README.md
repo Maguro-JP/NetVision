@@ -75,6 +75,7 @@ docs/GETTING_STARTED.md  自分の端末で実データを試す手順
 docs/INSTALL.md          閉域環境への導入手順書
 docs/WINDOWS_BEGINNER.md Windows で動かす手順（はじめての人向け）
 docs/OPERATIONS.md   運用手順書
+docs/UPGRADE.md          版を上げる手順（入れ替え・確認・戻し方）
 docs/PREVIEW.md  プレビュー環境（Vercel）の手順
 api/index.py     プレビュー用のサーバレス関数入口
 packaging/       閉域へ持ち込むオフラインバンドルの作成・導入スクリプト

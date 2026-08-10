@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { MaintenanceContract } from "../api/types";
+import ConfigDropZone from "../components/ConfigDropZone";
 import ChangeLogTable from "../components/ChangeLogTable";
 import { DOC_TYPE_LABEL, versionRange } from "../lib/docs";
 import SeverityBadge from "../components/SeverityBadge";
@@ -273,6 +274,7 @@ export default function DeviceDetailPage() {
       )}
 
       <h2>ポート</h2>
+      <ConfigDropZone deviceId={deviceId} hostname={device.hostname} />
       {!interfaces || interfaces.length === 0 ? (
         <div className="empty">
           Config を取り込むと、ポートと VLAN の設定がここに出ます。

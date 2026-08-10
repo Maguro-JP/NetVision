@@ -409,3 +409,78 @@ def test_topology_builds_itself_from_multiple_configs(client):
     graph = client.get(f"{API}/topology").json()
     assert len(graph["nodes"]) == len(created)
     assert len(graph["edges"]) >= 1
+
+
+def test_the_same_config_still_updates_the_inventory(client, device_payload):
+    """内容が同じでも台帳の更新は行う。
+
+    世代を増やさないのと、読み取った値を台帳へ反映しないのは別の話。
+    「同じ内容だから」で更新されないのは、使う側から見れば反映漏れにしか
+    見えない。2回目の取り込みで初めて反映を指定することもある。
+    """
+    ids = seed_fleet(client, device_payload)
+
+    first = upload(client, "core-sw-01").json()[0]
+    assert first["unchanged"] is False
+    assert client.get(f"{API}/devices/{ids['core']}").json()["serial_number"] is None
+
+    # 同じ内容を、今度は台帳へ反映する指定で
+    second = upload(client, "core-sw-01", apply_inventory=True).json()[0]
+
+    assert second["unchanged"] is True  # 世代は増えない
+    assert second["snapshot_id"] == first["snapshot_id"]
+    assert len(client.get(f"{API}/configs").json()) == 1
+    # 台帳はちゃんと更新される
+    assert "シリアル番号" in second["applied_fields"]
+    assert client.get(f"{API}/devices/{ids['core']}").json()["serial_number"] == "FOC2401A001"
+
+
+def test_the_same_config_keeps_ports_and_links_in_place(client, device_payload):
+    """同じ内容の取り込みで、ポートや結線が消えないこと。"""
+    ids = seed_fleet(client, device_payload)
+    upload(client, "core-sw-01")
+    before = client.get(f"{API}/configs/devices/{ids['core']}/interfaces").json()
+
+    upload(client, "core-sw-01")
+
+    after = client.get(f"{API}/configs/devices/{ids['core']}/interfaces").json()
+    assert [i["name"] for i in after] == [i["name"] for i in before]
+    assert after
+
+
+def test_a_config_taken_in_first_is_adopted_when_the_device_is_registered(client, device_payload):
+    """先に Config、あとから機器。この順でも紐付く。
+
+    台帳から作る人もいれば、手元の Config をまとめて入れてから機器を
+    整える人もいる。後者で取り込み直しが要るのは筋が通らない。
+    """
+    # 登録せずに取り込む（宙に浮いた状態を作る）
+    first = upload(client, "core-sw-01", create_missing=False).json()[0]
+    assert first["matched"] is False
+    assert first["device_id"] is None
+
+    device_id = add_device(client, device_payload, hostname="core-sw-01")
+
+    # 取り込み直さなくても、機器に紐付いている
+    snapshots = client.get(f"{API}/configs", params={"device_id": device_id}).json()
+    assert [s["id"] for s in snapshots] == [first["snapshot_id"]]
+
+    # 中身も入っている。紐付けだけして空のままでは意味がない
+    interfaces = client.get(f"{API}/configs/devices/{device_id}/interfaces").json()
+    assert len(interfaces) == 4
+
+
+def test_adoption_matches_hostnames_case_insensitively(client, device_payload):
+    """ホスト名の大文字小文字やドメイン付きの差は吸収する。"""
+    upload(client, "core-sw-01", create_missing=False)
+    device_id = add_device(client, device_payload, hostname="CORE-SW-01")
+
+    assert client.get(f"{API}/configs", params={"device_id": device_id}).json()
+
+
+def test_registering_an_unrelated_device_adopts_nothing(client, device_payload):
+    """関係ない機器を登録しても、他人の Config を引き取らない。"""
+    upload(client, "core-sw-01", create_missing=False)
+    other = add_device(client, device_payload, hostname="unrelated-sw-99")
+
+    assert client.get(f"{API}/configs", params={"device_id": other}).json() == []

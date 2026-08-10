@@ -216,30 +216,41 @@ def ingest(
 
     digest = _digest(text)
     latest = _latest_snapshot(db, device.id if device else None, parsed.hostname)
-    if latest is not None and latest.sha256 == digest:
-        result.unchanged = True
-        result.snapshot_id = latest.id
-        result.message = "前回の取り込みと同じ内容のため、世代は追加していません。"
-        return result
+
+    # 同じ内容なら世代は増やさない。増やしても差分が空の履歴が並ぶだけで、
+    # あとから「いつ変わったか」を追うときの邪魔になる。
+    #
+    # ただし、台帳への反映まで止めてはいけない。同じ Config でも、台帳側が
+    # 空だったり、あとから機器を登録して紐付いたばかりだったりする。
+    # 「同じ内容だから」という理由で更新されないのは、使う側から見れば
+    # 反映されないバグにしか見えない。世代を足すかどうかと、読み取った値を
+    # 台帳へ反映するかどうかは別の話として扱う。
+    result.unchanged = latest is not None and latest.sha256 == digest
 
     with audit_context(ChangeSource.SYSTEM, note=f"Config取り込み: {filename}"):
-        snapshot = ConfigSnapshot(
-            device_id=device.id if device else None,
-            hostname=parsed.hostname,
-            filename=filename,
-            content=text,
-            sha256=digest,
-            vendor=str(parsed.vendor),
-            parsed_os_name=parsed.os_name,
-            parsed_os_version=parsed.os_version,
-            parsed_model=parsed.model,
-            parsed_serial=parsed.serial_number,
-            interface_count=len(parsed.interfaces),
-            neighbor_count=len(parsed.neighbors),
-        )
-        db.add(snapshot)
-        db.flush()
-        result.snapshot_id = snapshot.id
+        if result.unchanged and latest is not None:
+            result.snapshot_id = latest.id
+            # 先に取り込んで宙に浮いていた世代を、今回の機器に引き取らせる
+            if device is not None and latest.device_id is None:
+                latest.device_id = device.id
+        else:
+            snapshot = ConfigSnapshot(
+                device_id=device.id if device else None,
+                hostname=parsed.hostname,
+                filename=filename,
+                content=text,
+                sha256=digest,
+                vendor=str(parsed.vendor),
+                parsed_os_name=parsed.os_name,
+                parsed_os_version=parsed.os_version,
+                parsed_model=parsed.model,
+                parsed_serial=parsed.serial_number,
+                interface_count=len(parsed.interfaces),
+                neighbor_count=len(parsed.neighbors),
+            )
+            db.add(snapshot)
+            db.flush()
+            result.snapshot_id = snapshot.id
 
         if device is not None:
             _sync_vlans(db, device, parsed)
@@ -257,12 +268,58 @@ def ingest(
             result.links_created = created
             result.unresolved_neighbors = unresolved
 
+        if result.unchanged and not result.message:
+            result.message = "前回と同じ内容のため、世代は追加していません。" + (
+                f"台帳へ反映: {' / '.join(result.applied_fields)}"
+                if result.applied_fields
+                else "ポート・結線は読み直しました。"
+            )
+
         if commit:
             db.commit()
         else:
             db.flush()
 
     return result
+
+
+def adopt_orphan_snapshots(db: Session, device: Device) -> int:
+    """先に取り込んであった Config を、あとから登録した機器に引き取らせる。
+
+    順番はどちらもあり得る。台帳を作ってから Config を入れる人もいれば、
+    手元の Config をまとめて入れてから機器を整える人もいる。後者のとき、
+    取り込み済みの世代が宙に浮いたままだと、機器を登録しても Config が
+    付いてこない——取り込み直しが要る、という筋の通らない手順になる。
+
+    引き取るときは、いちばん新しい世代を読み直してポート・VLAN・結線まで
+    作る。紐付けだけして中身が空のままでは、紐付いた意味がないため。
+
+    戻り値は引き取った世代の数。
+    """
+    key = normalize_hostname(device.hostname)
+    if not key:
+        return 0
+
+    orphans = [
+        snapshot
+        for snapshot in db.scalars(select(ConfigSnapshot).where(ConfigSnapshot.device_id.is_(None)))
+        if snapshot.hostname and normalize_hostname(snapshot.hostname) == key
+    ]
+    if not orphans:
+        return 0
+
+    for snapshot in orphans:
+        snapshot.device_id = device.id
+
+    newest = max(orphans, key=lambda s: (s.created_at, s.id))
+    parsed = configparse.parse(newest.content)
+    _sync_vlans(db, device, parsed)
+    _sync_vrfs(db, device, parsed)
+    _sync_tunnels(db, device, parsed)
+    _sync_interfaces(db, device, parsed)
+    _sync_links(db, device, parsed)
+    db.flush()
+    return len(orphans)
 
 
 def _latest_snapshot(
