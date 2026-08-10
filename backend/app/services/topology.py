@@ -476,6 +476,24 @@ def _compact(
         )
 
 
+# 機器の箱は、結線が多いほど横に広がる（画面側の widthFor と同じ規則）。
+# 線を1本ずつ別の通り道に沿わせるための幅も要る。
+# どちらも見込まずに対向を置くと、箱の右端が対向側へ食い込み、
+# 線がいったん行き過ぎてから戻る形になって、その戻りが交差に見える。
+_BOX_WIDTH = 190.0
+_BOX_GROW = 55.0
+_BOX_MAX = 620.0
+_LANE_GAP = 16.0
+
+
+def _room_for(links: int) -> float:
+    """配下を何台ぶら下げるかから、右へ余分に空ける幅を出す。"""
+    if links <= 0:
+        return 0.0
+    grown = min(_BOX_MAX, _BOX_WIDTH + max(0, links - 3) * _BOX_GROW)
+    return (grown - _BOX_WIDTH) + links * _LANE_GAP
+
+
 def _place_peers(
     by_id: dict[int, TopologyNodeView],
     graph: TopologyGraph,
@@ -537,9 +555,10 @@ def _place_peers(
         node.x, node.y = right + (index + 1) * _X_SPACING * 1.6, top
 
     # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
+    column = right + _X_SPACING * 1.6 + _room_for(len(below))
     for index, node in enumerate(below):
         # 自拠点の側と重ならないよう、線を通す余白を見込んで離す
-        node.x = right + _X_SPACING * 1.6
+        node.x = column
         node.y = top + (index + 1) * (_Y_SPACING * 0.7)
 
     if horizontal:

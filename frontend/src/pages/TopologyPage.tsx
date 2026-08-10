@@ -92,16 +92,25 @@ interface LabelOptions {
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
 const SAME_ROW = 60;
 
+/** 横へ大きく離れていると見なす差。これを超えたら横から出す。 */
+const ASIDE = 240;
+
 /**
  * 機器の箱のどの辺から線を出すか。
  *
- * 上下関係のある相手（段が違う相手）へは、上位の下から出して下位の上へ入れる。
- * 横に離れていても、斜めに横から出すと上下関係が読めなくなる。
- * 同じ段に並んでいる相手（冗長構成やスタック間）だけ、横どうしで結ぶ。
+ * 人が描くときの判断に合わせる。真下にいる相手へは下から出して上へ入れる。
+ * 同じ段に並んでいる相手（冗長構成やスタック間）は横どうしで結ぶ。
+ *
+ * 難しいのは、段が違ううえに横へも離れている相手——支社から見た各営業所が
+ * これにあたる。下から出すと、自分の真下にある配下の機器へ向かう線を
+ * 何本もまたぐことになる。横から出せばまたがずに済み、線も短い。
+ * 横へ 1 列以上ずれている相手は、下ではなく横につなぐ。
  */
-function sideToward(from: TopologyNode, to: TopologyNode): Side {
+export function sideToward(from: TopologyNode, to: TopologyNode): Side {
+  const dx = to.x - from.x;
   const dy = to.y - from.y;
-  if (Math.abs(dy) < SAME_ROW) return to.x > from.x ? "right" : "left";
+  if (Math.abs(dy) < SAME_ROW) return dx > 0 ? "right" : "left";
+  if (Math.abs(dx) >= ASIDE) return dx > 0 ? "right" : "left";
   return dy > 0 ? "bottom" : "top";
 }
 
@@ -112,7 +121,7 @@ function sideToward(from: TopologyNode, to: TopologyNode): Side {
  * 同じ辺に複数本来るときは3か所に散らす。同じ点から出すと線が重なって、
  * どのポートがどれか分からなくなる。
  */
-function assignAnchors(graph: TopologyGraph): {
+export function assignAnchors(graph: TopologyGraph): {
   anchors: Map<number, { source: string; target: string }>;
   busiest: Map<number, number>;
   lanes: Map<number, number>;
@@ -148,8 +157,11 @@ function assignAnchors(graph: TopologyGraph): {
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(end);
   }
 
+  /** 引き出し口のちょうど真ん中。SLOTS は 0.5 を含む奇数個で持つこと。 */
+  const CENTER = (SLOTS.length - 1) / 2;
+
   const slotFor = (index: number, count: number): number => {
-    if (count <= 1) return 1; // 1本なら中央
+    if (count <= 1) return CENTER; // 1本なら中央から出す
     // 相手が左にいるものから順に、左の引き出し口へ
     return Math.min(SLOTS.length - 1, Math.round((index / (count - 1)) * (SLOTS.length - 1)));
   };
@@ -195,11 +207,18 @@ function assignAnchors(graph: TopologyGraph): {
       if (!here || !there) return 0;
       return vertical ? Math.abs(there.x - here.x) : Math.abs(there.y - here.y);
     };
+    // 通り道は折れ点をずらして作るので、相手までの半分までしか使えない。
+    // はみ出すと線がいったん行き過ぎてから戻り、その戻りが交差に見える。
+    // 入る隙間しかないときは間隔を詰める（詰めても重ねない）
+    const closest = Math.min(...members.map(distance));
+    const room = Math.max(0, closest / 2 - 20);
+    const gap = Math.max(4, Math.min(LANE_GAP, room / Math.max(1, members.length - 1)));
+
     [...members]
       .sort((a, b) => distance(a) - distance(b))
       .forEach((end, index) => {
         // 既に別の辺で通り道が決まっていれば、そちらを優先する
-        if (!lanes.has(end.edge)) lanes.set(end.edge, index * LANE_GAP);
+        if (!lanes.has(end.edge)) lanes.set(end.edge, index * gap);
       });
   }
 
@@ -212,7 +231,24 @@ function assignAnchors(graph: TopologyGraph): {
  * 4本を超えたら1本あたり 55px 見込んで箱を広げる。 */
 function widthFor(count: number): number | undefined {
   if (count <= 3) return undefined;
-  return Math.min(620, 190 + (count - 3) * 55);
+  return Math.min(620, DEFAULT_WIDTH + (count - 3) * 55);
+}
+
+/** 箱の既定の幅（styles.css の .device-node と合わせること）。 */
+const DEFAULT_WIDTH = 190;
+
+/**
+ * 広げた箱を、広げる前の中心に置き直すためのずれ。
+ *
+ * 位置は箱の左上で持っている。幅だけ広げると中心が右へ動くので、
+ * 真下にいる相手へ引いた線が斜めに折れる。図の背骨にあたる縦の線が
+ * 曲がると、それだけで雑に見える。左へ半分戻して中心を揃える。
+ *
+ * 見た目だけの調整なので、保存するときは足し戻して元の値に返す。
+ * そうしないと、保存するたびに機器が少しずつ左へ寄っていく。
+ */
+function shiftFor(width: number | undefined): number {
+  return width ? (width - DEFAULT_WIDTH) / 2 : 0;
 }
 
 function toFlow(
@@ -225,10 +261,13 @@ function toFlow(
 } {
   const { anchors, busiest, lanes } = assignAnchors(graph);
 
-  const nodes = graph.nodes.map((node) => ({
+  const nodes = graph.nodes.map((node) => {
+    const width = widthFor(busiest.get(node.device_id) ?? 0);
+    const shift = shiftFor(width);
+    return {
     id: String(node.device_id),
     type: "device",
-    position: { x: node.x, y: node.y },
+    position: { x: node.x - shift, y: node.y },
     data: {
       hostname: node.hostname,
       vendor: simple ? "" : node.vendor,
@@ -244,10 +283,12 @@ function toFlow(
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
       // 線が多い機器は箱を広げる。引き出し口が詰まると線が重なって読めない
-      width: widthFor(busiest.get(node.device_id) ?? 0),
+      width,
+      shift,
     } satisfies DeviceNodeData,
     draggable: options.editable,
-  }));
+    };
+  });
 
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),
@@ -487,7 +528,12 @@ function TopologyEditor() {
     mutationFn: () =>
       api.savePositions(
         layer,
-        nodes.map((n) => ({ device_id: Number(n.id), x: n.position.x, y: n.position.y })),
+        // 見た目のために左へずらした分は足し戻す（shiftFor を参照）
+        nodes.map((n) => ({
+          device_id: Number(n.id),
+          x: n.position.x + (n.data.shift ?? 0),
+          y: n.position.y,
+        })),
       ),
     onSuccess: () => {
       setDirty(false);

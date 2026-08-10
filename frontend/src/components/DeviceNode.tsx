@@ -25,6 +25,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   hiddenPeers?: number;
   /** 箱の幅。1つの辺に線が多い機器は広げて、引き出し口の間隔を確保する */
   width?: number;
+  /** 箱を広げたぶん左へ戻した量。保存時に足し戻す（TopologyPage の shiftFor）。 */
+  shift?: number;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
