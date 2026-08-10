@@ -86,18 +86,20 @@ interface LabelOptions {
   editable: boolean;
 }
 
-/** 機器の中心から見て、相手がどちら側にいるか。 */
+/** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
+const SAME_ROW = 60;
+
+/**
+ * 機器の箱のどの辺から線を出すか。
+ *
+ * 上下関係のある相手（段が違う相手）へは、上位の下から出して下位の上へ入れる。
+ * 横に離れていても、斜めに横から出すと上下関係が読めなくなる。
+ * 同じ段に並んでいる相手（冗長構成やスタック間）だけ、横どうしで結ぶ。
+ */
 function sideToward(from: TopologyNode, to: TopologyNode): Side {
-  const dx = to.x - from.x;
   const dy = to.y - from.y;
-  // 箱は横長なので、横方向は少し厳しめに見ないと斜めの線が横に付いてしまう
-  return Math.abs(dx) * 0.75 > Math.abs(dy)
-    ? dx > 0
-      ? "right"
-      : "left"
-    : dy > 0
-      ? "bottom"
-      : "top";
+  if (Math.abs(dy) < SAME_ROW) return to.x > from.x ? "right" : "left";
+  return dy > 0 ? "bottom" : "top";
 }
 
 /**
@@ -107,7 +109,10 @@ function sideToward(from: TopologyNode, to: TopologyNode): Side {
  * 同じ辺に複数本来るときは3か所に散らす。同じ点から出すと線が重なって、
  * どのポートがどれか分からなくなる。
  */
-function assignAnchors(graph: TopologyGraph): Map<number, { source: string; target: string }> {
+function assignAnchors(graph: TopologyGraph): {
+  anchors: Map<number, { source: string; target: string }>;
+  busiest: Map<number, number>;
+} {
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
   const out = new Map<number, { source: string; target: string }>();
 
@@ -164,7 +169,23 @@ function assignAnchors(graph: TopologyGraph): Map<number, { source: string; targ
     const target = assigned.get(`${edge.id}:${edge.target}`);
     if (source && target) out.set(edge.id, { source, target });
   }
-  return out;
+
+  // 1つの辺に何本来ているか。多い機器は箱を広げて間隔を確保する
+  const busiest = new Map<number, number>();
+  for (const [key, members] of groups) {
+    const device = Number(key.split(":")[0]);
+    busiest.set(device, Math.max(busiest.get(device) ?? 0, members.length));
+  }
+  return { anchors: out, busiest };
+}
+
+/** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
+ *
+ * 引き出し口が詰まるとポート名も重なって読めなくなるので、
+ * 4本を超えたら1本あたり 55px 見込んで箱を広げる。 */
+function widthFor(count: number): number | undefined {
+  if (count <= 3) return undefined;
+  return Math.min(620, 190 + (count - 3) * 55);
 }
 
 function toFlow(
@@ -175,6 +196,8 @@ function toFlow(
   nodes: Node<DeviceNodeData>[];
   edges: Edge[];
 } {
+  const { anchors, busiest } = assignAnchors(graph);
+
   const nodes = graph.nodes.map((node) => ({
     id: String(node.device_id),
     type: "device",
@@ -193,11 +216,11 @@ function toFlow(
       editable: options.editable,
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
+      // 線が多い機器は箱を広げる。引き出し口が詰まると線が重なって読めない
+      width: widthFor(busiest.get(node.device_id) ?? 0),
     } satisfies DeviceNodeData,
     draggable: options.editable,
   }));
-
-  const anchors = assignAnchors(graph);
 
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),

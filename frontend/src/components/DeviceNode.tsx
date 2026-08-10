@@ -23,12 +23,16 @@ export interface DeviceNodeData extends Record<string, unknown> {
   outside?: boolean;
   /** 同じ拠点にいて、代表1台にまとめた分の台数 */
   hiddenPeers?: number;
+  /** 箱の幅。1つの辺に線が多い機器は広げて、引き出し口の間隔を確保する */
+  width?: number;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
 export const SIDES = ["top", "bottom", "left", "right"] as const;
 export type Side = (typeof SIDES)[number];
-export const SLOTS = [0.25, 0.5, 0.75];
+/* 各辺の引き出し口。線が増えても重ならないよう、辺あたり7か所置く。
+   足りなくなったら箱の幅を広げて間隔を確保する（幅は data.width で渡す）。 */
+export const SLOTS = [0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88];
 
 const POSITION_OF: Record<Side, Position> = {
   top: Position.Top,
@@ -73,6 +77,7 @@ export default function DeviceNode({
 }) {
   return (
     <div
+      style={data.width ? { width: data.width } : undefined}
       className={
         `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
         (data.outside ? "outside " : "") +
