@@ -289,6 +289,7 @@ export default function DeviceDetailPage() {
             <table>
               <thead>
                 <tr>
+                  <th>状態</th>
                   <th>ポート</th>
                   <th>説明</th>
                   <th>モード</th>
@@ -297,12 +298,22 @@ export default function DeviceDetailPage() {
                   <th>トランク許可 VLAN</th>
                   <th>VRF</th>
                   <th>IP</th>
-                  <th>状態</th>
                 </tr>
               </thead>
               <tbody>
                 {interfaces.map((port) => (
                   <tr key={port.id}>
+                    <td className="nowrap">
+                      {port.enabled ? (
+                        <span className="badge ok" title="Config で shutdown されていません">
+                          有効
+                        </span>
+                      ) : (
+                        <span className="badge unknown" title="Config で shutdown されています">
+                          shutdown
+                        </span>
+                      )}
+                    </td>
                     <td>
                       <strong>{port.name}</strong>
                     </td>
@@ -321,13 +332,6 @@ export default function DeviceDetailPage() {
                     </td>
                     <td>{port.vrf ?? "—"}</td>
                     <td className="muted">{port.ip_address ?? "—"}</td>
-                    <td>
-                      {port.enabled ? (
-                        <span className="badge ok">up</span>
-                      ) : (
-                        <span className="badge unknown">shutdown</span>
-                      )}
-                    </td>
                   </tr>
                 ))}
               </tbody>

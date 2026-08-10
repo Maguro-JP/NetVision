@@ -251,9 +251,9 @@ export default function ExposuresPage() {
         <table>
           <thead>
             <tr>
+              <th>状態</th>
               <th>機器</th>
               <th>CVE</th>
-              <th>状態</th>
               <th>裏取り</th>
               <th>期限</th>
               <th />
@@ -262,6 +262,20 @@ export default function ExposuresPage() {
           <tbody>
             {(rows ?? []).map((row) => (
               <tr key={row.id}>
+                <td>
+                  <select
+                    value={row.status}
+                    onChange={(e) => decide.mutate({ id: row.id, status: e.target.value })}
+                  >
+                    {DECIDABLE.map((value) => (
+                      <option key={value} value={value}>
+                        {STATUS_LABEL[value]}
+                      </option>
+                    ))}
+                    {row.status === "resolved" && <option value="resolved">該当しなくなった</option>}
+                  </select>
+                  {row.decided_by && <div className="muted">{row.decided_by}</div>}
+                </td>
                 <td>
                   <Link to={`/devices/${row.device_id}`}>{row.hostname}</Link>
                   <div className="muted">{row.os_version ?? "版数不明"}</div>
@@ -278,20 +292,6 @@ export default function ExposuresPage() {
                       差し戻し: {row.reopen_reason}
                     </div>
                   )}
-                </td>
-                <td>
-                  <select
-                    value={row.status}
-                    onChange={(e) => decide.mutate({ id: row.id, status: e.target.value })}
-                  >
-                    {DECIDABLE.map((value) => (
-                      <option key={value} value={value}>
-                        {STATUS_LABEL[value]}
-                      </option>
-                    ))}
-                    {row.status === "resolved" && <option value="resolved">該当しなくなった</option>}
-                  </select>
-                  {row.decided_by && <div className="muted">{row.decided_by}</div>}
                 </td>
                 <td>
                   {row.config_verified === null ? (
