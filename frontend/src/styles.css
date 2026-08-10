@@ -47,9 +47,11 @@ a:hover {
   grid-template-columns: 220px 1fr;
   min-height: 100vh;
 }
-/* メニューを畳んだ状態。図を広く使いたいときと、画面の狭い端末向け */
+/* メニューを畳んだ状態。図を広く使いたいときと、画面の狭い端末向け。
+   サイドバーは描かないので、1列にする。2列のままだと本文が
+   1列目（幅0）に入ってしまい、内容がぺしゃんこになる */
 .layout.collapsed {
-  grid-template-columns: 0 1fr;
+  grid-template-columns: 1fr;
 }
 
 .sidebar {
@@ -74,6 +76,18 @@ a:hover {
 }
 .sidebar-scrim {
   display: none;
+}
+
+/* 開閉ボタンと常時表示は横に並べる。メニューの外に置いてあるので、
+   閉じた状態からでも操作できる */
+.sidebar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.sidebar-controls .sidebar-toggle {
+  margin-bottom: 0;
 }
 
 /* グループごとに線で区切る。どこまでが1まとまりかを見た目で示す */
@@ -121,13 +135,12 @@ a:hover {
 }
 
 .sidebar-pin {
-  display: block;
-  margin: 12px 20px 0;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
+  display: inline-flex;
+  align-items: center;
   color: var(--muted);
   font-size: 12px;
   cursor: pointer;
+  white-space: nowrap;
 }
 
 .brand {

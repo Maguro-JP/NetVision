@@ -146,31 +146,36 @@ export default function App() {
             );
           })}
         </nav>
-
-        <label className="sidebar-pin" title="画面が狭くてもメニューを出したままにします">
-          <input
-            type="checkbox"
-            checked={pinned}
-            onChange={(event) => setPinned(event.target.checked)}
-          />{" "}
-          常時表示
-        </label>
       </aside>
 
       {/* 狭い画面でメニューを開いたとき、外側を触れば閉じられるようにする */}
       {open && !pinned && <div className="sidebar-scrim" onClick={() => setOpen(false)} />}
 
       <main className="main">
-        {!pinned && (
+        {/* 開閉ボタンと常時表示の切り替えは、メニューの外に置く。
+            メニューの中に入れると、閉じたときに触れなくなって戻せない */}
+        <div className="sidebar-controls">
           <button
             className="sidebar-toggle"
-            onClick={() => setOpen((value) => !value)}
+            onClick={() => {
+              // 常時表示のまま隠すと、次に開くときに迷う。隠すなら常時表示も解く
+              if (pinned) setPinned(false);
+              setOpen((value) => !value);
+            }}
             aria-expanded={open}
             title={open ? "メニューを隠す" : "メニューを出す"}
           >
             ☰<span className="sidebar-toggle-text"> メニュー</span>
           </button>
-        )}
+          <label className="sidebar-pin" title="画面が狭くてもメニューを出したままにします">
+            <input
+              type="checkbox"
+              checked={pinned}
+              onChange={(event) => setPinned(event.target.checked)}
+            />{" "}
+            常時表示
+          </label>
+        </div>
 
         {meta?.demo_mode && (
           <div className="demo-banner">
