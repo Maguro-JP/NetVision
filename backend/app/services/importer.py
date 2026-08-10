@@ -523,10 +523,7 @@ def _run_import(
     existing_by_key = _existing_by_key(
         db,
         key_field,
-        [
-            str(_extract(raw, mapping)[0].get(str(key_field)) or "").strip()
-            for raw in table_rows
-        ],
+        [str(_extract(raw, mapping)[0].get(str(key_field)) or "").strip() for raw in table_rows],
     )
 
     #: 行の結果と、その行で作った・更新した機器。id は最後にまとめて入れる
