@@ -18,7 +18,62 @@ GitHub もコマンド操作も初めてという前提で書いてあります�
 
 この作業は1回だけです。作った ZIP を配れば、以降は配るだけで済みます。
 
-## 1-1. 道具を3つ入れる
+作り方は3通りあります。作業用の端末に何を入れられるかで選んでください。
+
+| 方法 | 必要なもの | 向いている場合 |
+|---|---|---|
+| A. GitHub に作らせる | ブラウザだけ | 作業用の端末に何も入れられない |
+| B. PowerShell で作る | Node.js のみ | Git を入れられない |
+| C. Git Bash で作る | Git・Node.js・Python | 従来どおり |
+
+---
+
+## 方法A. GitHub に作らせる（一番手軽な入手方法）
+
+作業用の端末には何も入れません。GitHub 側で ZIP を作らせて、ブラウザで
+落とすだけです。
+
+1. ブラウザで <https://github.com/Maguro-JP/NetVision> を開き、サインインする
+2. 上の `Actions` タブを押す
+3. 左の一覧から `Windows bundle` を選ぶ
+4. 右にある `Run workflow` を押し、もう一度 `Run workflow` を押す
+5. 5分ほど待つと一覧に行が増えるので、それを押す
+6. 下のほうにある `NetVision-windows` を押すと ZIP が落ちてくる
+
+落ちてきたファイルは ZIP が二重になっています。展開すると中にもう1つ
+`NetVision-（日付）-windows.zip` があるので、それを第2部で使います。
+
+これで作れたなら、方法B・C は読まなくて構いません。
+
+---
+
+## 方法B. PowerShell で作る
+
+Git は要りません。Windows に最初から入っている PowerShell だけで動きます。
+Python も、この処理が組み込み用のものを勝手に取ってくるので入れなくて構いません。
+
+必要なのは Node.js（LTS 版）だけです。<https://nodejs.org/> から入れてください。
+
+ソースコードは、ブラウザで <https://github.com/Maguro-JP/NetVision> を開き、
+緑の `Code` ボタン →`Download ZIP` で落とし、デスクトップに展開します。
+
+展開したフォルダを開き、アドレス欄に `powershell` と打って Enter を押すと、
+そのフォルダで青い画面が開きます。次の1行を貼り付けて Enter を押します。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File packaging\make-bundle-windows.ps1
+```
+
+`-ExecutionPolicy Bypass` は、この1回だけスクリプトの実行を許すという意味です。
+パソコンの設定は変わりません。
+
+終わると `dist` フォルダに ZIP ができます。第2部へ進んでください。
+
+---
+
+## 方法C. Git Bash で作る
+
+### 1-1. 道具を3つ入れる
 
 ここだけはインストールが必要です。すべて公式サイトから入れます。
 
@@ -30,7 +85,7 @@ GitHub もコマンド操作も初めてという前提で書いてあります�
 
 3つとも「次へ」を押していけば終わります。入れ終わったらパソコンを再起動すると確実です。
 
-## 1-2. ソースコードを取ってくる
+### 1-2. ソースコードを取ってくる
 
 スタートメニューで `Git Bash` と検索して開きます。黒い画面（コマンドを打つ画面）が出ます。
 
@@ -47,7 +102,7 @@ git clone https://github.com/Maguro-JP/NetVision.git
 > GitHub のページから ZIP でも取れます（緑の `Code` ボタン → `Download ZIP`）。
 > その場合は展開したフォルダへ `cd` してください。
 
-## 1-3. ZIP を作る
+### 1-3. ZIP を作る
 
 同じ黒い画面で、続けて次を打ちます。
 
@@ -159,6 +214,9 @@ C:\Users\（あなたのユーザー名）\.netvision
 | 第1部で `npm: command not found` | Node.js が入っていないか、再起動していない |
 | 第1部で `bad interpreter` や `^M` を含むエラー | 下の「`bad interpreter` と出る」を見る |
 | 第1部で `Python が見つかりません` と出る | Python を「Add python.exe to PATH」にチェックを入れて入れ直し、Git Bash を開き直す |
+| 方法B で `このシステムではスクリプトの実行が無効` と出る | `powershell -ExecutionPolicy Bypass -File ...` の形で打っているか確認する |
+| 方法B で `画面の材料がありません` と出る | Node.js を入れて PowerShell を開き直すか、方法A に切り替える |
+| 方法A で `Run workflow` のボタンが無い | そのリポジトリへの書き込み権限が要る。持っている人に実行を頼む |
 
 ## `bad interpreter` と出る
 

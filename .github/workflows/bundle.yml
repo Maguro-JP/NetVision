@@ -1,0 +1,60 @@
+# Windows 用の「インストール不要」ZIP を GitHub 側で作る。
+#
+# 作業用の端末に Git も Python も Node.js も入れられないことがある。
+# その場合はここで作った ZIP をブラウザから落として、そのまま持ち込めばよい。
+#
+# 動かし方: GitHub の Actions タブ → この workflow → Run workflow
+name: Windows bundle
+
+on:
+  workflow_dispatch:
+  release:
+    types: [published]
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: ./packaging/make-bundle-windows.sh
+
+      - id: find
+        run: echo "zip=$(ls dist/NetVision-*-windows.zip)" >> "$GITHUB_OUTPUT"
+
+      # 出来上がりが壊れていないか、置くだけで確かめる。
+      # 起動そのものは Windows でしか試せないが、中身の欠けはここで気づける。
+      - name: 中身を確かめる
+        run: |
+          python - "${{ steps.find.outputs.zip }}" <<'PY'
+          import sys, zipfile
+          names = zipfile.ZipFile(sys.argv[1]).namelist()
+          need = [
+              "NetVision.bat",
+              "README.txt",
+              "python/python.exe",
+              "backend/scripts/standalone.py",
+              "backend/app/main.py",
+              "frontend/dist/index.html",
+          ]
+          missing = [n for n in need if not any(x.endswith(n) for x in names)]
+          if missing:
+              sys.exit(f"ZIP に足りないものがあります: {missing}")
+          if not any("/lib/fastapi/" in n for n in names):
+              sys.exit("依存ライブラリが入っていません")
+          print(f"{len(names)} 個のファイルを確認しました")
+          PY
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NetVision-windows
+          path: dist/NetVision-*-windows.zip
+          retention-days: 30
