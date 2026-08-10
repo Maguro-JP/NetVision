@@ -275,6 +275,7 @@ def scope_graph(
         nodes,
         [e for e in graph.edges if e.source in keep and e.target in keep],
         rank=hierarchy_rank(graph),
+        inside=inside,
         orientation=orientation,
     )
     for node in nodes:
@@ -363,6 +364,7 @@ def _compact(
     edges: list[TopologyEdgeView] | None = None,
     *,
     rank: dict[int, int] | None = None,
+    inside: set[int] | None = None,
     orientation: str = "vertical",
 ) -> None:
     """絞り込んだ分だけで、上下（左右）の関係が分かる木に並べ直す。
@@ -379,8 +381,17 @@ def _compact(
     if not nodes or any(node.placed for node in nodes):
         return
 
-    by_id = {node.device_id: node for node in nodes}
-    graph = TopologyGraph(layer="", nodes=nodes, edges=list(edges or []))
+    everything = {node.device_id: node for node in nodes}
+    # 自拠点の機器だけで木を組む。対向を混ぜて組むと、対向を脇へ寄せたあとに
+    # 自拠点の側が歯抜けになって、真ん中が空いた図になる
+    tree_nodes = [n for n in nodes if not inside or n.device_id in inside] or nodes
+    keep = {node.device_id for node in tree_nodes}
+    by_id = {node.device_id: node for node in tree_nodes}
+    graph = TopologyGraph(
+        layer="",
+        nodes=tree_nodes,
+        edges=[e for e in (edges or []) if e.source in keep and e.target in keep],
+    )
     if rank is None:
         rank = hierarchy_rank(graph)
 
@@ -454,6 +465,87 @@ def _compact(
         along = across.get(device_id, 0.0) * _X_SPACING
         down = depth.get(device_id, 0) * _Y_SPACING
         node.x, node.y = (down, along) if horizontal else (along, down)
+
+    if inside:
+        _place_peers(
+            everything,
+            TopologyGraph(layer="", nodes=nodes, edges=list(edges or [])),
+            inside,
+            rank,
+            horizontal=horizontal,
+        )
+
+
+def _place_peers(
+    by_id: dict[int, TopologyNodeView],
+    graph: TopologyGraph,
+    inside: set[int],
+    rank: dict[int, int],
+    *,
+    horizontal: bool,
+) -> None:
+    """対向（絞り込みの外）を、自拠点から見た向きに置き直す。
+
+    見たいのは自拠点の機器なので、そこを図の主役に据える。
+
+    - 上位は真上。どこから来ているかは1本の線で足りる
+    - 同じ段の相手は横。支社どうしのような並びの関係
+    - 配下の拠点は右へ縦に並べる。台数が増えても図が横に伸びない
+    """
+    if not inside:
+        return
+
+    own = [by_id[i] for i in inside if i in by_id]
+    if not own:
+        return
+    left = min(node.x for node in own)
+    right = max(node.x for node in own)
+    top = min(node.y for node in own)
+    middle = (left + right) / 2
+    own_rank = min(rank.get(node.device_id, 0) for node in own)
+
+    # 対向がどの内側の機器につながっているか
+    attached: dict[int, int] = {}
+    for edge in graph.edges:
+        if edge.source in inside and edge.target not in inside:
+            attached.setdefault(edge.target, edge.source)
+        elif edge.target in inside and edge.source not in inside:
+            attached.setdefault(edge.source, edge.target)
+
+    above: list[TopologyNodeView] = []
+    beside: list[TopologyNodeView] = []
+    below: list[TopologyNodeView] = []
+    for device_id, node in by_id.items():
+        if device_id in inside or device_id not in attached:
+            continue
+        level = rank.get(device_id, own_rank)
+        if level < own_rank:
+            above.append(node)
+        elif level > own_rank:
+            below.append(node)
+        else:
+            beside.append(node)
+
+    for group in (above, beside, below):
+        group.sort(key=lambda node: node.hostname)
+
+    for index, node in enumerate(above):
+        offset = (index - (len(above) - 1) / 2) * _X_SPACING
+        node.x, node.y = middle + offset, top - _Y_SPACING
+
+    for index, node in enumerate(beside):
+        node.x, node.y = right + (index + 1) * _X_SPACING * 1.6, top
+
+    # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
+    for index, node in enumerate(below):
+        # 自拠点の側と重ならないよう、線を通す余白を見込んで離す
+        node.x = right + _X_SPACING * 1.6
+        node.y = top + (index + 1) * (_Y_SPACING * 0.7)
+
+    if horizontal:
+        # 左右に並べる指定のときは、上下と左右を入れ替える
+        for node in above + beside + below:
+            node.x, node.y = node.y, node.x
 
 
 def port_key(name: str) -> tuple:

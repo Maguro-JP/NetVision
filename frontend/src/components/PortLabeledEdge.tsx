@@ -12,6 +12,8 @@ export interface PortEdgeData extends Record<string, unknown> {
   alongLine: boolean;
   /** ラベルを出さない（シンプル図で線だけにしたいとき） */
   hideLabels: boolean;
+  /** 線を通す道のずらし幅。同じところから出る線が重ならないようにする */
+  lane?: number;
   warning: string | null;
 }
 
@@ -46,6 +48,11 @@ export default function PortLabeledEdge({
   style,
   data,
 }: EdgeProps) {
+  const info = (data ?? {}) as Partial<PortEdgeData>;
+  // 同じところから何本も出るときは、線ごとに通り道をずらす。
+  // 基板の配線と同じで、重ねずに沿わせて引くと本数が読める
+  const lane = info.lane ?? 0;
+  const vertical = sourcePosition === Position.Top || sourcePosition === Position.Bottom;
   const [path, labelX, labelY] = getSmoothStepPath({
     sourceX,
     sourceY,
@@ -53,9 +60,12 @@ export default function PortLabeledEdge({
     targetY,
     sourcePosition,
     targetPosition,
+    ...(lane
+      ? vertical
+        ? { centerY: (sourceY + targetY) / 2 + (sourceY < targetY ? -lane : lane) }
+        : { centerX: (sourceX + targetX) / 2 + (sourceX < targetX ? -lane : lane) }
+      : {}),
   });
-
-  const info = (data ?? {}) as Partial<PortEdgeData>;
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
 
   return (

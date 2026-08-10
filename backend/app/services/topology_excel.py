@@ -42,13 +42,13 @@ from app.services.topology import (
 # 方眼の細かさ。箱の大きさと、線を通す余白をこれで決める
 BOX_W = 8  # 箱の幅（列）
 BOX_H = 3  # 箱の高さ（行）
-GAP_W = 16  # 段と段の間（列）。ここに縦線とポート名が入る
+GAP_W = 14  # 段と段の間（列）。ここに縦線とポート名が入る
 GAP_H = 1  # 箱と箱の間（行）
 
-# 図として見せるので、左と上に余白を取る。見出しは B2 から書き、
-# 1台目の箱の左にも、上りポート名を書ける幅を空けておく
-COL_START = 2 + GAP_W // 2  # 箱を置き始める列
-ROW_START = 4  # 箱を置き始める行（B2 の見出しの下）
+# 図として見せるので、左と上に少しだけ余白を取る。左は A 列の1列分で足りる。
+# 空けすぎると図が右へ寄って、そのぶん横に長くなる
+COL_START = 2  # 箱を置き始める列（B）
+ROW_START = 5  # 箱を置き始める行（見出しの下）
 
 
 @dataclass
@@ -222,7 +222,11 @@ def to_xlsx(
     center = Alignment(horizontal="center", vertical="center", wrap_text=True)
 
     generated = localtime.format(localtime.now(), with_zone=True)
-    title = sheet.cell(row=2, column=2, value="構成図")
+    # どこの図なのかが分からないと、印刷した紙が他の拠点のものと混ざる
+    scope_name = ""
+    if site_id is not None:
+        scope_name = next((n.site_name for n in graph.nodes if not n.outside and n.site_name), "")
+    title = sheet.cell(row=2, column=2, value=f"構成図{f' - {scope_name}' if scope_name else ''}")
     title.font = Font(bold=True, size=14)
     sheet.cell(
         row=3,
@@ -268,7 +272,9 @@ def to_xlsx(
         ポート名は線と同じ行に書くと罫線に重なって読めなくなるので、
         上位側は線の上の行、下位側は線の下の行に分けて書く。
         """
-        bus = parent_entry.col + BOX_W + GAP_W // 2
+        # 縦線は親のすぐ右に置く。横に長く走る区間を子の行に持ってくると、
+        # そこへ両側のポート名を並べて書けて、余白が無駄にならない
+        bus = parent_entry.col + BOX_W + 2
         # 親側の横線
         for c in range(parent_entry.col + BOX_W, bus + 1):
             _line_top(sheet, parent_entry.middle, c, line)
@@ -287,7 +293,8 @@ def to_xlsx(
             return
         down, up = pair
         if down:
-            # 上位機器の下りポートは、線の左上。左揃えで線の始まりから書く
+            # 上位機器の下りポートは、その線の左上。線ごとに書くので、
+            # 配下が何台あっても親側のポートがそれぞれ出る
             cell = sheet.cell(row=child.middle - 1, column=bus + 1, value=down)
             cell.font = Font(size=8, color="444444")
             cell.alignment = Alignment(horizontal="left")

@@ -45,6 +45,9 @@ const VIEW_KEY = "netvision.topology.view";
 // 描くだけで重い。拠点を選ぶか、名前で探してもらう
 const WIDE_LIMIT = 40;
 
+/** 線を通す道の間隔。狭いと線が重なって、広いと図が間延びする */
+const LANE_GAP = 16;
+
 interface ViewSettings {
   portStyle: PortStyle;
   alongLine: boolean;
@@ -112,6 +115,7 @@ function sideToward(from: TopologyNode, to: TopologyNode): Side {
 function assignAnchors(graph: TopologyGraph): {
   anchors: Map<number, { source: string; target: string }>;
   busiest: Map<number, number>;
+  lanes: Map<number, number>;
 } {
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
   const out = new Map<number, { source: string; target: string }>();
@@ -176,7 +180,30 @@ function assignAnchors(graph: TopologyGraph): {
     const device = Number(key.split(":")[0]);
     busiest.set(device, Math.max(busiest.get(device) ?? 0, members.length));
   }
-  return { anchors: out, busiest };
+
+  // 同じところから何本も出るときの通り道。基板の配線と同じで、
+  // 線を1本ずつ別の高さ（または横位置）に通すと重ならない。
+  // 近い相手ほど手前の通り道にすると、線どうしが交差しない
+  const lanes = new Map<number, number>();
+  for (const [, members] of groups) {
+    if (members.length < 2) continue;
+    const side = members[0].side;
+    const vertical = side === "top" || side === "bottom";
+    const distance = (end: (typeof members)[number]) => {
+      const here = nodes.get(end.device);
+      const there = nodes.get(end.other);
+      if (!here || !there) return 0;
+      return vertical ? Math.abs(there.x - here.x) : Math.abs(there.y - here.y);
+    };
+    [...members]
+      .sort((a, b) => distance(a) - distance(b))
+      .forEach((end, index) => {
+        // 既に別の辺で通り道が決まっていれば、そちらを優先する
+        if (!lanes.has(end.edge)) lanes.set(end.edge, index * LANE_GAP);
+      });
+  }
+
+  return { anchors: out, busiest, lanes };
 }
 
 /** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
@@ -196,7 +223,7 @@ function toFlow(
   nodes: Node<DeviceNodeData>[];
   edges: Edge[];
 } {
-  const { anchors, busiest } = assignAnchors(graph);
+  const { anchors, busiest, lanes } = assignAnchors(graph);
 
   const nodes = graph.nodes.map((node) => ({
     id: String(node.device_id),
@@ -243,6 +270,8 @@ function toFlow(
       portStyle: options.portStyle,
       alongLine: options.alongLine,
       hideLabels: false,
+      // 同じところから出る線を、1本ずつ別の通り道へずらす
+      lane: lanes.get(edge.id) ?? 0,
       warning: simple ? null : warningOf(edge),
     } satisfies PortEdgeData,
   }));

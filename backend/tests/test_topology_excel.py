@@ -238,7 +238,7 @@ def test_the_sheet_leaves_a_margin_at_the_top_left(db_session):
     sheet = sheet_of(db_session)["構成図"]
 
     assert sheet["A1"].value is None
-    assert sheet["B2"].value == "構成図"
+    assert str(sheet["B2"].value).startswith("構成図")
 
     boxes = [
         cell.column
@@ -246,5 +246,5 @@ def test_the_sheet_leaves_a_margin_at_the_top_left(db_session):
         for cell in row
         if cell.value and "\n" in str(cell.value)
     ]
-    # 一番左の箱の手前に、上りポート名を書ける幅がある
-    assert min(boxes) >= 4
+    # 左は1列だけ空ける。空けすぎると図が右へ寄って横に長くなる
+    assert min(boxes) == 2
