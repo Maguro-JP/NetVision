@@ -157,6 +157,35 @@ C:\Users\（あなたのユーザー名）\.netvision
 | ウイルス対策ソフトに止められた | 職場の管理者に相談する。中身はソースコードごと開示できる |
 | 第1部の `./packaging/...` で `command not found` | `cd ~/Desktop/NetVision` を先に実行したか確認する |
 | 第1部で `npm: command not found` | Node.js が入っていないか、再起動していない |
+| 第1部で `bad interpreter` や `^M` を含むエラー | 下の「`bad interpreter` と出る」を見る |
+| 第1部で `Python が見つかりません` と出る | Python を「Add python.exe to PATH」にチェックを入れて入れ直し、Git Bash を開き直す |
+
+## `bad interpreter` と出る
+
+```
+./packaging/make-bundle-windows.sh: /usr/bin/env: bash^M: bad interpreter
+```
+
+改行の形式の違いです。Windows の Git は、取ってきたファイルの改行を Windows 式
+（CRLF）に書き換える設定が既定で有効になっています。シェルスクリプトはこれを
+受け付けません。
+
+取り直すのが一番確実です。Git Bash で次を打ちます。
+
+```bash
+cd ~/Desktop
+rm -rf NetVision
+git clone https://github.com/Maguro-JP/NetVision.git
+```
+
+今の版には書き換えを止める設定が入っているので、取り直せば直ります。
+
+消したくない場合は、改行だけ戻すこともできます。
+
+```bash
+cd ~/Desktop/NetVision
+sed -i 's/\r$//' packaging/*.sh
+```
 
 ## それでも解決しないとき
 

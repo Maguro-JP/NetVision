@@ -12,6 +12,36 @@
 # ネットに繋がる端末で実行してください。
 set -euo pipefail
 
+# Windows には python3 コマンドが無い（python.org 版は python、Microsoft Store 版は py）。
+# Linux/macOS では逆に python が無いことがある。実際に動くものを1つ選ぶ。
+# Windows の「アプリ実行エイリアス」は python という名前で存在だけして中身が無く、
+# 実行するとストアが開いて終わるため、バージョンを聞いて答えるかどうかで確かめる。
+PY=""
+for candidate in python3 python py; do
+  if command -v "$candidate" >/dev/null 2>&1 && "$candidate" -c "import sys; sys.exit(0)" >/dev/null 2>&1; then
+    PY="$candidate"
+    break
+  fi
+done
+if [ -z "$PY" ]; then
+  cat >&2 <<'MSG'
+Python が見つかりません。
+
+  この作業をする側（ネットに繋がるパソコン）には Python が必要です。
+  https://www.python.org/downloads/ から 3.11 以上を入れてください。
+  インストール画面の最初にある「Add python.exe to PATH」に必ずチェックを
+  入れてください。入れたあとは Git Bash を一度閉じて開き直します。
+
+  ※ 配る先のパソコンには Python は要りません。この ZIP に同梱されます。
+MSG
+  exit 1
+fi
+
+if ! command -v npm >/dev/null 2>&1; then
+  echo "npm が見つかりません。https://nodejs.org/ の LTS 版を入れ、Git Bash を開き直してください。" >&2
+  exit 1
+fi
+
 PY_VERSION="${PY_VERSION:-3.11.9}"
 PY_TAG="cp311"          # embeddable のバージョンと合わせること
 PY_ABI="311"
@@ -39,10 +69,24 @@ find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || 
 echo "==> インストール不要の Python を取得します（$PY_VERSION）"
 PY_ZIP="$OUT/python-$PY_VERSION-embed-amd64.zip"
 if [ ! -f "$PY_ZIP" ]; then
-  curl -fSL -o "$PY_ZIP" \
-    "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-embed-amd64.zip"
+  if ! curl -fSL -o "$PY_ZIP" \
+    "https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-embed-amd64.zip"; then
+    rm -f "$PY_ZIP"
+    cat >&2 <<MSG
+
+Python の取得に失敗しました。
+
+  社内のプロキシや通信制限で python.org に届いていない可能性があります。
+  別の端末で次のファイルを手で落として、この場所に置き直してから、
+  もう一度このスクリプトを実行してください。
+
+    取得元 : https://www.python.org/ftp/python/$PY_VERSION/python-$PY_VERSION-embed-amd64.zip
+    置き場 : $PY_ZIP
+MSG
+    exit 1
+  fi
 fi
-python3 -c "
+"$PY" -c "
 import zipfile, sys
 zipfile.ZipFile('$PY_ZIP').extractall('$STAGE/python')
 print('  展開しました')
@@ -60,7 +104,7 @@ PTH
 
 echo "==> 依存ライブラリを Windows 向けに集めます"
 # 閉域側で pip を動かさずに済むよう、あらかじめ展開した状態で入れておく
-python3 -m pip install --quiet --target "$STAGE/lib" \
+"$PY" -m pip install --quiet --target "$STAGE/lib" \
   --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
   --implementation cp --abi "$PY_TAG" \
   fastapi sqlalchemy pydantic pydantic-settings python-dateutil \
@@ -73,7 +117,7 @@ find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null
 # 解凍ツールごとに違い、Windows 側で化けることがあるため。
 # バッチの中身は cmd が既定で解釈する CP932、説明書きはメモ帳が確実に
 # 読める UTF-8 BOM 付きで、いずれも改行は CRLF にする。
-python3 - "$STAGE" "$PY_VERSION" "$VERSION" <<'PYEOF'
+"$PY" - "$STAGE" "$PY_VERSION" "$VERSION" <<'PYEOF'
 import sys
 from pathlib import Path
 
@@ -142,7 +186,7 @@ PYEOF
 echo "==> ZIP に固めます"
 cd "$OUT"
 rm -f "NetVision-$VERSION-windows.zip"
-python3 -c "
+"$PY" -c "
 import shutil
 shutil.make_archive('NetVision-$VERSION-windows', 'zip', '.', 'NetVision-$VERSION-windows')
 "
