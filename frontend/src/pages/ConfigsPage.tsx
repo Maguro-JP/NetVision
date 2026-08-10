@@ -93,8 +93,9 @@ export default function ConfigsPage() {
   const queryClient = useQueryClient();
   const [files, setFiles] = useState<File[]>([]);
   const [applyInventory, setApplyInventory] = useState(false);
-  // 台帳が空の状態から実 Config で立ち上げるときに使う
-  const [createMissing, setCreateMissing] = useState(false);
+  // 取り込んだのに機器一覧に何も出てこないのでは道具として使えないので、
+  // 台帳に無いホスト名は既定で登録する。外せるようにはしておく
+  const [createMissing, setCreateMissing] = useState(true);
   const [results, setResults] = useState<IngestResult[] | null>(null);
   const [diffTarget, setDiffTarget] = useState<number | null>(null);
 
@@ -164,9 +165,10 @@ export default function ConfigsPage() {
             台帳に無い機器を Config から登録する
           </label>
           <span className="muted">
-            まだ台帳が空のときに使います。型番が読み取れない Config は登録しません
-            （EoL も脆弱性も型番で引くため）。running-config だけでは型番が入っていないので、
-            <code>show version</code> の出力も同じファイルに含めてください。
+            紐付けはファイル名ではなく、Config の中のホスト名で判断します。
+            型番が読み取れなくても登録し、機器一覧に「情報不足」と表示します。
+            型番は EoL と脆弱性を引く鍵なので、<code>show version</code> の出力も
+            同じファイルに含めるか、あとから機器一覧で入力してください。
           </span>
         </div>
       </div>

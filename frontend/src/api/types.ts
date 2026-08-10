@@ -49,6 +49,10 @@ export interface Device {
   eol_date: string | null;
   notes: string | null;
   lifecycle: LifecycleStatus;
+  /** 埋まっていない項目の名前。Config から起こした機器は空の項目が残る */
+  missing_fields: string[];
+  /** 台帳に載った日時。取り込んだばかりの機器を上に出すのに使う */
+  created_at: string | null;
 }
 
 export interface MaintenanceContract {

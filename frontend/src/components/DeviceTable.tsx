@@ -1,61 +1,151 @@
+import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
 import type { Device } from "../api/types";
-import { DEVICE_TYPE_LABEL, formatDate, formatRemaining } from "../lib/format";
+import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, formatDate, formatRemaining } from "../lib/format";
 import SeverityBadge from "./SeverityBadge";
 
-export default function DeviceTable({ devices }: { devices: Device[] }) {
-  if (devices.length === 0) {
-    return <div className="empty">該当する機器はありません</div>;
-  }
+/** 列。並び順は見る頻度の順で、状態を左に置く。
+ *
+ * 一覧を開いて最初に見るのは「困っている機器はどれか」で、ホスト名はその次。
+ * 状態が右端にあると、横に長い表を目で往復することになる。
+ */
+const COLUMNS = [
+  "status",
+  "hostname",
+  "type",
+  "operation",
+  "product",
+  "site",
+  "version",
+  "maintenance",
+  "eol",
+] as const;
+
+export type DeviceColumn = (typeof COLUMNS)[number];
+
+const HEADINGS: Record<DeviceColumn, string> = {
+  status: "状態",
+  hostname: "ホスト名",
+  type: "種別",
+  operation: "運用",
+  product: "メーカー / 型番",
+  site: "拠点",
+  version: "バージョン",
+  maintenance: "保守期限",
+  eol: "EoL",
+};
+
+/** 新着と見なす日数。取り込んだ直後に見つけられれば足りる。 */
+const NEW_DAYS = 7;
+
+function isNew(device: Device): boolean {
+  if (!device.created_at) return false;
+  const added = new Date(device.created_at).getTime();
+  if (Number.isNaN(added)) return false;
+  return Date.now() - added < NEW_DAYS * 24 * 60 * 60 * 1000;
+}
+
+/**
+ * 新しく載った機器を上に出す並び。
+ *
+ * Config を取り込んだ直後は、増えた機器を確かめたい。名前順のままだと
+ * 何十行の途中に紛れて見つけられない。新着だけ先頭へ寄せ、その中と
+ * それ以外はホスト名順にする（並びが日によって変わらないように）。
+ */
+export function sortForList(devices: Device[]): Device[] {
+  return [...devices].sort((a, b) => {
+    const fresh = Number(isNew(b)) - Number(isNew(a));
+    if (fresh) return fresh;
+    return a.hostname.localeCompare(b.hostname);
+  });
+}
+
+/** 未入力の項目。空欄のままだと入れ忘れなのか元々無いのか分からない。 */
+function Blank({ label }: { label: string }) {
+  return (
+    <span className="blank" title={`${label}が入っていません`}>
+      未入力
+    </span>
+  );
+}
+
+export default function DeviceTable({
+  devices,
+  columnFilters,
+}: {
+  devices: Device[];
+  /** 列見出しの下に出す絞り込み。Excel のように列ごとに絞れる */
+  columnFilters?: Partial<Record<DeviceColumn, ReactNode>>;
+}) {
+  const rows = sortForList(devices);
 
   return (
-    <table>
+    <table className="device-table">
       <thead>
         <tr>
-          <th>ホスト名</th>
-          <th>種別</th>
-          <th>ベンダー / 型番</th>
-          <th>バージョン</th>
-          <th>拠点</th>
-          <th>保守期限</th>
-          <th>EoL</th>
-          <th>状態</th>
+          {COLUMNS.map((column) => (
+            <th key={column}>{HEADINGS[column]}</th>
+          ))}
         </tr>
+        {columnFilters && (
+          <tr className="filter-row">
+            {COLUMNS.map((column) => (
+              <th key={column}>{columnFilters[column] ?? null}</th>
+            ))}
+          </tr>
+        )}
       </thead>
       <tbody>
-        {devices.map((d) => (
+        {rows.length === 0 && (
+          <tr>
+            <td colSpan={COLUMNS.length} className="empty-cell">
+              該当する機器はありません
+            </td>
+          </tr>
+        )}
+        {rows.map((d) => (
           <tr key={d.id}>
-            <td>
+            <td className="nowrap">
+              <SeverityBadge severity={d.lifecycle.overall_severity} />
+              {d.missing_fields.length > 0 && (
+                <span
+                  className="badge warning"
+                  title={`${d.missing_fields.join("・")}が入っていません`}
+                >
+                  情報不足
+                </span>
+              )}
+            </td>
+            <td className="nowrap">
               <Link to={`/devices/${d.id}`}>{d.hostname}</Link>
+              {isNew(d) && <span className="badge new">New</span>}
             </td>
             <td>{DEVICE_TYPE_LABEL[d.device_type]}</td>
+            <td className="muted nowrap">{DEVICE_STATUS_LABEL[d.status]}</td>
             <td>
-              {d.vendor} / {d.model}
+              {d.vendor || <Blank label="メーカー" />} / {d.model || <Blank label="型番" />}
             </td>
-            <td className="muted mono">{d.os_version ?? "—"}</td>
             <td className="muted">
               {d.site_id ? (
                 <Link to={`/topology?site=${d.site_id}`} title="この拠点だけの構成図を開きます">
                   {d.site_name ?? "—"}
                 </Link>
               ) : (
-                (d.site_name ?? "—")
+                <Blank label="拠点" />
               )}
             </td>
-            <td>
+            <td className="muted mono">{d.os_version ?? "—"}</td>
+            <td className="nowrap">
               {formatDate(d.lifecycle.maintenance_end)}
               <span className="muted">
                 {" "}
                 ({formatRemaining(d.lifecycle.days_to_maintenance_end)})
               </span>
             </td>
-            <td>
+            <td className="nowrap">
               {formatDate(d.eol_date)}
               <span className="muted"> ({formatRemaining(d.lifecycle.days_to_eol)})</span>
-            </td>
-            <td>
-              <SeverityBadge severity={d.lifecycle.overall_severity} />
             </td>
           </tr>
         ))}

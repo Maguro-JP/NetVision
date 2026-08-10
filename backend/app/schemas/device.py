@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -91,6 +91,16 @@ class DeviceRead(DeviceBase):
     id: int
     site_name: str | None = None
     lifecycle: LifecycleStatusRead
+
+    # Config から起こした機器は、読み取れなかった項目が空のまま載る。
+    # 入力時は必須のままにしておきたいので、読み出し側だけ空を許す。
+    vendor: str = ""
+    model: str = ""
+
+    #: 埋まっていない項目の名前。一覧で「情報不足」として見せる
+    missing_fields: list[str] = []
+    #: 台帳に載った日時。取り込んだばかりの機器を上に出すのに使う
+    created_at: datetime | None = None
 
 
 class DeviceDetail(DeviceRead):

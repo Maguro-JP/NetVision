@@ -9,11 +9,15 @@ def load(name: str) -> bytes:
     return (FIXTURES / f"{name}.txt").read_bytes()
 
 
-def upload(client, *names, apply_inventory=False, device_id=None, encoding=None):
+def upload(
+    client, *names, apply_inventory=False, device_id=None, encoding=None, create_missing=None
+):
     files = [
         ("files", (f"{name}.txt", _encode(load(name), encoding), "text/plain")) for name in names
     ]
     data = {"apply_inventory": str(apply_inventory).lower()}
+    if create_missing is not None:
+        data["create_missing"] = str(create_missing).lower()
     if device_id is not None:
         data["device_id"] = str(device_id)
     return client.post(f"{API}/configs/upload", files=files, data=data)
@@ -103,7 +107,11 @@ def test_applying_config_is_recorded_in_history(client, device_payload):
 
 
 def test_unmatched_hostname_is_still_stored(client):
-    body = upload(client, "core-sw-01").json()[0]
+    """登録しない指定のときも、読んだ内容は捨てない。
+
+    後から機器を登録すれば紐付けられるので、取り込み直しは要らない。
+    """
+    body = upload(client, "core-sw-01", create_missing=False).json()[0]
 
     assert body["matched"] is False
     assert body["device_id"] is None
@@ -258,8 +266,13 @@ def test_create_missing_builds_the_ledger_from_configs(client):
     assert devices[0]["model"] == "C9500-40X"
 
 
-def test_create_missing_is_off_by_default(client):
-    """既定では作らない（意図しない登録を防ぐ）。"""
+def test_uploading_a_config_registers_the_device_by_default(client):
+    """何も指定しなくても、取り込めば機器一覧に載る。
+
+    ここが既定で off だったせいで、Config を入れても一覧に何も出てこず、
+    連携していないように見えていた。無い物を足すのは上書きではないので、
+    既定で行う。人が入れた値を書き換える apply_inventory とは分けてある。
+    """
     fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
 
     result = client.post(
@@ -267,8 +280,21 @@ def test_create_missing_is_off_by_default(client):
         files=[("files", ("core-sw-01.txt", fixture.read_bytes(), "text/plain"))],
     ).json()[0]
 
-    assert result["created"] is False
-    assert client.get(f"{API}/devices").json() == []
+    assert result["created"] is True
+    assert [d["hostname"] for d in client.get(f"{API}/devices").json()] == ["core-sw-01"]
+
+
+def test_existing_values_are_not_overwritten_by_default(client):
+    """既定では、人が入れた台帳の値を書き換えない。"""
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "vendor": "Cisco", "model": "手で入れた型番"},
+    )
+
+    upload(client, "core-sw-01")
+
+    device = client.get(f"{API}/devices").json()[0]
+    assert device["model"] == "手で入れた型番"
 
 
 def test_create_missing_does_not_duplicate_existing_devices(client, device_payload):
@@ -304,8 +330,16 @@ def test_create_missing_does_not_overwrite_existing_values(client, device_payloa
     assert client.get(f"{API}/devices").json()[0]["model"] == "手で入れた型番"
 
 
-def test_config_without_a_model_is_not_registered(client):
-    """型番が読めない Config は登録しない。EoL も脆弱性も型番で引くため。"""
+def test_config_without_a_model_is_registered_and_flagged(client):
+    """型番が読めなくても台帳に載せる。ただし何が足りないかを示す。
+
+    running-config だけでは型番が読めないことが多い。これを理由に登録を
+    見送ると、取り込んだのに機器一覧に何も出てこない。利用者から見れば
+    「何も起きなかった」であって、道具として使えない。
+
+    載せたうえで足りない印を付ける。型番は EoL と脆弱性を引く鍵なので、
+    埋めてもらう必要は変わらないが、埋める対象が見えている方が直せる。
+    """
     running_only = b"hostname plain-sw\n!\ninterface GigabitEthernet1/0/1\n description x\n"
 
     result = client.post(
@@ -314,10 +348,47 @@ def test_config_without_a_model_is_not_registered(client):
         data={"create_missing": "true"},
     ).json()[0]
 
-    assert result["created"] is False
-    assert client.get(f"{API}/devices").json() == []
-    # 黙って落とさず、何をすればいいかを返す
+    assert result["created"] is True
+
+    devices = client.get(f"{API}/devices").json()
+    assert [d["hostname"] for d in devices] == ["plain-sw"]
+    # 足りない項目は機器自身が答える。一覧で「情報不足」として出す
+    assert "型番" in devices[0]["missing_fields"]
+    # 黙って埋めない。空のまま載せる
+    assert devices[0]["model"] == ""
+
+    # 何をすればいいかも返す
     assert "show version" in result["message"]
+
+
+def test_a_config_is_linked_by_the_hostname_inside_it_not_the_filename(client):
+    """紐付けはファイル名ではなく Config の中のホスト名で決める。
+
+    ファイル名は現場で自由に付く（日付や作業番号が入る）。ファイル名に
+    合わせろという作りは、道具の都合を人に押し付けている。
+    """
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "vendor": "Cisco", "model": "C9300-48P"},
+    )
+
+    result = client.post(
+        f"{API}/configs/upload",
+        files=[
+            (
+                "files",
+                (
+                    "20260810_作業3_backup.txt",
+                    b"hostname core-sw-01\n!\ninterface GigabitEthernet1/0/1\n",
+                    "text/plain",
+                ),
+            )
+        ],
+    ).json()[0]
+
+    assert result["matched"] is True
+    assert result["device_hostname"] == "core-sw-01"
+    assert result["created"] is False
 
 
 def test_topology_builds_itself_from_multiple_configs(client):

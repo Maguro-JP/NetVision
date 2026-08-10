@@ -840,3 +840,52 @@ button:disabled {
 .space-slider input {
   width: 120px;
 }
+
+/* 機器一覧。絞り込みは列見出しの下に置く（表計算と同じ位置） */
+.device-table .filter-row th {
+  padding-top: 0;
+  padding-bottom: 6px;
+  font-weight: 400;
+  background: transparent;
+}
+
+.device-table .filter-row select {
+  /* 列幅に合わせて縮むが、選んだ値が読めなくなるまでは縮めない */
+  width: 100%;
+  min-width: 6em;
+  padding: 3px 6px;
+  font-size: 0.82rem;
+}
+
+.device-table td.nowrap,
+.device-table th.nowrap {
+  white-space: nowrap;
+}
+
+.device-table td.empty-cell {
+  padding: 24px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* 未入力。空欄のままだと入れ忘れか元々無いのか分からない */
+.blank {
+  color: var(--warning, #d9a441);
+  font-size: 0.82rem;
+}
+
+.badge.new {
+  margin-left: 6px;
+  background: var(--accent, #3b82f6);
+  color: #fff;
+}
+
+.toolbar-spacer {
+  flex: 1;
+}
+
+.link-button {
+  background: transparent;
+  border: 1px solid var(--warning, #d9a441);
+  color: var(--warning, #d9a441);
+}

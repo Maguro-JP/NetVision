@@ -2,9 +2,16 @@ import { useQuery } from "@tanstack/react-query";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import DeviceTable from "../components/DeviceTable";
+import DeviceTable, { type DeviceColumn } from "../components/DeviceTable";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 
+/**
+ * 機器一覧。
+ *
+ * 絞り込みは列見出しの下に置く。表計算と同じ場所にあれば、どの列が絞れるか
+ * 見ただけで分かるし、上に並べた選択肢と列の対応を目で探さずに済む。
+ * 上のバーには、探す欄と追加だけを残す。
+ */
 export default function DeviceListPage() {
   const [params, setParams] = useSearchParams();
 
@@ -15,8 +22,13 @@ export default function DeviceListPage() {
     severity: params.get("severity") ?? undefined,
     site_id: params.get("site_id") ? Number(params.get("site_id")) : undefined,
   };
+  // 情報不足だけを見たいときがある。取り込んだ直後の埋め作業がこれ
+  const onlyIncomplete = params.get("incomplete") === "1";
 
-  const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: api.listSites });
+  const { data: sites } = useQuery({
+    queryKey: ["sites"],
+    queryFn: api.listSites,
+  });
   const { data, isLoading, error } = useQuery({
     queryKey: ["devices", filters],
     queryFn: () => api.listDevices(filters),
@@ -29,6 +41,59 @@ export default function DeviceListPage() {
     setParams(next, { replace: true });
   };
 
+  const dropdown = (key: string, all: string, options: Record<string, string>) => (
+    <select value={params.get(key) ?? ""} onChange={(e) => setFilter(key, e.target.value)}>
+      <option value="">{all}</option>
+      {Object.entries(options).map(([value, label]) => (
+        <option key={value} value={value}>
+          {label}
+        </option>
+      ))}
+    </select>
+  );
+
+  const columnFilters: Partial<Record<DeviceColumn, React.ReactNode>> = {
+    status: (
+      <select
+        value={onlyIncomplete ? "incomplete" : (params.get("severity") ?? "")}
+        onChange={(e) => {
+          const next = new URLSearchParams(params);
+          next.delete("severity");
+          next.delete("incomplete");
+          if (e.target.value === "incomplete") next.set("incomplete", "1");
+          else if (e.target.value) next.set("severity", e.target.value);
+          setParams(next, { replace: true });
+        }}
+      >
+        <option value="">すべて</option>
+        <option value="incomplete">情報不足</option>
+        {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
+          <option key={value} value={value}>
+            {label}
+          </option>
+        ))}
+      </select>
+    ),
+    type: dropdown("device_type", "すべて", DEVICE_TYPE_LABEL),
+    site: (
+      <select
+        value={filters.site_id?.toString() ?? ""}
+        onChange={(e) => setFilter("site_id", e.target.value)}
+      >
+        <option value="">すべて</option>
+        {(sites ?? []).map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    ),
+    operation: dropdown("status", "すべて", DEVICE_STATUS_LABEL),
+  };
+
+  const shown = (data ?? []).filter((d) => !onlyIncomplete || d.missing_fields.length > 0);
+  const incompleteCount = (data ?? []).filter((d) => d.missing_fields.length > 0).length;
+
   return (
     <>
       <h1>機器一覧</h1>
@@ -36,54 +101,36 @@ export default function DeviceListPage() {
 
       <div className="toolbar">
         <input
-          placeholder="ホスト名 / 型番 / シリアル で検索"
+          placeholder="ホスト名 / 型番 / シリアル で探す"
           defaultValue={filters.q ?? ""}
           onChange={(e) => setFilter("q", e.target.value)}
           style={{ minWidth: 260 }}
         />
-        <select value={filters.device_type ?? ""} onChange={(e) => setFilter("device_type", e.target.value)}>
-          <option value="">すべての種別</option>
-          {Object.entries(DEVICE_TYPE_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select value={filters.status ?? ""} onChange={(e) => setFilter("status", e.target.value)}>
-          <option value="">すべての状態</option>
-          {Object.entries(DEVICE_STATUS_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select value={filters.severity ?? ""} onChange={(e) => setFilter("severity", e.target.value)}>
-          <option value="">すべてのアラート</option>
-          {Object.entries(SEVERITY_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={filters.site_id?.toString() ?? ""}
-          onChange={(e) => setFilter("site_id", e.target.value)}
-        >
-          <option value="">すべての拠点</option>
-          {(sites ?? []).map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        {incompleteCount > 0 && !onlyIncomplete && (
+          <button
+            className="link-button"
+            onClick={() => setFilter("incomplete", "1")}
+            title="Config から起こした機器は、読み取れなかった項目が空のままです"
+          >
+            情報不足 {incompleteCount} 件
+          </button>
+        )}
+        <span className="toolbar-spacer" />
         <Link to="/devices/new">
           <button className="primary">機器を追加</button>
         </Link>
       </div>
 
+      {error && <div className="error">{(error as Error).message}</div>}
+      {isLoading ? (
+        <p className="muted">読み込み中…</p>
+      ) : (
+        <DeviceTable devices={shown} columnFilters={columnFilters} />
+      )}
+
       <div className="toolbar">
         <span className="muted" style={{ alignSelf: "center" }}>
-          絞り込んだ {data?.length ?? 0} 件を書き出す:
+          絞り込んだ {shown.length} 件を書き出す:
         </span>
         <a href={api.exportUrl("xlsx", filters)}>
           <button>Excel (.xlsx)</button>
@@ -101,9 +148,6 @@ export default function DeviceListPage() {
           <button>取り込み用CSV</button>
         </a>
       </div>
-
-      {error && <div className="error">{(error as Error).message}</div>}
-      {isLoading ? <p className="muted">読み込み中…</p> : <DeviceTable devices={data ?? []} />}
     </>
   );
 }

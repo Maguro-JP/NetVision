@@ -103,19 +103,23 @@ def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
     埋めずに空のままにする（推測で埋めると、後から本物の値が入ったときに
     どちらが正しいか分からなくなる）。
 
-    ただし型番が読めないときは作らない。型番はこのツールの中心で、
-    EoL も脆弱性も型番で引くため、空のまま登録すると判定できない機器が
-    黙って増える。plain な running-config には型番が入っていないことが多く、
-    その場合は `show version` を一緒に取り込んでもらう必要がある。
+    型番が読めなくても登録する。plain な running-config には型番が入って
+    いないことが多く、以前はそれを理由に登録を見送っていた。結果として、
+    取り込んだのに機器一覧に何も出てこない——利用者から見れば「何も
+    起きなかった」という状態になっていた。
+
+    足りないまま載せる代わりに、何が足りないかは機器一覧で分かるようにする
+    （Device.missing_fields）。黙って捨てるより、足りない印を付けて見せる方が
+    直しようがある。型番は EoL も脆弱性も引けないので、埋めてもらう必要は
+    変わらない。
     """
-    vendor = configparse.VENDOR_NAMES.get(parsed.vendor)
-    if not parsed.model or not vendor:
+    if not parsed.hostname:
         return None
 
     device = Device(
         hostname=parsed.hostname,
-        vendor=vendor,
-        model=parsed.model,
+        vendor=configparse.VENDOR_NAMES.get(parsed.vendor) or "",
+        model=parsed.model or "",
         serial_number=parsed.serial_number,
         os_name=parsed.os_name,
         os_version=parsed.os_version,
@@ -176,11 +180,12 @@ def ingest(
     if device is None and create_missing and parsed.hostname:
         device = _create_from_config(db, parsed)
         created = device is not None
-        if device is None:
+        if device is not None and device.missing_fields:
             creation_note = (
-                f"{parsed.hostname} は型番が読み取れないため登録していません。"
-                "running-config だけでは型番が分からないので、"
-                "`show version` の出力も一緒に取り込んでください"
+                f"{device.hostname} を台帳に登録しました。"
+                f"{'・'.join(device.missing_fields)}が読み取れていません。"
+                "型番は EoL や脆弱性を引く鍵になるので、"
+                "`show version` の出力も取り込むか、機器一覧から入力してください"
             )
 
     result = IngestResult(
@@ -199,8 +204,10 @@ def ingest(
         diffs=compute_diffs(device, parsed),
     )
 
-    if device is None:
-        result.message = creation_note or (
+    if creation_note:
+        result.message = creation_note
+    elif device is None:
+        result.message = (
             f"ホスト名「{parsed.hostname}」に一致する機器が台帳にありません。"
             "内容は保存したので、機器を登録してから紐付けられます。"
             if parsed.hostname

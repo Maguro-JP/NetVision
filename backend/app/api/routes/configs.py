@@ -84,13 +84,20 @@ async def upload_configs(
         default=False, description="読み取った型番・バージョンを台帳へ反映するか"
     ),
     create_missing: bool = Form(
-        default=False, description="台帳に無いホスト名なら機器を新規作成するか"
+        default=True, description="台帳に無いホスト名なら機器を新規作成するか"
     ),
 ) -> list[IngestResultRead]:
     """Config を取り込み、機器・インターフェース・隣接情報を抽出する。
 
-    既定では台帳を書き換えず、差分の提示だけ行う（apply_inventory で反映）。
-    台帳が空の状態から実 Config で立ち上げる場合は create_missing を使う。
+    紐付けはファイル名ではなく Config の中のホスト名で決める。ファイル名は
+    現場で自由に付く（日付や作業番号が入る）ので、そこに合わせろという作りは
+    道具の都合を人に押し付けることになる。
+
+    既定で、台帳に無いホスト名は新しい機器として登録する。取り込んだのに
+    機器一覧に何も出てこないのでは、道具として使えないため。
+
+    既存の値の上書きだけは既定で行わない（apply_inventory）。無い物を足すのと、
+    人が入れた値を書き換えるのとでは、間違えたときの取り返しが違う。
     """
     if device_id is not None and db.get(Device, device_id) is None:
         raise HTTPException(

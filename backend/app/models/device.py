@@ -74,6 +74,25 @@ class Device(Base):
 
     site: Mapped[Site | None] = relationship(back_populates="devices")  # noqa: F821
 
+    #: 揃っていないと道具として困る項目。名前は画面にそのまま出す。
+    #: 型番とメーカーは EoL と脆弱性を引く鍵、拠点は図と一覧の絞り込みの軸。
+    REQUIRED_FIELDS: tuple[tuple[str, str], ...] = (
+        ("vendor", "メーカー"),
+        ("model", "型番"),
+        ("site_id", "拠点"),
+    )
+
+    @property
+    def missing_fields(self) -> list[str]:
+        """埋まっていない項目の名前。
+
+        Config から機器を起こすと、読み取れなかった項目は空のまま載る。
+        空で載せること自体は正しい（推測で埋めると後から直せない）が、
+        空のまま埋もれると、EoL の判定漏れに後で気づくことになる。
+        一覧で目に付くよう、何が足りないかを機器自身に答えさせる。
+        """
+        return [label for name, label in self.REQUIRED_FIELDS if not getattr(self, name, None)]
+
     # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスタに正規化してある。
     # 台帳の表記ゆれ（cisco / Cisco）を吸収するため、大文字小文字を無視して突き合わせる。
     product: Mapped[ProductReference | None] = relationship(
