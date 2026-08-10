@@ -932,3 +932,12 @@ button:disabled {
   margin: 6px 0 0;
   padding-left: 18px;
 }
+
+/* 一覧のページ送り */
+.pager {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  justify-content: center;
+  margin: 12px 0;
+}

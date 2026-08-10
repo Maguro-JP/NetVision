@@ -517,6 +517,21 @@ def _run_import(
         )
 
     site_cache = {s.name: s for s in db.scalars(select(Site))}
+
+    # ファイルに出てくる鍵の分だけ、既存機器を先にまとめて引いておく。
+    # 1行ずつ問い合わせると行数分の往復になり、取り込みが終わらなくなる
+    existing_by_key = _existing_by_key(
+        db,
+        key_field,
+        [
+            str(_extract(raw, mapping)[0].get(str(key_field)) or "").strip()
+            for raw in table_rows
+        ],
+    )
+
+    #: 行の結果と、その行で作った・更新した機器。id は最後にまとめて入れる
+    pending: list[tuple[RowResult, Device]] = []
+
     # 同一ファイル内の重複も検出したいので、投入済みキーを覚えておく
     seen_keys: dict[str, int] = {}
 
@@ -551,7 +566,7 @@ def _run_import(
             continue
 
         seen_keys[key_value] = index
-        existing = _find_existing(db, key_field, key_value)
+        existing = existing_by_key.get(key_value)
 
         if existing is not None and not update_existing:
             result.action = RowAction.SKIP
@@ -582,14 +597,22 @@ def _run_import(
             result.action = RowAction.UPDATE
             updated += 1
 
-        db.flush()
-        result.device_id = device.id
-
-        if _add_contract(db, device, values):
-            contracts_added += 1
-            result.contract_added = True
+        # ここで毎行 flush すると行数分の往復になる。id が要るのは
+        # 保守契約をぶら下げる行だけなので、そのときだけ確定させる
+        pending.append((result, device))
+        if _has_contract(values):
+            db.flush()
+            if _add_contract(db, device, values):
+                contracts_added += 1
+                result.contract_added = True
 
         results.append(result)
+
+    # まとめて書き出してから、行ごとの結果に id を入れる
+    if pending:
+        db.flush()
+        for result, device in pending:
+            result.device_id = device.id
 
     if commit and errors == 0:
         db.commit()
@@ -646,6 +669,29 @@ def _find_existing(db: Session, key_field: KeyField, key_value: str) -> Device |
     return db.scalar(select(Device).where(column == key_value))
 
 
+#: 既存機器を先に引くときの1回あたりの件数。IN 句が長くなりすぎないように分ける
+_LOOKUP_CHUNK = 500
+
+
+def _existing_by_key(db: Session, key_field: KeyField, keys: list[str]) -> dict[str, Device]:
+    """ファイルに出てくる鍵の分だけ、既存機器をまとめて引く。
+
+    以前は1行ごとに1回ずつ問い合わせていた。1万行なら1万回で、行が増える
+    ほど時間が伸びる。取り込みが終わらないという症状の主因がこれだった。
+    ファイルに出てくる鍵は先に分かるので、まとめて引いて表に載せておく。
+    """
+    column = Device.hostname if key_field is KeyField.HOSTNAME else Device.serial_number
+    found: dict[str, Device] = {}
+    unique = [key for key in dict.fromkeys(keys) if key]
+    for start in range(0, len(unique), _LOOKUP_CHUNK):
+        chunk = unique[start : start + _LOOKUP_CHUNK]
+        for device in db.scalars(select(Device).where(column.in_(chunk))):
+            value = getattr(device, column.key)
+            if value is not None:
+                found[str(value)] = device
+    return found
+
+
 def _apply_values(
     device: Device, values: dict[str, object], db: Session, site_cache: dict[str, Site]
 ) -> None:
@@ -671,6 +717,11 @@ def _apply_values(
         device.device_type = DeviceType.OTHER
     if device.status is None:
         device.status = DeviceStatus.ACTIVE
+
+
+def _has_contract(values: dict[str, object]) -> bool:
+    """この行に保守契約の列が入っているか（_add_contract の判定と揃えること）。"""
+    return bool(values.get("contract_end_date"))
 
 
 def _add_contract(db: Session, device: Device, values: dict[str, object]) -> bool:

@@ -71,6 +71,24 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.status === 204 ? (undefined as T) : ((await res.json()) as T);
 }
 
+/**
+ * 一覧を1ページ分だけ取る。総数はヘッダから読む。
+ *
+ * 16万台の環境では全件を返せない。かといって総数が分からないとページも
+ * 送れないので、本体はページ、総数はヘッダに分けて受け取る。
+ */
+async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: number }> {
+  const res = await fetch(`${BASE}${path}`, {
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, await extractError(res));
+  }
+  const items = (await res.json()) as T[];
+  const header = res.headers.get("X-Total-Count");
+  return { items, total: header === null ? items.length : Number(header) };
+}
+
 /** multipart 送信。Content-Type はブラウザに境界文字列ごと決めさせる。 */
 async function upload<T>(path: string, form: FormData): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { method: "POST", body: form });
@@ -100,9 +118,10 @@ async function extractError(res: Response): Promise<string> {
   return `${res.status} ${res.statusText}`;
 }
 
-function query(params: Record<string, string | number | undefined>): string {
+function query(params: Record<string, string | number | boolean | undefined>): string {
   const entries = Object.entries(params).filter(
-    ([, v]) => v !== undefined && v !== "" && v !== null,
+    // false は「指定なし」と同じ扱い。?incomplete=false を送っても意味がない
+    ([, v]) => v !== undefined && v !== "" && v !== null && v !== false,
   );
   return entries.length ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}` : "";
 }
@@ -127,13 +146,23 @@ export interface ChangeFilters extends Record<string, string | number | undefine
   offset?: number;
 }
 
-export interface DeviceFilters extends Record<string, string | number | undefined> {
+export interface DeviceFilters extends Record<string, string | number | boolean | undefined> {
   q?: string;
   vendor?: string;
   device_type?: string;
   status?: string;
   site_id?: number;
   severity?: string;
+  /** 埋まっていない項目がある機器だけ */
+  incomplete?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/** 1ページ分の機器と、条件に合う総数。 */
+export interface DevicePage {
+  items: Device[];
+  total: number;
 }
 
 export const api = {
@@ -141,6 +170,9 @@ export const api = {
   alerts: (withinDays: number) => request<Device[]>(`/alerts${query({ within_days: withinDays })}`),
 
   listDevices: (filters: DeviceFilters = {}) => request<Device[]>(`/devices${query(filters)}`),
+  /** 1ページ分を、総数つきで取る。総数は X-Total-Count ヘッダで返ってくる。 */
+  listDevicePage: (filters: DeviceFilters = {}) =>
+    requestWithTotal<Device>(`/devices${query(filters)}`),
   getDevice: (id: number) => request<DeviceDetail>(`/devices/${id}`),
   createDevice: (body: Partial<Device>) =>
     request<DeviceDetail>("/devices", { method: "POST", body: JSON.stringify(body) }),
@@ -161,7 +193,7 @@ export const api = {
     filters: DeviceFilters = {},
     options: { includeStatus?: boolean; encoding?: "utf-8" | "shift_jis" } = {},
   ) => {
-    const params: Record<string, string | number | undefined> = { ...filters };
+    const params: Record<string, string | number | boolean | undefined> = { ...filters };
     if (options.includeStatus === false) params.include_status = "false";
     if (format === "csv" && options.encoding) params.encoding = options.encoding;
     return `${BASE}/export/devices.${format}${query(params)}`;

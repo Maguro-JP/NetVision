@@ -139,10 +139,24 @@ class Insight:
 
 
 @dataclass
+class KindSummary:
+    """指摘の種類ごとのまとめ。"""
+
+    kind: InsightKind
+    category: InsightCategory
+    title: str
+    severity: Severity
+    count: int
+    annual_saving: float
+
+
+@dataclass
 class InsightReport:
     total: int
     annual_saving_total: float
     by_category: dict[str, int] = field(default_factory=dict)
+    #: 種類ごとの件数。16万台では同じ文言が16万行並ぶので、まずこちらを見る
+    by_kind: list[KindSummary] = field(default_factory=list)
     insights: list[Insight] = field(default_factory=list)
 
 
@@ -172,7 +186,17 @@ def analyze(
     devices: list[Device],
     today: date | None = None,
     vulnerabilities: list[Vulnerability] | None = None,
+    keep: int | None = None,
 ) -> InsightReport:
+    """台帳から読み取れる無駄とリスクを洗い出す。
+
+    `keep` を渡すと、返す指摘を重い順にその件数までに絞る。件数や削減見込みは
+    絞る前の全件から出すので、数字は変わらない。
+
+    16万台の環境では指摘が40万件近くになる。全部返すと 150MB の応答になり、
+    受け取った画面側が固まる。そもそも同じ文言が16万行並んでも読めないので、
+    まず種類ごとの件数（by_kind）を見て、中身は必要な分だけ見る形にする。
+    """
     today = today or date.today()
     insights: list[Insight] = []
 
@@ -324,11 +348,32 @@ def analyze(
     # 重い順、次に削減額の大きい順
     insights.sort(key=lambda i: (-i.severity.rank, -(i.annual_saving or 0)))
 
+    summaries: dict[InsightKind, KindSummary] = {}
+    for insight in insights:
+        summary = summaries.get(insight.kind)
+        if summary is None:
+            summaries[insight.kind] = KindSummary(
+                kind=insight.kind,
+                category=insight.category,
+                title=insight.title,
+                severity=insight.severity,
+                count=1,
+                annual_saving=insight.annual_saving or 0,
+            )
+        else:
+            summary.count += 1
+            summary.annual_saving += insight.annual_saving or 0
+
+    by_kind = sorted(
+        summaries.values(), key=lambda s: (-s.severity.rank, -s.annual_saving, -s.count)
+    )
+
     return InsightReport(
         total=len(insights),
         annual_saving_total=sum(i.annual_saving or 0 for i in insights),
         by_category=by_category,
-        insights=insights,
+        by_kind=by_kind,
+        insights=insights if keep is None else insights[:keep],
     )
 
 

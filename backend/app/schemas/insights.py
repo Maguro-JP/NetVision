@@ -16,8 +16,19 @@ class InsightRead(BaseModel):
     recommendation: str
 
 
+class KindSummaryRead(BaseModel):
+    kind: InsightKind
+    category: InsightCategory
+    title: str
+    severity: Severity
+    count: int
+    annual_saving: float
+
+
 class InsightReportRead(BaseModel):
     total: int
     annual_saving_total: float
     by_category: dict[str, int]
+    #: 種類ごとの件数。件数が多いときはまずこちらを見る
+    by_kind: list[KindSummaryRead] = []
     insights: list[InsightRead]

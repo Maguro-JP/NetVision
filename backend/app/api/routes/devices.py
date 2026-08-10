@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
@@ -9,7 +9,7 @@ from app.db import get_db
 from app.models import Device, DeviceStatus, DeviceType, ScenarioItem, Site
 from app.schemas import DeviceCreate, DeviceDetail, DeviceRead, DeviceUpdate
 from app.services import configs
-from app.services.device_query import DeviceFilters, query_devices
+from app.services.device_query import DeviceFilters, count_devices, query_devices
 from app.services.lifecycle import Severity
 
 router = APIRouter(prefix="/devices", tags=["devices"])
@@ -40,21 +40,30 @@ def list_devices(
     device_status: DeviceStatus | None = Query(default=None, alias="status"),
     site_id: int | None = None,
     severity: Severity | None = Query(default=None, description="総合アラート重要度で絞り込む"),
+    incomplete: bool = Query(default=False, description="埋まっていない項目がある機器だけ"),
     limit: int = Query(default=200, le=1000),
     offset: int = 0,
+    response: Response = None,  # type: ignore[assignment]
 ) -> list[DeviceRead]:
-    devices = query_devices(
-        db,
-        DeviceFilters(
-            q=q,
-            vendor=vendor,
-            device_type=device_type,
-            status=device_status,
-            site_id=site_id,
-            severity=severity,
-        ),
+    """条件に合う機器を1ページ分返す。
+
+    総数は `X-Total-Count` ヘッダに入れる。16万台の環境では全件を返す
+    わけにいかないが、何件あるかが分からないとページも送れないため。
+    """
+    filters = DeviceFilters(
+        q=q,
+        vendor=vendor,
+        device_type=device_type,
+        status=device_status,
+        site_id=site_id,
+        severity=severity,
+        incomplete=incomplete,
     )
-    return [to_device_read(d) for d in devices[offset : offset + limit]]
+    total = count_devices(db, filters)
+    devices = query_devices(db, filters, limit=limit, offset=offset)
+    if response is not None:
+        response.headers["X-Total-Count"] = str(total)
+    return [to_device_read(d) for d in devices]
 
 
 @router.post("", response_model=DeviceDetail, status_code=status.HTTP_201_CREATED)
