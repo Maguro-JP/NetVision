@@ -107,6 +107,10 @@ const DEFAULTS: Settings = {
  * 拠点そのものを1点として見た方が形が分かる。寄れば中身が出る。 */
 const CLUSTER_ZOOM = 1.5;
 
+/* 一度に出す名前の数。手前から順に出して、これを超えたら出さない。
+ * 全部に出すと文字どうしが重なって、名前も点も読めなくなる。 */
+const MAX_LABELS = 30;
+
 const SETTINGS_KEY = "netvision.space.settings";
 
 function loadSettings(): Settings {
@@ -230,7 +234,10 @@ function asSphere(points: Point[], layers: Map<number, number>): void {
     index.set(hop, position + 1);
     const count = counts.get(hop) ?? 1;
     const shell = depths.indexOf(hop);
-    const radius = 90 + shell * (RADIUS / Math.max(depths.length - 1, 1));
+    // 点が増えるほど殻を広げる。同じ半径に詰め込むと球ではなく団子になり、
+    // 1点ずつの明るさも潰れて「散らばっている」感じが出ない
+    const spread = Math.min(3.2, Math.sqrt(points.length / 60));
+    const radius = (90 + shell * (RADIUS / Math.max(depths.length - 1, 1))) * Math.max(1, spread);
 
     // 殻の上に散らす（1台なら中心付近）
     const t = count === 1 ? 0.5 : (position + 0.5) / count;
@@ -462,13 +469,66 @@ export default function SpacePage() {
   const drag = useRef<{ x: number; y: number; pan: boolean; spin: number } | null>(null);
 
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
-  const { data: graph } = useQuery({
-    queryKey: ["topology", "space", site],
-    queryFn: () =>
-      api.getTopology("physical", false, "vertical", {
-        site_id: site === "" ? undefined : site,
-      }),
+
+  // 拠点を選んでいないときは、機器1台ずつではなく拠点の塊を見ている。
+  // 全機器を取りに行くと、16万台の環境では取得だけで十数秒かかり、
+  // 受け取っても1点ずつ描けるはずがない。拠点まで先にまとめたものを取る
+  const { data: space } = useQuery({
+    queryKey: ["topology", "space"],
+    queryFn: () => api.getSpaceView(),
+    enabled: site === "",
   });
+
+  // 拠点を選んだときだけ、その拠点の機器を取りに行く（範囲が限られる）
+  const { data: detailGraph } = useQuery({
+    queryKey: ["topology", "space-detail", site],
+    queryFn: () => api.getTopology("physical", false, "vertical", { site_id: site as number }),
+    enabled: site !== "",
+  });
+
+  /** 拠点の集計を、描画側が期待するグラフの形に直す。 */
+  const graph: TopologyGraph | undefined = useMemo(() => {
+    if (site !== "") return detailGraph;
+    if (!space) return undefined;
+    const idOf = (value: number | null) => value ?? 0;
+    return {
+      layer: "physical",
+      unplaced_count: 0,
+      nodes: space.sites.map((item) => ({
+        device_id: idOf(item.site_id),
+        hostname: item.name,
+        site_id: item.site_id,
+        site_name: item.name,
+        severity: item.severity,
+        device_type: "other",
+        vendor: "",
+        model: "",
+        status: "active",
+        mgmt_ip: null,
+        interface_count: item.device_count,
+        x: 0,
+        y: 0,
+        placed: false,
+        vlans: [],
+        vrfs: [],
+        port_kinds: [],
+        outside: false,
+        hidden_peers: 0,
+      })),
+      edges: space.edges.map((edge, index) => ({
+        id: index + 1,
+        source: idOf(edge.a),
+        target: idOf(edge.b),
+      })),
+    } as unknown as TopologyGraph;
+  }, [site, space, detailGraph]);
+
+  /** 拠点ごとの台数。まとめた玉に「何台」を出すのに使う。 */
+  const deviceCounts = useMemo(() => {
+    const counts = new Map<number, number>();
+    for (const item of space?.sites ?? []) counts.set(item.site_id ?? 0, item.device_count);
+    return counts;
+  }, [space]);
 
   const addressOf = useMemo(
     () => new Map((sites ?? []).map((item: Site) => [item.name, item.address])),
@@ -512,14 +572,16 @@ export default function SpacePage() {
     if (!context) return;
 
     let running = true;
+    // 点の集合は Set で引く。ここを線形探索にすると、点と線の積だけ
+    // 時間がかかり、拠点が増えたところで固まる
+    const present = new Set(points.map((p) => p.id));
     const detail = {
       points,
       byId: new Map(points.map((p) => [p.id, p])),
       edges: (graph?.edges ?? []).filter(
-        (edge) =>
-          points.some((p) => p.id === edge.source) && points.some((p) => p.id === edge.target),
+        (edge) => present.has(edge.source) && present.has(edge.target),
       ) as { id: number; source: number; target: number }[],
-      counts: new Map<number, number>(),
+      counts: site === "" ? deviceCounts : new Map<number, number>(),
     };
     const summary = clustered
       ? {
@@ -710,8 +772,18 @@ export default function SpacePage() {
 
       const sorted = [...shown].sort((a, b) => a.scale - b.scale);
       // 地図では丸を小さくする。主役は線を流れる光の方
-      const dot = (mode === "map" ? 1.0 : 2.4) * settings.dot;
-      const grow = (mode === "map" ? 1.4 : 3.2) * settings.dot;
+      // 点が多いほど粒を小さくする。大きいまま数だけ増やすと塊になって、
+      // どこに何があるか読めない。密なところが星空に見えるのは粒が細かいから
+      // 名前を出す点は先に決める。描く順は奥から手前なので、
+      // 描きながら数えると奥の点にばかり名前が付いてしまう
+      const nameable = sorted
+        .slice(-MAX_LABELS)
+        .filter((point) => point.scale > ((counts.get(point.id) ?? 0) ? 0.8 : 0.95));
+      const named = new Set(nameable.map((point) => point.id));
+
+      const fine = Math.min(1, Math.sqrt(120 / Math.max(shown.length, 1)));
+      const dot = (mode === "map" ? 1.0 : 2.4) * settings.dot * fine;
+      const grow = (mode === "map" ? 1.4 : 3.2) * settings.dot * fine;
       for (const point of sorted) {
         const alert = settings.alerts ? ALERT_COLOR[point.severity] : undefined;
         // まとめた玉は、抱えている台数だけ大きくする
@@ -742,7 +814,9 @@ export default function SpacePage() {
         context.globalAlpha = 1;
 
         // 名前は手前のものだけ。全部出すと文字で埋まる
-        if (settings.labels && (held ? point.scale > 0.8 : point.scale > 0.95) && mode !== "map") {
+        // 名前は手前の数件だけ。全部に出すと文字が重なって、
+        // 名前も点も両方読めなくなる（2000拠点なら文字の壁になる）
+        if (settings.labels && named.has(point.id) && mode !== "map") {
           context.fillStyle = "#c9d4e2";
           context.font = "11px system-ui, sans-serif";
           context.fillText(point.hostname, point.screenX + size + 3, point.screenY + 4);
@@ -810,7 +884,11 @@ export default function SpacePage() {
           位置を戻す
         </button>
         <span className="muted">
-          {graph ? `${graph.nodes.length}台 ${graph.edges.length}本` : "読み込み中…"}
+          {!graph
+            ? "読み込み中…"
+            : site === ""
+              ? `${(space?.device_total ?? 0).toLocaleString()}台 / ${graph.nodes.length.toLocaleString()}拠点`
+              : `${graph.nodes.length}台 ${graph.edges.length}本`}
           {mode === "map" && unlocated > 0 ? ` / 住所から位置が分からない機器 ${unlocated}台` : ""}
         </span>
       </div>

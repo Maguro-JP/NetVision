@@ -245,3 +245,61 @@ def test_deleting_a_device_removes_its_links(client, device_payload):
     client.delete(f"{API}/devices/{ids['edge']}")
     edges = graph(client)["edges"]
     assert [(e["source"], e["target"]) for e in edges] == [(ids["core"], ids["acc"])]
+
+
+def test_scoping_only_reads_the_devices_it_needs(client, db_session, device_payload):
+    """拠点で絞ったら、その拠点と対向だけを読むこと。
+
+    全部読んでから捨てる作りだと、全国規模では図が1つも出せない
+    （16万台では返ってこなかった）。
+    """
+    from app.services import topology
+
+    other = client.post(f"{API}/sites", json={"name": "遠くの拠点"}).json()["id"]
+    here = client.post(f"{API}/sites", json={"name": "見たい拠点"}).json()["id"]
+
+    client.post(f"{API}/devices", json=device_payload(hostname="here-sw-01", site_id=here))
+    for index in range(5):
+        client.post(
+            f"{API}/devices",
+            json=device_payload(
+                hostname=f"far-sw-{index:02d}", serial_number=f"F{index}", site_id=other
+            ),
+        )
+
+    only = topology.scoped_device_ids(db_session, site_id=here)
+
+    assert only is not None
+    assert len(only) == 1, "関係ない拠点まで読み込んでいる"
+
+
+def test_scoping_keeps_the_devices_on_the_other_end(client, db_session, device_payload):
+    """対向は残す。ここを落とすと線が1本も出ない図になる。"""
+    from app.services import topology
+
+    center = client.post(f"{API}/sites", json={"name": "センター"}).json()["id"]
+    branch = client.post(f"{API}/sites", json={"name": "支社"}).json()["id"]
+
+    a = client.post(
+        f"{API}/devices", json=device_payload(hostname="center-rt", site_id=center)
+    ).json()["id"]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="branch-rt", serial_number="B1", site_id=branch),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": a,
+            "a_interface": "Gi0/0",
+            "b_device_id": b,
+            "b_interface": "Gi0/1",
+        },
+    )
+
+    only = topology.scoped_device_ids(db_session, site_id=branch)
+
+    assert only == {a, b}
+
+    graph = client.get(f"{API}/topology", params={"site_id": branch}).json()
+    assert len(graph["edges"]) == 1

@@ -857,3 +857,17 @@ export interface LinkImportResult {
   unmapped_columns: string[];
   committed: boolean;
 }
+
+/** 眺めるための、拠点単位にまとめた姿。 */
+export interface SpaceView {
+  sites: {
+    site_id: number | null;
+    name: string;
+    address: string | null;
+    device_count: number;
+    severity: string;
+  }[];
+  edges: { a: number | null; b: number | null; count: number }[];
+  device_total: number;
+  link_total: number;
+}

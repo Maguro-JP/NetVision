@@ -102,12 +102,52 @@ class TopologyGraph:
     unplaced_count: int = 0
 
 
+def scoped_device_ids(
+    db: Session, *, site_id: int | None = None, q: str | None = None
+) -> set[int] | None:
+    """図に要る機器だけを先に絞り込む。
+
+    拠点を選んで見るとき、必要なのはその拠点の機器と、そこから線が
+    出ている相手だけ。それ以外まで読み込むと、全国規模では図を1つ出す
+    のに何分もかかる（16万台では返ってこなかった）。
+
+    絞り込みが無いときは None を返す（＝全部）。
+    """
+    keyword = (q or "").strip()
+    if site_id is None and not keyword:
+        return None
+
+    stmt = select(Device.id)
+    if site_id is not None:
+        stmt = stmt.where(Device.site_id == site_id)
+    if keyword:
+        like = f"%{keyword}%"
+        stmt = stmt.where(
+            Device.hostname.ilike(like) | Device.mgmt_ip.ilike(like),
+        )
+    inside = set(db.scalars(stmt))
+    if not inside:
+        return inside
+
+    # 対向（直接つながっている相手）まで。ここが無いと線が1本も出ない図になる
+    neighbours: set[int] = set()
+    for a, b in db.execute(
+        select(Link.a_device_id, Link.b_device_id).where(
+            Link.a_device_id.in_(inside) | Link.b_device_id.in_(inside)
+        )
+    ):
+        neighbours.add(a)
+        neighbours.add(b)
+    return inside | neighbours
+
+
 def get_graph(
     db: Session,
     layer: str = DEFAULT_LAYER,
     *,
     include_retired: bool = False,
     orientation: str = "vertical",
+    only: set[int] | None = None,
 ) -> TopologyGraph:
     if layer == "logical":
         # 論理図はトンネルから組み立てる。物理の結線とは別の話なので、
@@ -119,11 +159,11 @@ def get_graph(
         ).graph
         return _apply_saved_positions(db, graph)
 
-    devices = list(
-        db.scalars(
-            select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
-        )
-    )
+    device_query = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
+    if only is not None:
+        # 絞り込みが決まっているなら、その分だけ読む（scoped_device_ids を参照）
+        device_query = device_query.where(Device.id.in_(only))
+    devices = list(db.scalars(device_query))
     if not include_retired:
         devices = [d for d in devices if d.status is not DeviceStatus.RETIRED]
 
@@ -134,15 +174,21 @@ def get_graph(
         for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == layer))
     }
     interface_counts = _interface_counts(db)
-    interfaces = list(db.scalars(select(Interface)))
+    interface_query = select(Interface)
+    if only is not None:
+        interface_query = interface_query.where(Interface.device_id.in_(only))
+    interfaces = list(db.scalars(interface_query))
     defined = _defined_vlans(db)
     vlans_by_device = _vlans_by_device(interfaces, defined)
     vrfs_by_device = _vrfs_by_device(db)
     ports = {(i.device_id, normalize(i.name)): i for i in interfaces}
 
+    link_query = select(Link)
+    if only is not None:
+        link_query = link_query.where(Link.a_device_id.in_(only) & Link.b_device_id.in_(only))
     links = [
         link
-        for link in db.scalars(select(Link))
+        for link in db.scalars(link_query)
         if link.a_device_id in visible_ids and link.b_device_id in visible_ids
     ]
     # 図に出てくるポートの種類は、線が繋がっているポートだけを見る。

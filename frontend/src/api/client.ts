@@ -1,5 +1,6 @@
 import type {
   LinkImportResult,
+  SpaceView,
   DashboardSummary,
   Device,
   DeviceDetail,
@@ -202,6 +203,9 @@ export const api = {
 
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
+
+  /** 眺めるための、拠点単位にまとめた姿。機器が何台あっても大きさは変わらない。 */
+  getSpaceView: () => request<SpaceView>("/topology/space"),
 
   /** 結線表のひな形。これに書いて取り込めば図が立ち上がる。 */
   linkTemplateUrl: `${BASE}/import/links/template.xlsx`,

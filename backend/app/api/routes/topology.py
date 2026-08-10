@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -22,8 +23,8 @@ from app.schemas.topology import (
     VrfRead,
 )
 from app.services import configs as config_service
+from app.services import spaceview, topology_export
 from app.services import topology as service
-from app.services import topology_export
 from app.services import vlans as vlan_service
 
 router = APIRouter(prefix="/topology", tags=["topology"])
@@ -52,7 +53,12 @@ def get_topology(
     拠点が多い環境では全体図は使わない。`site_id` や `q` で絞った分だけを
     返し、既定では対向（直接つながっている相手）までを足す。
     """
-    graph = service.get_graph(db, layer, include_retired=include_retired, orientation=orientation)
+    # 絞り込みが決まっているなら、必要な機器だけ読む。全部読んでから
+    # 捨てる作りだと、全国規模では図を1つ出すのに何分もかかる
+    only = service.scoped_device_ids(db, site_id=site_id, q=q)
+    graph = service.get_graph(
+        db, layer, include_retired=include_retired, orientation=orientation, only=only
+    )
     graph = service.scope_graph(graph, site_id=site_id, q=q, scope=scope, orientation=orientation)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
@@ -304,6 +310,37 @@ def export_link_table_csv(
 @router.get("/stats", response_model=TopologyStatsRead)
 def get_stats(db: DbSession, layer: str = service.DEFAULT_LAYER) -> TopologyStatsRead:
     return TopologyStatsRead.model_validate(service.get_stats(db, layer), from_attributes=True)
+
+
+class SpaceSiteRead(BaseModel):
+    site_id: int | None
+    name: str
+    address: str | None
+    device_count: int
+    severity: str
+
+
+class SpaceEdgeRead(BaseModel):
+    a: int | None
+    b: int | None
+    count: int
+
+
+class SpaceViewRead(BaseModel):
+    sites: list[SpaceSiteRead]
+    edges: list[SpaceEdgeRead]
+    device_total: int
+    link_total: int
+
+
+@router.get("/space", response_model=SpaceViewRead)
+def get_space(db: DbSession) -> SpaceViewRead:
+    """眺めるための、拠点単位にまとめた姿。
+
+    返る大きさは拠点数で決まり、機器が何台あっても変わらない。
+    機器1台ずつを見たいときは、拠点を選んで通常のグラフを取る。
+    """
+    return SpaceViewRead.model_validate(spaceview.build(db), from_attributes=True)
 
 
 @router.put("/positions", response_model=dict[str, int])
