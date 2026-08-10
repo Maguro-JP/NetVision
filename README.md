@@ -72,7 +72,8 @@ frontend/
   src/lib/       表示フォーマット
 docs/ROADMAP.md  今後の開発計画
 docs/GETTING_STARTED.md  自分の端末で実データを試す手順
-docs/INSTALL.md      閉域環境への導入手順書
+docs/INSTALL.md          閉域環境への導入手順書
+docs/WINDOWS_BEGINNER.md Windows で動かす手順（はじめての人向け）
 docs/OPERATIONS.md   運用手順書
 docs/PREVIEW.md  プレビュー環境（Vercel）の手順
 api/index.py     プレビュー用のサーバレス関数入口
@@ -111,7 +112,9 @@ python.org の embeddable package を同梱するので、ZIP を展開して `N
 ./packaging/make-bundle-windows.sh   # → dist/NetVision-YYYYMMDD-windows.zip
 ```
 
-手順は [docs/INSTALL.md](docs/INSTALL.md)、運用は [docs/OPERATIONS.md](docs/OPERATIONS.md) にまとめています。
+手順は [docs/INSTALL.md](docs/INSTALL.md)、運用は [docs/OPERATIONS.md](docs/OPERATIONS.md) に
+まとめています。Windows で Python を入れられない場合は
+[docs/WINDOWS_BEGINNER.md](docs/WINDOWS_BEGINNER.md) に、画面の操作から順に書いてあります。
 
 ### Docker Compose（本番と同じ構成）
 

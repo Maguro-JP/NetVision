@@ -134,16 +134,23 @@ sudo systemctl enable --now netvision
 インストール不要版を使います。python.org が配布している embeddable package
 （インストーラではなく ZIP）を同梱するので、展開するだけで動きます。
 
+> 画面の操作から順に書いた手順書があります。GitHub もコマンド操作も初めてなら
+> [WINDOWS_BEGINNER.md](WINDOWS_BEGINNER.md) の方が迷いません。ここは要点だけです。
+
 ```bash
 ./packaging/make-bundle-windows.sh     # ネット側で実行
 # → dist/NetVision-YYYYMMDD-windows.zip（約 60MB）
 ```
 
+作る側に必要なもの: Git（Windows なら Git for Windows の Git Bash）、Node.js、Python 3.11 以上。
+このスクリプトは bash 用なので、Windows では Git Bash から実行します。
+
 導入先での作業は次だけです。
 
 1. ZIP を書き込める場所（デスクトップなど）に展開する
+   （ZIP を開いた中から直接起動しても動きません）
 2. `NetVision.bat` をダブルクリックする
-3. ブラウザが開く
+3. ブラウザが開く（開かなければ `http://127.0.0.1:8000` を手で入力）
 
 この方式が触らないもの（申請時の説明材料になります）
 
