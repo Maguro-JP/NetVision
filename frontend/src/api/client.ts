@@ -1,4 +1,5 @@
 import type {
+  LinkImportResult,
   DashboardSummary,
   Device,
   DeviceDetail,
@@ -201,6 +202,14 @@ export const api = {
 
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
+
+  /** 結線表のひな形。これに書いて取り込めば図が立ち上がる。 */
+  linkTemplateUrl: `${BASE}/import/links/template.xlsx`,
+  importLinks: (file: File, commit: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<LinkImportResult>(commit ? "/import/links" : "/import/links/preview", form);
+  },
   importDevices: (options: ImportOptions) => {
     const form = new FormData();
     form.append("file", options.file);

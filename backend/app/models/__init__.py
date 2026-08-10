@@ -4,6 +4,7 @@ from app.models.device import Device, DeviceStatus, DeviceType
 from app.models.document import ConfigTemplate, Document, DocumentType, TemplateCategory
 from app.models.exposure import DeviceExposure, ExposureStatus
 from app.models.maintenance import MaintenanceContract
+from app.models.pending_link import PendingLink
 from app.models.reference import (
     ProductReference,
     ReferenceSource,
@@ -59,6 +60,7 @@ __all__ = [
     "DeviceVlan",
     "DeviceVrf",
     "DeviceTunnel",
+    "PendingLink",
     "Vlan",
     "Site",
 ]

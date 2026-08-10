@@ -612,6 +612,10 @@ def _run_import(
             result.device_id = device.id
 
     if commit and errors == 0:
+        # 結線表を先に取り込んでいた場合、機器が揃った行をここで結ぶ
+        from app.services.linkimport import resolve_pending
+
+        resolve_pending(db)
         db.commit()
         committed = True
     else:

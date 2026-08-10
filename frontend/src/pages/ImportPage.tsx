@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
+import LinkSheetImport from "../components/LinkSheetImport";
 import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
 
@@ -301,6 +302,9 @@ export default function ImportPage() {
           )}
         </>
       )}
+
+      <hr />
+      <LinkSheetImport />
     </>
   );
 }

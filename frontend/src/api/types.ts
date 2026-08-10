@@ -843,3 +843,17 @@ export interface AppMeta {
   warning_days: number;
   critical_days: number;
 }
+
+/** 結線表の取り込み結果。 */
+export interface LinkImportResult {
+  total_rows: number;
+  /** 両端の機器が揃っていて、結線として作れた行 */
+  linked: number;
+  /** 既に同じ結線があった行 */
+  already: number;
+  /** 機器がまだ無いので預かった行 */
+  pending: number;
+  issues: { row_number: number; message: string }[];
+  unmapped_columns: string[];
+  committed: boolean;
+}

@@ -8,7 +8,7 @@ from app.api.deps import to_device_detail, to_device_read
 from app.db import get_db
 from app.models import Device, DeviceStatus, DeviceType, ScenarioItem, Site
 from app.schemas import DeviceCreate, DeviceDetail, DeviceRead, DeviceUpdate
-from app.services import configs
+from app.services import configs, linkimport
 from app.services.device_query import DeviceFilters, count_devices, query_devices
 from app.services.lifecycle import Severity
 
@@ -82,6 +82,8 @@ def create_device(payload: DeviceCreate, db: DbSession) -> DeviceDetail:
     # 台帳から作るか Config から作るかは人によって順番が逆になるので、
     # どちらから始めても同じところに着くようにしておく
     configs.adopt_orphan_snapshots(db, device)
+    # 結線表を先に取り込んでいた場合も、この機器の分をここで結ぶ
+    linkimport.resolve_pending(db)
 
     db.commit()
     db.refresh(device)

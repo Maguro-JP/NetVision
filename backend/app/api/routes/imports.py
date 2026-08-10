@@ -4,13 +4,14 @@ import json
 from datetime import date, datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas.imports import ImportFieldInfo, ImportResult
-from app.services import importer
+from app.services import importer, linkimport
 from app.services.tablefile import Table, TableFileError, read_table
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -216,3 +217,67 @@ async def download_error_rows(
         media_type="text/csv",
         headers={"Content-Disposition": 'attachment; filename="netvision_import_errors.csv"'},
     )
+
+
+class LinkImportIssueRead(BaseModel):
+    row_number: int
+    message: str
+
+
+class LinkImportResultRead(BaseModel):
+    total_rows: int
+    linked: int
+    already: int
+    pending: int
+    issues: list[LinkImportIssueRead]
+    unmapped_columns: list[str]
+    committed: bool
+
+
+@router.get("/links/template.xlsx")
+def link_template() -> Response:
+    """結線表の記入用ひな形。
+
+    導入のとき、これに書いて取り込めば図が立ち上がる。何をどう書くかは
+    シートの中に書いてあるので、この画面を離れても分かる。
+    """
+    return Response(
+        content=linkimport.template_xlsx(),
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": 'attachment; filename="netvision-links-template.xlsx"'},
+    )
+
+
+async def _run_links(db: Session, file: UploadFile, commit: bool) -> LinkImportResultRead:
+    content = await file.read()
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 20MB）"
+        )
+    try:
+        outcome = linkimport.run_import(db, file.filename or "links", content, commit=commit)
+    except TableFileError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return LinkImportResultRead.model_validate(outcome, from_attributes=True)
+
+
+@router.post("/links/preview", response_model=LinkImportResultRead)
+async def preview_link_import(
+    db: DbSession,
+    file: UploadFile = File(description="結線表（CSV / Excel）"),
+) -> LinkImportResultRead:
+    """結線表の中身を確認するだけで、DB は変更しない。"""
+    return await _run_links(db, file, commit=False)
+
+
+@router.post("/links", response_model=LinkImportResultRead)
+async def commit_link_import(
+    db: DbSession,
+    file: UploadFile = File(description="結線表（CSV / Excel）"),
+) -> LinkImportResultRead:
+    """結線表を取り込む。
+
+    台帳にまだ無い機器の行は「未接続」として預かる。その機器を登録した
+    時点で自動的に結線に変わるので、取り込み直しは要らない。
+    """
+    return await _run_links(db, file, commit=True)
