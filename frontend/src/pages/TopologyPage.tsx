@@ -300,6 +300,8 @@ function toFlow(
     // ポート名を両端に置くため、独自のエッジで描く
     type: "port",
     animated: false,
+    // 編集中は端をつまんで別の機器へ持っていける。引き直すより早い
+    reconnectable: options.editable,
     className:
       `topo-edge ${edge.origin} ${edge.confirmed_both_ways || simple ? "confirmed" : ""}` +
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
@@ -560,9 +562,13 @@ function TopologyEditor() {
   });
 
   const arrange = useMutation({
-    mutationFn: () => api.arrangePositions(layer, { ...viewScope, orientation }),
+    mutationFn: () => api.arrangePositions(layer, viewScope),
     onSuccess: (result) => {
-      setNotice(`配置を最適化しました（${result.arranged} 台を並べ直して保存しました）`);
+      setNotice(
+        result.arranged
+          ? `配置を最適化しました（${result.arranged} 台の手動配置を外し、自動で並べ直しました）`
+          : "配置を最適化しました（すべて自動配置のままです）",
+      );
       refresh();
     },
   });
@@ -624,6 +630,31 @@ function TopologyEditor() {
       if (changes.some((c) => c.type === "position" && c.dragging === false)) setDirty(true);
     },
     [onNodesChange],
+  );
+
+  /** 線の端を別の機器へ付け替える。どちらの端が動いたかは、変わった側で判る */
+  const reconnect = useMutation({
+    mutationFn: ({ id, body }: { id: number; body: Record<string, number> }) =>
+      api.updateLink(id, body),
+    onSuccess: () => {
+      setNotice("結線をつなぎ替えました");
+      refresh();
+    },
+  });
+
+  const onReconnect = useCallback(
+    (oldEdge: Edge, connection: Connection) => {
+      if (!editable) return;
+      if (connection.source === connection.target) return;
+
+      const body: Record<string, number> = {};
+      if (connection.source !== oldEdge.source) body.a_device_id = Number(connection.source);
+      if (connection.target !== oldEdge.target) body.b_device_id = Number(connection.target);
+      if (!Object.keys(body).length) return;
+
+      reconnect.mutate({ id: Number(oldEdge.id), body });
+    },
+    [editable, reconnect],
   );
 
   const onConnect = useCallback(
@@ -778,7 +809,7 @@ function TopologyEditor() {
           className="primary"
           onClick={() => arrange.mutate()}
           disabled={arrange.isPending}
-          title="いま見えている範囲を、上位を上・下位を下に並べ直して保存します"
+          title="いま見えている範囲を、上位を上・下位を下に並べ直します。手で置いた位置は外れます"
         >
           {arrange.isPending ? "並べ直しています…" : "配置を最適化"}
         </button>
@@ -860,9 +891,9 @@ function TopologyEditor() {
           {notice}
         </div>
       )}
-      {(save.error || createLink.error || rebuild.error) && (
+      {(save.error || createLink.error || rebuild.error || reconnect.error) && (
         <div className="error">
-          {((save.error ?? createLink.error ?? rebuild.error) as Error).message}
+          {((save.error ?? createLink.error ?? rebuild.error ?? reconnect.error) as Error).message}
         </div>
       )}
 
@@ -927,6 +958,8 @@ function TopologyEditor() {
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
+            onReconnect={onReconnect}
+            edgesReconnectable={editable}
             onEdgeClick={(_, edge) => setSelectedEdge(edge)}
             onPaneClick={() => setSelectedEdge(null)}
             onInit={(flow) => {
@@ -1071,6 +1104,8 @@ function TopologyEditor() {
             <>
               <p className="muted" style={{ margin: "8px 0 4px" }}>
                 線を出す位置を変えられます。既定は位置関係から自動で決めています。
+                <br />
+                つなぎ替えは、図の上で<strong>線の端をつまんで別の機器へ</strong>持っていきます。
               </p>
               <div className="toolbar" style={{ marginBottom: 0 }}>
                 <SidePicker

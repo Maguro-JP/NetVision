@@ -59,7 +59,15 @@ def get_topology(
     graph = service.get_graph(
         db, layer, include_retired=include_retired, orientation=orientation, only=only
     )
-    graph = service.scope_graph(graph, site_id=site_id, q=q, scope=scope, orientation=orientation)
+    graph = service.scope_graph(
+        graph,
+        site_id=site_id,
+        q=q,
+        scope=scope,
+        orientation=orientation,
+        # 上下は網全体で見る。絞ったあとのグラフで求めると順番が狂う
+        rank=service.network_rank(db) if only is not None else None,
+    )
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
@@ -370,10 +378,11 @@ def reset_positions(
     site_id: int | None = None,
     q: str | None = None,
 ) -> dict[str, int]:
-    """配置をリセットして自動レイアウトに戻す。
+    """配置を自動レイアウトに戻す。
 
-    拠点や検索で絞っているときは、その範囲だけ戻す。1拠点を見ている最中の
-    リセットで、他の拠点で直した配置まで消えるのは行き過ぎなため。
+    拠点や検索を指定すればその範囲だけ、指定しなければ全部。1拠点を見て
+    いる最中のリセットで他の拠点の配置まで消えるのは行き過ぎなので、
+    画面からは範囲つきで呼ぶ。
     """
     only = service.scoped_device_ids(db, site_id=site_id, q=q)
     return {"reset": service.reset_positions(db, layer, only=only)}
@@ -385,18 +394,13 @@ def arrange_positions(
     layer: str = service.DEFAULT_LAYER,
     site_id: int | None = None,
     q: str | None = None,
-    scope: str = service.SCOPE_PEERS,
-    orientation: str = "vertical",
 ) -> dict[str, int]:
-    """いま見えている範囲を、自動配置で並べ直して保存する。
+    """いま見えている範囲を、自動配置で並べ直す。
 
-    手で置いていくとどうしてもずれる。並べ直したあとの位置は保存するので、
-    次に開いても同じ配置になる。
+    手で置いた位置を外して自動配置に任せる。範囲は絞り込みの内側だけなので、
+    他の拠点で直した配置には触らない。
     """
-    saved = service.arrange_positions(
-        db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
-    )
-    return {"arranged": saved}
+    return {"arranged": service.arrange_positions(db, layer, site_id=site_id, q=q)}
 
 
 @router.post("/rebuild", response_model=RebuildResult)
@@ -461,9 +465,47 @@ def _load(db: Session, link_id: int) -> Link:
 
 @router.patch("/links/{link_id}", response_model=LinkRead)
 def update_link(link_id: int, payload: LinkUpdate, db: DbSession) -> Link:
+    """結線を直す。端を別の機器へ付け替えることもできる。
+
+    実機を見ながら図を直すとき、引き直すより端をつまんで動かす方が早い。
+    ポート名は付け替えても引き継ぐ（同じケーブルの相手が変わっただけ、
+    という直し方が多いため）。
+    """
     link = _load(db, link_id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+
+    a_device = changes.get("a_device_id", link.a_device_id)
+    b_device = changes.get("b_device_id", link.b_device_id)
+    if a_device == b_device:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ機器同士は結線できません")
+    for device_id in (a_device, b_device):
+        if device_id != link.a_device_id and device_id != link.b_device_id:
+            if db.get(Device, device_id) is None:
+                raise HTTPException(
+                    status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {device_id} が存在しません"
+                )
+
+    a_port = changes.get("a_interface", link.a_interface)
+    b_port = changes.get("b_interface", link.b_interface)
+    duplicate = db.scalar(
+        select(Link).where(
+            Link.id != link.id,
+            Link.a_device_id == a_device,
+            Link.a_interface == a_port,
+            Link.b_device_id == b_device,
+            Link.b_interface == b_port,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ結線が既にあります")
+
+    for key, value in changes.items():
         setattr(link, key, value)
+    # 端を付け替えたら、両側から確認できていたという印は外す
+    if "a_device_id" in changes or "b_device_id" in changes:
+        link.confirmed_both_ways = False
+        link.origin = LinkOrigin.MANUAL
+
     db.commit()
     db.refresh(link)
     return link

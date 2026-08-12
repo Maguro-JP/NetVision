@@ -412,8 +412,12 @@ def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, devic
     assert where["here-01"][2] is False  # 見ていた拠点だけ自動配置に戻る
 
 
-def test_arranging_saves_the_tidy_layout(client, device_payload):
-    """並べ直した位置は保存される（次に開いても同じ配置）。"""
+def test_arranging_puts_the_layout_back_in_order(client, device_payload):
+    """手で置いてずれた配置を、自動配置に戻せること。
+
+    結果を保存しないのは、保存すると以後この範囲が並べ直されなくなるため
+    （図は保存済みの配置を尊重する作りになっている）。
+    """
     site = client.post(f"{API}/sites", json={"name": "整列する拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="tidy-rt", site_id=site)).json()[
         "id"
@@ -442,7 +446,115 @@ def test_arranging_saves_the_tidy_layout(client, device_payload):
 
     graph = client.get(f"{API}/topology", params={"site_id": site}).json()
     nodes = {n["hostname"]: n for n in graph["nodes"]}
-    assert nodes["tidy-rt"]["placed"] is True  # 保存されている
+    assert nodes["tidy-rt"]["placed"] is False  # 手で置いた位置は外れている
     assert (nodes["tidy-rt"]["x"], nodes["tidy-rt"]["y"]) != (999.0, 999.0)
     # 上位が上、下位が下に並ぶ
     assert nodes["tidy-rt"]["y"] < nodes["tidy-sw"]["y"]
+
+
+def test_arranging_one_site_leaves_the_other_sites_alone(client, device_payload):
+    here = client.post(f"{API}/sites", json={"name": "整える拠点"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "触らない拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="a-01", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices", json=device_payload(hostname="b-01", serial_number="X9", site_id=there)
+    ).json()["id"]
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 1.0, "y": 1.0},
+                {"device_id": b, "x": 700.0, "y": 700.0},
+            ],
+        },
+    )
+
+    client.post(f"{API}/topology/positions/arrange", params={"site_id": here})
+
+    graph = client.get(f"{API}/topology").json()
+    where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
+    assert where["b-01"] == (700.0, 700.0)
+
+
+def make_pair(client, device_payload, *names):
+    return [
+        client.post(
+            f"{API}/devices", json=device_payload(hostname=name, serial_number=f"S{name}")
+        ).json()["id"]
+        for name in names
+    ]
+
+
+def test_a_link_can_be_moved_to_another_device(client, device_payload):
+    """線の端を別の機器へ付け替えられること。
+
+    実機を見ながら図を直すとき、引き直すより端をつまんで動かす方が早い。
+    """
+    a, b, c = make_pair(client, device_payload, "rt-01", "sw-01", "sw-02")
+    link = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    ).json()
+
+    moved = client.patch(f"{API}/topology/links/{link['id']}", json={"b_device_id": c}).json()
+
+    assert moved["b_device_id"] == c
+    assert moved["b_interface"] == "Gi0/1"  # ポート名は引き継ぐ
+    assert moved["confirmed_both_ways"] is False  # 付け替えたので確認済みは外れる
+
+
+def test_moving_a_link_onto_itself_is_refused(client, device_payload):
+    a, b = make_pair(client, device_payload, "rt-02", "sw-03")
+    link = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    ).json()
+
+    res = client.patch(f"{API}/topology/links/{link['id']}", json={"b_device_id": a})
+
+    assert res.status_code == 422
+    assert "同じ機器同士" in res.json()["detail"]
+
+
+def test_moving_a_link_onto_an_existing_one_is_refused(client, device_payload):
+    """同じ結線が2本できないこと。"""
+    a, b, c = make_pair(client, device_payload, "rt-03", "sw-04", "sw-05")
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": c, "b_interface": "Gi0/1"},
+    )
+    second = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    ).json()
+
+    res = client.patch(f"{API}/topology/links/{second['id']}", json={"b_device_id": c})
+
+    assert res.status_code == 422
+    assert "既にあります" in res.json()["detail"]
+
+
+def test_moving_a_link_to_an_unknown_device_is_refused(client, device_payload):
+    a, b = make_pair(client, device_payload, "rt-04", "sw-06")
+    link = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    ).json()
+
+    res = client.patch(f"{API}/topology/links/{link['id']}", json={"b_device_id": 9999})
+
+    assert res.status_code == 422
+
+
+def test_a_link_can_be_deleted(client, device_payload):
+    a, b = make_pair(client, device_payload, "rt-05", "sw-07")
+    link = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    ).json()
+
+    assert client.delete(f"{API}/topology/links/{link['id']}").status_code == 204
+    assert client.get(f"{API}/topology/links").json() == []

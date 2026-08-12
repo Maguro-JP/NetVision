@@ -224,6 +224,9 @@ SIDES = ("top", "bottom", "left", "right")
 class LinkUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
+    # つなぎ替え。図の上で線の端を別の機器へ持っていったときに使う
+    a_device_id: int | None = None
+    b_device_id: int | None = None
     a_interface: str | None = Field(default=None, max_length=120)
     b_interface: str | None = Field(default=None, max_length=120)
     label: str | None = None

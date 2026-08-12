@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import re
+from collections import defaultdict
 from dataclasses import dataclass, field
 from math import ceil
 
@@ -261,6 +262,7 @@ def scope_graph(
     q: str | None = None,
     scope: str = SCOPE_PEERS,
     orientation: str = "vertical",
+    rank: dict[int, int] | None = None,
 ) -> TopologyGraph:
     """見たい範囲だけに絞る。
 
@@ -320,7 +322,10 @@ def scope_graph(
     _compact(
         nodes,
         [e for e in graph.edges if e.source in keep and e.target in keep],
-        rank=hierarchy_rank(graph),
+        # 上下は網全体で見る。渡されていなければ手元のぶんで求めるが、
+        # 絞り込んだあとのグラフで求めると、その範囲でたまたま真ん中にいる
+        # 機器が最上位になってしまう
+        rank=rank if rank is not None else hierarchy_rank(graph),
         inside=inside,
         orientation=orientation,
     )
@@ -367,6 +372,20 @@ def _far(start: int, adjacency: dict[int, list[int]]) -> tuple[int, dict[int, in
     return last, distance
 
 
+def network_rank(db: Session) -> dict[int, int]:
+    """網全体で見た上下関係。結線だけを読むので、台数が増えても軽い。
+
+    上下は網全体で決めないと意味がない。1拠点分に絞ったあとで求めると、
+    その範囲でたまたま真ん中にいる機器が最上位になってしまう。
+    かといって全機器を読み直すのは重いので、必要な結線だけを読む。
+    """
+    adjacency: dict[int, set[int]] = defaultdict(set)
+    for a, b in db.execute(select(Link.a_device_id, Link.b_device_id)):
+        adjacency[a].add(b)
+        adjacency[b].add(a)
+    return _rank_from_adjacency(adjacency)
+
+
 def hierarchy_rank(graph) -> dict[int, int]:
     """網全体の「上位からの遠さ」。小さいほど上位。
 
@@ -377,7 +396,11 @@ def hierarchy_rank(graph) -> dict[int, int]:
     センター側なので、そこからのホップ数を上下の目安にする。
     木構造の網ではこれがよく合う。
     """
-    adjacency = _adjacency(graph)
+    return _rank_from_adjacency(_adjacency(graph))
+
+
+def _rank_from_adjacency(adjacency: dict[int, set[int]]) -> dict[int, int]:
+    """隣接から上下を求める。中心（一番長い経路の真ん中）からのホップ数。"""
     if not adjacency:
         return {}
 
@@ -835,31 +858,22 @@ def arrange_positions(
     *,
     site_id: int | None = None,
     q: str | None = None,
-    scope: str = SCOPE_PEERS,
-    orientation: str = "vertical",
 ) -> int:
-    """いま見えている範囲を、自動配置で並べ直して保存する。
+    """いま見えている範囲を、自動配置で並べ直す。
 
     手で置いていくとどうしてもずれる。並べ直しは自動配置がやることなので、
-    その結果をそのまま保存する（消して自動に戻すのと違い、次に開いたときも
-    同じ位置になる）。
+    その範囲の手動配置を外して自動配置に任せる。
 
-    保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
-    その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
+    結果を保存しないのは、保存すると並べ直しが止まるため。図は「保存済みの
+    配置があればそれを尊重する」作りで（直した配置を勝手に戻さないため）、
+    自動配置の結果を保存すると、以後この範囲は並べ直されなくなる。
+    対向の機器を保存すると、その機器自身の拠点の図まで、こちらの都合で
+    決めた位置に変わってしまう問題もある。
+
+    戻り値は外した手動配置の数。
     """
     only = scoped_device_ids(db, site_id=site_id, q=q)
-
-    # 先に保存済みの配置を外す。残したままだと、いま置いてある位置が
-    # そのまま図に反映されるだけで、並べ直しにならない
-    reset_positions(db, layer, only=only)
-
-    graph = get_graph(db, layer, orientation=orientation, only=only)
-    graph = scope_graph(graph, site_id=site_id, q=q, scope=scope, orientation=orientation)
-
-    placed = [(n.device_id, n.x, n.y) for n in graph.nodes if not n.outside]
-    if not placed:
-        return 0
-    return save_positions(db, layer, placed)
+    return reset_positions(db, layer, only=only)
 
 
 @dataclass
