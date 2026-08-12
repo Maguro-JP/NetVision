@@ -15,10 +15,11 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy.orm import Session
+from sqlalchemy import case, func, select
+from sqlalchemy.orm import Session, selectinload
 
-from app.models import Device, DeviceStatus, Link
-from app.services.device_query import DeviceFilters, query_devices
+from app.models import Device, DeviceStatus, Link, MaintenanceContract
+from app.models.reference import ProductReference
 from app.services.lifecycle import Severity, evaluate
 
 # 会計年度の開始月（日本の年度）
@@ -111,75 +112,162 @@ def _estimated_cost(device: Device) -> float | None:
 _TARGET_SAMPLE = 200
 
 
+def _due_expression(today: date):
+    """機器ごとの更改期日を SQL で出す。
+
+    保守期限（契約のうち最も遠い終了日）と EoL（機器の入力、無ければ型番の
+    製品マスタ）のうち、早い方が実質の期限になる。判定の意味は
+    _due_and_reason と同じで、こちらはその写し。
+
+    以前は全機器を読み込んで1台ずつ評価していた。16万台では読み込みだけで
+    13秒かかっており、年度ごとの台数を数えるだけでもその時間を払っていた。
+    """
+    maintenance_end = (
+        select(func.max(MaintenanceContract.end_date))
+        .where(MaintenanceContract.device_id == Device.id)
+        .correlate(Device)
+        .scalar_subquery()
+    )
+    product_eol = (
+        select(ProductReference.eol_date)
+        .where(
+            func.lower(ProductReference.vendor) == func.lower(Device.vendor),
+            func.lower(ProductReference.model) == func.lower(Device.model),
+        )
+        .correlate(Device)
+        .limit(1)
+        .scalar_subquery()
+    )
+    eol = func.coalesce(Device.eol_date, product_eol)
+    # 早い方。片方しか無ければそちら
+    return case(
+        (maintenance_end.is_(None), eol),
+        (eol.is_(None), maintenance_end),
+        (maintenance_end < eol, maintenance_end),
+        else_=eol,
+    )
+
+
+def _annual_cost_expression():
+    """機器ごとの年間保守費。更改費用の概算はここから出す。"""
+    return (
+        select(func.coalesce(func.sum(MaintenanceContract.annual_cost), 0))
+        .where(MaintenanceContract.device_id == Device.id)
+        .correlate(Device)
+        .scalar_subquery()
+    )
+
+
+#: 年度ごとに返す機器の数。全部返しても読めないし、16万台の環境では
+#: 応答が数十MBになって受け取る側が固まる。件数と金額は全件から出す
+_TARGET_SAMPLE = 200
+
+
+def _fiscal_range(year: int) -> tuple[date, date]:
+    """その年度の始まりと終わり（年度は4月始まり）。"""
+    return date(year, FISCAL_START_MONTH, 1), date(year + 1, FISCAL_START_MONTH, 1)
+
+
 def build_plan(
     db: Session, *, years: int = 5, today: date | None = None, keep: int | None = _TARGET_SAMPLE
 ) -> ReplacementPlan:
     """更改の年度計画を組み立てる。
 
-    `keep` を渡すと、年度ごとに返す機器をその件数までに絞る。台数と金額は
-    絞る前の全件から出すので、計画としての数字は変わらない。
+    台数と金額は SQL の集計で出す。中身（対象機器の一覧）は年度ごとに
+    `keep` 件までしか読まないので、台数が増えても速さと大きさが変わらない。
     """
     today = today or date.today()
     start_year = fiscal_year_of(today)
+    last_year = start_year + years - 1
 
-    devices = [
-        d for d in query_devices(db, DeviceFilters()) if d.status is not DeviceStatus.RETIRED
-    ]
-    impacts = impact_counts(db)
+    due = _due_expression(today)
+    cost = func.round(_annual_cost_expression() * 10, -3)
+    alive = Device.status != DeviceStatus.RETIRED
 
-    buckets: dict[int, FiscalYearPlan] = {
-        year: FiscalYearPlan(year, fiscal_year_label(year), 0, 0.0)
-        for year in range(start_year, start_year + years)
-    }
     plan = ReplacementPlan(evaluated_on=today)
 
-    for device in devices:
-        due, reason, severity = _due_and_reason(device, today)
-        cost = _estimated_cost(device)
-        target = ReplacementTarget(
-            device_id=device.id,
-            hostname=device.hostname,
-            vendor=device.vendor,
-            model=device.model,
-            site_name=device.site.name if device.site else None,
-            reason=reason,
-            due_on=due,
-            severity=severity,
-            estimated_cost=cost,
-            impact_count=impacts.get(device.id, 0),
+    for year in range(start_year, last_year + 1):
+        begin, end = _fiscal_range(year)
+        if year == start_year:
+            # 既に過ぎているものは「今年度に対応すべきもの」として今年度へ寄せる
+            window = due < end
+        else:
+            window = (due >= begin) & (due < end)
+
+        row = db.execute(
+            select(func.count(Device.id), func.coalesce(func.sum(cost), 0.0)).where(alive, window)
+        ).one()
+        bucket = FiscalYearPlan(
+            fiscal_year=year,
+            label=fiscal_year_label(year),
+            device_count=row[0],
+            estimated_cost=float(row[1] or 0.0),
+            target_total=row[0],
         )
 
-        if due is None:
-            plan.unscheduled.append(target)
-            continue
+        if bucket.device_count:
+            wanted = select(Device.id).where(alive, window).order_by(due, Device.hostname)
+            if keep is not None:
+                wanted = wanted.limit(keep)
+            bucket.targets = _targets_for(db, list(db.scalars(wanted)), today)
 
-        year = fiscal_year_of(due)
-        # 既に過ぎているものは「今年度に対応すべきもの」として今年度へ寄せる
-        year = max(year, start_year)
-        bucket = buckets.get(year)
-        if bucket is None:
-            # 対象年度より先のものは計画の範囲外
-            continue
-
-        bucket.targets.append(target)
-        bucket.device_count += 1
-        bucket.estimated_cost += cost or 0.0
-
-    for bucket in buckets.values():
-        bucket.targets.sort(key=lambda t: (t.due_on or date.max, t.hostname))
-        bucket.target_total = len(bucket.targets)
-        if keep is not None:
-            bucket.targets = bucket.targets[:keep]
         plan.years.append(bucket)
         plan.total_cost += bucket.estimated_cost
         plan.total_devices += bucket.device_count
 
-    plan.years.sort(key=lambda y: y.fiscal_year)
-    plan.unscheduled.sort(key=lambda t: t.hostname)
-    plan.unscheduled_total = len(plan.unscheduled)
-    if keep is not None:
-        plan.unscheduled = plan.unscheduled[:keep]
+    # 期日が分からず年度に割り付けられなかったもの（台帳の抜け）
+    unscheduled = select(Device.id).where(alive, due.is_(None))
+    plan.unscheduled_total = (
+        db.scalar(select(func.count()).select_from(unscheduled.subquery())) or 0
+    )
+    if plan.unscheduled_total:
+        listed = unscheduled.order_by(Device.hostname)
+        if keep is not None:
+            listed = listed.limit(keep)
+        plan.unscheduled = _targets_for(db, list(db.scalars(listed)), today)
+
     return plan
+
+
+def _targets_for(db: Session, device_ids: list[int], today: date) -> list[ReplacementTarget]:
+    """一覧に出す分だけ、機器を読んで対象に組み立てる。
+
+    影響台数もここでしか出さない。全機器分を求めると、経路の探索を
+    台数だけ繰り返すことになる。
+    """
+    if not device_ids:
+        return []
+
+    devices = list(
+        db.scalars(
+            select(Device)
+            .options(selectinload(Device.contracts), selectinload(Device.site))
+            .where(Device.id.in_(device_ids))
+        )
+    )
+    order = {device_id: index for index, device_id in enumerate(device_ids)}
+    devices.sort(key=lambda d: order.get(d.id, len(order)))
+
+    impacts = impact_counts(db, only=set(device_ids))
+
+    targets: list[ReplacementTarget] = []
+    for device in devices:
+        found, reason, severity = _due_and_reason(device, today)
+        targets.append(
+            ReplacementTarget(
+                device_id=device.id,
+                hostname=device.hostname,
+                vendor=device.vendor,
+                model=device.model,
+                site_name=device.site.name if device.site else None,
+                reason=reason,
+                due_on=found,
+                severity=severity,
+                estimated_cost=_estimated_cost(device),
+                impact_count=impacts.get(device.id, 0),
+            )
+        )
+    return targets
 
 
 # ---------------------------------------------------------------------------
@@ -229,10 +317,15 @@ def isolated_by(db: Session, device_id: int) -> list[int]:
     return sorted(node for node in graph if node != device_id and node not in reachable)
 
 
-def impact_counts(db: Session) -> dict[int, int]:
-    """全機器について、止めたときに経路が失われる機器の数。"""
+def impact_counts(db: Session, *, only: set[int] | None = None) -> dict[int, int]:
+    """止めたときに経路が失われる機器の数。
+
+    `only` を渡すと、その機器の分だけ求める。全機器分を求めると経路の探索を
+    台数だけ繰り返すことになり、台数が増えたときに終わらない。
+    """
     graph = _adjacency(db)
-    return {device_id: len(isolated_by(db, device_id)) for device_id in graph}
+    wanted = graph.keys() if only is None else (graph.keys() & only)
+    return {device_id: len(isolated_by(db, device_id)) for device_id in wanted}
 
 
 @dataclass

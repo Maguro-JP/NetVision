@@ -200,3 +200,53 @@ def test_the_plan_reports_totals_even_when_the_list_is_trimmed(client, device_pa
     assert year["device_count"] == total  # 数は全件
     assert year["target_total"] == total
     assert len(year["targets"]) == replacement._TARGET_SAMPLE  # 中身は絞る
+
+
+def test_the_sql_totals_agree_with_evaluating_each_device(client, db_session, device_payload):
+    """年度ごとの台数を SQL で数えるようにしたので、1台ずつ見た結果と一致すること。
+
+    食い違うと「計画に出ていないのに期限が来る」機器が生まれ、気づくのは
+    期限が過ぎたあとになる。境目（年度の初日・最終日）を必ず含める。
+    """
+    from datetime import date, timedelta
+
+    from app.models.device import Device
+    from app.services import replacement
+
+    today = date.today()
+    start = replacement.fiscal_year_of(today)
+
+    # 年度の境目をまたぐ日付を並べる
+    days: list[date | None] = [None]
+    for year in range(start, start + 6):
+        begin, end = replacement._fiscal_range(year)
+        days += [begin, end - timedelta(days=1)]
+    days += [today - timedelta(days=800)]  # 既に過ぎているもの
+
+    for index, day in enumerate(days):
+        client.post(
+            f"{API}/devices",
+            json=device_payload(
+                hostname=f"plan-{index:03d}",
+                serial_number=f"S{index}",
+                eol_date=day.isoformat() if day else None,
+            ),
+        )
+
+    plan = replacement.build_plan(db_session, today=today)
+
+    # 1台ずつ評価した場合の年度ごとの台数
+    expected: dict[int, int] = {}
+    unscheduled = 0
+    for device in db_session.query(Device).all():
+        due, _, _ = replacement._due_and_reason(device, today)
+        if due is None:
+            unscheduled += 1
+            continue
+        year = max(replacement.fiscal_year_of(due), start)
+        if year <= start + 4:
+            expected[year] = expected.get(year, 0) + 1
+
+    assert {y.fiscal_year: y.device_count for y in plan.years if y.device_count} == expected
+    assert plan.unscheduled_total == unscheduled
+    assert plan.total_devices == sum(expected.values())
