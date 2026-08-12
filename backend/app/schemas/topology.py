@@ -254,7 +254,10 @@ class TopologyStatsRead(BaseModel):
     discovered_links: int
     manual_links: int
     confirmed_links: int
+    #: 繋がっていない機器の名前。多いときは頭から少しだけ返す
     isolated_devices: list[str]
+    #: 繋がっていない機器の総数
+    isolated_count: int = 0
 
 
 class RebuildResult(BaseModel):

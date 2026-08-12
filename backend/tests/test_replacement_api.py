@@ -171,3 +171,32 @@ def test_impact_count_appears_in_the_plan(client, device_payload):
 
 def test_unknown_device_impact_is_404(client):
     assert client.get(f"{API}/replacement/impact/999").status_code == 404
+
+
+def test_the_plan_reports_totals_even_when_the_list_is_trimmed(client, device_payload):
+    """返す機器を絞っても、台数と金額は全件から出すこと。
+
+    16万台の環境では全部返すと応答が数十MBになり、受け取る側が固まる。
+    ただし計画の数字が変わってしまっては意味がない。
+    """
+    from datetime import date, timedelta
+
+    from app.services import replacement
+
+    soon = (date.today() + timedelta(days=30)).isoformat()
+    total = replacement._TARGET_SAMPLE + 10
+    for index in range(total):
+        client.post(
+            f"{API}/devices",
+            json=device_payload(
+                hostname=f"plan-{index:04d}", serial_number=f"S{index}", eol_date=soon
+            ),
+        )
+
+    plan = client.get(f"{API}/replacement/plan").json()
+
+    assert plan["total_devices"] == total
+    year = next(y for y in plan["years"] if y["device_count"] > 0)
+    assert year["device_count"] == total  # 数は全件
+    assert year["target_total"] == total
+    assert len(year["targets"]) == replacement._TARGET_SAMPLE  # 中身は絞る

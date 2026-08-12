@@ -303,3 +303,53 @@ def test_scoping_keeps_the_devices_on_the_other_end(client, db_session, device_p
 
     graph = client.get(f"{API}/topology", params={"site_id": branch}).json()
     assert len(graph["edges"]) == 1
+
+
+def test_stats_are_counted_without_building_the_whole_graph(client, device_payload):
+    """要約は数えるだけ。図そのものは組み立てない。
+
+    以前は数えるためにグラフを作っており、全国規模では15秒かかっていた。
+    """
+    a = client.post(f"{API}/devices", json=device_payload(hostname="sw-a")).json()["id"]
+    b = client.post(
+        f"{API}/devices", json=device_payload(hostname="sw-b", serial_number="X2")
+    ).json()["id"]
+    client.post(f"{API}/devices", json=device_payload(hostname="lonely", serial_number="X3"))
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+
+    stats = client.get(f"{API}/topology/stats").json()
+
+    assert stats["device_count"] == 3
+    assert stats["link_count"] == 1
+    assert stats["manual_links"] == 1
+    assert stats["isolated_devices"] == ["lonely"]
+    assert stats["isolated_count"] == 1
+
+
+def test_retired_devices_are_not_counted_as_isolated(client, device_payload):
+    """撤去済みは図に出ないので、繋がっていない機器にも数えない。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="gone-01", status="retired"))
+
+    stats = client.get(f"{API}/topology/stats").json()
+
+    assert stats["device_count"] == 0
+    assert stats["isolated_count"] == 0
+
+
+def test_isolated_devices_are_capped_but_counted_in_full(client, device_payload):
+    """名前は頭から少しだけ。数は全部数える。"""
+    from app.services import topology
+
+    for index in range(topology._ISOLATED_SAMPLE + 5):
+        client.post(
+            f"{API}/devices",
+            json=device_payload(hostname=f"lonely-{index:04d}", serial_number=f"S{index}"),
+        )
+
+    stats = client.get(f"{API}/topology/stats").json()
+
+    assert stats["isolated_count"] == topology._ISOLATED_SAMPLE + 5
+    assert len(stats["isolated_devices"]) == topology._ISOLATED_SAMPLE

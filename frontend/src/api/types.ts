@@ -305,7 +305,10 @@ export interface TopologyStats {
   discovered_links: number;
   manual_links: number;
   confirmed_links: number;
+  /** 繋がっていない機器の名前。多いときは頭から少しだけ */
   isolated_devices: string[];
+  /** 繋がっていない機器の総数 */
+  isolated_count: number;
 }
 
 export interface RebuildResult {

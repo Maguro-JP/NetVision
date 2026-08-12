@@ -27,7 +27,9 @@ class FiscalYearPlanRead(BaseModel):
     label: str
     device_count: int
     estimated_cost: float
+    #: 年度の対象機器。多いときは頭から少しだけ（target_total が実数）
     targets: list[ReplacementTargetRead]
+    target_total: int = 0
 
 
 class ReplacementPlanRead(BaseModel):
@@ -38,6 +40,8 @@ class ReplacementPlanRead(BaseModel):
     unscheduled: list[ReplacementTargetRead]
     total_cost: float
     total_devices: int
+    #: 割り付けられなかった機器の総数（unscheduled は頭から少しだけ）
+    unscheduled_total: int = 0
 
 
 class ImpactRead(BaseModel):

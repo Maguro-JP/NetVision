@@ -55,7 +55,9 @@ class FiscalYearPlan:
     label: str
     device_count: int
     estimated_cost: float
+    #: 年度の対象機器。多いときは頭から少しだけ（target_total が実数）
     targets: list[ReplacementTarget] = field(default_factory=list)
+    target_total: int = 0
 
 
 @dataclass
@@ -64,6 +66,8 @@ class ReplacementPlan:
     years: list[FiscalYearPlan] = field(default_factory=list)
     # 期日が分からず年度に割り付けられなかったもの（台帳の抜け）
     unscheduled: list[ReplacementTarget] = field(default_factory=list)
+    #: 割り付けられなかったものの総数（unscheduled は途中で切っている）
+    unscheduled_total: int = 0
     total_cost: float = 0.0
     total_devices: int = 0
 
@@ -102,7 +106,19 @@ def _estimated_cost(device: Device) -> float | None:
     return round(annual * 10, -3)
 
 
-def build_plan(db: Session, *, years: int = 5, today: date | None = None) -> ReplacementPlan:
+#: 年度ごとに返す機器の数。全部返しても読めないし、16万台の環境では
+#: 応答が数十MBになって受け取る側が固まる。件数と金額は全件から出す
+_TARGET_SAMPLE = 200
+
+
+def build_plan(
+    db: Session, *, years: int = 5, today: date | None = None, keep: int | None = _TARGET_SAMPLE
+) -> ReplacementPlan:
+    """更改の年度計画を組み立てる。
+
+    `keep` を渡すと、年度ごとに返す機器をその件数までに絞る。台数と金額は
+    絞る前の全件から出すので、計画としての数字は変わらない。
+    """
     today = today or date.today()
     start_year = fiscal_year_of(today)
 
@@ -151,12 +167,18 @@ def build_plan(db: Session, *, years: int = 5, today: date | None = None) -> Rep
 
     for bucket in buckets.values():
         bucket.targets.sort(key=lambda t: (t.due_on or date.max, t.hostname))
+        bucket.target_total = len(bucket.targets)
+        if keep is not None:
+            bucket.targets = bucket.targets[:keep]
         plan.years.append(bucket)
         plan.total_cost += bucket.estimated_cost
         plan.total_devices += bucket.device_count
 
     plan.years.sort(key=lambda y: y.fiscal_year)
     plan.unscheduled.sort(key=lambda t: t.hostname)
+    plan.unscheduled_total = len(plan.unscheduled)
+    if keep is not None:
+        plan.unscheduled = plan.unscheduled[:keep]
     return plan
 
 

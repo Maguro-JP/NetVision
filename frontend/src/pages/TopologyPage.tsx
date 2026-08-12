@@ -861,7 +861,7 @@ function TopologyEditor() {
           <div className="card">
             <div className="label">未接続の機器</div>
             <div className="value" style={{ color: "var(--sev-unknown)" }}>
-              {stats.isolated_devices.length}
+              {stats.isolated_count.toLocaleString()}
             </div>
           </div>
         </div>
@@ -1074,7 +1074,7 @@ function TopologyEditor() {
         </div>
       )}
 
-      {stats && stats.isolated_devices.length > 0 && (
+      {stats && stats.isolated_count > 0 && (
         <>
           <h2>どこにも繋がっていない機器</h2>
           <p className="muted" style={{ marginTop: -6 }}>
@@ -1086,6 +1086,11 @@ function TopologyEditor() {
                 {hostname}
               </span>
             ))}
+            {stats.isolated_count > stats.isolated_devices.length && (
+              <span className="muted">
+                ほか {(stats.isolated_count - stats.isolated_devices.length).toLocaleString()} 台
+              </span>
+            )}
           </div>
         </>
       )}

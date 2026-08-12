@@ -818,19 +818,73 @@ class TopologyStats:
     discovered_links: int
     manual_links: int
     confirmed_links: int
-    isolated_devices: list[str]  # 1本も線が繋がっていない機器
+    #: 1本も線が繋がっていない機器。多いときは頭から少しだけ
+    isolated_devices: list[str]
+    #: 繋がっていない機器の総数（isolated_devices は途中で切っている）
+    isolated_count: int = 0
+
+
+#: 未接続の機器を、名前で見せる上限。全部返しても読めないし、
+#: 16万台の環境では応答が数MBになって画面が固まる
+_ISOLATED_SAMPLE = 100
 
 
 def get_stats(db: Session, layer: str = DEFAULT_LAYER) -> TopologyStats:
-    graph = get_graph(db, layer)
-    connected = {e.source for e in graph.edges} | {e.target for e in graph.edges}
+    """図の要約。数えるだけなので、図そのものは組み立てない。
+
+    以前は全体のグラフを作ってから数えていた。数えるために16万台分の
+    ノードとエッジを作ることになり、15秒かかっていた。数はすべて SQL の
+    集計で出る。
+    """
+    if layer != DEFAULT_LAYER:
+        # 論理図など、SQL で数えられない層は今までどおり組み立てて数える
+        graph = get_graph(db, layer)
+        connected = {e.source for e in graph.edges} | {e.target for e in graph.edges}
+        isolated = sorted(n.hostname for n in graph.nodes if n.device_id not in connected)
+        return TopologyStats(
+            device_count=len(graph.nodes),
+            link_count=len(graph.edges),
+            discovered_links=sum(1 for e in graph.edges if e.origin is LinkOrigin.DISCOVERED),
+            manual_links=sum(1 for e in graph.edges if e.origin is LinkOrigin.MANUAL),
+            confirmed_links=sum(1 for e in graph.edges if e.confirmed_both_ways),
+            isolated_devices=isolated[:_ISOLATED_SAMPLE],
+            isolated_count=len(isolated),
+        )
+
+    from sqlalchemy import func
+
+    alive = Device.status != DeviceStatus.RETIRED
+    device_count = db.scalar(select(func.count()).select_from(Device).where(alive)) or 0
+
+    link_count = db.scalar(select(func.count()).select_from(Link)) or 0
+    discovered = (
+        db.scalar(
+            select(func.count()).select_from(Link).where(Link.origin == LinkOrigin.DISCOVERED)
+        )
+        or 0
+    )
+    manual = (
+        db.scalar(select(func.count()).select_from(Link).where(Link.origin == LinkOrigin.MANUAL))
+        or 0
+    )
+    confirmed = (
+        db.scalar(select(func.count()).select_from(Link).where(Link.confirmed_both_ways.is_(True)))
+        or 0
+    )
+
+    linked = select(Link.a_device_id).union(select(Link.b_device_id)).subquery()
+    lonely = select(Device.hostname).where(alive, Device.id.notin_(select(linked.c[0])))
+    isolated_count = db.scalar(select(func.count()).select_from(lonely.subquery())) or 0
+    isolated = list(db.scalars(lonely.order_by(Device.hostname).limit(_ISOLATED_SAMPLE)))
+
     return TopologyStats(
-        device_count=len(graph.nodes),
-        link_count=len(graph.edges),
-        discovered_links=sum(1 for e in graph.edges if e.origin is LinkOrigin.DISCOVERED),
-        manual_links=sum(1 for e in graph.edges if e.origin is LinkOrigin.MANUAL),
-        confirmed_links=sum(1 for e in graph.edges if e.confirmed_both_ways),
-        isolated_devices=sorted(n.hostname for n in graph.nodes if n.device_id not in connected),
+        device_count=device_count,
+        link_count=link_count,
+        discovered_links=discovered,
+        manual_links=manual,
+        confirmed_links=confirmed,
+        isolated_devices=isolated,
+        isolated_count=isolated_count,
     )
 
 
