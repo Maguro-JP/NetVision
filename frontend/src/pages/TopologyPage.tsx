@@ -542,10 +542,27 @@ function TopologyEditor() {
     },
   });
 
+  /** いま見えている範囲。リセットも整列もこの範囲だけに効かせる */
+  const viewScope = {
+    site_id: selectedSite === "" ? undefined : selectedSite,
+    q: appliedSearch.trim() || undefined,
+  };
+
   const reset = useMutation({
-    mutationFn: () => api.resetPositions(layer),
-    onSuccess: () => {
-      setNotice("配置をリセットし、自動レイアウトに戻しました");
+    mutationFn: () => api.resetPositions(layer, viewScope),
+    onSuccess: (result) => {
+      setNotice(
+        `配置をリセットしました（${result.reset} 台を自動レイアウトに戻しました）` +
+          (viewScope.site_id || viewScope.q ? "。絞り込みの外は触っていません" : ""),
+      );
+      refresh();
+    },
+  });
+
+  const arrange = useMutation({
+    mutationFn: () => api.arrangePositions(layer, { ...viewScope, orientation }),
+    onSuccess: (result) => {
+      setNotice(`配置を最適化しました（${result.arranged} 台を並べ直して保存しました）`);
       refresh();
     },
   });
@@ -756,10 +773,21 @@ function TopologyEditor() {
             </button>
           </>
         )}
+        {/* 手で置いていくとどうしてもずれる。並べ直しは自動配置に任せる */}
+        <button
+          className="primary"
+          onClick={() => arrange.mutate()}
+          disabled={arrange.isPending}
+          title="いま見えている範囲を、上位を上・下位を下に並べ直して保存します"
+        >
+          {arrange.isPending ? "並べ直しています…" : "配置を最適化"}
+        </button>
         {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
         <button
           onClick={() => {
-            if (confirm("配置をリセットして自動レイアウトに戻しますか？")) reset.mutate();
+            const where =
+              viewScope.site_id || viewScope.q ? "いま絞り込んでいる範囲の配置" : "すべての配置";
+            if (confirm(`${where}をリセットして自動レイアウトに戻しますか？`)) reset.mutate();
           }}
         >
           配置をリセット

@@ -346,8 +346,11 @@ def get_space(db: DbSession) -> SpaceViewRead:
 @router.put("/positions", response_model=dict[str, int])
 def save_positions(payload: SavePositions, db: DbSession) -> dict[str, int]:
     """人が動かしたノード位置を保存する。"""
-    known = {d.id for d in db.scalars(select(Device))}
-    unknown = [p.device_id for p in payload.positions if p.device_id not in known]
+    # 送られてきた機器だけ確かめる。全機器を読むと、1台動かすたびに
+    # 台数分の読み込みが走る
+    wanted = [p.device_id for p in payload.positions]
+    known = set(db.scalars(select(Device.id).where(Device.id.in_(wanted))))
+    unknown = [device_id for device_id in wanted if device_id not in known]
     if unknown:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -361,9 +364,39 @@ def save_positions(payload: SavePositions, db: DbSession) -> dict[str, int]:
 
 
 @router.delete("/positions", response_model=dict[str, int])
-def reset_positions(db: DbSession, layer: str = service.DEFAULT_LAYER) -> dict[str, int]:
-    """配置をリセットして自動レイアウトに戻す。"""
-    return {"reset": service.reset_positions(db, layer)}
+def reset_positions(
+    db: DbSession,
+    layer: str = service.DEFAULT_LAYER,
+    site_id: int | None = None,
+    q: str | None = None,
+) -> dict[str, int]:
+    """配置をリセットして自動レイアウトに戻す。
+
+    拠点や検索で絞っているときは、その範囲だけ戻す。1拠点を見ている最中の
+    リセットで、他の拠点で直した配置まで消えるのは行き過ぎなため。
+    """
+    only = service.scoped_device_ids(db, site_id=site_id, q=q)
+    return {"reset": service.reset_positions(db, layer, only=only)}
+
+
+@router.post("/positions/arrange", response_model=dict[str, int])
+def arrange_positions(
+    db: DbSession,
+    layer: str = service.DEFAULT_LAYER,
+    site_id: int | None = None,
+    q: str | None = None,
+    scope: str = service.SCOPE_PEERS,
+    orientation: str = "vertical",
+) -> dict[str, int]:
+    """いま見えている範囲を、自動配置で並べ直して保存する。
+
+    手で置いていくとどうしてもずれる。並べ直したあとの位置は保存するので、
+    次に開いても同じ配置になる。
+    """
+    saved = service.arrange_positions(
+        db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
+    )
+    return {"arranged": saved}
 
 
 @router.post("/rebuild", response_model=RebuildResult)

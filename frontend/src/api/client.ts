@@ -329,8 +329,19 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ layer, positions }),
     }),
-  resetPositions: (layer: string) =>
-    request<{ reset: number }>(`/topology/positions${query({ layer })}`, { method: "DELETE" }),
+  /** 配置を自動レイアウトに戻す。拠点や検索で絞っていればその範囲だけ。 */
+  resetPositions: (layer: string, scope: { site_id?: number; q?: string } = {}) =>
+    request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {
+      method: "DELETE",
+    }),
+  /** いま見えている範囲を並べ直して保存する。 */
+  arrangePositions: (
+    layer: string,
+    scope: { site_id?: number; q?: string; orientation?: string } = {},
+  ) =>
+    request<{ arranged: number }>(`/topology/positions/arrange${query({ layer, ...scope })}`, {
+      method: "POST",
+    }),
   rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
   listTopologyVlans: () => request<TopologyVlan[]>("/topology/vlans"),
   listTopologyVrfs: () => request<TopologyVrf[]>("/topology/vrfs"),

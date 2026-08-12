@@ -782,9 +782,20 @@ def _auto_layout(
 
 
 def save_positions(db: Session, layer: str, positions: list[tuple[int, float, float]]) -> int:
+    """動かした機器の位置を保存する。
+
+    動かした分だけを読む。以前は層の保存済み位置を全部読み込んでいたため、
+    1台つまんで置き直すたびに全機器分の読み書きが走っていた（台数が増える
+    ほど、動かすたびに固まる）。
+    """
+    wanted = [device_id for device_id, _, _ in positions]
     existing = {
         node.device_id: node
-        for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == layer))
+        for node in db.scalars(
+            select(TopologyNode).where(
+                TopologyNode.layer == layer, TopologyNode.device_id.in_(wanted)
+            )
+        )
     }
 
     saved = 0
@@ -802,13 +813,53 @@ def save_positions(db: Session, layer: str, positions: list[tuple[int, float, fl
     return saved
 
 
-def reset_positions(db: Session, layer: str) -> int:
-    """保存済みの配置を消して、自動レイアウトに戻す。"""
-    nodes = list(db.scalars(select(TopologyNode).where(TopologyNode.layer == layer)))
+def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) -> int:
+    """保存済みの配置を消して、自動レイアウトに戻す。
+
+    `only` を渡すと、その機器の分だけ消す。拠点を1つ見ている最中の
+    「リセット」で、他の拠点で直した配置まで消えるのは行き過ぎなため。
+    """
+    stmt = select(TopologyNode).where(TopologyNode.layer == layer)
+    if only is not None:
+        stmt = stmt.where(TopologyNode.device_id.in_(only))
+    nodes = list(db.scalars(stmt))
     for node in nodes:
         db.delete(node)
     db.commit()
     return len(nodes)
+
+
+def arrange_positions(
+    db: Session,
+    layer: str,
+    *,
+    site_id: int | None = None,
+    q: str | None = None,
+    scope: str = SCOPE_PEERS,
+    orientation: str = "vertical",
+) -> int:
+    """いま見えている範囲を、自動配置で並べ直して保存する。
+
+    手で置いていくとどうしてもずれる。並べ直しは自動配置がやることなので、
+    その結果をそのまま保存する（消して自動に戻すのと違い、次に開いたときも
+    同じ位置になる）。
+
+    保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
+    その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
+    """
+    only = scoped_device_ids(db, site_id=site_id, q=q)
+
+    # 先に保存済みの配置を外す。残したままだと、いま置いてある位置が
+    # そのまま図に反映されるだけで、並べ直しにならない
+    reset_positions(db, layer, only=only)
+
+    graph = get_graph(db, layer, orientation=orientation, only=only)
+    graph = scope_graph(graph, site_id=site_id, q=q, scope=scope, orientation=orientation)
+
+    placed = [(n.device_id, n.x, n.y) for n in graph.nodes if not n.outside]
+    if not placed:
+        return 0
+    return save_positions(db, layer, placed)
 
 
 @dataclass

@@ -353,3 +353,96 @@ def test_isolated_devices_are_capped_but_counted_in_full(client, device_payload)
 
     assert stats["isolated_count"] == topology._ISOLATED_SAMPLE + 5
     assert len(stats["isolated_devices"]) == topology._ISOLATED_SAMPLE
+
+
+def test_saving_a_position_only_touches_the_devices_that_moved(client, device_payload):
+    """1台動かした保存で、他の機器の配置に触らないこと。
+
+    以前は保存のたびに全機器と全配置を読み込んでいた。台数が増えるほど
+    「動かすたびに固まる」状態になる。
+    """
+    moved = client.post(f"{API}/devices", json=device_payload(hostname="moved-01")).json()["id"]
+    other = client.post(
+        f"{API}/devices", json=device_payload(hostname="other-01", serial_number="X2")
+    ).json()["id"]
+
+    client.put(
+        f"{API}/topology/positions",
+        json={"layer": "physical", "positions": [{"device_id": other, "x": 111.0, "y": 222.0}]},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={"layer": "physical", "positions": [{"device_id": moved, "x": 10.0, "y": 20.0}]},
+    )
+
+    graph = client.get(f"{API}/topology").json()
+    where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
+    assert where["moved-01"] == (10.0, 20.0)
+    assert where["other-01"] == (111.0, 222.0)  # 触られていない
+
+
+def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, device_payload):
+    """1拠点を見ている最中のリセットで、他の拠点の配置まで消さないこと。"""
+    here = client.post(f"{API}/sites", json={"name": "見ている拠点"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "別の拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="here-01", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="there-01", serial_number="X2", site_id=there),
+    ).json()["id"]
+
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 1.0, "y": 1.0},
+                {"device_id": b, "x": 500.0, "y": 500.0},
+            ],
+        },
+    )
+
+    client.delete(f"{API}/topology/positions", params={"site_id": here})
+
+    graph = client.get(f"{API}/topology").json()
+    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
+    assert where["there-01"][:2] == (500.0, 500.0)  # 別の拠点は残る
+    assert where["here-01"][2] is False  # 見ていた拠点だけ自動配置に戻る
+
+
+def test_arranging_saves_the_tidy_layout(client, device_payload):
+    """並べ直した位置は保存される（次に開いても同じ配置）。"""
+    site = client.post(f"{API}/sites", json={"name": "整列する拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="tidy-rt", site_id=site)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices", json=device_payload(hostname="tidy-sw", serial_number="X2", site_id=site)
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+    # わざとぐちゃぐちゃに置く
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 999.0, "y": 999.0},
+                {"device_id": b, "x": -999.0, "y": -999.0},
+            ],
+        },
+    )
+
+    result = client.post(f"{API}/topology/positions/arrange", params={"site_id": site}).json()
+    assert result["arranged"] == 2
+
+    graph = client.get(f"{API}/topology", params={"site_id": site}).json()
+    nodes = {n["hostname"]: n for n in graph["nodes"]}
+    assert nodes["tidy-rt"]["placed"] is True  # 保存されている
+    assert (nodes["tidy-rt"]["x"], nodes["tidy-rt"]["y"]) != (999.0, 999.0)
+    # 上位が上、下位が下に並ぶ
+    assert nodes["tidy-rt"]["y"] < nodes["tidy-sw"]["y"]
