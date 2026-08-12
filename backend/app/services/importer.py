@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
 from app.models.change_log import ChangeSource
 from app.services.audit import audit_context
+from app.services.configparse import normalize_hostname
 
 # ---------------------------------------------------------------------------
 # 取り込み可能なフィールド
@@ -56,7 +57,9 @@ CONTRACT_FIELDS = (
     "contract_annual_cost",
 )
 
-IMPORTABLE_FIELDS = DEVICE_FIELDS + CONTRACT_FIELDS
+# 機器ID は取り込みでも受け取る。書き出して直して戻すとき、この列があるから
+# ホスト名を書き換えても同じ機器として直せる（無いと別名の機器が増える）
+IMPORTABLE_FIELDS = ("device_id",) + DEVICE_FIELDS + CONTRACT_FIELDS
 
 REQUIRED_FIELDS = ("hostname", "vendor", "model")
 
@@ -65,6 +68,7 @@ DATE_FIELDS = frozenset(
 )
 
 FIELD_LABELS: dict[str, str] = {
+    "device_id": "機器ID",
     "hostname": "ホスト名",
     "vendor": "ベンダー",
     "model": "型番",
@@ -92,6 +96,14 @@ FIELD_LABELS: dict[str, str] = {
 
 # 列名の別名。正規化（小文字化・空白と記号の除去）した文字列で突き合わせる。
 FIELD_ALIASES: dict[str, tuple[str, ...]] = {
+    "device_id": (
+        "機器id",
+        "機器ID",
+        "id",
+        "device_id",
+        "deviceid",
+        "台帳id",
+    ),
     "hostname": (
         "hostname",
         "host",
@@ -526,6 +538,41 @@ def _run_import(
         [str(_extract(raw, mapping)[0].get(str(key_field)) or "").strip() for raw in table_rows],
     )
 
+    # 機器ID が書かれている行は、その ID の機器を直す。ホスト名を書き換えたい
+    # ときにこれが無いと、別名の機器が新しく作られるだけで直せない。
+    # 書き出したファイルには ID が入っているので、Excel で直して戻せば通る
+    wanted_ids: set[int] = set()
+    for raw in table_rows:
+        text = str(_extract(raw, mapping)[0].get("device_id") or "").strip()
+        if text.isdigit():
+            wanted_ids.add(int(text))
+    by_id: dict[int, Device] = {}
+    if wanted_ids:
+        ids = sorted(wanted_ids)
+        for start in range(0, len(ids), _LOOKUP_CHUNK):
+            chunk = ids[start : start + _LOOKUP_CHUNK]
+            for device in db.scalars(select(Device).where(Device.id.in_(chunk))):
+                by_id[device.id] = device
+
+    # 重複判定に使う表。ファイルに出てくる名前の分だけ台帳を引く
+    # （全件読むと、台数が増えたときに取り込みが終わらなくなる）
+    wanted_names = [
+        str(_extract(raw, mapping)[0].get("hostname") or "").strip() for raw in table_rows
+    ]
+    existing_by_name: dict[str, Device] = {}
+    unique_names = [n for n in dict.fromkeys(wanted_names) if n]
+    for start in range(0, len(unique_names), _LOOKUP_CHUNK):
+        chunk = unique_names[start : start + _LOOKUP_CHUNK]
+        for device in db.scalars(select(Device).where(Device.hostname.in_(chunk))):
+            existing_by_name[normalize_hostname(device.hostname)] = device
+
+    # このファイルで名前が変わる機器。入れ替えは正しい操作なので弾かない
+    renaming_ids: set[int] = set()
+    for raw in table_rows:
+        text = str(_extract(raw, mapping)[0].get("device_id") or "").strip()
+        if text.isdigit() and int(text) in by_id:
+            renaming_ids.add(int(text))
+
     #: 行の結果と、その行で作った・更新した機器。id は最後にまとめて入れる
     pending: list[tuple[RowResult, Device]] = []
 
@@ -539,9 +586,36 @@ def _run_import(
         values, issues = _extract(raw_row, mapping)
         key_value = str(values.get(str(key_field)) or "").strip()
 
-        result = RowResult(row_number=index, key=key_value, action=RowAction.ERROR, issues=issues)
+        # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
+        # 同じ機器として扱う。これが無いと、名前を直したいのに別名の機器が
+        # 新しく作られるだけで、書き出して直して戻す運用が成り立たない
+        id_text = str(values.get("device_id") or "").strip()
+        by_id_device: Device | None = None
+        id_issue: RowIssue | None = None
+        if id_text:
+            if not id_text.isdigit():
+                id_issue = RowIssue(column="device_id", message="機器IDは数字で書いてください")
+            else:
+                by_id_device = by_id.get(int(id_text))
+                if by_id_device is None:
+                    id_issue = RowIssue(
+                        column="device_id",
+                        message=f"機器ID {id_text} は台帳にありません",
+                    )
+            if by_id_device is not None and not key_value:
+                # 名前を空にして ID だけ書いた行も通す
+                key_value = by_id_device.hostname
 
-        if not key_value:
+        result = RowResult(
+            row_number=index,
+            key=key_value or id_text,
+            action=RowAction.ERROR,
+            issues=issues,
+        )
+
+        if id_issue is not None:
+            result.issues.append(id_issue)
+        elif by_id_device is None and not key_value:
             result.issues.append(
                 RowIssue(column=str(key_field), message=f"{FIELD_LABELS[key_field]}が空です")
             )
@@ -550,10 +624,14 @@ def _run_import(
                 result.issues.append(
                     RowIssue(column=required, message=f"{FIELD_LABELS[required]}は必須です")
                 )
-        if key_value and key_value in seen_keys:
+        # 同じ機器を1つのファイルで2度直そうとしていないか。ID があるときは
+        # ID で、無いときはキー列で見る（名前を入れ替える行があっても弾かない）
+        dedupe_key = f"id:{id_text}" if by_id_device is not None else key_value
+        if dedupe_key and dedupe_key in seen_keys:
             result.issues.append(
                 RowIssue(
-                    column=str(key_field), message=f"{seen_keys[key_value]}行目と重複しています"
+                    column="device_id" if by_id_device is not None else str(key_field),
+                    message=f"{seen_keys[dedupe_key]}行目と重複しています",
                 )
             )
 
@@ -562,8 +640,8 @@ def _run_import(
             results.append(result)
             continue
 
-        seen_keys[key_value] = index
-        existing = existing_by_key.get(key_value)
+        seen_keys[dedupe_key] = index
+        existing = by_id_device if by_id_device is not None else existing_by_key.get(key_value)
 
         if existing is not None and not update_existing:
             result.action = RowAction.SKIP
@@ -574,6 +652,23 @@ def _run_import(
             continue
 
         device = existing or Device()
+
+        # 他の機器が既に使っている名前にしようとしていないか。DB の重複エラーを
+        # そのまま出すと、何行目の何が悪いのか分からない
+        wanted_name = str(values.get("hostname") or "").strip()
+        if wanted_name:
+            owner = existing_by_name.get(normalize_hostname(wanted_name))
+            if owner is not None and owner is not device and owner.id not in renaming_ids:
+                result.issues.append(
+                    RowIssue(
+                        column="hostname",
+                        message=f"ホスト名「{wanted_name}」は他の機器が使っています",
+                    )
+                )
+                errors += 1
+                results.append(result)
+                continue
+
         _apply_values(device, values, db, site_cache)
 
         if device.eos_date and device.eol_date and device.eol_date < device.eos_date:
@@ -607,6 +702,7 @@ def _run_import(
 
     # まとめて書き出してから、行ごとの結果に id を入れる
     if pending:
+        _flush_renames(db, [device for _, device in pending])
         db.flush()
         for result, device in pending:
             result.device_id = device.id
@@ -663,6 +759,37 @@ def _extract(
             issues.append(RowIssue(column=target, message=str(exc)))
 
     return values, issues
+
+
+def _flush_renames(db: Session, devices: list[Device]) -> None:
+    """名前を変える機器を、いったん仮の名前にしてから書き込む。
+
+    ホスト名には重複禁止が掛かっている。1つのファイルで2台の名前を
+    入れ替えると、書き込む順番によっては途中で一時的に重複し、DB に
+    弾かれる（利用者から見れば理由の分からない失敗になる）。
+
+    先に全部を衝突しない仮の名前にしてから、本来の名前を入れ直す。
+    こうすると順番に関係なく通る。
+    """
+    from sqlalchemy import inspect as sa_inspect
+
+    intended: dict[Device, str] = {}
+    for device in devices:
+        if device.id is None:
+            continue  # 新規はまだ誰とも重ならない
+        history = sa_inspect(device).attrs.hostname.history
+        if history.has_changes() and history.deleted:
+            intended[device] = device.hostname
+
+    if not intended:
+        return
+
+    for device in intended:
+        device.hostname = f"__netvision_renaming_{device.id}__"
+    db.flush()
+    for device, name in intended.items():
+        device.hostname = name
+    db.flush()
 
 
 def _find_existing(db: Session, key_field: KeyField, key_value: str) -> Device | None:

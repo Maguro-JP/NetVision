@@ -210,7 +210,12 @@ def test_unsupported_extension_is_rejected(client):
 def test_fields_and_template_endpoints(client):
     fields = client.get(f"{API}/import/fields").json()
     assert {f["name"] for f in fields} >= {"hostname", "vendor", "model", "contract_end_date"}
-    assert [f["required"] for f in fields[:3]] == [True, True, True]
+
+    required = {f["name"] for f in fields if f["required"]}
+    assert required == {"hostname", "vendor", "model"}
+    # 機器IDは任意。新しく登録する行では空のままでよい
+    assert "device_id" in {f["name"] for f in fields}
+    assert "device_id" not in required
 
     res = client.get(f"{API}/import/template.csv")
     assert res.status_code == 200
@@ -300,3 +305,143 @@ def test_error_rows_csv_does_not_write_to_db(client):
         files={"file": ("daichou.csv", broken.encode("utf-8"), "text/csv")},
     )
     assert client.get(f"{API}/devices").json() == []
+
+
+def _csv(rows: list[str]) -> bytes:
+    return "\n".join(rows).encode("utf-8")
+
+
+def _import(client, body: bytes, **data):
+    return client.post(
+        f"{API}/import/devices",
+        files={"file": ("devices.csv", body, "text/csv")},
+        data={"commit": "true", **data},
+    ).json()
+
+
+def test_fixing_a_hostname_updates_the_device_instead_of_adding_one(client, device_payload):
+    """書き出して名前を直して戻したら、その機器が直ること。
+
+    台帳を取り込んで作った DB にホスト名の誤りが大量にあることがある。
+    ここで新しい機器が増える作りだと、直しようがない（誤った機器と
+    正しい機器が両方並ぶだけになる）。
+    """
+    device_id = client.post(f"{API}/devices", json=device_payload(hostname="typo-sw-01")).json()[
+        "id"
+    ]
+
+    result = _import(
+        client,
+        _csv(
+            [
+                "機器ID,ホスト名,ベンダー,型番",
+                f"{device_id},core-sw-01,Cisco,C9500-40X",
+            ]
+        ),
+    )
+
+    assert result["created"] == 0
+    assert result["updated"] == 1
+
+    devices = client.get(f"{API}/devices").json()
+    assert [d["hostname"] for d in devices] == ["core-sw-01"]
+    assert devices[0]["id"] == device_id  # 同じ機器のまま
+
+
+def test_the_exported_file_can_be_edited_and_taken_back(client, device_payload):
+    """書き出し → 直す → 取り込み、の一周が通ること。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="wrong-01"))
+    exported = client.get(f"{API}/export/devices.csv?include_status=false").text
+
+    lines = exported.strip().split("\n")
+    fixed = lines[0] + "\n" + lines[1].replace("wrong-01", "right-01")
+
+    result = _import(client, fixed.encode("utf-8"))
+
+    assert result["updated"] == 1
+    assert result["created"] == 0
+    assert [d["hostname"] for d in client.get(f"{API}/devices").json()] == ["right-01"]
+
+
+def test_a_row_without_an_id_still_works_as_before(client):
+    """機器IDを書かない行は今までどおり。新規に登録するときはこれ。"""
+    result = _import(client, _csv(["ホスト名,ベンダー,型番", "new-sw-01,Cisco,C9300-48P"]))
+
+    assert result["created"] == 1
+    assert [d["hostname"] for d in client.get(f"{API}/devices").json()] == ["new-sw-01"]
+
+
+def test_an_unknown_id_is_reported_instead_of_creating_a_device(client):
+    """消された機器の行を黙って作り直さない。何が起きたか分かるようにする。"""
+    result = _import(client, _csv(["機器ID,ホスト名,ベンダー,型番", "999,x-sw,Cisco,C9300-48P"]))
+
+    assert result["errors"] == 1
+    assert result["created"] == 0
+    assert "台帳にありません" in result["rows"][0]["issues"][0]["message"]
+    assert client.get(f"{API}/devices").json() == []
+
+
+def test_two_devices_can_swap_hostnames_in_one_file(client, device_payload):
+    """名前の入れ替えも通ること。ID で見ているから重複扱いにならない。"""
+    a = client.post(f"{API}/devices", json=device_payload(hostname="sw-a")).json()["id"]
+    b = client.post(
+        f"{API}/devices", json=device_payload(hostname="sw-b", serial_number="X2")
+    ).json()["id"]
+
+    result = _import(
+        client,
+        _csv(
+            [
+                "機器ID,ホスト名,ベンダー,型番",
+                f"{a},sw-b,Cisco,C9500-40X",
+                f"{b},sw-a,Cisco,C9500-40X",
+            ]
+        ),
+    )
+
+    assert result["errors"] == 0, result["rows"]
+    assert result["updated"] == 2
+    names = {d["id"]: d["hostname"] for d in client.get(f"{API}/devices").json()}
+    assert names[a] == "sw-b"
+    assert names[b] == "sw-a"
+
+
+def test_the_same_id_twice_in_one_file_is_reported(client, device_payload):
+    device_id = client.post(f"{API}/devices", json=device_payload(hostname="dup-01")).json()["id"]
+
+    result = _import(
+        client,
+        _csv(
+            [
+                "機器ID,ホスト名,ベンダー,型番",
+                f"{device_id},name-a,Cisco,C9300-48P",
+                f"{device_id},name-b,Cisco,C9300-48P",
+            ]
+        ),
+    )
+
+    assert result["errors"] == 1
+    assert "重複" in result["rows"][1]["issues"][0]["message"]
+
+
+def test_renaming_onto_another_device_is_reported_clearly(client, device_payload):
+    """他の機器と同じ名前にしようとしたら、理由を示して止めること。
+
+    ここで DB の重複エラーがそのまま出ると、何行目の何が悪いのか分からない。
+    """
+    a = client.post(f"{API}/devices", json=device_payload(hostname="keep-01")).json()["id"]
+    client.post(f"{API}/devices", json=device_payload(hostname="taken-01", serial_number="X2"))
+
+    result = _import(
+        client,
+        _csv(["機器ID,ホスト名,ベンダー,型番", f"{a},taken-01,Cisco,C9500-40X"]),
+    )
+
+    assert result["errors"] == 1
+    assert result["created"] == 0
+    message = result["rows"][0]["issues"][0]["message"]
+    assert "taken-01" in message
+
+    # 台帳は変わっていない
+    names = sorted(d["hostname"] for d in client.get(f"{API}/devices").json())
+    assert names == ["keep-01", "taken-01"]

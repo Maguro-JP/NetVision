@@ -12,7 +12,7 @@ import io
 from datetime import date
 
 from app.models import Device, MaintenanceContract
-from app.services.importer import CONTRACT_FIELDS, DEVICE_FIELDS, FIELD_LABELS
+from app.services.importer import FIELD_LABELS, IMPORTABLE_FIELDS
 from app.services.lifecycle import LifecycleStatus, Severity, evaluate
 
 # 取り込みでは使わないが、資料として役に立つ算出列
@@ -54,7 +54,7 @@ _STATUS_LABELS = {
 
 
 def build_headers(include_status: bool = True) -> list[str]:
-    headers = [FIELD_LABELS[f] for f in DEVICE_FIELDS + CONTRACT_FIELDS]
+    headers = [FIELD_LABELS[f] for f in IMPORTABLE_FIELDS]
     if include_status:
         headers += [label for _, label in STATUS_COLUMNS]
     return headers
@@ -79,6 +79,7 @@ def build_row(device: Device, include_status: bool = True) -> list[object]:
     status: LifecycleStatus = evaluate(device)
 
     values: dict[str, object] = {
+        "device_id": device.id,
         "hostname": device.hostname,
         "vendor": device.vendor,
         "model": device.model,
@@ -106,7 +107,7 @@ def build_row(device: Device, include_status: bool = True) -> list[object]:
         ),
     }
 
-    row: list[object] = [values[f] for f in DEVICE_FIELDS + CONTRACT_FIELDS]
+    row: list[object] = [values[f] for f in IMPORTABLE_FIELDS]
     if include_status:
         row += [
             status.maintenance_end,
