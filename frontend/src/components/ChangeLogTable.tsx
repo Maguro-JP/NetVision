@@ -1,5 +1,9 @@
 import { Link } from "react-router-dom";
 
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+
+import { api } from "../api/client";
 import type { ChangeAction, ChangeLog, ChangeSource } from "../api/types";
 import { formatTimestamp } from "../lib/format";
 
@@ -42,6 +46,11 @@ function Diff({ log }: { log: ChangeLog }) {
   return <span className="muted">{log.new_value ?? log.old_value ?? "—"}</span>;
 }
 
+/** 戻せる履歴か。作成・削除は戻さない（消すのは削除であって、戻すとは違う） */
+function canRevert(log: ChangeLog): boolean {
+  return log.entity_type === "device" && log.action === "update" && Boolean(log.field);
+}
+
 export default function ChangeLogTable({
   logs,
   showEntity = true,
@@ -49,6 +58,20 @@ export default function ChangeLogTable({
   logs: ChangeLog[];
   showEntity?: boolean;
 }) {
+  const queryClient = useQueryClient();
+  const [failed, setFailed] = useState<{ id: number; reason: string } | null>(null);
+
+  const undo = useMutation({
+    mutationFn: (id: number) => api.revertChange(id),
+    onSuccess: () => {
+      setFailed(null);
+      for (const key of ["changes", "device", "devices", "topology"]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+    onError: (error, id) => setFailed({ id, reason: (error as Error).message }),
+  });
+
   if (logs.length === 0) {
     return <div className="empty">変更履歴はありません</div>;
   }
@@ -63,6 +86,7 @@ export default function ChangeLogTable({
           <th>項目</th>
           <th>変更内容</th>
           <th>発生元</th>
+          <th />
         </tr>
       </thead>
       <tbody>
@@ -87,6 +111,18 @@ export default function ChangeLogTable({
               <Diff log={log} />
             </td>
             <td className="muted">{SOURCE_LABEL[log.source] ?? log.source}</td>
+            <td className="nowrap">
+              {canRevert(log) && (
+                <button
+                  onClick={() => undo.mutate(log.id)}
+                  disabled={undo.isPending}
+                  title="この変更を元の値に戻します。戻したことも履歴に残ります"
+                >
+                  戻す
+                </button>
+              )}
+              {failed?.id === log.id && <div className="error">{failed.reason}</div>}
+            </td>
           </tr>
         ))}
       </tbody>

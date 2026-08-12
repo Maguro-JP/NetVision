@@ -1,4 +1,5 @@
 import type {
+  ChangeLog,
   LinkImportResult,
   SpaceView,
   DashboardSummary,
@@ -203,6 +204,15 @@ export const api = {
 
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
+
+  /** 変更履歴1件を元の値に戻す。戻したことも履歴に残る。 */
+  revertChange: (id: number) => request<ChangeLog>(`/changes/${id}/revert`, { method: "POST" }),
+  /** 取り込み1回分をまとめて戻す。 */
+  revertBatch: (batchId: string) =>
+    request<{ reverted: number; skipped: { id: number; reason: string }[] }>(
+      `/changes/batches/${batchId}/revert`,
+      { method: "POST" },
+    ),
 
   /** 眺めるための、拠点単位にまとめた姿。機器が何台あっても大きさは変わらない。 */
   getSpaceView: () => request<SpaceView>("/topology/space"),

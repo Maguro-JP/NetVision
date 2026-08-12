@@ -1,13 +1,16 @@
 from datetime import datetime
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import ChangeAction, ChangeLog, ChangeSource
 from app.schemas.changes import ChangeLogPage, ChangeLogRead
+from app.services import revert
+from app.services.audit import audit_context
 from app.services.importer import FIELD_LABELS
 
 router = APIRouter(prefix="/changes", tags=["changes"])
@@ -80,3 +83,46 @@ def list_changes(
         stmt.order_by(ChangeLog.created_at.desc(), ChangeLog.id.desc()).limit(limit).offset(offset)
     )
     return ChangeLogPage(total=total, items=[_to_read(log) for log in logs])
+
+
+class RevertBatchResult(BaseModel):
+    reverted: int
+    skipped: list[dict[str, object]]
+
+
+@router.post("/{entry_id}/revert", response_model=ChangeLogRead)
+def revert_change(entry_id: int, db: DbSession) -> ChangeLogRead:
+    """変更履歴1件を戻す。
+
+    手で台帳を直す作業は、戻せないと踏み切れない。戻せない履歴（作成・削除や
+    対象が消えている場合）は、なぜ戻せないかを返す。
+
+    戻した操作そのものも履歴に残る。戻したことを消さないため。
+    """
+    with audit_context(ChangeSource.UI, note=f"変更履歴 {entry_id} を戻す"):
+        try:
+            revert.revert_entry(db, entry_id)
+        except revert.NotRevertable as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+
+    entry = db.get(ChangeLog, entry_id)
+    return _to_read(entry)  # type: ignore[arg-type]
+
+
+@router.post("/batches/{batch_id}/revert", response_model=RevertBatchResult)
+def revert_batch(batch_id: str, db: DbSession) -> RevertBatchResult:
+    """取り込み1回分をまとめて戻す。
+
+    台帳を丸ごと取り込んで結果がおかしかったとき、1件ずつ戻すのは現実的ではない。
+    戻せなかった履歴は理由を添えて返すので、残りは手で判断できる。
+    """
+    with audit_context(ChangeSource.UI, note=f"取り込み {batch_id} を戻す"):
+        try:
+            result = revert.revert_batch(db, batch_id)
+        except revert.NotRevertable as error:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+
+    return RevertBatchResult(
+        reverted=result.reverted,
+        skipped=[{"id": entry_id, "reason": reason} for entry_id, reason in result.skipped],
+    )
