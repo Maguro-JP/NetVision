@@ -31,6 +31,29 @@ def _validate_site(db: Session, site_id: int | None) -> None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"site {site_id} が存在しません")
 
 
+def _resolve_site_name(db: Session, name: str | None) -> int | None:
+    """拠点を名前で受け取る。台帳に無い名前ならその場で作る。
+
+    拠点を先に登録しないと機器を登録できないのでは、試験や仮の入力で手が
+    止まる。作業の順番を道具の都合で決めさせないための入口。
+
+    表記ゆれで拠点が二重にできないよう、前後の空白を落として大文字小文字を
+    無視して突き合わせる。
+    """
+    wanted = (name or "").strip()
+    if not wanted:
+        return None
+
+    for site in db.scalars(select(Site)):
+        if site.name.strip().casefold() == wanted.casefold():
+            return site.id
+
+    site = Site(name=wanted)
+    db.add(site)
+    db.flush()
+    return site.id
+
+
 @router.get("", response_model=list[DeviceRead])
 def list_devices(
     db: DbSession,
@@ -74,7 +97,12 @@ def create_device(payload: DeviceCreate, db: DbSession) -> DeviceDetail:
             status.HTTP_409_CONFLICT, f"hostname '{payload.hostname}' は登録済みです"
         )
 
-    device = Device(**payload.model_dump())
+    values = payload.model_dump()
+    site_name = values.pop("site_name", None)
+    if site_name:
+        values["site_id"] = _resolve_site_name(db, site_name)
+
+    device = Device(**values)
     db.add(device)
     db.flush()
 
@@ -99,6 +127,10 @@ def get_device(device_id: int, db: DbSession) -> DeviceDetail:
 def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> DeviceDetail:
     device = _load(db, device_id)
     changes = payload.model_dump(exclude_unset=True)
+
+    site_name = changes.pop("site_name", None)
+    if site_name is not None:
+        changes["site_id"] = _resolve_site_name(db, site_name)
 
     if "site_id" in changes:
         _validate_site(db, changes["site_id"])

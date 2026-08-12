@@ -67,3 +67,56 @@ def test_delete_device(client, device_payload):
 def test_unknown_site_rejected(client, device_payload):
     res = client.post(f"{API}/devices", json=device_payload(site_id=999))
     assert res.status_code == 422
+
+
+def test_a_site_can_be_named_instead_of_chosen(client, device_payload):
+    """拠点を先に作らなくても、名前を書けば登録できること。
+
+    試験や仮の入力で、拠点だけ先に作りに行くのは手が止まる。
+    """
+    payload = device_payload()
+    payload.pop("site_id", None)
+    payload["site_name"] = "検証ラック"
+
+    created = client.post(f"{API}/devices", json=payload).json()
+
+    assert created["site_name"] == "検証ラック"
+    assert [s["name"] for s in client.get(f"{API}/sites").json()] == ["検証ラック"]
+
+
+def test_naming_an_existing_site_does_not_make_a_second_one(client, device_payload):
+    """表記ゆれで拠点が二重にできないこと。"""
+    client.post(f"{API}/sites", json={"name": "本社データセンター"})
+
+    payload = device_payload(hostname="sw-a")
+    payload.pop("site_id", None)
+    payload["site_name"] = "  本社データセンター "
+
+    created = client.post(f"{API}/devices", json=payload).json()
+
+    assert created["site_name"] == "本社データセンター"
+    assert len(client.get(f"{API}/sites").json()) == 1
+
+
+def test_a_site_can_be_named_when_editing(client, device_payload):
+    payload = device_payload()
+    payload.pop("site_id", None)
+    device_id = client.post(f"{API}/devices", json=payload).json()["id"]
+
+    updated = client.patch(f"{API}/devices/{device_id}", json={"site_name": "大阪ラボ"}).json()
+
+    assert updated["site_name"] == "大阪ラボ"
+
+
+def test_clearing_the_site_name_unsets_the_site(client, device_payload):
+    """空にしたら未設定に戻せること（空文字で拠点を作らない）。"""
+    payload = device_payload()
+    payload.pop("site_id", None)
+    payload["site_name"] = "一時拠点"
+    device_id = client.post(f"{API}/devices", json=payload).json()["id"]
+
+    updated = client.patch(f"{API}/devices/{device_id}", json={"site_name": ""}).json()
+
+    assert updated["site_id"] is None
+    # 空文字で拠点は増えない
+    assert [s["name"] for s in client.get(f"{API}/sites").json()] == ["一時拠点"]

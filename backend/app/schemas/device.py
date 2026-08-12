@@ -39,7 +39,9 @@ class DeviceBase(BaseModel):
 
 
 class DeviceCreate(DeviceBase):
-    pass
+    #: 拠点を名前で指定する。台帳に無い名前ならその場で拠点を作る。
+    #: 拠点を先に登録しないと機器を登録できないのでは、試験や仮の入力で手が止まる
+    site_name: str | None = Field(default=None, max_length=120)
 
 
 class DeviceUpdate(BaseModel):
@@ -51,6 +53,8 @@ class DeviceUpdate(BaseModel):
     vendor: str | None = Field(default=None, min_length=1, max_length=80)
     model: str | None = Field(default=None, min_length=1, max_length=120)
     serial_number: str | None = None
+    #: 拠点を名前で指定する（DeviceCreate と同じ扱い）
+    site_name: str | None = Field(default=None, max_length=120)
     device_type: DeviceType | None = None
     status: DeviceStatus | None = None
 

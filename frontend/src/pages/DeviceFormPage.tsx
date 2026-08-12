@@ -18,7 +18,7 @@ const EMPTY: FormState = {
   os_name: "",
   os_version: "",
   firmware_version: "",
-  site_id: "",
+  site_name: "",
   rack: "",
   rack_unit: "",
   mgmt_ip: "",
@@ -41,8 +41,9 @@ function toForm(device: Device): FormState {
 function toPayload(form: FormState): Partial<Device> {
   const payload: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(form)) {
-    if (key === "site_id") {
-      payload[key] = value === "" ? null : Number(value);
+    if (key === "site_name") {
+      // 空は「未設定に戻す」。null ではなく空文字で送る（未指定と区別する）
+      payload[key] = value;
     } else {
       payload[key] = value === "" ? null : value;
     }
@@ -140,15 +141,30 @@ export default function DeviceFormPage() {
           {text("firmware_version", "ファームウェアバージョン")}
 
           <div className="field">
-            <label htmlFor="site_id">拠点</label>
-            <select id="site_id" value={form.site_id} onChange={set("site_id")}>
-              <option value="">未設定</option>
-              {(sites ?? []).map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+            <label htmlFor="site_name">拠点</label>
+            {/* 選ぶだけでなく打てるようにする。台帳に無い名前ならその場で作る
+                （拠点を先に登録しないと機器を登録できないのでは手が止まる）。
+                打つと部分一致で候補が出る */}
+            <input
+              id="site_name"
+              list="site-candidates"
+              value={form.site_name}
+              onChange={set("site_name")}
+              placeholder="拠点名（打つと候補が出ます。無い名前はそのまま作ります）"
+              autoComplete="off"
+            />
+            <datalist id="site-candidates">
+              {(sites ?? [])
+                .filter((s) =>
+                  form.site_name.trim()
+                    ? s.name.toLowerCase().includes(form.site_name.trim().toLowerCase())
+                    : true,
+                )
+                .slice(0, 50)
+                .map((s) => (
+                  <option key={s.id} value={s.name} />
+                ))}
+            </datalist>
           </div>
           {text("rack", "ラック")}
           {text("rack_unit", "搭載U")}
