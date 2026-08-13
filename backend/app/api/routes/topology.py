@@ -172,6 +172,10 @@ def export_topology(
         description="ポート名の出し方。full = そのまま / short = 略記 / number = 番号だけ",
     ),
     along_line: bool = Query(default=False, description="ポート名を線に沿わせて回転する"),
+    show_circuit_names: bool = Query(
+        default=False,
+        description="回線名を線の中央に出す。既定は出さない（ポート名の邪魔になるため）",
+    ),
     show_peers: bool = Query(
         default=True,
         description="絞り込みの外に出た対向機器を簡易表示で残す（線ごと消さない）",
@@ -208,6 +212,7 @@ def export_topology(
         along_line=along_line,
         show_peers=show_peers,
         orientation=orientation,
+        show_circuit_names=show_circuit_names,
     )
     suffix = f"-vlan{vlan}" if vlan else ""
     if vrf:

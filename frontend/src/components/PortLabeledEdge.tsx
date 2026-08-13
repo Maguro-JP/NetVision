@@ -7,6 +7,8 @@ export interface PortEdgeData extends Record<string, unknown> {
   targetInterface: string;
   /** 回線名。ポート名とは別に、線の中央に出す */
   manualLabel: string | null;
+  /** 回線名を図に出すか。既定は出さない（ポート名の邪魔になるため） */
+  showCircuitName: boolean;
   portStyle: PortStyle;
   /** ポート名を線に沿わせて回転する */
   alongLine: boolean;
@@ -36,7 +38,8 @@ const DIRECTION: Record<Position, [number, number]> = {
  * 図の向きが変わればその規則は成り立たず、逆に読んでしまう。
  * ポートの隣にあれば規則は要らない。
  *
- * 回線名（人が付けた呼び名）は線の中央に足す。ポート名を消して置き換えてはいけない。
+ * 回線名（人が付けた呼び名）は、出したときだけ線の中央に足す。
+ * 常に出すとポート名の邪魔になるので、既定は出さない。
  */
 export default function PortLabeledEdge({
   id,
@@ -97,7 +100,7 @@ export default function PortLabeledEdge({
             alongLine={info.alongLine ?? false}
             opacity={style?.opacity}
           />
-          {info.manualLabel && (
+          {info.showCircuitName && info.manualLabel && (
             <div
               className="topo-edge-label center circuit"
               style={{
@@ -114,7 +117,7 @@ export default function PortLabeledEdge({
             <div
               className="topo-edge-label warning"
               style={{
-                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + (info.manualLabel ? 14 : 0)}px)`,
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + (info.showCircuitName && info.manualLabel ? 14 : 0)}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
             >

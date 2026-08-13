@@ -169,17 +169,20 @@ def test_along_line_never_renders_upside_down():
             assert -90 <= float(angle) <= 90, f"{angle} 度は逆さま"
 
 
-def test_manual_label_still_goes_in_the_middle():
-    """回線名は中央、ポート名は機器の脇。どちらか一方にしない。"""
+def test_manual_label_is_hidden_unless_asked():
+    """回線名は既定で出さない。出す指定をしたときだけ中央に載る。"""
     graph = graph_of(0, 0, 400, 0)
     graph.edges[0].label = "本社⇔支社 専用線"
-    svg = render_svg(graph)
 
-    found = labels(svg)
-    assert "本社⇔支社 専用線" in found
-    assert "Gi1/0/1" in found
-    assert "Te1/1/1" in found
-    assert_labels_sit_by_their_own_device(svg)
+    hidden = labels(render_svg(graph))
+    assert "本社⇔支社 専用線" not in hidden
+    assert "Gi1/0/1" in hidden
+
+    shown = labels(render_svg(graph, show_circuit_names=True))
+    assert "本社⇔支社 専用線" in shown
+    assert "Gi1/0/1" in shown
+    assert "Te1/1/1" in shown
+    assert_labels_sit_by_their_own_device(render_svg(graph, show_circuit_names=True))
 
 
 def test_device_box_carries_the_port_kind():

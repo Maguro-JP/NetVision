@@ -73,6 +73,7 @@ def render_svg(
     port_style: str = "short",
     along_line: bool = False,
     show_peers: bool = True,
+    show_circuit_names: bool = False,
 ) -> str:
     """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
 
@@ -227,8 +228,8 @@ def render_svg(
         nx1, ny1 = points[1]
         nx2, ny2 = points[-2]
 
-        if edge.label:
-            # 回線名は線の中央。ポート名は機器の脇。どちらか一方にしない
+        if show_circuit_names and edge.label:
+            # 回線名は線の中央。出さないときはポート名だけ（普段はこちらの方が読める）
             parts.append(_center_label(*_path_middle(points), edge.label, placement))
         # ポート名はそれぞれの機器側に置く。1本の線に2つ並べると
         # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
@@ -841,6 +842,7 @@ def export_svg(
     along_line: bool = False,
     show_peers: bool = True,
     orientation: str = "vertical",
+    show_circuit_names: bool = False,
 ) -> str:
     return render_svg(
         get_graph(db, layer, orientation=orientation),
@@ -852,4 +854,5 @@ def export_svg(
         port_style=port_style,
         along_line=along_line,
         show_peers=show_peers,
+        show_circuit_names=show_circuit_names,
     )

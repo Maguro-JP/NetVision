@@ -67,6 +67,8 @@ interface ViewSettings {
   simple: boolean;
   /** 自動配置の向き。横長の紙や画面に貼るときは左右の方が収まる */
   orientation: "vertical" | "horizontal";
+  /** 回線名を図に出すか。既定は出さない */
+  showCircuitNames: boolean;
 }
 
 function loadView(): ViewSettings {
@@ -75,6 +77,7 @@ function loadView(): ViewSettings {
     alongLine: false,
     simple: false,
     orientation: "vertical",
+    showCircuitNames: false,
   };
   try {
     const saved = JSON.parse(localStorage.getItem(VIEW_KEY) ?? "{}");
@@ -99,6 +102,7 @@ interface LabelOptions {
   portStyle: PortStyle;
   alongLine: boolean;
   editable: boolean;
+  showCircuitNames: boolean;
 }
 
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
@@ -324,6 +328,7 @@ function toFlow(
       manualLabel: edge.label,
       portStyle: options.portStyle,
       alongLine: options.alongLine,
+      showCircuitName: options.showCircuitNames,
       // シンプル表示は機器名と線だけ。ポート名まで残すと「シンプル」にならない
       hideLabels: simple,
       // 同じところから出る線を、1本ずつ別の通り道へずらす
@@ -437,6 +442,7 @@ function TopologyEditor() {
   const [portStyle, setPortStyle] = useState<PortStyle>(view.portStyle);
   const [alongLine, setAlongLine] = useState(view.alongLine);
   const [orientation, setOrientation] = useState(view.orientation);
+  const [showCircuitNames, setShowCircuitNames] = useState(view.showCircuitNames);
   // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
   const [editable, setEditable] = useState(false);
   const [showStats, setShowStats] = useState(false);
@@ -494,7 +500,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
-    const flow = toFlow(graph, simple, { portStyle, alongLine, editable });
+    const flow = toFlow(graph, simple, { portStyle, alongLine, editable, showCircuitNames });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
@@ -558,6 +564,7 @@ function TopologyEditor() {
     simple,
     portStyle,
     alongLine,
+    showCircuitNames,
     editable,
     revision,
     dirty,
@@ -568,8 +575,11 @@ function TopologyEditor() {
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
   useEffect(() => {
-    localStorage.setItem(VIEW_KEY, JSON.stringify({ portStyle, alongLine, simple, orientation }));
-  }, [portStyle, alongLine, simple, orientation]);
+    localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ portStyle, alongLine, simple, orientation, showCircuitNames }),
+    );
+  }, [portStyle, alongLine, simple, orientation, showCircuitNames]);
 
   // 絞り込みを URL に残す。この画面をそのまま人に送れる
   useEffect(() => {
@@ -1018,6 +1028,17 @@ function TopologyEditor() {
             />{" "}
             線に沿わせる
           </label>
+          <label
+            className="vlan-chip"
+            title="回線名（上位回線・予備など）を線の中央に出します。普段はポート名の邪魔になるので出さない"
+          >
+            <input
+              type="checkbox"
+              checked={showCircuitNames}
+              onChange={(e) => setShowCircuitNames(e.target.checked)}
+            />{" "}
+            回線名
+          </label>
         </div>
 
         <div className="topo-toolbar-row">
@@ -1134,6 +1155,7 @@ function TopologyEditor() {
               style: simple ? "simple" : undefined,
               port_style: portStyle,
               along_line: alongLine ? "true" : undefined,
+              show_circuit_names: showCircuitNames ? "true" : undefined,
               orientation,
             })}
             title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"

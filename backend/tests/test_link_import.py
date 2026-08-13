@@ -44,7 +44,7 @@ def test_template_can_be_downloaded_and_filled_in(client):
         str(value or "") for row in book["書き方"].iter_rows(values_only=True) for value in row
     )
     assert "回線名" in guide
-    assert "ポート名は機器の脇" in guide
+    assert "既定で出しません" in guide
 
 
 def test_the_example_row_in_the_template_is_not_taken_in(client):

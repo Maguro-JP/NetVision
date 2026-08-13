@@ -376,6 +376,8 @@ export const api = {
       port_style?: string;
       /** ポート名を線に沿わせて回転する */
       along_line?: string;
+      /** 回線名を線の中央に出す */
+      show_circuit_names?: string;
     } = {},
   ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
   /** 結線表。図が要らない場面（作業指示・検収）は表の方が使いやすい */
