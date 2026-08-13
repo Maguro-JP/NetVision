@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device, DeviceStatus
 from app.models.scenario import Scenario, ScenarioAction, ScenarioItem
-from app.services.device_query import DeviceFilters, query_devices
+from app.services.device_query import DeviceFilters, query_alerts, query_devices
 from app.services.lifecycle import Severity, evaluate
 
 
@@ -183,17 +183,13 @@ def generate_items(db: Session, scenario: Scenario, within_days: int = 730) -> l
     existing_targets = {item.device_id for item in scenario.items if item.device_id}
 
     created: list[ScenarioItem] = []
-    for device in query_devices(db, DeviceFilters()):
-        if device.status is DeviceStatus.RETIRED or device.id in existing_targets:
+    for device in query_alerts(db, within_days, today=on):
+        if device.id in existing_targets:
             continue
-
         status = evaluate(device, on)
-        deadlines = [
+        soonest = min(
             d for d in (status.days_to_maintenance_end, status.days_to_eol) if d is not None
-        ]
-        if not deadlines or min(deadlines) > within_days:
-            continue
-        soonest = min(deadlines)
+        )
 
         created.append(
             ScenarioItem(

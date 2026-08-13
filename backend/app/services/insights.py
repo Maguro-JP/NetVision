@@ -415,6 +415,123 @@ def analyze(
     return collector.report()
 
 
+def analyze_from_db(
+    db,
+    *,
+    site_id: int | None = None,
+    today: date | None = None,
+    vulnerabilities: list[Vulnerability] | None = None,
+    keep: int | None = 200,
+) -> InsightReport:
+    """台帳全体を ORM 化せずに指摘を出す。ノートPCの導入テスト向け。
+
+    件数は SQL、文言は種類ごとに必要な機器だけ読む。
+    """
+    from app.services import insight_query as iq
+
+    today = today or date.today()
+    sample = keep or 200
+    stats = iq.collect_kind_stats(db, site_id=site_id, today=today, sample=sample)
+    mixed = iq.mixed_provider_insights(db, site_id=site_id, today=today)
+
+    sample_ids: list[int] = []
+    seen: set[int] = set()
+    for stat in stats:
+        for device_id in stat.sample_ids:
+            if device_id not in seen:
+                seen.add(device_id)
+                sample_ids.append(device_id)
+
+    devices = iq.load_devices(db, sample_ids)
+    details = analyze(devices, today=today, keep=None, vulnerabilities=None)
+    insights = [i for i in details.insights if i.kind is not InsightKind.MIXED_PROVIDERS]
+    insights.extend(mixed)
+
+    vuln_summaries: list[KindSummary] = []
+    if vulnerabilities:
+        vuln_report = _vulnerability_report(
+            db, site_id=site_id, vulnerabilities=vulnerabilities, keep=keep
+        )
+        insights.extend(vuln_report.insights)
+        vuln_summaries = vuln_report.by_kind
+        vuln_total = vuln_report.total
+        vuln_saving = vuln_report.annual_saving_total
+    else:
+        vuln_total = 0
+        vuln_saving = 0.0
+
+    insights.sort(key=lambda i: (-i.severity.rank, -(i.annual_saving or 0)))
+    if keep is not None:
+        insights = insights[:keep]
+
+    by_kind = iq.summaries_from_stats(stats, extra=vuln_summaries)
+    if mixed:
+        category, title, severity = KIND_META[InsightKind.MIXED_PROVIDERS]
+        by_kind.append(
+            KindSummary(
+                kind=InsightKind.MIXED_PROVIDERS,
+                category=category,
+                title=title,
+                severity=severity,
+                count=len(mixed),
+                annual_saving=0,
+            )
+        )
+        by_kind.sort(key=lambda s: (-s.severity.rank, -s.annual_saving, -s.count))
+
+    by_category: dict[str, int] = {}
+    for summary in by_kind:
+        by_category[summary.category] = by_category.get(summary.category, 0) + summary.count
+
+    return InsightReport(
+        total=sum(s.count for s in stats) + len(mixed) + vuln_total,
+        annual_saving_total=sum(s.annual_saving for s in stats) + vuln_saving,
+        by_category=by_category,
+        by_kind=by_kind,
+        insights=insights,
+    )
+
+
+def _vulnerability_report(
+    db,
+    *,
+    site_id: int | None,
+    vulnerabilities: list,
+    keep: int | None,
+) -> InsightReport:
+    """OS が入っている稼働機だけを見て、脆弱性の指摘を数える。"""
+    from sqlalchemy import select
+
+    from app.models import Device, DeviceStatus
+    from app.services.insight_query import load_devices
+
+    collector = _Collector(keep)
+    last_id = 0
+    chunk = 200
+    while True:
+        stmt = (
+            select(Device.id)
+            .where(
+                Device.status == DeviceStatus.ACTIVE,
+                Device.os_version.is_not(None),
+                Device.os_version != "",
+                Device.id > last_id,
+            )
+            .order_by(Device.id)
+            .limit(chunk)
+        )
+        if site_id is not None:
+            stmt = stmt.where(Device.site_id == site_id)
+        ids = list(db.scalars(stmt))
+        if not ids:
+            break
+        last_id = ids[-1]
+        for device in load_devices(db, ids):
+            for finding in _vulnerability_insights(device, vulnerabilities):
+                collector.absorb(finding)
+    return collector.report()
+
+
 def _vulnerability_insights(device: Device, vulnerabilities: list) -> list[Insight]:
     """該当する脆弱性を指摘に変える。悪用確認済みを最優先で挙げる。"""
     from app.services.reference import match_device
