@@ -10,11 +10,17 @@ import re
 
 # 略記 → 正式名。長い接頭辞から順に判定する。
 ABBREVIATIONS: tuple[tuple[str, str], ...] = (
+    ("ten-gigabitethernet", "TenGigabitEthernet"),
     ("tengigabitethernet", "TenGigabitEthernet"),
     ("twentyfivegige", "TwentyFiveGigE"),
+    ("forty-gigabitethernet", "FortyGigabitEthernet"),
     ("fortygigabitethernet", "FortyGigabitEthernet"),
     ("hundredgige", "HundredGigE"),
     ("gigabitethernet", "GigabitEthernet"),
+    # NEC IX。GigabitEthernet より先に見ると Cisco 側へ寄ってしまうので、
+    # 正式名そのものだけをここに置く（略記 ge は Juniper と衝突するので下）
+    ("gigaethernet", "GigaEthernet"),
+    ("bridge-aggregation", "Bridge-Aggregation"),
     ("fastethernet", "FastEthernet"),
     ("port-channel", "Port-channel"),
     ("portchannel", "Port-channel"),
@@ -27,6 +33,7 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("hun", "HundredGigE"),
     ("tengig", "TenGigabitEthernet"),
     ("fortygig", "FortyGigabitEthernet"),
+    ("xge", "TenGigabitEthernet"),
     ("gig", "GigabitEthernet"),
     ("fas", "FastEthernet"),
     ("mgmt", "Management"),
@@ -34,6 +41,7 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("fo", "FortyGigabitEthernet"),
     ("te", "TenGigabitEthernet"),
     ("gi", "GigabitEthernet"),
+    ("ge", "GigabitEthernet"),  # Comware の GE1/0/1。Juniper の ge-0/0/1 は先に除外する
     ("fa", "FastEthernet"),
     ("po", "Port-channel"),
     ("lo", "Loopback"),
@@ -42,8 +50,8 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("et", "Ethernet"),
 )
 
-# Juniper 系（ge-0/0/1 など）はそのままで一意に決まる
-_JUNIPER = re.compile(r"^(ge|xe|et|fe|em|fxp|irb|ae|lo)-?\d", re.IGNORECASE)
+# Juniper 系（ge-0/0/1 など）。ハイフン必須。無いと Comware の GE1/0/1 を Juniper と誤る
+_JUNIPER = re.compile(r"^(ge|xe|et|fe|em|fxp|irb|ae|lo)-\d", re.IGNORECASE)
 _SPLIT = re.compile(r"^([A-Za-z\-]+)\s*([\d/\.:]+.*)?$")
 
 

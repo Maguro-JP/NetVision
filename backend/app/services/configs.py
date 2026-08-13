@@ -86,14 +86,23 @@ def _digest(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _find_device(db: Session, hostname: str | None) -> Device | None:
-    if not hostname:
+def _find_device(
+    db: Session, hostname: str | None, serial_number: str | None = None
+) -> Device | None:
+    """ホスト名で探し、無ければシリアルで探す。
+
+    機器名（sysname）が変わっても実機は同じ、ということがある。
+    シリアルは台帳上も一意なので、そちらが当たれば同一機とみなす。
+    """
+    if hostname:
+        key = normalize_hostname(hostname)
+        for device in db.scalars(select(Device)):
+            if normalize_hostname(device.hostname) == key:
+                return device
+    serial = (serial_number or "").strip()
+    if not serial:
         return None
-    key = normalize_hostname(hostname)
-    for device in db.scalars(select(Device)):
-        if normalize_hostname(device.hostname) == key:
-            return device
-    return None
+    return db.scalar(select(Device).where(Device.serial_number == serial))
 
 
 def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
@@ -173,7 +182,11 @@ def ingest(
     ないので分けてある。台帳が空の状態から実 Config で立ち上げるときに使う。
     """
     parsed = configparse.parse(text)
-    device = db.get(Device, device_id) if device_id else _find_device(db, parsed.hostname)
+    device = (
+        db.get(Device, device_id)
+        if device_id
+        else _find_device(db, parsed.hostname, parsed.serial_number)
+    )
 
     created = False
     creation_note: str | None = None
