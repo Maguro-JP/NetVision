@@ -344,6 +344,12 @@ def parse_date(value: object) -> date | None:
     if not text:
         return None
 
+    # よくある形を先に処理する。strptime を総当たりすると、16万行では
+    # それだけで数秒溶ける（列が日付2つあるだけで行数の十数倍呼ばれる）
+    fast = _parse_date_fast(text)
+    if fast is not None:
+        return fast
+
     for pattern in _DATE_PATTERNS:
         try:
             parsed = datetime.strptime(text, pattern).date()
@@ -352,6 +358,33 @@ def parse_date(value: object) -> date | None:
         # 年月までの指定は月初として扱う
         return parsed
     raise CellValueError(f"日付として解釈できません: '{value}'")
+
+
+def _parse_date_fast(text: str) -> date | None:
+    """YYYY-MM-DD / YYYY/M/D / YYYY.MM.DD と、年月だけの形を速く読む。"""
+    if len(text) >= 8 and text[4] in "-/.":
+        sep = text[4]
+        parts = text.split(sep)
+        if len(parts) == 3:
+            try:
+                year, month, day = (int(parts[0]), int(parts[1]), int(parts[2]))
+                return date(year, month, day)
+            except ValueError:
+                return None
+        if len(parts) == 2:
+            try:
+                return date(int(parts[0]), int(parts[1]), 1)
+            except ValueError:
+                return None
+    if text.endswith("日") and "年" in text and "月" in text:
+        try:
+            return datetime.strptime(text, "%Y年%m月%d日").date()
+        except ValueError:
+            try:
+                return datetime.strptime(text, "%Y年%m月").date()
+            except ValueError:
+                return None
+    return None
 
 
 def parse_decimal(value: object) -> float | None:
@@ -413,6 +446,11 @@ class RowResult:
     contract_added: bool = False
 
 
+#: 行ごとの結果を返す上限。件数・内訳は全件から出すが、中身を全部返すと
+#: 16万行で応答が数十MBになり、画面側が固まる。エラー行を優先して残す
+_ROW_SAMPLE = 200
+
+
 @dataclass
 class ImportOutcome:
     committed: bool
@@ -427,6 +465,26 @@ class ImportOutcome:
     missing_required_fields: list[str]
     column_samples: dict[str, list[str]]
     rows: list[RowResult]
+    #: 行結果の実数。rows はサンプルなので、多いときはこちらが正
+    rows_total: int = 0
+
+
+def _sample_rows(results: list[RowResult], limit: int | None = _ROW_SAMPLE) -> list[RowResult]:
+    """返す行結果を絞る。エラーを先に出し、残りは出てきた順で埋める。"""
+    if limit is None or len(results) <= limit:
+        return results
+    errors = [r for r in results if r.action is RowAction.ERROR]
+    if len(errors) >= limit:
+        return errors[:limit]
+    chosen = list(errors)
+    seen = {id(r) for r in chosen}
+    for row in results:
+        if id(row) in seen:
+            continue
+        chosen.append(row)
+        if len(chosen) >= limit:
+            break
+    return chosen
 
 
 class KeyField(enum.StrEnum):
@@ -471,10 +529,14 @@ def run_import(
     key_field: KeyField = KeyField.HOSTNAME,
     update_existing: bool = True,
     commit: bool = False,
+    keep_rows: int | None = _ROW_SAMPLE,
 ) -> ImportOutcome:
     """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
     この取り込みで発生した変更は、まとめて1つのバッチとして履歴に残る。
+
+    `keep_rows` は返す行結果の上限。件数や内訳は全件から出す。エラー行の
+    CSV 書き出しなど、全行が必要な呼び出しでは None を渡す。
     """
     with audit_context(ChangeSource.IMPORT, note="台帳の取り込み"):
         return _run_import(
@@ -485,6 +547,7 @@ def run_import(
             key_field=key_field,
             update_existing=update_existing,
             commit=commit,
+            keep_rows=keep_rows,
         )
 
 
@@ -497,6 +560,7 @@ def _run_import(
     key_field: KeyField = KeyField.HOSTNAME,
     update_existing: bool = True,
     commit: bool = False,
+    keep_rows: int | None = _ROW_SAMPLE,
 ) -> ImportOutcome:
     mapping = detect_mapping(table_headers)
     for column, target in (mapping_override or {}).items():
@@ -526,7 +590,14 @@ def _run_import(
             missing_required_fields=missing_required,
             column_samples=samples,
             rows=[],
+            rows_total=0,
         )
+
+    # 行の変換は1回だけやる。以前は既存引きのたびにやり直しており、
+    # 日付列がある台帳では行数の数倍だけ strptime が走っていた
+    extracted: list[tuple[dict[str, object], list[RowIssue]]] = [
+        _extract(raw, mapping) for raw in table_rows
+    ]
 
     site_cache = {s.name: s for s in db.scalars(select(Site))}
 
@@ -535,15 +606,15 @@ def _run_import(
     existing_by_key = _existing_by_key(
         db,
         key_field,
-        [str(_extract(raw, mapping)[0].get(str(key_field)) or "").strip() for raw in table_rows],
+        [str(values.get(str(key_field)) or "").strip() for values, _ in extracted],
     )
 
     # 機器ID が書かれている行は、その ID の機器を直す。ホスト名を書き換えたい
     # ときにこれが無いと、別名の機器が新しく作られるだけで直せない。
     # 書き出したファイルには ID が入っているので、Excel で直して戻せば通る
     wanted_ids: set[int] = set()
-    for raw in table_rows:
-        text = str(_extract(raw, mapping)[0].get("device_id") or "").strip()
+    for values, _ in extracted:
+        text = str(values.get("device_id") or "").strip()
         if text.isdigit():
             wanted_ids.add(int(text))
     by_id: dict[int, Device] = {}
@@ -556,9 +627,7 @@ def _run_import(
 
     # 重複判定に使う表。ファイルに出てくる名前の分だけ台帳を引く
     # （全件読むと、台数が増えたときに取り込みが終わらなくなる）
-    wanted_names = [
-        str(_extract(raw, mapping)[0].get("hostname") or "").strip() for raw in table_rows
-    ]
+    wanted_names = [str(values.get("hostname") or "").strip() for values, _ in extracted]
     existing_by_name: dict[str, Device] = {}
     unique_names = [n for n in dict.fromkeys(wanted_names) if n]
     for start in range(0, len(unique_names), _LOOKUP_CHUNK):
@@ -568,13 +637,15 @@ def _run_import(
 
     # このファイルで名前が変わる機器。入れ替えは正しい操作なので弾かない
     renaming_ids: set[int] = set()
-    for raw in table_rows:
-        text = str(_extract(raw, mapping)[0].get("device_id") or "").strip()
+    for values, _ in extracted:
+        text = str(values.get("device_id") or "").strip()
         if text.isdigit() and int(text) in by_id:
             renaming_ids.add(int(text))
 
     #: 行の結果と、その行で作った・更新した機器。id は最後にまとめて入れる
     pending: list[tuple[RowResult, Device]] = []
+    #: 保守契約は機器の id が決まってからまとめて付ける（行ごとの flush を避ける）
+    pending_contracts: list[tuple[RowResult, Device, dict[str, object]]] = []
 
     # 同一ファイル内の重複も検出したいので、投入済みキーを覚えておく
     seen_keys: dict[str, int] = {}
@@ -582,8 +653,7 @@ def _run_import(
     results: list[RowResult] = []
     created = updated = skipped = errors = contracts_added = 0
 
-    for index, raw_row in enumerate(table_rows, start=2):
-        values, issues = _extract(raw_row, mapping)
+    for index, (values, issues) in enumerate(extracted, start=2):
         key_value = str(values.get(str(key_field)) or "").strip()
 
         # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
@@ -610,7 +680,7 @@ def _run_import(
             row_number=index,
             key=key_value or id_text,
             action=RowAction.ERROR,
-            issues=issues,
+            issues=list(issues),
         )
 
         if id_issue is not None:
@@ -682,32 +752,42 @@ def _run_import(
             continue
 
         if existing is None:
-            db.add(device)
+            if commit:
+                db.add(device)
             result.action = RowAction.CREATE
             created += 1
+            if wanted_name:
+                existing_by_name[normalize_hostname(wanted_name)] = device
         else:
             result.action = RowAction.UPDATE
+            result.device_id = existing.id
             updated += 1
+            if wanted_name:
+                existing_by_name[normalize_hostname(wanted_name)] = device
 
-        # ここで毎行 flush すると行数分の往復になる。id が要るのは
-        # 保守契約をぶら下げる行だけなので、そのときだけ確定させる
-        pending.append((result, device))
-        if _has_contract(values):
-            db.flush()
-            if _add_contract(db, device, values):
-                contracts_added += 1
-                result.contract_added = True
+        if _has_contract(values) and _contract_would_be_added(device, values):
+            contracts_added += 1
+            result.contract_added = True
+            if commit:
+                pending_contracts.append((result, device, values))
+
+        if commit:
+            pending.append((result, device))
 
         results.append(result)
 
-    # まとめて書き出してから、行ごとの結果に id を入れる
-    if pending:
-        _flush_renames(db, [device for _, device in pending])
-        db.flush()
-        for result, device in pending:
-            result.device_id = device.id
-
     if commit and errors == 0:
+        # 確認だけなら、16万件を flush してから rollback する必要はない。
+        # 件数と行結果はすでに揃っている。反映するときだけまとめて書く。
+        if pending:
+            _flush_renames(db, [device for _, device in pending])
+            db.flush()
+            for result, device in pending:
+                result.device_id = device.id
+            for _result, device, values in pending_contracts:
+                _add_contract(db, device, values)
+            if pending_contracts:
+                db.flush()
         # 結線表を先に取り込んでいた場合、機器が揃った行をここで結ぶ
         from app.services.linkimport import resolve_pending
 
@@ -715,6 +795,7 @@ def _run_import(
         db.commit()
         committed = True
     else:
+        # プレビューやエラー時は、既存機器への途中変更を捨てる
         db.rollback()
         committed = False
 
@@ -730,7 +811,8 @@ def _run_import(
         unmapped_columns=unmapped,
         missing_required_fields=[],
         column_samples=samples,
-        rows=results,
+        rows=_sample_rows(results, keep_rows) if keep_rows is not None else results,
+        rows_total=len(results),
     )
 
 
@@ -837,9 +919,10 @@ def _apply_values(
         if site is None:
             site = Site(name=str(site_name))
             db.add(site)
-            db.flush()
             site_cache[str(site_name)] = site
-        device.site_id = site.id
+        # site_id をその場で採番するために flush すると、溜まっている機器まで
+        # まとめて書かれてしまう。関係を渡せば、最後の flush で順番に載る
+        device.site = site
 
     if device.device_type is None:
         device.device_type = DeviceType.OTHER
@@ -852,25 +935,36 @@ def _has_contract(values: dict[str, object]) -> bool:
     return bool(values.get("contract_end_date"))
 
 
-def _add_contract(db: Session, device: Device, values: dict[str, object]) -> bool:
-    """保守契約列があれば契約を追加する。同じ契約が既にあれば何もしない。"""
-    start = values.get("contract_start_date")
+def _contract_would_be_added(device: Device, values: dict[str, object]) -> bool:
+    """この行の保守契約が新規として付くか。書かずに判定する（プレビュー用）。"""
     end = values.get("contract_end_date")
-    provider = values.get("contract_provider")
-
     if not end:
-        return False  # 終了日がなければ保守期限として意味を持たない
-
+        return False
+    provider = values.get("contract_provider")
     number = values.get("contract_number")
     for existing in device.contracts:
         same_number = number and existing.contract_number == number
         same_period = existing.end_date == end and existing.provider == (provider or "不明")
         if same_number or same_period:
             return False
+    return True
 
+
+def _add_contract(db: Session, device: Device, values: dict[str, object]) -> bool:
+    """保守契約列があれば契約を追加する。同じ契約が既にあれば何もしない。"""
+    if not _contract_would_be_added(device, values):
+        return False
+
+    start = values.get("contract_start_date")
+    end = values.get("contract_end_date")
+    provider = values.get("contract_provider")
+    number = values.get("contract_number")
+
+    # device= で渡す。device_id だけだと、同一セッション内の
+    # device.contracts が空のまま残り、再取り込みで二重に付いてしまう
     db.add(
         MaintenanceContract(
-            device_id=device.id,
+            device=device,
             provider=str(provider) if provider else "不明",
             contract_number=str(number) if number else None,
             service_level=(
@@ -884,6 +978,4 @@ def _add_contract(db: Session, device: Device, values: dict[str, object]) -> boo
             annual_cost=values.get("contract_annual_cost"),
         )
     )
-    db.flush()
-    db.refresh(device)
     return True

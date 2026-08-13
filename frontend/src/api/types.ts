@@ -116,6 +116,8 @@ export interface ImportResult {
   missing_required_fields: string[];
   column_samples: Record<string, string[]>;
   rows: ImportRowResult[];
+  /** 行結果の実数。rows は画面が固まらないよう一部だけ返す */
+  rows_total: number;
 }
 
 export type ConfigVendor =

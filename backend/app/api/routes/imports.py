@@ -18,7 +18,7 @@ router = APIRouter(prefix="/import", tags=["import"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-MAX_UPLOAD_BYTES = 20 * 1024 * 1024
+MAX_UPLOAD_BYTES = 100 * 1024 * 1024
 
 ERROR_COLUMN = "エラー内容"
 ERROR_CSV_ENCODINGS = {"utf-8": "utf-8-sig", "shift_jis": "cp932"}
@@ -95,11 +95,13 @@ async def _run(
     key_field: str,
     update_existing: bool,
     commit: bool,
+    *,
+    keep_rows: int | None = importer._ROW_SAMPLE,
 ) -> tuple[Table, importer.ImportOutcome]:
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 20MB）"
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 100MB）"
         )
 
     try:
@@ -143,6 +145,7 @@ async def _run(
         key_field=key,
         update_existing=update_existing,
         commit=commit,
+        keep_rows=keep_rows,
     )
     return table, outcome
 
@@ -192,7 +195,9 @@ async def download_error_rows(
             "encoding は utf-8 または shift_jis を指定してください",
         )
 
-    table, outcome = await _run(db, file, mapping, key_field, update_existing, commit=False)
+    table, outcome = await _run(
+        db, file, mapping, key_field, update_existing, commit=False, keep_rows=None
+    )
 
     buffer = io.StringIO(newline="")
     writer = csv.writer(buffer, lineterminator="\r\n")
@@ -252,7 +257,7 @@ async def _run_links(db: Session, file: UploadFile, commit: bool) -> LinkImportR
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 20MB）"
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 100MB）"
         )
     try:
         outcome = linkimport.run_import(db, file.filename or "links", content, commit=commit)

@@ -262,6 +262,13 @@ export default function ImportPage() {
           </div>
 
           <h2>行ごとの結果</h2>
+          {result.rows_total > result.rows.length && (
+            <p className="muted" style={{ marginTop: -6 }}>
+              {result.rows_total} 行中 {result.rows.length}{" "}
+              行を表示しています（エラー行を優先）。件数の内訳は上の合計が正です。
+              {result.errors > 0 && " エラー行の全件は CSV で書き出せます。"}
+            </p>
+          )}
           {result.rows.length === 0 ? (
             <div className="empty">確認できる行がありません</div>
           ) : (

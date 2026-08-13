@@ -445,3 +445,31 @@ def test_renaming_onto_another_device_is_reported_clearly(client, device_payload
     # 台帳は変わっていない
     names = sorted(d["hostname"] for d in client.get(f"{API}/devices").json())
     assert names == ["keep-01", "taken-01"]
+
+
+def test_large_preview_returns_a_sample_not_every_row(client):
+    """行結果を全部返すと、16万行では画面側が固まる。
+
+    件数の内訳は全件から出し、中身はエラー優先で一部だけ返す。
+    """
+    from app.services import importer
+
+    total = importer._ROW_SAMPLE + 80
+    lines = ["ホスト名,ベンダー,型番"]
+    for i in range(total):
+        # 先頭付近にエラーを混ぜる。サンプルにエラーが残ることを見る
+        if i in (3, 7):
+            lines.append(f"bad-{i:04d},Cisco,")  # 型番欠落
+        else:
+            lines.append(f"sw-{i:04d},Cisco,C9300")
+
+    body = upload(client, "\n".join(lines) + "\n").json()
+
+    assert body["total_rows"] == total
+    assert body["rows_total"] == total
+    assert body["created"] == total - 2
+    assert body["errors"] == 2
+    assert len(body["rows"]) == importer._ROW_SAMPLE
+    assert [r["action"] for r in body["rows"][:2]] == ["error", "error"]
+    # プレビューなので台帳は空のまま
+    assert client.get(f"{API}/devices").json() == []
