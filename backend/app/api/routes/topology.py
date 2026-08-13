@@ -384,7 +384,7 @@ def reset_positions(
     いる最中のリセットで他の拠点の配置まで消えるのは行き過ぎなので、
     画面からは範囲つきで呼ぶ。
     """
-    only = service.scoped_device_ids(db, site_id=site_id, q=q)
+    only = service.matching_device_ids(db, site_id=site_id, q=q)
     return {"reset": service.reset_positions(db, layer, only=only)}
 
 
@@ -394,13 +394,19 @@ def arrange_positions(
     layer: str = service.DEFAULT_LAYER,
     site_id: int | None = None,
     q: str | None = None,
+    scope: str = Query(default=service.SCOPE_PEERS),
+    orientation: str = Query(default="vertical"),
 ) -> dict[str, int]:
-    """いま見えている範囲を、自動配置で並べ直す。
+    """いま見えている範囲を、自動配置で並べ直して保存する。
 
-    手で置いた位置を外して自動配置に任せる。範囲は絞り込みの内側だけなので、
-    他の拠点で直した配置には触らない。
+    手で置いた位置を外し、上位を上・下位を下に並べ直す。範囲は絞り込みの
+    内側だけなので、他の拠点で直した配置には触らない。
     """
-    return {"arranged": service.arrange_positions(db, layer, site_id=site_id, q=q)}
+    return {
+        "arranged": service.arrange_positions(
+            db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
+        )
+    }
 
 
 @router.post("/rebuild", response_model=RebuildResult)

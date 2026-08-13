@@ -334,8 +334,11 @@ export const api = {
     request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {
       method: "DELETE",
     }),
-  /** いま見えている範囲を自動配置で並べ直す（手で置いた位置は外れる）。 */
-  arrangePositions: (layer: string, scope: { site_id?: number; q?: string } = {}) =>
+  /** いま見えている範囲を自動配置で並べ直して保存する。 */
+  arrangePositions: (
+    layer: string,
+    scope: { site_id?: number; q?: string; scope?: string; orientation?: string } = {},
+  ) =>
     request<{ arranged: number }>(`/topology/positions/arrange${query({ layer, ...scope })}`, {
       method: "POST",
     }),

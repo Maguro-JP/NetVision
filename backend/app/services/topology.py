@@ -103,14 +103,13 @@ class TopologyGraph:
     unplaced_count: int = 0
 
 
-def scoped_device_ids(
+def matching_device_ids(
     db: Session, *, site_id: int | None = None, q: str | None = None
 ) -> set[int] | None:
-    """図に要る機器だけを先に絞り込む。
+    """絞り込みに当たる機器だけを返す。対向は含めない。
 
-    拠点を選んで見るとき、必要なのはその拠点の機器と、そこから線が
-    出ている相手だけ。それ以外まで読み込むと、全国規模では図を1つ出す
-    のに何分もかかる（16万台では返ってこなかった）。
+    配置のリセットや最適化は、見ている範囲の機器だけに効かせる。
+    対向まで消すと、相手の拠点で直した配置まで巻き添えになる。
 
     絞り込みが無いときは None を返す（＝全部）。
     """
@@ -126,7 +125,23 @@ def scoped_device_ids(
         stmt = stmt.where(
             Device.hostname.ilike(like) | Device.mgmt_ip.ilike(like),
         )
-    inside = set(db.scalars(stmt))
+    return set(db.scalars(stmt))
+
+
+def scoped_device_ids(
+    db: Session, *, site_id: int | None = None, q: str | None = None
+) -> set[int] | None:
+    """図に要る機器だけを先に絞り込む。
+
+    拠点を選んで見るとき、必要なのはその拠点の機器と、そこから線が
+    出ている相手だけ。それ以外まで読み込むと、全国規模では図を1つ出す
+    のに何分もかかる（16万台では返ってこなかった）。
+
+    絞り込みが無いときは None を返す（＝全部）。
+    """
+    inside = matching_device_ids(db, site_id=site_id, q=q)
+    if inside is None:
+        return None
     if not inside:
         return inside
 
@@ -444,16 +459,20 @@ def _compact(
     並べ方は木。上位を上（横向きなら左）に置き、その配下を1段下へ広げる。
     同じ段に上位も下位も混ぜると、線が機器の間を横切って重なってしまう。
 
-    人が動かして保存した配置が混ざっている場合は何もしない。
-    直した配置を勝手に戻すと、直した意味が無くなる。
+    人が動かして保存した配置が、見ている範囲の内側に混ざっている場合は
+    何もしない。直した配置を勝手に戻すと、直した意味が無くなる。
+
+    対向として出しているだけの機器は、相手の拠点で置いた位置を持っている
+    ことがある。そちらは脇へ寄せる対象なので、内側の並べ直しは止めない。
     """
-    if not nodes or any(node.placed for node in nodes):
+    owned = [n for n in nodes if inside is None or n.device_id in inside] or list(nodes)
+    if not nodes or any(node.placed for node in owned):
         return
 
     everything = {node.device_id: node for node in nodes}
     # 自拠点の機器だけで木を組む。対向を混ぜて組むと、対向を脇へ寄せたあとに
     # 自拠点の側が歯抜けになって、真ん中が空いた図になる
-    tree_nodes = [n for n in nodes if not inside or n.device_id in inside] or nodes
+    tree_nodes = owned
     keep = {node.device_id for node in tree_nodes}
     by_id = {node.device_id: node for node in tree_nodes}
     graph = TopologyGraph(
@@ -842,6 +861,8 @@ def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) ->
     `only` を渡すと、その機器の分だけ消す。拠点を1つ見ている最中の
     「リセット」で、他の拠点で直した配置まで消えるのは行き過ぎなため。
     """
+    if only is not None and len(only) == 0:
+        return 0
     stmt = select(TopologyNode).where(TopologyNode.layer == layer)
     if only is not None:
         stmt = stmt.where(TopologyNode.device_id.in_(only))
@@ -858,22 +879,39 @@ def arrange_positions(
     *,
     site_id: int | None = None,
     q: str | None = None,
+    scope: str = SCOPE_PEERS,
+    orientation: str = "vertical",
 ) -> int:
-    """いま見えている範囲を、自動配置で並べ直す。
+    """いま見えている範囲を、自動配置で並べ直して保存する。
 
     手で置いていくとどうしてもずれる。並べ直しは自動配置がやることなので、
-    その範囲の手動配置を外して自動配置に任せる。
+    その結果をそのまま保存する（消して自動に戻すのと違い、次に開いたときも
+    同じ位置になる）。もう一度押せば、保存した配置を外してから並べ直すので、
+    何度でも効く。
 
-    結果を保存しないのは、保存すると並べ直しが止まるため。図は「保存済みの
-    配置があればそれを尊重する」作りで（直した配置を勝手に戻さないため）、
-    自動配置の結果を保存すると、以後この範囲は並べ直されなくなる。
-    対向の機器を保存すると、その機器自身の拠点の図まで、こちらの都合で
-    決めた位置に変わってしまう問題もある。
-
-    戻り値は外した手動配置の数。
+    保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
+    その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
     """
-    only = scoped_device_ids(db, site_id=site_id, q=q)
-    return reset_positions(db, layer, only=only)
+    inside = matching_device_ids(db, site_id=site_id, q=q)
+    # 先に保存済みの配置を外す。残したままだと、いま置いてある位置が
+    # そのまま図に反映されるだけで、並べ直しにならない
+    reset_positions(db, layer, only=inside)
+
+    draw = scoped_device_ids(db, site_id=site_id, q=q)
+    graph = get_graph(db, layer, orientation=orientation, only=draw)
+    graph = scope_graph(
+        graph,
+        site_id=site_id,
+        q=q,
+        scope=scope,
+        orientation=orientation,
+        rank=network_rank(db) if draw is not None else None,
+    )
+
+    placed = [(n.device_id, n.x, n.y) for n in graph.nodes if not n.outside]
+    if not placed:
+        return 0
+    return save_positions(db, layer, placed)
 
 
 @dataclass

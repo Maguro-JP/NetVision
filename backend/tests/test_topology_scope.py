@@ -247,6 +247,27 @@ def test_a_saved_layout_is_not_rearranged(db_session):
     assert (kept.x, kept.y) == (4321.0, 1234.0)
 
 
+def test_a_placed_peer_does_not_block_rearranging_the_site(db_session):
+    """対向が保存済みでも、自拠点の並べ直しは止まらないこと。
+
+    対向の位置まで「保存済み」と見なすと、拠点を見ているときの最適化も
+    リセットも効かなくなる。対向は脇へ寄せる対象なので、内側は並べ直す。
+    """
+    ids = build(db_session)
+    graph = topology.get_graph(db_session)
+    peer = next(n for n in graph.nodes if n.hostname == "east-core-rt-01")
+    peer.x, peer.y, peer.placed = 9999.0, 9999.0, True
+    local = next(n for n in graph.nodes if n.hostname == "osaka-rt-01")
+    local.x, local.y = 50.0, 800.0  # わざと散らす。placed は False のまま
+
+    scoped = topology.scope_graph(graph, site_id=ids["osaka"])
+    kept = {n.hostname: n for n in scoped.nodes}
+
+    assert kept["east-core-rt-01"].placed is True  # 対向の位置は残る
+    assert (kept["osaka-rt-01"].x, kept["osaka-rt-01"].y) != (50.0, 800.0)
+    assert kept["osaka-rt-01"].y < kept["osaka-sw-01"].y
+
+
 def test_many_peers_are_spread_out_instead_of_overlapping(db_session):
     """対向が多くても、線が重ならないように広げること。
 

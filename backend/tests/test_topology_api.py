@@ -446,10 +446,14 @@ def test_arranging_puts_the_layout_back_in_order(client, device_payload):
 
     graph = client.get(f"{API}/topology", params={"site_id": site}).json()
     nodes = {n["hostname"]: n for n in graph["nodes"]}
-    assert nodes["tidy-rt"]["placed"] is False  # 手で置いた位置は外れている
+    assert nodes["tidy-rt"]["placed"] is True  # 並べ直した結果は残る
     assert (nodes["tidy-rt"]["x"], nodes["tidy-rt"]["y"]) != (999.0, 999.0)
     # 上位が上、下位が下に並ぶ
     assert nodes["tidy-rt"]["y"] < nodes["tidy-sw"]["y"]
+
+    # もう一度押しても効く（保存した配置を外してから並べ直す）
+    again = client.post(f"{API}/topology/positions/arrange", params={"site_id": site}).json()
+    assert again["arranged"] == 2
 
 
 def test_arranging_one_site_leaves_the_other_sites_alone(client, device_payload):
@@ -477,6 +481,77 @@ def test_arranging_one_site_leaves_the_other_sites_alone(client, device_payload)
     graph = client.get(f"{API}/topology").json()
     where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
     assert where["b-01"] == (700.0, 700.0)
+
+
+def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
+    """対向の機器は、相手の拠点で置いた位置を持っている。
+
+    こちらをリセットしたときに対向まで消すと、相手側の図が突然戻ってしまう。
+    """
+    here = client.post(f"{API}/sites", json={"name": "見ている拠点"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "対向の拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="here-rt", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="there-rt", serial_number="X2", site_id=there),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 1.0, "y": 1.0},
+                {"device_id": b, "x": 700.0, "y": 700.0},
+            ],
+        },
+    )
+
+    client.delete(f"{API}/topology/positions", params={"site_id": here})
+
+    graph = client.get(f"{API}/topology").json()
+    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
+    assert where["there-rt"] == (700.0, 700.0, True)
+    assert where["here-rt"][2] is False
+
+
+def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payload):
+    """最適化で対向の位置まで上書きしないこと。"""
+    here = client.post(f"{API}/sites", json={"name": "整える拠点"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "対向の拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="here-rt", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="there-rt", serial_number="X2", site_id=there),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 1.0, "y": 1.0},
+                {"device_id": b, "x": 700.0, "y": 700.0},
+            ],
+        },
+    )
+
+    client.post(f"{API}/topology/positions/arrange", params={"site_id": here})
+
+    graph = client.get(f"{API}/topology").json()
+    where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
+    assert where["there-rt"] == (700.0, 700.0)
+    assert where["here-rt"] != (1.0, 1.0)
 
 
 def make_pair(client, device_payload, *names):

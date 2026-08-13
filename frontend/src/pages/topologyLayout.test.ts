@@ -20,7 +20,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
-import { assignAnchors, sideToward } from "./TopologyPage";
+import { assignAnchors, keepLocalPositions, sideToward } from "./TopologyPage";
 
 function node(
   id: number,
@@ -164,5 +164,31 @@ describe("引き出し口と通り道", () => {
         .map((office) => office.y - 0),
     );
     expect(widest).toBeLessThan(nearest / 2);
+  });
+});
+
+describe("動かした位置を表示の切り替えで消さない", () => {
+  it("同じ機器が並んでいるときは、今の座標を残す", () => {
+    const incoming = [
+      { id: "1", position: { x: 0, y: 0 } },
+      { id: "2", position: { x: 100, y: 0 } },
+    ];
+    const current = [
+      { id: "1", position: { x: 40, y: 80 } },
+      { id: "2", position: { x: 100, y: 0 } },
+    ];
+    expect(keepLocalPositions(incoming, current, true)).toEqual(current);
+  });
+
+  it("機器の顔ぶれが変わったときは、サーバの配置に従う", () => {
+    const incoming = [{ id: "3", position: { x: 0, y: 0 } }];
+    const current = [{ id: "1", position: { x: 40, y: 80 } }];
+    expect(keepLocalPositions(incoming, current, true)).toEqual(incoming);
+  });
+
+  it("保存・リセットのあとは、サーバの配置をそのまま使う", () => {
+    const incoming = [{ id: "1", position: { x: 0, y: 0 } }];
+    const current = [{ id: "1", position: { x: 40, y: 80 } }];
+    expect(keepLocalPositions(incoming, current, false)).toEqual(incoming);
   });
 });
