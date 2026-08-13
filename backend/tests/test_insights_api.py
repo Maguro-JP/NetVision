@@ -210,3 +210,25 @@ def test_patched_device_gets_no_vulnerability_insight(client, device_payload):
 
     assert "known_exploited_vulnerability" not in kinds(insights(client))
     assert "critical_vulnerability" not in kinds(insights(client))
+
+
+def test_limit_does_not_change_totals(client, device_payload):
+    """返す件数を絞っても、総数と削減見込みは全件から出す。"""
+    for index in range(8):
+        add_device(
+            client,
+            device_payload,
+            hostname=f"sw-{index:02d}",
+            serial_number=f"X{index}",
+            eol_date=_in(-10),
+        )
+
+    full = insights(client, limit=200)
+    short = insights(client, limit=3)
+
+    assert short["total"] == full["total"]
+    assert short["annual_saving_total"] == full["annual_saving_total"]
+    assert short["by_kind"] == full["by_kind"]
+    assert len(short["insights"]) == 3
+    assert len(full["insights"]) > 3
+    assert [i["kind"] for i in short["insights"]] == [i["kind"] for i in full["insights"][:3]]

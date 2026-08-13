@@ -16,7 +16,7 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from math import ceil
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
@@ -25,6 +25,9 @@ from app.services.configparse import expand, normalize, vlanlist
 from app.services.lifecycle import Severity, evaluate
 
 DEFAULT_LAYER = "physical"
+
+# 全体図を描くとブラウザが固まる台数。これ以上は拠点か名前で絞ってもらう
+UNSCOPED_GRAPH_LIMIT = 80
 
 # 段の順序。上位（外部に近い）ほど上に置く。
 TIER_ORDER: dict[DeviceType, int] = {
@@ -159,6 +162,14 @@ def scoped_device_ids(
         neighbours.add(a)
         neighbours.add(b)
     return inside | neighbours
+
+
+def unscoped_graph_too_wide(db: Session, *, include_retired: bool = False) -> bool:
+    """絞らずに全体を出すと固まる規模か。"""
+    stmt = select(func.count()).select_from(Device)
+    if not include_retired:
+        stmt = stmt.where(Device.status != DeviceStatus.RETIRED)
+    return (db.scalar(stmt) or 0) > UNSCOPED_GRAPH_LIMIT
 
 
 def get_graph(
@@ -1038,8 +1049,6 @@ def get_stats(db: Session, layer: str = DEFAULT_LAYER) -> TopologyStats:
             isolated_devices=isolated[:_ISOLATED_SAMPLE],
             isolated_count=len(isolated),
         )
-
-    from sqlalchemy import func
 
     alive = Device.status != DeviceStatus.RETIRED
     device_count = db.scalar(select(func.count()).select_from(Device).where(alive)) or 0

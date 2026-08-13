@@ -100,6 +100,7 @@ export default function ConfigsPage() {
   const [results, setResults] = useState<IngestResult[] | null>(null);
   const [diffTarget, setDiffTarget] = useState<number | null>(null);
   const [over, setOver] = useState(false);
+  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const takeFiles = (list: FileList | File[] | null) => {
@@ -117,13 +118,24 @@ export default function ConfigsPage() {
   });
 
   const run = useMutation({
-    mutationFn: () => api.uploadConfigs(files, { applyInventory, createMissing }),
+    mutationFn: async () => {
+      const collected: IngestResult[] = [];
+      setProgress({ done: 0, total: files.length });
+      for (let index = 0; index < files.length; index++) {
+        const batch = await api.uploadConfigs([files[index]], { applyInventory, createMissing });
+        collected.push(...batch);
+        setProgress({ done: index + 1, total: files.length });
+      }
+      return collected;
+    },
     onSuccess: (data) => {
       setResults(data);
+      setProgress(null);
       queryClient.invalidateQueries({ queryKey: ["configs"] });
       queryClient.invalidateQueries({ queryKey: ["topology"] });
       queryClient.invalidateQueries({ queryKey: ["devices"] });
     },
+    onSettled: () => setProgress(null),
   });
 
   const remove = useMutation({
@@ -222,7 +234,11 @@ export default function ConfigsPage() {
           disabled={files.length === 0 || run.isPending}
           onClick={() => run.mutate()}
         >
-          {run.isPending ? "取り込み中…" : `取り込む（${files.length}件）`}
+          {run.isPending
+            ? progress
+              ? `取り込み中… ${progress.done} / ${progress.total}`
+              : "取り込み中…"
+            : `取り込む（${files.length}件）`}
         </button>
       </div>
 

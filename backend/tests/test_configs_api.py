@@ -139,6 +139,16 @@ def test_unmatched_hostname_can_match_by_serial(client, device_payload):
     assert diffs["serial_number"]["differs"] is False
 
 
+def test_fqdn_inventory_hostname_matches_short_sysname(client, device_payload):
+    """台帳が FQDN でも、Config の短いホスト名で同一機とみなす。"""
+    device_id = add_device(client, device_payload, hostname="core-sw-01.example.com")
+
+    body = upload(client, "core-sw-01", create_missing=False).json()[0]
+
+    assert body["matched"] is True
+    assert body["device_id"] == device_id
+
+
 def test_identical_content_does_not_create_a_new_generation(client, device_payload):
     seed_fleet(client, device_payload)
 

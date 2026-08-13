@@ -54,18 +54,16 @@ def _rank_of(column, today: date):
     )
 
 
-def _overall_rank(today: date):
-    """機器1台の総合重要度。保守期限と EoL の重い方を採る。
-
-    保守期限は契約のうち最も遠い終了日、EoL は機器個別の入力を優先して
-    無ければ型番の製品マスタ、という lifecycle.evaluate と同じ決め方。
-    """
-    maintenance_end = (
+def _maintenance_end_expr():
+    return (
         select(func.max(MaintenanceContract.end_date))
         .where(MaintenanceContract.device_id == Device.id)
         .correlate(Device)
         .scalar_subquery()
     )
+
+
+def _eol_expr():
     product_eol = (
         select(ProductReference.eol_date)
         .where(
@@ -76,10 +74,29 @@ def _overall_rank(today: date):
         .limit(1)
         .scalar_subquery()
     )
-    eol = func.coalesce(Device.eol_date, product_eol)
+    return func.coalesce(Device.eol_date, product_eol)
 
-    maintenance_rank = _rank_of(maintenance_end, today)
-    eol_rank = _rank_of(eol, today)
+
+def _soonest_date():
+    """保守期限と EoL のうち早い方。ダッシュボードの「期限が近い順」に使う。"""
+    maintenance_end = _maintenance_end_expr()
+    eol = _eol_expr()
+    return case(
+        (maintenance_end.is_(None), eol),
+        (eol.is_(None), maintenance_end),
+        (maintenance_end < eol, maintenance_end),
+        else_=eol,
+    )
+
+
+def _overall_rank(today: date):
+    """機器1台の総合重要度。保守期限と EoL の重い方を採る。
+
+    保守期限は契約のうち最も遠い終了日、EoL は機器個別の入力を優先して
+    無ければ型番の製品マスタ、という lifecycle.evaluate と同じ決め方。
+    """
+    maintenance_rank = _rank_of(_maintenance_end_expr(), today)
+    eol_rank = _rank_of(_eol_expr(), today)
     worse = case((maintenance_rank > eol_rank, maintenance_rank), else_=eol_rank)
 
     # 撤去済みはアラート対象から外す
@@ -152,4 +169,113 @@ def query_devices(
         stmt = stmt.offset(offset)
     if limit is not None:
         stmt = stmt.limit(limit)
+    return list(db.scalars(stmt))
+
+
+def iter_devices(
+    db: Session, filters: DeviceFilters, *, today: date | None = None, chunk: int = 200
+):
+    """全件を一度に ORM 化しない。指摘の洗い出しなど、1台ずつ見る処理向け。
+
+    16万台を list に積むと、画面が固まるほどの待ちになる。
+    selectinload と yield_per は相性が悪いので、id 順に塊で読む。
+    """
+    last_id = 0
+    while True:
+        stmt = (
+            build_query(filters, today=today)
+            .where(Device.id > last_id)
+            .options(selectinload(Device.contracts), selectinload(Device.site))
+            .order_by(Device.id)
+            .limit(chunk)
+        )
+        batch = list(db.scalars(stmt))
+        if not batch:
+            return
+        yield from batch
+        last_id = batch[-1].id
+
+
+def _counts_from_ranks(rows: list[tuple]) -> dict[str, int]:
+    by_rank = {severity.rank: severity.value for severity in Severity}
+    out = {severity.value: 0 for severity in Severity}
+    for rank, count in rows:
+        name = by_rank.get(int(rank or 0))
+        if name:
+            out[name] += count
+    return out
+
+
+def count_by_overall_severity(db: Session, *, today: date | None = None) -> dict[str, int]:
+    today = today or date.today()
+    rank = _overall_rank(today)
+    rows = db.execute(select(rank, func.count()).group_by(rank)).all()
+    return _counts_from_ranks(rows)
+
+
+def count_by_maintenance_severity(db: Session, *, today: date | None = None) -> dict[str, int]:
+    today = today or date.today()
+    rank = _rank_of(_maintenance_end_expr(), today)
+    rows = db.execute(select(rank, func.count()).group_by(rank)).all()
+    return _counts_from_ranks(rows)
+
+
+def count_by_eol_severity(db: Session, *, today: date | None = None) -> dict[str, int]:
+    today = today or date.today()
+    rank = _rank_of(_eol_expr(), today)
+    rows = db.execute(select(rank, func.count()).group_by(rank)).all()
+    return _counts_from_ranks(rows)
+
+
+def count_by_vendor(db: Session) -> list[tuple[str, int]]:
+    rows = db.execute(
+        select(Device.vendor, func.count()).group_by(Device.vendor).order_by(func.count().desc())
+    ).all()
+    return [(vendor, count) for vendor, count in rows]
+
+
+def count_without_lifecycle_data(db: Session) -> int:
+    """機器側の EoL も保守終了日も無い台数。製品マスタの EoL は見ない。
+
+    ダッシュボードの「ライフサイクル情報未登録」と同じ定義。
+    """
+    return (
+        db.scalar(
+            select(func.count(Device.id)).where(
+                Device.eol_date.is_(None),
+                _maintenance_end_expr().is_(None),
+            )
+        )
+        or 0
+    )
+
+
+_ALERT_RANKS = (Severity.EXPIRED.rank, Severity.CRITICAL.rank, Severity.WARNING.rank)
+
+
+def query_upcoming(db: Session, limit: int, *, today: date | None = None) -> list[Device]:
+    """期限が近い機器。ダッシュボード用に、必要な件数だけ読む。"""
+    today = today or date.today()
+    stmt = (
+        select(Device)
+        .where(_overall_rank(today).in_(_ALERT_RANKS))
+        .options(selectinload(Device.contracts), selectinload(Device.site))
+        .order_by(_soonest_date().asc())
+        .limit(limit)
+    )
+    return list(db.scalars(stmt))
+
+
+def query_alerts(db: Session, within_days: int, *, today: date | None = None) -> list[Device]:
+    """指定日数以内に保守切れ / EoL を迎える稼働機器。更改計画の材料。"""
+    today = today or date.today()
+    due = _soonest_date()
+    stmt = (
+        select(Device)
+        .where(Device.status != DeviceStatus.RETIRED)
+        .where(due.is_not(None))
+        .where(due <= today + timedelta(days=within_days))
+        .options(selectinload(Device.contracts), selectinload(Device.site))
+        .order_by(due.asc())
+    )
     return list(db.scalars(stmt))

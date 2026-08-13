@@ -52,8 +52,9 @@ import type {
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
-/** 応答が無いときに「読み込み中」のまま固まらないようにする */
-const TIMEOUT_MS = 20_000;
+/** 画面の読み込みが 10 秒以上止まらないようにする。取り込みは別で長く待つ */
+const GET_TIMEOUT_MS = 8_000;
+const LONG_TIMEOUT_MS = 120_000;
 
 export class ApiError extends Error {
   constructor(
@@ -75,13 +76,15 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-async function send(path: string, init: RequestInit = {}): Promise<Response> {
+async function send(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<Response> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new ApiError(0, "オフラインです。接続してからやり直してください");
   }
 
+  const method = (init.method ?? "GET").toUpperCase();
+  const wait = timeoutMs ?? (method === "GET" ? GET_TIMEOUT_MS : LONG_TIMEOUT_MS);
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), wait);
   init.signal?.addEventListener("abort", () => controller.abort());
 
   try {
