@@ -197,7 +197,18 @@ export interface ChangeFilters extends Record<string, string | number | undefine
 
 export interface DeviceFilters extends Record<string, string | number | boolean | undefined> {
   q?: string;
+  hostname?: string;
   vendor?: string;
+  model?: string;
+  serial_number?: string;
+  os_version?: string;
+  mgmt_ip?: string;
+  rack?: string;
+  notes?: string;
+  product?: string;
+  site_name?: string;
+  maintenance?: string;
+  eol?: string;
   device_type?: string;
   status?: string;
   site_id?: number;

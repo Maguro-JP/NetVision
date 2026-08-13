@@ -21,26 +21,81 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import date, timedelta
 
-from sqlalchemy import Select, case, func, or_, select
+from sqlalchemy import Select, String, case, cast, func, or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.config import settings
-from app.models import Device, DeviceStatus, DeviceType
+from app.models import Device, DeviceStatus, DeviceType, Site
 from app.models.maintenance import MaintenanceContract
 from app.models.reference import ProductReference
 from app.services.lifecycle import Severity
 
+# 一覧の探す欄で日本語の呼び名でも当たるようにする。画面の表示名と同じ語。
+_DEVICE_TYPE_SEARCH: dict[DeviceType, tuple[str, ...]] = {
+    DeviceType.ROUTER: ("ルータ", "ルーター", "router"),
+    DeviceType.SWITCH: ("スイッチ", "switch"),
+    DeviceType.FIREWALL: ("ファイアウォール", "firewall"),
+    DeviceType.LOAD_BALANCER: ("ロードバランサ", "ロードバランサー", "load_balancer"),
+    DeviceType.WIRELESS_AP: ("無線ap", "無線AP", "wireless_ap"),
+    DeviceType.WIRELESS_CONTROLLER: ("無線コントローラ", "wireless_controller"),
+    DeviceType.SERVER: ("サーバ", "サーバー", "server"),
+    DeviceType.OTHER: ("その他", "other"),
+}
+_DEVICE_STATUS_SEARCH: dict[DeviceStatus, tuple[str, ...]] = {
+    DeviceStatus.ACTIVE: ("稼働中", "active"),
+    DeviceStatus.STANDBY: ("予備機", "standby"),
+    DeviceStatus.MAINTENANCE: ("保守作業中", "maintenance"),
+    DeviceStatus.RETIRED: ("撤去済み", "retired"),
+}
+_SEVERITY_SEARCH: dict[Severity, tuple[str, ...]] = {
+    Severity.EXPIRED: ("期限切れ", "expired"),
+    Severity.CRITICAL: ("要対応", "critical"),
+    Severity.WARNING: ("要計画", "warning"),
+    Severity.OK: ("問題なし", "ok"),
+    Severity.UNKNOWN: ("情報未登録", "unknown"),
+}
+
 
 @dataclass
 class DeviceFilters:
+    #: どの項目でも探す（部分一致）。列ごとの絞り込みとは別
     q: str | None = None
+    #: 列ごとの部分一致。Excel のフィルター内検索と同じ使い方
+    hostname: str | None = None
     vendor: str | None = None
+    model: str | None = None
+    serial_number: str | None = None
+    os_version: str | None = None
+    mgmt_ip: str | None = None
+    rack: str | None = None
+    notes: str | None = None
+    site_name: str | None = None
+    #: メーカーまたは型番のどちらかに含む
+    product: str | None = None
+    #: 保守期限（最も遠い終了日）の文字列部分一致。年や月で絞れる
+    maintenance: str | None = None
+    #: EoL 日付の文字列部分一致
+    eol: str | None = None
     device_type: DeviceType | None = None
     status: DeviceStatus | None = None
     site_id: int | None = None
     severity: Severity | None = None
     #: 埋まっていない項目がある機器だけに絞る
     incomplete: bool = False
+
+
+def _like(value: str) -> str:
+    return f"%{value}%"
+
+
+def _enums_matching(needle: str, mapping: dict) -> list:
+    """探す語が呼び名や値に含まれる列挙だけを返す。"""
+    folded = needle.casefold()
+    hits = []
+    for member, aliases in mapping.items():
+        if any(folded in alias.casefold() for alias in aliases):
+            hits.append(member)
+    return hits
 
 
 def _rank_of(column, today: date):
@@ -107,17 +162,73 @@ def build_query(filters: DeviceFilters, *, today: date | None = None) -> Select:
     """条件だけを組み立てる（並べ替えや件数の切り出しは呼ぶ側で）。"""
     stmt = select(Device)
 
+    # 拠点名・住所で探す・絞るときだけ外部結合する。毎回結合すると無駄になる
+    needs_site = bool(filters.q or filters.site_name)
+    if needs_site:
+        stmt = stmt.outerjoin(Site, Device.site_id == Site.id)
+
     if filters.q:
-        like = f"%{filters.q}%"
-        stmt = stmt.where(
-            or_(
-                Device.hostname.ilike(like),
-                Device.model.ilike(like),
-                Device.serial_number.ilike(like),
-            )
-        )
+        like = _like(filters.q)
+        text_hits = [
+            Device.hostname.ilike(like),
+            Device.vendor.ilike(like),
+            Device.model.ilike(like),
+            Device.serial_number.ilike(like),
+            Device.os_name.ilike(like),
+            Device.os_version.ilike(like),
+            Device.firmware_version.ilike(like),
+            Device.rack.ilike(like),
+            Device.rack_unit.ilike(like),
+            Device.mgmt_ip.ilike(like),
+            Device.notes.ilike(like),
+            Site.name.ilike(like),
+            Site.address.ilike(like),
+            cast(Device.install_date, String).ilike(like),
+            cast(Device.eos_date, String).ilike(like),
+            cast(Device.eol_date, String).ilike(like),
+            cast(_maintenance_end_expr(), String).ilike(like),
+        ]
+        type_hits = _enums_matching(filters.q, _DEVICE_TYPE_SEARCH)
+        if type_hits:
+            text_hits.append(Device.device_type.in_(type_hits))
+        status_hits = _enums_matching(filters.q, _DEVICE_STATUS_SEARCH)
+        if status_hits:
+            text_hits.append(Device.status.in_(status_hits))
+        severity_hits = _enums_matching(filters.q, _SEVERITY_SEARCH)
+        if severity_hits:
+            ranks = [s.rank for s in severity_hits]
+            text_hits.append(_overall_rank(today or date.today()).in_(ranks))
+        stmt = stmt.where(or_(*text_hits))
+
+    # 列フィルターはすべて部分一致。Excel で値の一部を打って絞るのと同じ
+    if filters.hostname:
+        stmt = stmt.where(Device.hostname.ilike(_like(filters.hostname)))
     if filters.vendor:
-        stmt = stmt.where(Device.vendor == filters.vendor)
+        stmt = stmt.where(Device.vendor.ilike(_like(filters.vendor)))
+    if filters.model:
+        stmt = stmt.where(Device.model.ilike(_like(filters.model)))
+    if filters.serial_number:
+        stmt = stmt.where(Device.serial_number.ilike(_like(filters.serial_number)))
+    if filters.os_version:
+        stmt = stmt.where(Device.os_version.ilike(_like(filters.os_version)))
+    if filters.mgmt_ip:
+        stmt = stmt.where(Device.mgmt_ip.ilike(_like(filters.mgmt_ip)))
+    if filters.rack:
+        stmt = stmt.where(
+            or_(Device.rack.ilike(_like(filters.rack)), Device.rack_unit.ilike(_like(filters.rack)))
+        )
+    if filters.notes:
+        stmt = stmt.where(Device.notes.ilike(_like(filters.notes)))
+    if filters.product:
+        like = _like(filters.product)
+        stmt = stmt.where(or_(Device.vendor.ilike(like), Device.model.ilike(like)))
+    if filters.site_name:
+        stmt = stmt.where(Site.name.ilike(_like(filters.site_name)))
+    if filters.maintenance:
+        stmt = stmt.where(cast(_maintenance_end_expr(), String).ilike(_like(filters.maintenance)))
+    if filters.eol:
+        stmt = stmt.where(cast(_eol_expr(), String).ilike(_like(filters.eol)))
+
     if filters.device_type:
         stmt = stmt.where(Device.device_type == filters.device_type)
     if filters.status:

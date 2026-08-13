@@ -182,6 +182,54 @@ def test_incomplete_finds_devices_with_blanks(db_session):
     assert len(names) > 1
 
 
+def test_q_and_column_filters_match_any_field(db_session):
+    """全体検索はどの項目でも当たり、列フィルターは部分一致で絞れること。"""
+    from app.models.site import Site
+
+    site = Site(name="大阪DC", address="大阪府")
+    db_session.add(site)
+    db_session.flush()
+    db_session.add(
+        Device(
+            hostname="edge-fw-01",
+            vendor="Fortinet",
+            model="FG-100F",
+            serial_number="FGT123",
+            device_type=DeviceType.FIREWALL,
+            status=DeviceStatus.ACTIVE,
+            os_version="7.2.5",
+            mgmt_ip="192.0.2.10",
+            rack="A-01",
+            notes="境界防火壁",
+            site_id=site.id,
+            eol_date=TODAY + timedelta(days=400),
+        )
+    )
+    db_session.add(
+        Device(
+            hostname="core-sw-01",
+            vendor="Cisco",
+            model="C9500",
+            device_type=DeviceType.SWITCH,
+            status=DeviceStatus.ACTIVE,
+        )
+    )
+    db_session.commit()
+
+    def names(**kwargs):
+        return {d.hostname for d in query_devices(db_session, DeviceFilters(**kwargs), today=TODAY)}
+
+    assert names(q="192.0.2.10") == {"edge-fw-01"}
+    assert names(q="大阪") == {"edge-fw-01"}
+    assert names(q="ファイアウォール") == {"edge-fw-01"}
+    assert names(q="境界") == {"edge-fw-01"}
+    assert names(product="FG-") == {"edge-fw-01"}
+    assert names(hostname="edge") == {"edge-fw-01"}
+    assert names(os_version="7.2") == {"edge-fw-01"}
+    assert names(site_name="大阪") == {"edge-fw-01"}
+    assert names(eol="2027") == {"edge-fw-01"}
+
+
 def test_severity_counts_agree_with_evaluate(db_session):
     """ダッシュボードの件数も SQL と evaluate が一致すること。"""
     from collections import Counter

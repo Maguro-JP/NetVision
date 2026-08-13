@@ -48,7 +48,12 @@ def test_search_and_filter(client, device_payload):
     client.post(
         f"{API}/devices",
         json=device_payload(
-            hostname="fw-01", vendor="Fortinet", model="FG-100F", device_type="firewall"
+            hostname="fw-01",
+            vendor="Fortinet",
+            model="FG-100F",
+            device_type="firewall",
+            mgmt_ip="10.1.1.50",
+            notes="東京拠点の境界",
         ),
     )
 
@@ -56,6 +61,13 @@ def test_search_and_filter(client, device_payload):
     assert len(client.get(f"{API}/devices", params={"vendor": "Fortinet"}).json()) == 1
     assert len(client.get(f"{API}/devices", params={"q": "C9500"}).json()) == 1
     assert len(client.get(f"{API}/devices", params={"device_type": "firewall"}).json()) == 1
+    # 全体検索は管理IP・メモ・種別の呼び名でも当たる
+    assert len(client.get(f"{API}/devices", params={"q": "10.1.1.50"}).json()) == 1
+    assert len(client.get(f"{API}/devices", params={"q": "境界"}).json()) == 1
+    assert len(client.get(f"{API}/devices", params={"q": "ファイアウォール"}).json()) == 1
+    # 列フィルターは部分一致
+    assert len(client.get(f"{API}/devices", params={"product": "FG-"}).json()) == 1
+    assert len(client.get(f"{API}/devices", params={"hostname": "fw"}).json()) == 1
 
 
 def test_delete_device(client, device_payload):

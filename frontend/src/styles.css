@@ -859,11 +859,69 @@ button:disabled {
   background: transparent;
 }
 
-.device-table .filter-row select {
+.device-table .filter-row select,
+.device-table .filter-row .column-filter-input {
   /* 列幅に合わせて縮むが、選んだ値が読めなくなるまでは縮めない */
   width: 100%;
   min-width: 6em;
   padding: 3px 6px;
+  font-size: 0.82rem;
+}
+
+.device-table .filter-row .column-filter-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 4px;
+}
+
+.column-filter-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.column-choice {
+  position: relative;
+}
+
+.column-choice-list {
+  position: absolute;
+  z-index: 20;
+  left: 0;
+  right: 0;
+  top: calc(100% + 2px);
+  margin: 0;
+  padding: 4px 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.35);
+}
+
+.column-choice-list button {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--text);
+  text-align: left;
+  font-size: 0.82rem;
+}
+
+.column-choice-list button:hover,
+.column-choice-list button.active {
+  background: var(--panel-2);
+}
+
+.column-choice-empty {
+  padding: 8px 10px;
+  color: var(--muted);
   font-size: 0.82rem;
 }
 
