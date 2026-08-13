@@ -619,8 +619,8 @@ function TopologyEditor() {
       setDirty(false);
       setNotice(
         result.arranged
-          ? `配置を最適化しました（${result.arranged} 台を自動で並べ直しました）`
-          : "配置を最適化しました（並べ直す機器がありません）",
+          ? `配置を最適化しました（手で置いた並びを残して ${result.arranged} 台を整えました）`
+          : "配置を最適化しました（整える機器がありません）",
       );
     },
   });
@@ -862,14 +862,14 @@ function TopologyEditor() {
             </button>
           </>
         )}
-        {/* 手で置いていくとどうしてもずれる。並べ直しは自動配置に任せる */}
+        {/* 手で置いた左右は残して、段と間隔だけ整える。消して戻すのはリセット */}
         <button
           className="primary"
           onClick={() => arrange.mutate()}
           disabled={arrange.isPending}
-          title="いま見えている範囲を、上位を上・下位を下に並べ直して保存します。手で置いた位置は外れます"
+          title="手で置いた左右の並びは残して、段と間隔を整えます。自動配置に戻すのはリセットです"
         >
-          {arrange.isPending ? "並べ直しています…" : "配置を最適化"}
+          {arrange.isPending ? "整えています…" : "配置を最適化"}
         </button>
         {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
         <button

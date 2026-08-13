@@ -413,10 +413,9 @@ def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, devic
 
 
 def test_arranging_puts_the_layout_back_in_order(client, device_payload):
-    """手で置いてずれた配置を、自動配置に戻せること。
+    """ずれた配置を、上下関係を保ったまま間隔を整えること。
 
-    結果を保存しないのは、保存すると以後この範囲が並べ直されなくなるため
-    （図は保存済みの配置を尊重する作りになっている）。
+    人が置いた左右は意思として残す。消して作り直すのはリセットの仕事。
     """
     site = client.post(f"{API}/sites", json={"name": "整列する拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="tidy-rt", site_id=site)).json()[
@@ -446,12 +445,12 @@ def test_arranging_puts_the_layout_back_in_order(client, device_payload):
 
     graph = client.get(f"{API}/topology", params={"site_id": site}).json()
     nodes = {n["hostname"]: n for n in graph["nodes"]}
-    assert nodes["tidy-rt"]["placed"] is True  # 並べ直した結果は残る
+    assert nodes["tidy-rt"]["placed"] is True
     assert (nodes["tidy-rt"]["x"], nodes["tidy-rt"]["y"]) != (999.0, 999.0)
     # 上位が上、下位が下に並ぶ
     assert nodes["tidy-rt"]["y"] < nodes["tidy-sw"]["y"]
 
-    # もう一度押しても効く（保存した配置を外してから並べ直す）
+    # もう一度押しても効く（意思を読み直して整え直す）
     again = client.post(f"{API}/topology/positions/arrange", params={"site_id": site}).json()
     assert again["arranged"] == 2
 
@@ -552,6 +551,147 @@ def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payloa
     where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
     assert where["there-rt"] == (700.0, 700.0)
     assert where["here-rt"] != (1.0, 1.0)
+
+
+def test_initial_layout_stacks_connected_routers(client, device_payload):
+    """初期配置は結線の上下で置く。同じ種別でも横一列にしない。
+
+    センターと支社はどちらもルータだが、段が違う。種別の段だけだと
+    横並びになり、線が機器の間を横切る。
+    """
+    core = client.post(
+        f"{API}/devices", json=device_payload(hostname="core-rt", device_type="router")
+    ).json()["id"]
+    branch = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="branch-rt", device_type="router", serial_number="X2"),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": core,
+            "a_interface": "Gi0/0",
+            "b_device_id": branch,
+            "b_interface": "Gi0/1",
+        },
+    )
+
+    nodes = {n["hostname"]: n for n in graph(client)["nodes"]}
+    assert nodes["core-rt"]["y"] < nodes["branch-rt"]["y"]
+    assert nodes["core-rt"]["placed"] is False
+
+
+def test_arranging_keeps_the_order_a_person_chose(client, device_payload):
+    """最適化は、人が入れ替えた左右を残して間隔だけ整えること。"""
+    site = client.post(f"{API}/sites", json={"name": "意思を残す拠点"}).json()["id"]
+    rt = client.post(
+        f"{API}/devices", json=device_payload(hostname="br-rt", device_type="router", site_id=site)
+    ).json()["id"]
+    left = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="sw-b", device_type="switch", serial_number="B", site_id=site
+        ),
+    ).json()["id"]
+    right = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="sw-a", device_type="switch", serial_number="A", site_id=site
+        ),
+    ).json()["id"]
+    # ポート順なら sw-a (Gi0/1) が左、sw-b (Gi0/2) が右。人は逆に置いた
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": rt,
+            "a_interface": "Gi0/1",
+            "b_device_id": right,
+            "b_interface": "Gi0/1",
+        },
+    )
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": rt,
+            "a_interface": "Gi0/2",
+            "b_device_id": left,
+            "b_interface": "Gi0/1",
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": rt, "x": 0.0, "y": 0.0},
+                {"device_id": left, "x": -400.0, "y": 280.0},
+                {"device_id": right, "x": 800.0, "y": 310.0},
+            ],
+        },
+    )
+
+    client.post(f"{API}/topology/positions/arrange", params={"site_id": site})
+
+    shown = client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+    nodes = {n["hostname"]: n for n in shown}
+    assert nodes["sw-b"]["x"] < nodes["sw-a"]["x"]  # 人が入れ替えた順
+    assert nodes["br-rt"]["y"] < nodes["sw-a"]["y"]
+    assert abs((nodes["sw-a"]["x"] - nodes["sw-b"]["x"]) - 300.0) < 1.0  # 間隔は均等
+
+
+def test_a_new_device_is_laid_out_without_moving_saved_ones(client, device_payload):
+    """機器が増えても、人が置いた位置はそのまま。増えた分だけ木に足す。"""
+    site = client.post(f"{API}/sites", json={"name": "足す拠点"}).json()["id"]
+    rt = client.post(
+        f"{API}/devices", json=device_payload(hostname="hub-rt", device_type="router", site_id=site)
+    ).json()["id"]
+    old = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="old-sw", device_type="switch", serial_number="O", site_id=site
+        ),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": rt,
+            "a_interface": "Gi0/1",
+            "b_device_id": old,
+            "b_interface": "Gi0/1",
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": rt, "x": 12.0, "y": 34.0},
+                {"device_id": old, "x": 56.0, "y": 78.0},
+            ],
+        },
+    )
+    new = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="new-sw", device_type="switch", serial_number="N", site_id=site
+        ),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": rt,
+            "a_interface": "Gi0/2",
+            "b_device_id": new,
+            "b_interface": "Gi0/1",
+        },
+    )
+
+    shown = client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+    nodes = {n["hostname"]: n for n in shown}
+    assert (nodes["hub-rt"]["x"], nodes["hub-rt"]["y"]) == (12.0, 34.0)
+    assert (nodes["old-sw"]["x"], nodes["old-sw"]["y"]) == (56.0, 78.0)
+    assert nodes["new-sw"]["placed"] is False
+    assert nodes["new-sw"]["y"] > nodes["hub-rt"]["y"]
 
 
 def make_pair(client, device_payload, *names):

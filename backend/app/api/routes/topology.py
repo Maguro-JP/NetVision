@@ -397,10 +397,10 @@ def arrange_positions(
     scope: str = Query(default=service.SCOPE_PEERS),
     orientation: str = Query(default="vertical"),
 ) -> dict[str, int]:
-    """いま見えている範囲を、自動配置で並べ直して保存する。
+    """いま見えている範囲を、人の意思を残して完成形に整える。
 
-    手で置いた位置を外し、上位を上・下位を下に並べ直す。範囲は絞り込みの
-    内側だけなので、他の拠点で直した配置には触らない。
+    人が置いた左右の並びは残し、上位を上・間隔を均等にする。
+    消して自動配置に戻すのはリセット。範囲は絞り込みの内側だけ。
     """
     return {
         "arranged": service.arrange_positions(

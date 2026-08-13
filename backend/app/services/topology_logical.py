@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.models import Device, DeviceStatus, DeviceTunnel
 from app.models.topology import Interface, LinkOrigin
 from app.services.lifecycle import evaluate
-from app.services.topology import TopologyEdgeView, TopologyGraph, TopologyNodeView, _auto_layout
+from app.services.topology import TopologyEdgeView, TopologyGraph, TopologyNodeView
 
 LOGICAL_LAYER = "logical"
 
@@ -115,8 +115,6 @@ def build(
     # 全機器を並べると、線の無い箱ばかりで何も読めない
     involved = {e.source for e in edges} | {e.target for e in edges}
     shown = [d for d in devices if d.id in involved]
-    positions = _auto_layout(shown, orientation=orientation)
-
     nodes = [
         TopologyNodeView(
             device_id=device.id,
@@ -130,8 +128,8 @@ def build(
             mgmt_ip=device.mgmt_ip,
             severity=evaluate(device).overall_severity,
             interface_count=0,
-            x=positions[device.id][0],
-            y=positions[device.id][1],
+            x=0.0,
+            y=0.0,
             placed=False,
         )
         for device in shown
