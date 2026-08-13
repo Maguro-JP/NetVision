@@ -28,6 +28,20 @@ import DeviceNode, {
 } from "../components/DeviceNode";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
 import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import {
+  applyPositions,
+  canRedo,
+  canUndo,
+  capturePositions,
+  changedIds,
+  currentPositions,
+  isDirty as historyIsDirty,
+  pushStep,
+  redo as redoHistory,
+  startHistory,
+  undo as undoHistory,
+  type EditHistory,
+} from "./topologyEditHistory";
 
 const NODE_TYPES = { device: DeviceNode };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -435,11 +449,13 @@ function TopologyEditor() {
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
-  // ドラッグで動かした機器。保存は動かした分だけ送る（見えている対向まで
-  // まとめて保存すると、相手の拠点の図までこちらの座標で上書きされる）
-  const movedIds = useRef(new Set<string>());
+  // ドラッグの過程。保存は基準から動いた機器だけ送る
+  const historyRef = useRef<EditHistory | null>(null);
+  const [historyTick, setHistoryTick] = useState(0);
   // 保存・リセット・最適化のあとは、取り直した配置をそのまま使う
   const takeServerLayout = useRef(false);
+  // 取り消しで当て直すときは、過程に足さない
+  const applyingHistory = useRef(false);
 
   const scoped = selectedSite !== "" || appliedSearch.trim() !== "";
   const { data: stats } = useQuery({
@@ -514,10 +530,17 @@ function TopologyEditor() {
       });
     }
 
-    setNodes((current) =>
-      keepLocalPositions(flow.nodes, current, dirty && !takeServerLayout.current),
-    );
+    const keepLocal = dirty && !takeServerLayout.current;
     takeServerLayout.current = false;
+    let nextNodes = flow.nodes;
+    setNodes((current) => {
+      nextNodes = keepLocalPositions(flow.nodes, current, keepLocal);
+      return nextNodes;
+    });
+    if (!keepLocal) {
+      historyRef.current = startHistory(capturePositions(nextNodes));
+      setHistoryTick((value) => value + 1);
+    }
     setEdges(flow.edges);
     // 未保存の移動は消さない。以前はここで dirty を落としていたため、
     // 表示を切り替えただけで「保存済み」に見え、位置もサーバの古い値に戻った
@@ -565,11 +588,13 @@ function TopologyEditor() {
 
   const save = useMutation({
     mutationFn: () => {
+      const history = historyRef.current;
+      const moved = new Set(history ? changedIds(history) : []);
       const byId = new Map((graph?.nodes ?? []).map((n) => [String(n.device_id), n]));
       return api.savePositions(
         layer,
         nodes
-          .filter((n) => movedIds.current.has(n.id))
+          .filter((n) => moved.has(n.id))
           .filter((n) => byId.get(n.id)?.outside !== true)
           .map((n) => ({
             device_id: Number(n.id),
@@ -580,7 +605,6 @@ function TopologyEditor() {
       );
     },
     onSuccess: async () => {
-      movedIds.current.clear();
       await refresh();
       setDirty(false);
       setNotice("配置を保存しました");
@@ -596,7 +620,6 @@ function TopologyEditor() {
   const reset = useMutation({
     mutationFn: () => api.resetPositions(layer, viewScope),
     onSuccess: async (result) => {
-      movedIds.current.clear();
       await refresh();
       setDirty(false);
       setNotice(
@@ -614,7 +637,6 @@ function TopologyEditor() {
         orientation,
       }),
     onSuccess: async (result) => {
-      movedIds.current.clear();
       await refresh();
       setDirty(false);
       setNotice(
@@ -676,19 +698,98 @@ function TopologyEditor() {
     },
   });
 
+  const rememberHistory = useCallback((next: EditHistory) => {
+    historyRef.current = next;
+    setDirty(historyIsDirty(next));
+    setHistoryTick((value) => value + 1);
+  }, []);
+
+  const discardEdits = useCallback(() => {
+    const history = historyRef.current;
+    if (!history) return;
+    applyingHistory.current = true;
+    setNodes((current) => applyPositions(current, history.baseline));
+    applyingHistory.current = false;
+    rememberHistory(startHistory(history.baseline));
+    setNotice("編集中の配置を破棄しました");
+  }, [rememberHistory, setNodes]);
+
+  const undoEdit = useCallback(() => {
+    const history = historyRef.current;
+    if (!history) return;
+    const next = undoHistory(history);
+    if (!next) return;
+    applyingHistory.current = true;
+    setNodes((current) => applyPositions(current, currentPositions(next)));
+    applyingHistory.current = false;
+    rememberHistory(next);
+  }, [rememberHistory, setNodes]);
+
+  const redoEdit = useCallback(() => {
+    const history = historyRef.current;
+    if (!history) return;
+    const next = redoHistory(history);
+    if (!next) return;
+    applyingHistory.current = true;
+    setNodes((current) => applyPositions(current, currentPositions(next)));
+    applyingHistory.current = false;
+    rememberHistory(next);
+  }, [rememberHistory, setNodes]);
+
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<DeviceNodeData>>[]) => {
       onNodesChange(changes);
-      const moved = changes.filter(
-        (c): c is Extract<NodeChange<Node<DeviceNodeData>>, { type: "position" }> =>
-          c.type === "position" && c.dragging === false,
-      );
-      if (moved.length === 0) return;
-      for (const change of moved) movedIds.current.add(change.id);
-      setDirty(true);
     },
     [onNodesChange],
   );
+
+  /** ドラッグが終わったタイミングで、その配置を編集過程に残す */
+  const onNodeDragStop = useCallback(() => {
+    if (applyingHistory.current) return;
+    const current = instance.current?.getNodes() ?? [];
+    if (current.length === 0) return;
+    const history = historyRef.current ?? startHistory(capturePositions(current));
+    rememberHistory(pushStep(history, capturePositions(current)));
+  }, [rememberHistory]);
+
+  // 入力欄にいるときはショートカットを奪わない
+  useEffect(() => {
+    if (!editable) return;
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === "INPUT" ||
+          target.tagName === "TEXTAREA" ||
+          target.tagName === "SELECT" ||
+          target.isContentEditable)
+      ) {
+        return;
+      }
+      const key = event.key.toLowerCase();
+      const withMod = event.metaKey || event.ctrlKey;
+      if (!withMod) return;
+      if (key === "z" && !event.shiftKey) {
+        event.preventDefault();
+        undoEdit();
+      } else if ((key === "z" && event.shiftKey) || key === "y") {
+        event.preventDefault();
+        redoEdit();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [editable, undoEdit, redoEdit]);
+
+  useEffect(() => {
+    if (!dirty) return;
+    const onLeave = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", onLeave);
+    return () => window.removeEventListener("beforeunload", onLeave);
+  }, [dirty]);
 
   /** 線の端を別の機器へ付け替える。どちらの端が動いたかは、変わった側で判る */
   const reconnect = useMutation({
@@ -764,6 +865,10 @@ function TopologyEditor() {
     [],
   );
 
+  // historyTick で再描画し、ref の過程をボタンの有効／無効に反映する
+  const undoable = historyTick >= 0 && !!historyRef.current && canUndo(historyRef.current);
+  const redoable = historyTick >= 0 && !!historyRef.current && canRedo(historyRef.current);
+
   return (
     <>
       <h1>トポロジ図</h1>
@@ -774,7 +879,8 @@ function TopologyEditor() {
             <strong>編集中です。</strong>
             機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
             線を選ぶと、どの辺から出すかも変えられます。
-            <strong>「配置を保存」を押すまで反映されません。</strong>
+            途中の配置は記録されるので、「一つ戻す」「やり直す」で行き来できます。
+            <strong>「配置を保存」を押すまでサーバには残りません。</strong>
           </>
         ) : (
           <>図は動かせません。並べ替えたいときは「編集する」を押してください。</>
@@ -784,10 +890,16 @@ function TopologyEditor() {
       <div className="toolbar">
         <button
           className={editable ? "primary" : ""}
-          onClick={() => setEditable((value) => !value)}
+          onClick={() => {
+            if (editable && dirty) {
+              if (!confirm("編集中の配置を破棄して編集を終えますか？")) return;
+              discardEdits();
+            }
+            setEditable((value) => !value);
+          }}
           title={
             editable
-              ? "編集を終える。以後はドラッグしても動きません"
+              ? "編集を終える。未保存の配置があるときは破棄の確認を出します"
               : "機器の移動・結線の追加ができるようになります"
           }
         >
@@ -851,11 +963,41 @@ function TopologyEditor() {
         {editable && (
           <>
             <button
+              onClick={undoEdit}
+              disabled={!undoable}
+              title="一つ前の配置に戻します（Ctrl+Z）"
+            >
+              一つ戻す
+            </button>
+            <button
+              onClick={redoEdit}
+              disabled={!redoable}
+              title="取り消した配置を戻します（Ctrl+Shift+Z）"
+            >
+              やり直す
+            </button>
+            <button
               className="primary"
               disabled={!dirty || save.isPending}
-              onClick={() => save.mutate()}
+              onClick={() => {
+                if (!confirm("いまの配置を保存しますか？ 保存すると、この編集の取り消しはできなくなります。")) {
+                  return;
+                }
+                save.mutate();
+              }}
+              title="編集した配置をサーバに残します"
             >
               {dirty ? "配置を保存" : "保存済み"}
+            </button>
+            <button
+              disabled={!dirty}
+              onClick={() => {
+                if (!confirm("編集中の配置を破棄して、保存前の状態に戻しますか？")) return;
+                discardEdits();
+              }}
+              title="保存していない配置を捨てて、編集を始める前に戻します"
+            >
+              破棄
             </button>
             <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
               Config から結線を作り直す
@@ -1014,6 +1156,7 @@ function TopologyEditor() {
             nodesConnectable={editable}
             elementsSelectable
             onNodesChange={handleNodesChange}
+            onNodeDragStop={onNodeDragStop}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
             onReconnect={onReconnect}
