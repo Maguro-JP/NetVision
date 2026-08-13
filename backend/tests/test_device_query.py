@@ -211,13 +211,16 @@ def test_severity_counts_agree_with_evaluate(db_session):
         in {Severity.EXPIRED, Severity.CRITICAL, Severity.WARNING}
     ]
     alerting.sort(
-        key=lambda d: min(
-            x
-            for x in (
-                evaluate(d, TODAY).days_to_maintenance_end,
-                evaluate(d, TODAY).days_to_eol,
-            )
-            if x is not None
+        key=lambda d: (
+            min(
+                x
+                for x in (
+                    evaluate(d, TODAY).days_to_maintenance_end,
+                    evaluate(d, TODAY).days_to_eol,
+                )
+                if x is not None
+            ),
+            d.hostname,
         )
     )
     assert [d.hostname for d in query_upcoming(db_session, 5, today=TODAY)] == [
