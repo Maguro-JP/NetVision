@@ -38,9 +38,9 @@ Excel 台帳ではなく、常に最新の状態で見られるようにする�
 | 層 | 技術 |
 |---|---|
 | バックエンド | Python 3.11+ / FastAPI / SQLAlchemy 2.0 / Alembic |
-| データベース | PostgreSQL 16 |
+| データベース | SQLite（ノートPCの1台運用） / PostgreSQL 16（チームで共有するとき） |
 | フロントエンド | TypeScript / React 18 / Vite / TanStack Query / React Router |
-| 配布 | Docker Compose（閉域環境でのオンプレ運用を想定） |
+| 配布 | ノートPCならファイル1つで起動。チーム利用は Docker Compose |
 
 ```
 backend/
@@ -137,8 +137,11 @@ docker compose exec backend python -m scripts.seed
 PR ごとに実際の画面を触って確認できます。DB の用意は不要で、デモデータが自動で入ります。
 手順と制約は [docs/PREVIEW.md](docs/PREVIEW.md) を参照してください。
 
-本番運用の想定は変わりません。 閉域環境での Docker Compose 運用が前提で、
-プレビューは確認用です。データは永続せず、実機の情報を入れる場所ではありません。
+本番運用の想定は変わりません。 閉域のオンプレが前提です。サーバに載せるのが
+理想ですが、採用の前に現場のノートPCで実データを試せないと話が進みません。
+導入テストと1人での運用は `scripts.standalone`（SQLite）で完結します。
+複数人で共有する段階で Docker Compose と Postgres に載せます。
+プレビューは確認用で、データは永続せず、実機の情報を入れる場所ではありません。
 
 ### ローカル開発
 

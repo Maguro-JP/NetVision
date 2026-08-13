@@ -26,8 +26,8 @@ class Settings(BaseSettings):
     # サーバの時計が UTC でも、資料に載る「◯◯時点」は使う人の時刻でなければ意味が無い。
     display_timezone: str = "Asia/Tokyo"
 
-    # 起動時にテーブルが無ければ作る。1台完結の個人利用（SQLite）向け。
-    # 複数人で運用する場合は alembic でマイグレーションするので false のまま。
+    # 起動時にテーブルが無ければ作る。ノートPCの1台運用（SQLite）向け。
+    # チームで Postgres を使う場合は alembic でマイグレーションするので false のまま。
     auto_create_schema: bool = False
 
     # プレビュー用のデモ運用。有効にするとスキーマ作成に加えてデモデータも入れる。

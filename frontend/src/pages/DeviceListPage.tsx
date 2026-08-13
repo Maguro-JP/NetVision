@@ -1,8 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import DeviceTable, { type DeviceColumn } from "../components/DeviceTable";
+import QueryError from "../components/QueryError";
+import { SEARCH_DELAY_MS, useDebouncedValue } from "../lib/debounce";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 
 /**
@@ -18,12 +21,30 @@ const PAGE_SIZE = 100;
 export default function DeviceListPage() {
   const [params, setParams] = useSearchParams();
 
-  // 情報不足だけを見たいときがある。取り込んだ直後の埋め作業がこれ
+  const urlQ = params.get("q") ?? "";
+  const [qInput, setQInput] = useState(urlQ);
+  const qDebounced = useDebouncedValue(qInput, SEARCH_DELAY_MS);
+
+  // 打ち終わってから URL に載せる。打っている最中に戻すと、次の文字が消える
+  useEffect(() => {
+    if (qInput !== qDebounced) return;
+    if (urlQ !== qInput) setQInput(urlQ);
+  }, [urlQ, qInput, qDebounced]);
+
+  useEffect(() => {
+    if ((qDebounced || "") === urlQ) return;
+    const next = new URLSearchParams(params);
+    if (qDebounced) next.set("q", qDebounced);
+    else next.delete("q");
+    next.delete("page");
+    setParams(next, { replace: true });
+  }, [qDebounced, urlQ, params, setParams]);
+
   const onlyIncomplete = params.get("incomplete") === "1";
   const page = Math.max(0, Number(params.get("page") ?? 0));
 
   const filters = {
-    q: params.get("q") ?? undefined,
+    q: qDebounced || undefined,
     device_type: params.get("device_type") ?? undefined,
     status: params.get("status") ?? undefined,
     severity: params.get("severity") ?? undefined,
@@ -37,7 +58,7 @@ export default function DeviceListPage() {
   });
   // 全件は取りに行かない。16万台の環境では1ページ分でも全件読み込むと
   // 10秒かかっていた（絞り込みも件数も、いまはサーバ側で済ませている）
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["devices", filters, page],
     queryFn: () => api.listDevicePage({ ...filters, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
     placeholderData: (previous) => previous,
@@ -122,11 +143,13 @@ export default function DeviceListPage() {
 
       <div className="toolbar">
         <input
+          type="search"
           placeholder="ホスト名 / 型番 / シリアル で探す"
-          defaultValue={filters.q ?? ""}
-          onChange={(e) => setFilter("q", e.target.value)}
+          value={qInput}
+          onChange={(e) => setQInput(e.target.value)}
           style={{ minWidth: 260 }}
         />
+        {isFetching && !isLoading && <span className="muted">探しています…</span>}
         {!onlyIncomplete && (
           <button
             className="link-button"
@@ -142,7 +165,7 @@ export default function DeviceListPage() {
         </Link>
       </div>
 
-      {error && <div className="error">{(error as Error).message}</div>}
+      {error && <QueryError error={error} onRetry={() => refetch()} />}
       {isLoading ? (
         <p className="muted">読み込み中…</p>
       ) : (

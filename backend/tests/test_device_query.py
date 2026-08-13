@@ -180,3 +180,49 @@ def test_incomplete_finds_devices_with_blanks(db_session):
     assert "blank-01" in names
     # 拠点が空の機器も情報不足として拾う（この試験の機器は拠点を入れていない）
     assert len(names) > 1
+
+
+def test_severity_counts_agree_with_evaluate(db_session):
+    """ダッシュボードの件数も SQL と evaluate が一致すること。"""
+    from collections import Counter
+
+    from app.services.device_query import (
+        count_by_eol_severity,
+        count_by_overall_severity,
+        query_upcoming,
+    )
+
+    build_fleet(db_session)
+    devices = query_devices(db_session, DeviceFilters())
+    overall = Counter(evaluate(d, TODAY).overall_severity.value for d in devices)
+    eol = Counter(evaluate(d, TODAY).eol_severity.value for d in devices)
+
+    assert count_by_overall_severity(db_session, today=TODAY) == {
+        severity.value: overall.get(severity.value, 0) for severity in Severity
+    }
+    assert count_by_eol_severity(db_session, today=TODAY) == {
+        severity.value: eol.get(severity.value, 0) for severity in Severity
+    }
+
+    alerting = [
+        d
+        for d in devices
+        if evaluate(d, TODAY).overall_severity
+        in {Severity.EXPIRED, Severity.CRITICAL, Severity.WARNING}
+    ]
+    alerting.sort(
+        key=lambda d: (
+            min(
+                x
+                for x in (
+                    evaluate(d, TODAY).days_to_maintenance_end,
+                    evaluate(d, TODAY).days_to_eol,
+                )
+                if x is not None
+            ),
+            d.hostname,
+        )
+    )
+    assert [d.hostname for d in query_upcoming(db_session, 5, today=TODAY)] == [
+        d.hostname for d in alerting[:5]
+    ]

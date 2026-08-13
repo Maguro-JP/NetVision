@@ -3,20 +3,25 @@ import { useState } from "react";
 
 import { api } from "../api/client";
 import ChangeLogTable, { ACTION_LABEL, ENTITY_LABEL, SOURCE_LABEL } from "../components/ChangeLogTable";
+import QueryError from "../components/QueryError";
+import { SEARCH_DELAY_MS, useDebouncedValue } from "../lib/debounce";
 
 const PAGE_SIZE = 100;
 
 export default function ChangesPage() {
   const [filters, setFilters] = useState<Record<string, string>>({});
+  const [qInput, setQInput] = useState("");
+  const qDebounced = useDebouncedValue(qInput, SEARCH_DELAY_MS);
   const [page, setPage] = useState(0);
 
   const params = {
     ...filters,
+    q: qDebounced || undefined,
     limit: PAGE_SIZE,
     offset: page * PAGE_SIZE,
   };
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["changes", params],
     queryFn: () => api.listChanges(params),
   });
@@ -44,11 +49,16 @@ export default function ChangesPage() {
 
       <div className="toolbar">
         <input
+          type="search"
           placeholder="対象名 / 変更内容で検索"
-          defaultValue={filters.q ?? ""}
-          onChange={(e) => setFilter("q", e.target.value)}
+          value={qInput}
+          onChange={(e) => {
+            setPage(0);
+            setQInput(e.target.value);
+          }}
           style={{ minWidth: 260 }}
         />
+        {isFetching && !isLoading && <span className="muted">探しています…</span>}
         <select
           value={filters.entity_type ?? ""}
           onChange={(e) => setFilter("entity_type", e.target.value)}
@@ -83,7 +93,7 @@ export default function ChangesPage() {
         )}
       </div>
 
-      {error && <div className="error">{(error as Error).message}</div>}
+      {error && <QueryError error={error} onRetry={() => refetch()} />}
 
       {isLoading ? (
         <p className="muted">読み込み中…</p>

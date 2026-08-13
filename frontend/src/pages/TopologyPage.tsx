@@ -28,6 +28,7 @@ import DeviceNode, {
 } from "../components/DeviceNode";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
 import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 
 const NODE_TYPES = { device: DeviceNode };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -415,7 +416,6 @@ function TopologyEditor() {
   // 絞ったときにどこまで出すか。既定は対向まで（拠点だけだと線が1本も出ない）
   const [scope, setScope] = useState<"peers" | "site">("peers");
   // 絞らずに全体を出すのは、台数が少ないときだけ既定にする
-  const [showAll, setShowAll] = useState(false);
   // VLAN が数百ある現場ではチェックボックスを全部出しても選べない
   const [vlanFilter, setVlanFilter] = useState("");
   // 機器名と線だけの表示。現場で使う図では付帯情報がむしろ邪魔になる
@@ -432,6 +432,7 @@ function TopologyEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
+  useUnsavedWarning(dirty);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
@@ -448,7 +449,7 @@ function TopologyEditor() {
   });
   // 全体図は台数が増えると読めないし、描くだけで重い。
   // 絞っていないときは、小さい構成のときだけ自動で出す
-  const tooWide = !scoped && !showAll && (stats?.device_count ?? 0) > WIDE_LIMIT;
+  const tooWide = !scoped && (stats?.device_count ?? 0) > WIDE_LIMIT;
 
   const { data: graph, isLoading } = useQuery({
     queryKey: ["topology", layer, orientation, selectedSite, appliedSearch, scope],
@@ -793,7 +794,14 @@ function TopologyEditor() {
         >
           {editable ? "🔓 編集中" : "🔒 編集する"}
         </button>
-        <select value={layer} onChange={(e) => setLayer(e.target.value)}>
+        <select
+          value={layer}
+          onChange={(e) => {
+            if (!confirmLeave(dirty)) return;
+            setDirty(false);
+            setLayer(e.target.value);
+          }}
+        >
           {LAYERS.map((item) => (
             <option key={item.value} value={item.value}>
               {item.label}
@@ -990,11 +998,10 @@ function TopologyEditor() {
           // それでも見たい人のために、出す手段は残しておく
           <div className="empty" style={{ margin: 40 }}>
             <p>
-              機器が {stats?.device_count} 台あります。全体図は読めないので、
+              機器が {stats?.device_count} 台あります。全体図は読めないし、描くと画面が止まるので、
               <strong>拠点を選ぶ</strong>か<strong>拠点名・機器名で探して</strong>ください。
             </p>
             <p className="muted">選んだ拠点の対向（直接つながっている上位）までは自動で出ます。</p>
-            <button onClick={() => setShowAll(true)}>それでも全体を出す（重くなります）</button>
           </div>
         ) : isLoading ? (
           <p className="muted" style={{ padding: 20 }}>

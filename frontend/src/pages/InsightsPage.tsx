@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { InsightCategory } from "../api/types";
+import QueryError from "../components/QueryError";
 import SeverityBadge from "../components/SeverityBadge";
 import { formatCurrency } from "../lib/format";
 
@@ -24,12 +25,12 @@ const CATEGORY_HINT: Record<InsightCategory, string> = {
 export default function InsightsPage() {
   const [category, setCategory] = useState<InsightCategory | "">("");
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["insights", category],
     queryFn: () => api.listInsights(category ? { category } : {}),
   });
 
-  if (error) return <div className="error">{(error as Error).message}</div>;
+  if (error) return <QueryError error={error} onRetry={() => refetch()} />;
 
   return (
     <>

@@ -56,6 +56,11 @@ def get_topology(
     # 絞り込みが決まっているなら、必要な機器だけ読む。全部読んでから
     # 捨てる作りだと、全国規模では図を1つ出すのに何分もかかる
     only = service.scoped_device_ids(db, site_id=site_id, q=q)
+    if only is None and service.unscoped_graph_too_wide(db, include_retired=include_retired):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "機器が多すぎて全体図は出せません。拠点か機器名で絞ってください",
+        )
     graph = service.get_graph(
         db, layer, include_retired=include_retired, orientation=orientation, only=only
     )

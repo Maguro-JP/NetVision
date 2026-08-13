@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { ScenarioStatus } from "../api/types";
+import QueryError from "../components/QueryError";
 import { formatDate } from "../lib/format";
 
 export const SCENARIO_STATUS_LABEL: Record<ScenarioStatus, string> = {
@@ -17,7 +18,7 @@ export default function ScenariosPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: "", description: "", target_date: "" });
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["scenarios"],
     queryFn: api.listScenarios,
   });
@@ -49,7 +50,7 @@ export default function ScenariosPage() {
       </p>
 
       {(error || create.error) && (
-        <div className="error">{((error ?? create.error) as Error).message}</div>
+        <QueryError error={error ?? create.error} onRetry={error ? () => refetch() : undefined} />
       )}
 
       <form

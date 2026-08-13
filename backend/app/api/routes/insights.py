@@ -5,8 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.schemas.insights import InsightRead, InsightReportRead, KindSummaryRead
-from app.services.device_query import DeviceFilters, query_devices
-from app.services.insights import InsightCategory, analyze
+from app.services.insights import InsightCategory, analyze_from_db
 from app.services.reference import load_vulnerabilities
 
 router = APIRouter(prefix="/insights", tags=["insights"])
@@ -32,8 +31,9 @@ def list_insights(
     件数と削減見込みは絞る前の全件から出しているので、数字は変わらない。
     種類ごとの内訳は `by_kind` を見る。
     """
-    devices = query_devices(db, DeviceFilters(site_id=site_id))
-    report = analyze(devices, vulnerabilities=load_vulnerabilities(db), keep=limit)
+    report = analyze_from_db(
+        db, site_id=site_id, vulnerabilities=load_vulnerabilities(db), keep=limit
+    )
 
     if category is not None:
         filtered = [i for i in report.insights if i.category is category]

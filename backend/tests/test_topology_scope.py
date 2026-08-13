@@ -376,3 +376,31 @@ def test_children_are_placed_in_port_order(db_session):
     placed = {n.hostname: n.x for n in graph.nodes}
     # ポート 1 → 2 → 10 の順に左から並ぶ（文字列順なら 1, 10, 2 になる）
     assert placed["zzz-rt-01"] < placed["mmm-rt-01"] < placed["aaa-rt-01"]
+
+
+def test_unscoped_topology_is_rejected_when_too_wide(client, db_session):
+    """全体図は台数が増えると画面が固まるので、API 側でも出さない。"""
+    from app.models.device import Device, DeviceType
+    from app.services.topology import UNSCOPED_GRAPH_LIMIT
+
+    db_session.add_all(
+        [
+            Device(
+                hostname=f"sw-{index:03d}",
+                vendor="Cisco",
+                model="C2960",
+                device_type=DeviceType.SWITCH,
+                serial_number=f"S{index}",
+            )
+            for index in range(UNSCOPED_GRAPH_LIMIT + 1)
+        ]
+    )
+    db_session.commit()
+
+    blocked = client.get(f"{API}/topology")
+    assert blocked.status_code == 400
+    assert "絞って" in blocked.json()["detail"]
+
+    scoped = client.get(f"{API}/topology", params={"q": "sw-000"})
+    assert scoped.status_code == 200
+    assert len(scoped.json()["nodes"]) == 1

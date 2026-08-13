@@ -12,7 +12,7 @@ import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models import Device, DeviceTunnel, DeviceVlan, DeviceVrf
@@ -93,16 +93,35 @@ def _find_device(
 
     機器名（sysname）が変わっても実機は同じ、ということがある。
     シリアルは台帳上も一意なので、そちらが当たれば同一機とみなす。
+
+    以前は全機器を読んで Python で正規化比較していた。16万台では
+    Config 1件の取り込みのたびに一覧と同じ待ちが発生する。
     """
     if hostname:
         key = normalize_hostname(hostname)
-        for device in db.scalars(select(Device)):
-            if normalize_hostname(device.hostname) == key:
-                return device
+        if key:
+            found = _find_device_by_hostname(db, key)
+            if found is not None:
+                return found
     serial = (serial_number or "").strip()
     if not serial:
         return None
     return db.scalar(select(Device).where(Device.serial_number == serial))
+
+
+def _find_device_by_hostname(db: Session, key: str) -> Device | None:
+    """正規化後のホスト名で1台引く。FQDN やシリアル付き表記も同じキーになる。"""
+    stmt = select(Device).where(
+        or_(
+            func.lower(Device.hostname) == key,
+            Device.hostname.ilike(f"{key}.%"),
+            Device.hostname.ilike(f"{key}(%"),
+        )
+    )
+    for device in db.scalars(stmt):
+        if normalize_hostname(device.hostname) == key:
+            return device
+    return None
 
 
 def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
@@ -467,16 +486,25 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
 
 
 def _sync_links(
-    db: Session, device: Device, parsed: ParsedConfig
+    db: Session,
+    device: Device,
+    parsed: ParsedConfig,
+    *,
+    hostname_index: dict[str, Device] | None = None,
 ) -> tuple[int, list[UnresolvedNeighbor]]:
-    """隣接情報から結線を作る。相手が台帳に無い場合は未解決として返す。"""
-    devices = {normalize_hostname(d.hostname): d for d in db.scalars(select(Device))}
+    """隣接情報から結線を作る。相手が台帳に無い場合は未解決として返す。
 
+    1件の取り込みでは相手を SQL で引く。全台の再構築（rebuild_links）では
+    呼び出し側が作った索引を使い、同じ全件ロードを繰り返さない。
+    """
     created = 0
     unresolved: list[UnresolvedNeighbor] = []
 
     for neighbor in parsed.neighbors:
-        remote = devices.get(neighbor.remote_key)
+        if hostname_index is not None:
+            remote = hostname_index.get(neighbor.remote_key)
+        else:
+            remote = _find_device_by_hostname(db, neighbor.remote_key)
         if remote is None or remote.id == device.id:
             if remote is None:
                 unresolved.append(
@@ -567,13 +595,14 @@ def rebuild_links(db: Session) -> tuple[int, list[UnresolvedNeighbor]]:
 
     created = 0
     unresolved: list[UnresolvedNeighbor] = []
+    hostname_index = {normalize_hostname(d.hostname): d for d in db.scalars(select(Device))}
 
-    for device in db.scalars(select(Device)):
+    for device in hostname_index.values():
         snapshot = _latest_snapshot(db, device.id, None)
         if snapshot is None:
             continue
         parsed = configparse.parse(snapshot.content)
-        count, missing = _sync_links(db, device, parsed)
+        count, missing = _sync_links(db, device, parsed, hostname_index=hostname_index)
         created += count
         unresolved.extend(missing)
 

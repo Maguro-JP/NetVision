@@ -19,18 +19,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import date
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import (
-    Device,
     DeviceExposure,
     DeviceStatus,
     ExposureStatus,
     Vulnerability,
 )
 from app.models.exposure import UNHANDLED
-from app.services.device_query import DeviceFilters, query_devices
+from app.services.device_query import DeviceFilters, iter_devices
 from app.services.reference import match_device
 
 # 人が判断して閉じた状態。自動処理で勝手に書き換えない
@@ -51,8 +50,10 @@ class SyncResult:
     messages: list[str] = field(default_factory=list)
 
 
-def _active_devices(db: Session) -> list[Device]:
-    return [d for d in query_devices(db, DeviceFilters()) if d.status is not DeviceStatus.RETIRED]
+def _iter_alive(db: Session):
+    for device in iter_devices(db, DeviceFilters()):
+        if device.status is not DeviceStatus.RETIRED:
+            yield device
 
 
 def sync(db: Session, *, today: date | None = None) -> SyncResult:
@@ -66,13 +67,11 @@ def sync(db: Session, *, today: date | None = None) -> SyncResult:
     result = SyncResult()
 
     vulnerabilities = list(db.scalars(select(Vulnerability)))
-    devices = _active_devices(db)
-
     existing = {(e.device_id, e.vulnerability_id): e for e in db.scalars(select(DeviceExposure))}
     by_cve = {v.cve_id: v for v in vulnerabilities}
     seen: set[tuple[int, int]] = set()
 
-    for device in devices:
+    for device in _iter_alive(db):
         for finding in match_device(device, vulnerabilities):
             vulnerability = by_cve.get(finding.cve_id)
             if vulnerability is None:
@@ -248,28 +247,64 @@ def listing(
 
 
 def summary(db: Session, *, today: date | None = None) -> ExposureSummary:
+    """件数だけ SQL で出す。行を全部読むとノートPCでは画面が固まる。"""
     today = today or date.today()
-    rows = listing(db, today=today)
-    unhandled_names = {str(s) for s in UNHANDLED}
+    unhandled = tuple(UNHANDLED)
 
-    out = ExposureSummary(total=len(rows))
-    for row in rows:
-        out.by_status[row.status] = out.by_status.get(row.status, 0) + 1
+    status_rows = db.execute(
+        select(DeviceExposure.status, func.count()).group_by(DeviceExposure.status)
+    ).all()
+    by_status = {str(status): count for status, count in status_rows}
 
-        if row.status in unhandled_names:
-            out.unhandled += 1
-            if row.known_exploited:
-                out.known_exploited_unhandled += 1
-        if row.overdue:
-            out.overdue += 1
-        if row.status == str(ExposureStatus.MITIGATED):
-            # 回避策だけ。機器の版は変わっていないので該当は残ったまま
-            out.mitigated_but_still_affected += 1
-        if row.reopened_on and row.status in unhandled_names:
-            out.reopened += 1
-        if row.status in {str(ExposureStatus.MITIGATED), str(ExposureStatus.FIXED)} and not (
-            row.config_verified
-        ):
-            out.unverified += 1
+    total = sum(by_status.values())
+    unhandled_count = sum(by_status.get(str(s), 0) for s in unhandled)
 
-    return out
+    known_exploited_unhandled = (
+        db.scalar(
+            select(func.count(DeviceExposure.id))
+            .join(Vulnerability, DeviceExposure.vulnerability_id == Vulnerability.id)
+            .where(DeviceExposure.status.in_(unhandled), Vulnerability.known_exploited.is_(True))
+        )
+        or 0
+    )
+    overdue = (
+        db.scalar(
+            select(func.count(DeviceExposure.id))
+            .join(Vulnerability, DeviceExposure.vulnerability_id == Vulnerability.id)
+            .where(
+                DeviceExposure.status.in_(unhandled),
+                Vulnerability.remediation_due.is_not(None),
+                Vulnerability.remediation_due < today,
+            )
+        )
+        or 0
+    )
+    reopened = (
+        db.scalar(
+            select(func.count(DeviceExposure.id)).where(
+                DeviceExposure.status.in_(unhandled),
+                DeviceExposure.reopened_on.is_not(None),
+            )
+        )
+        or 0
+    )
+    unverified = (
+        db.scalar(
+            select(func.count(DeviceExposure.id)).where(
+                DeviceExposure.status.in_((ExposureStatus.MITIGATED, ExposureStatus.FIXED)),
+                DeviceExposure.config_verified.is_not(True),
+            )
+        )
+        or 0
+    )
+
+    return ExposureSummary(
+        total=total,
+        unhandled=unhandled_count,
+        known_exploited_unhandled=known_exploited_unhandled,
+        overdue=overdue,
+        mitigated_but_still_affected=by_status.get(str(ExposureStatus.MITIGATED), 0),
+        reopened=reopened,
+        unverified=unverified,
+        by_status=by_status,
+    )

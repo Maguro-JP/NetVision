@@ -8,8 +8,10 @@
 from __future__ import annotations
 
 import enum
+from collections.abc import Iterable
 from dataclasses import dataclass, field
 from datetime import date
+from heapq import heappush, heappushpop
 from typing import TYPE_CHECKING
 
 from app.models import Device, DeviceStatus, MaintenanceContract
@@ -182,8 +184,93 @@ def _make(kind: InsightKind, device: Device | None, detail: str, **kwargs) -> In
     )
 
 
+class _Collector:
+    """指摘の件数は全件から数え、返す中身だけ重い順に keep 件残す。"""
+
+    def __init__(self, keep: int | None) -> None:
+        self.keep = keep
+        self.total = 0
+        self.annual_saving_total = 0.0
+        self.by_category: dict[str, int] = {}
+        self.summaries: dict[InsightKind, KindSummary] = {}
+        self._all: list[Insight] = []
+        self._heap: list[tuple] = []
+        self._seq = 0
+
+    def emit(self, kind: InsightKind, device: Device | None, detail: str, **kwargs) -> None:
+        category, title, severity = KIND_META[kind]
+        saving = kwargs.get("annual_saving") or 0
+        self._count(kind, category, title, severity, saving)
+        if self.keep is not None and not self._would_keep(severity.rank, saving):
+            return
+        self._retain(_make(kind, device, detail, **kwargs), severity.rank, saving)
+
+    def absorb(self, insight: Insight) -> None:
+        saving = insight.annual_saving or 0
+        self._count(insight.kind, insight.category, insight.title, insight.severity, saving)
+        if self.keep is not None and not self._would_keep(insight.severity.rank, saving):
+            return
+        self._retain(insight, insight.severity.rank, saving)
+
+    def _count(
+        self,
+        kind: InsightKind,
+        category: InsightCategory,
+        title: str,
+        severity: Severity,
+        saving: float,
+    ) -> None:
+        self.total += 1
+        self.annual_saving_total += saving
+        self.by_category[category] = self.by_category.get(category, 0) + 1
+        summary = self.summaries.get(kind)
+        if summary is None:
+            self.summaries[kind] = KindSummary(
+                kind=kind,
+                category=category,
+                title=title,
+                severity=severity,
+                count=1,
+                annual_saving=saving,
+            )
+        else:
+            summary.count += 1
+            summary.annual_saving += saving
+
+    def _would_keep(self, rank: int, saving: float) -> bool:
+        if len(self._heap) < (self.keep or 0):
+            return True
+        worst_rank, worst_saving = self._heap[0][0], self._heap[0][1]
+        return (rank, saving) > (worst_rank, worst_saving)
+
+    def _retain(self, insight: Insight, rank: int, saving: float) -> None:
+        if self.keep is None:
+            self._all.append(insight)
+            return
+        self._seq += 1
+        item = (rank, saving, -self._seq, insight)
+        if len(self._heap) < self.keep:
+            heappush(self._heap, item)
+        else:
+            heappushpop(self._heap, item)
+
+    def report(self) -> InsightReport:
+        insights = self._all if self.keep is None else [item[3] for item in self._heap]
+        insights.sort(key=lambda i: (-i.severity.rank, -(i.annual_saving or 0)))
+        by_kind = sorted(
+            self.summaries.values(), key=lambda s: (-s.severity.rank, -s.annual_saving, -s.count)
+        )
+        return InsightReport(
+            total=self.total,
+            annual_saving_total=self.annual_saving_total,
+            by_category=self.by_category,
+            by_kind=by_kind,
+            insights=insights,
+        )
+
+
 def analyze(
-    devices: list[Device],
+    devices: Iterable[Device],
     today: date | None = None,
     vulnerabilities: list[Vulnerability] | None = None,
     keep: int | None = None,
@@ -198,7 +285,8 @@ def analyze(
     まず種類ごとの件数（by_kind）を見て、中身は必要な分だけ見る形にする。
     """
     today = today or date.today()
-    insights: list[Insight] = []
+    collector = _Collector(keep)
+    mixed: dict[str, dict[str, set[str]]] = {}
 
     for device in devices:
         status = evaluate(device, today)
@@ -207,174 +295,241 @@ def analyze(
 
         # --- 無駄 -----------------------------------------------------------
         if device.status is DeviceStatus.RETIRED and active:
-            insights.append(
-                _make(
-                    InsightKind.CONTRACT_ON_RETIRED,
-                    device,
-                    f"撤去済みですが {len(active)} 件の保守契約が有効なままです"
-                    f"（最終終了日 {max(c.end_date for c in active):%Y/%m/%d}）",
-                    annual_saving=active_cost or None,
-                    recommendation="保守契約の解約を検討してください。",
-                )
+            collector.emit(
+                InsightKind.CONTRACT_ON_RETIRED,
+                device,
+                f"撤去済みですが {len(active)} 件の保守契約が有効なままです"
+                f"（最終終了日 {max(c.end_date for c in active):%Y/%m/%d}）",
+                annual_saving=active_cost or None,
+                recommendation="保守契約の解約を検討してください。",
             )
 
         if device.status is DeviceStatus.STANDBY and active_cost > 0:
-            insights.append(
-                _make(
-                    InsightKind.CONTRACT_ON_STANDBY,
-                    device,
-                    f"予備機に年額 {active_cost:,.0f} 円の保守が付いています",
-                    # 予備機はサービスレベルを下げる想定で、半額を削減余地とみなす
-                    annual_saving=active_cost / 2,
-                    recommendation="予備機向けにサービスレベルを下げられないか確認してください。",
-                )
+            collector.emit(
+                InsightKind.CONTRACT_ON_STANDBY,
+                device,
+                f"予備機に年額 {active_cost:,.0f} 円の保守が付いています",
+                # 予備機はサービスレベルを下げる想定で、半額を削減余地とみなす
+                annual_saving=active_cost / 2,
+                recommendation="予備機向けにサービスレベルを下げられないか確認してください。",
             )
 
         # 同じ期間に重なる契約は二重払いの可能性が高い
         for index, first in enumerate(active):
             for second in active[index + 1 :]:
                 if first.start_date <= second.end_date and second.start_date <= first.end_date:
-                    insights.append(
-                        _make(
-                            InsightKind.DUPLICATE_CONTRACT,
-                            device,
-                            f"「{first.provider}」と「{second.provider}」の契約期間が重なっています",
-                            annual_saving=min(_cost(first), _cost(second)) or None,
-                            recommendation="二重契約になっていないか確認してください。",
-                        )
+                    collector.emit(
+                        InsightKind.DUPLICATE_CONTRACT,
+                        device,
+                        f"「{first.provider}」と「{second.provider}」の契約期間が重なっています",
+                        annual_saving=min(_cost(first), _cost(second)) or None,
+                        recommendation="二重契約になっていないか確認してください。",
                     )
 
         if status.effective_eol_date and active:
             latest = max(c.end_date for c in active)
             if latest > status.effective_eol_date:
                 over_days = (latest - status.effective_eol_date).days
-                insights.append(
-                    _make(
-                        InsightKind.CONTRACT_AFTER_EOL,
-                        device,
-                        f"サポート終了({status.effective_eol_date:%Y/%m/%d})より "
-                        f"{over_days} 日先まで保守契約があります",
-                        recommendation=(
-                            "EoL 以降はベンダー保守が受けられない場合があります。"
-                            "契約期間を見直してください。"
-                        ),
-                    )
+                collector.emit(
+                    InsightKind.CONTRACT_AFTER_EOL,
+                    device,
+                    f"サポート終了({status.effective_eol_date:%Y/%m/%d})より "
+                    f"{over_days} 日先まで保守契約があります",
+                    recommendation=(
+                        "EoL 以降はベンダー保守が受けられない場合があります。"
+                        "契約期間を見直してください。"
+                    ),
                 )
 
         # --- リスク ---------------------------------------------------------
         if device.status is DeviceStatus.ACTIVE:
             if status.eol_severity is Severity.EXPIRED:
-                insights.append(
-                    _make(
-                        InsightKind.ACTIVE_AFTER_EOL,
-                        device,
-                        f"サポート終了から {abs(status.days_to_eol or 0)} 日経過しています",
-                        recommendation="脆弱性の修正が提供されません。更改を優先してください。",
-                    )
+                collector.emit(
+                    InsightKind.ACTIVE_AFTER_EOL,
+                    device,
+                    f"サポート終了から {abs(status.days_to_eol or 0)} 日経過しています",
+                    recommendation="脆弱性の修正が提供されません。更改を優先してください。",
                 )
 
             if not active:
-                insights.append(
-                    _make(
-                        InsightKind.ACTIVE_WITHOUT_CONTRACT,
-                        device,
-                        "有効な保守契約がありません"
-                        if device.contracts
-                        else "保守契約が登録されていません",
-                        recommendation="障害時の復旧手段を確認し、必要なら契約してください。",
-                    )
+                collector.emit(
+                    InsightKind.ACTIVE_WITHOUT_CONTRACT,
+                    device,
+                    "有効な保守契約がありません"
+                    if device.contracts
+                    else "保守契約が登録されていません",
+                    recommendation="障害時の復旧手段を確認し、必要なら契約してください。",
                 )
 
             if status.age_years is not None and status.age_years >= AGING_YEARS:
-                insights.append(
-                    _make(
-                        InsightKind.AGING_DEVICE,
-                        device,
-                        f"導入から {status.age_years} 年経過しています",
-                        recommendation="更改計画に含めることを検討してください。",
-                    )
+                collector.emit(
+                    InsightKind.AGING_DEVICE,
+                    device,
+                    f"導入から {status.age_years} 年経過しています",
+                    recommendation="更改計画に含めることを検討してください。",
                 )
 
-            insights.extend(_vulnerability_insights(device, vulnerabilities or []))
+            for finding in _vulnerability_insights(device, vulnerabilities or []):
+                collector.absorb(finding)
 
         # --- 台帳の整備 -----------------------------------------------------
         if device.status is not DeviceStatus.RETIRED:
+            for contract in active:
+                mixed.setdefault(device.model, {}).setdefault(contract.provider, set()).add(
+                    device.hostname
+                )
             if getattr(device, "product", None) is None:
-                insights.append(
-                    _make(
-                        InsightKind.MISSING_PRODUCT_REFERENCE,
-                        device,
-                        f"{device.vendor} {device.model} の EoL 情報が製品マスタにありません",
-                        recommendation=(
-                            "リファレンス管理から型番を登録すると、"
-                            "同じ型番の機器すべてに反映されます。"
-                        ),
-                    )
+                collector.emit(
+                    InsightKind.MISSING_PRODUCT_REFERENCE,
+                    device,
+                    f"{device.vendor} {device.model} の EoL 情報が製品マスタにありません",
+                    recommendation=(
+                        "リファレンス管理から型番を登録すると、同じ型番の機器すべてに反映されます。"
+                    ),
                 )
             if not device.os_version:
-                insights.append(
-                    _make(
-                        InsightKind.MISSING_OS_VERSION,
-                        device,
-                        "OSバージョンが分からないため、該当する脆弱性を判定できません",
-                        recommendation="Config を取り込むと自動で読み取れます。",
-                    )
+                collector.emit(
+                    InsightKind.MISSING_OS_VERSION,
+                    device,
+                    "OSバージョンが分からないため、該当する脆弱性を判定できません",
+                    recommendation="Config を取り込むと自動で読み取れます。",
                 )
             if status.effective_eol_date is None and status.maintenance_end is None:
-                insights.append(
-                    _make(
-                        InsightKind.MISSING_LIFECYCLE_DATA,
-                        device,
-                        "EoL・保守期限のどちらも未登録です",
-                        recommendation="ベンダーのEoX情報と保守契約を確認して登録してください。",
-                    )
+                collector.emit(
+                    InsightKind.MISSING_LIFECYCLE_DATA,
+                    device,
+                    "EoL・保守期限のどちらも未登録です",
+                    recommendation="ベンダーのEoX情報と保守契約を確認して登録してください。",
                 )
             if device.site_id is None:
-                insights.append(
-                    _make(
-                        InsightKind.MISSING_SITE,
-                        device,
-                        "設置拠点が未登録です",
-                        recommendation="拠点を登録すると、拠点単位の更改計画が立てられます。",
-                    )
+                collector.emit(
+                    InsightKind.MISSING_SITE,
+                    device,
+                    "設置拠点が未登録です",
+                    recommendation="拠点を登録すると、拠点単位の更改計画が立てられます。",
                 )
 
-    insights.extend(_mixed_providers(devices, today))
+    for insight in _mixed_provider_insights(mixed):
+        collector.absorb(insight)
+
+    return collector.report()
+
+
+def analyze_from_db(
+    db,
+    *,
+    site_id: int | None = None,
+    today: date | None = None,
+    vulnerabilities: list[Vulnerability] | None = None,
+    keep: int | None = 200,
+) -> InsightReport:
+    """台帳全体を ORM 化せずに指摘を出す。ノートPCの導入テスト向け。
+
+    件数は SQL、文言は種類ごとに必要な機器だけ読む。
+    """
+    from app.services import insight_query as iq
+
+    today = today or date.today()
+    sample = keep or 200
+    stats = iq.collect_kind_stats(db, site_id=site_id, today=today, sample=sample)
+    mixed = iq.mixed_provider_insights(db, site_id=site_id, today=today)
+
+    sample_ids: list[int] = []
+    seen: set[int] = set()
+    for stat in stats:
+        for device_id in stat.sample_ids:
+            if device_id not in seen:
+                seen.add(device_id)
+                sample_ids.append(device_id)
+
+    devices = iq.load_devices(db, sample_ids)
+    details = analyze(devices, today=today, keep=None, vulnerabilities=None)
+    insights = [i for i in details.insights if i.kind is not InsightKind.MIXED_PROVIDERS]
+    insights.extend(mixed)
+
+    vuln_summaries: list[KindSummary] = []
+    if vulnerabilities:
+        vuln_report = _vulnerability_report(
+            db, site_id=site_id, vulnerabilities=vulnerabilities, keep=keep
+        )
+        insights.extend(vuln_report.insights)
+        vuln_summaries = vuln_report.by_kind
+        vuln_total = vuln_report.total
+        vuln_saving = vuln_report.annual_saving_total
+    else:
+        vuln_total = 0
+        vuln_saving = 0.0
+
+    insights.sort(key=lambda i: (-i.severity.rank, -(i.annual_saving or 0)))
+    if keep is not None:
+        insights = insights[:keep]
+
+    by_kind = iq.summaries_from_stats(stats, extra=vuln_summaries)
+    if mixed:
+        category, title, severity = KIND_META[InsightKind.MIXED_PROVIDERS]
+        by_kind.append(
+            KindSummary(
+                kind=InsightKind.MIXED_PROVIDERS,
+                category=category,
+                title=title,
+                severity=severity,
+                count=len(mixed),
+                annual_saving=0,
+            )
+        )
+        by_kind.sort(key=lambda s: (-s.severity.rank, -s.annual_saving, -s.count))
 
     by_category: dict[str, int] = {}
-    for insight in insights:
-        by_category[insight.category] = by_category.get(insight.category, 0) + 1
-
-    # 重い順、次に削減額の大きい順
-    insights.sort(key=lambda i: (-i.severity.rank, -(i.annual_saving or 0)))
-
-    summaries: dict[InsightKind, KindSummary] = {}
-    for insight in insights:
-        summary = summaries.get(insight.kind)
-        if summary is None:
-            summaries[insight.kind] = KindSummary(
-                kind=insight.kind,
-                category=insight.category,
-                title=insight.title,
-                severity=insight.severity,
-                count=1,
-                annual_saving=insight.annual_saving or 0,
-            )
-        else:
-            summary.count += 1
-            summary.annual_saving += insight.annual_saving or 0
-
-    by_kind = sorted(
-        summaries.values(), key=lambda s: (-s.severity.rank, -s.annual_saving, -s.count)
-    )
+    for summary in by_kind:
+        by_category[summary.category] = by_category.get(summary.category, 0) + summary.count
 
     return InsightReport(
-        total=len(insights),
-        annual_saving_total=sum(i.annual_saving or 0 for i in insights),
+        total=sum(s.count for s in stats) + len(mixed) + vuln_total,
+        annual_saving_total=sum(s.annual_saving for s in stats) + vuln_saving,
         by_category=by_category,
         by_kind=by_kind,
-        insights=insights if keep is None else insights[:keep],
+        insights=insights,
     )
+
+
+def _vulnerability_report(
+    db,
+    *,
+    site_id: int | None,
+    vulnerabilities: list,
+    keep: int | None,
+) -> InsightReport:
+    """OS が入っている稼働機だけを見て、脆弱性の指摘を数える。"""
+    from sqlalchemy import select
+
+    from app.models import Device, DeviceStatus
+    from app.services.insight_query import load_devices
+
+    collector = _Collector(keep)
+    last_id = 0
+    chunk = 200
+    while True:
+        stmt = (
+            select(Device.id)
+            .where(
+                Device.status == DeviceStatus.ACTIVE,
+                Device.os_version.is_not(None),
+                Device.os_version != "",
+                Device.id > last_id,
+            )
+            .order_by(Device.id)
+            .limit(chunk)
+        )
+        if site_id is not None:
+            stmt = stmt.where(Device.site_id == site_id)
+        ids = list(db.scalars(stmt))
+        if not ids:
+            break
+        last_id = ids[-1]
+        for device in load_devices(db, ids):
+            for finding in _vulnerability_insights(device, vulnerabilities):
+                collector.absorb(finding)
+    return collector.report()
 
 
 def _vulnerability_insights(device: Device, vulnerabilities: list) -> list[Insight]:
@@ -417,17 +572,8 @@ def _vulnerability_insights(device: Device, vulnerabilities: list) -> list[Insig
     return insights
 
 
-def _mixed_providers(devices: list[Device], today: date) -> list[Insight]:
+def _mixed_provider_insights(by_model: dict[str, dict[str, set[str]]]) -> list[Insight]:
     """同じ型番なのに保守ベンダーが分かれているものを集約候補として挙げる。"""
-    by_model: dict[str, dict[str, set[str]]] = {}
-    for device in devices:
-        if device.status is DeviceStatus.RETIRED:
-            continue
-        for contract in _active_contracts(device, today):
-            by_model.setdefault(device.model, {}).setdefault(contract.provider, set()).add(
-                device.hostname
-            )
-
     insights: list[Insight] = []
     for model, providers in by_model.items():
         if len(providers) < 2:
