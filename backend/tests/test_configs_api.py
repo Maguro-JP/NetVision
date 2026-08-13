@@ -119,6 +119,26 @@ def test_unmatched_hostname_is_still_stored(client):
     assert "台帳にありません" in body["message"]
 
 
+def test_unmatched_hostname_can_match_by_serial(client, device_payload):
+    """機器名が変わっていても、シリアルが同じなら同一機として紐付ける。"""
+    device_id = add_device(
+        client,
+        device_payload,
+        hostname="qx-old-name",
+        vendor="NEC",
+        serial_number="210235A0L6C123000010",
+    )
+
+    body = upload(client, "qx-sw-01", create_missing=False).json()[0]
+
+    assert body["matched"] is True
+    assert body["device_id"] == device_id
+    assert body["hostname"] == "qx-sw-01"
+    diffs = {d["field"]: d for d in body["diffs"]}
+    assert diffs["serial_number"]["observed"] == "210235A0L6C123000010"
+    assert diffs["serial_number"]["differs"] is False
+
+
 def test_identical_content_does_not_create_a_new_generation(client, device_payload):
     seed_fleet(client, device_payload)
 

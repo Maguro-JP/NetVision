@@ -142,7 +142,7 @@ async def preview_config(
     text = _decode(content)
 
     parsed = service.configparse.parse(text)
-    device = service._find_device(db, parsed.hostname)
+    device = service._find_device(db, parsed.hostname, parsed.serial_number)
     result = service.IngestResult(
         filename=file.filename or "config.txt",
         vendor=parsed.vendor,

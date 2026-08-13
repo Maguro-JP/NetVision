@@ -63,6 +63,7 @@ def test_qx_is_detected_and_read():
     assert parsed.model == "QX-S5528P"
     assert parsed.os_name == "Comware"
     assert parsed.os_version == "5.20.99"
+    assert parsed.serial_number == "210235A0L6C123000010"
 
 
 def test_qx_interfaces_and_vlans():
@@ -110,7 +111,64 @@ interface Vlan-interface10
     parsed = configparse.parse(text)
     assert parsed.vendor is Vendor.NEC_QX
     assert parsed.hostname == "osaka-qx-01"
+    assert parsed.serial_number is None
     assert any(i.name == "GigabitEthernet1/0/1" for i in parsed.interfaces)
+
+
+def test_qx_serial_from_esn_and_sentence_forms():
+    esn = configparse.parse(
+        "sysname qx-sw-01\ninterface GigabitEthernet1/0/1\nESN of slot 1: 210235A0L6C123000010\n"
+    )
+    assert esn.serial_number == "210235A0L6C123000010"
+
+    sentence = configparse.parse(
+        "sysname qx-sw-01\ninterface GigabitEthernet1/0/1\n"
+        "The Serial Number of the device is: 210235A0L6C999000001\n"
+    )
+    assert sentence.serial_number == "210235A0L6C999000001"
+
+
+def test_qx_serial_skips_none_and_power_supply():
+    text = """
+sysname qx-sw-01
+interface GigabitEthernet1/0/1
+Slot 1:
+DEVICE_SERIAL_NUMBER : None
+Power 1:
+DEVICE_SERIAL_NUMBER : 210231A0PWR0000001
+Chassis:
+DEVICE_SERIAL_NUMBER : 210235A0L6C123000010
+"""
+    parsed = configparse.parse(text)
+    assert parsed.serial_number == "210235A0L6C123000010"
+
+
+def test_qx_does_not_treat_lldp_chassis_id_as_serial():
+    text = """
+sysname qx-sw-01
+interface GigabitEthernet1/0/1
+LLDP neighbor-information of port 1[GigabitEthernet1/0/1]:
+  Chassis type      : MAC address
+  Chassis ID        : 0011-2233-4455
+  System name       : core-sw-01
+  Port ID           : GigabitEthernet1/0/24
+"""
+    parsed = configparse.parse(text)
+    assert parsed.serial_number is None
+
+
+def test_qx_reads_model_from_manuinfo_when_banner_is_missing():
+    text = """
+sysname branch-qx-01
+interface GigabitEthernet1/0/1
+Slot 1:
+DEVICE_NAME          : QX-S6520X
+DEVICE_SERIAL_NUMBER : 210235A1ABC123456789
+"""
+    parsed = configparse.parse(text)
+    assert parsed.vendor is Vendor.NEC_QX
+    assert parsed.model == "QX-S6520X"
+    assert parsed.serial_number == "210235A1ABC123456789"
 
 
 def test_quoted_sysname_is_read():

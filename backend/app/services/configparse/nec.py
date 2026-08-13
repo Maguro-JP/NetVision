@@ -78,6 +78,18 @@ _QX_VPN_INSTANCE = re.compile(r"^ip\s+vpn-instance\s+(\S+)", re.IGNORECASE)
 _QX_BIND_VPN = re.compile(
     r"^\s*(?:ip\s+binding\s+vpn-instance|vpn-instance)\s+(\S+)", re.IGNORECASE
 )
+# `display device manuinfo` / `display esn`。電源・FAN のシリアルは捨て、シャーシ側を取る
+_QX_MANUINFO_HEADER = re.compile(
+    r"^(Slot\s+\d+|Chassis(?:\s+\d+)?|Power(?:Supply)?\s+\d+|PSU\s+\d+|Fan\s+\d+)\s*:",
+    re.IGNORECASE,
+)
+_QX_DEVICE_SERIAL = re.compile(r"^DEVICE_SERIAL_NUMBER\s*:\s*(\S+)", re.IGNORECASE)
+_QX_DEVICE_NAME_FIELD = re.compile(r"^DEVICE_NAME\s*:\s*(.+)$", re.IGNORECASE)
+_QX_ESN = re.compile(r"^ESN of slot\s+\d+\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+_QX_SERIAL_SENTENCE = re.compile(
+    r"^The Serial Number of the device is:\s*(\S+)", re.IGNORECASE | re.MULTILINE
+)
+_INVALID_SERIALS = frozenset({"none", "n/a", "na", "null", "unknown", "unavailable", "--", "-"})
 
 _DESCRIPTION = re.compile(r"^\s*description\s+(.+?)\s*$", re.IGNORECASE)
 
@@ -265,6 +277,59 @@ def _looks_like_mac(value: str) -> bool:
     return len(compact) >= 12 and all(c in "0123456789abcdefABCDEF" for c in compact)
 
 
+def _serial_looks_valid(serial: str) -> bool:
+    if not serial or serial.lower() in _INVALID_SERIALS:
+        return False
+    if _looks_like_mac(serial):
+        return False
+    return bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{3,}", serial))
+
+
+def _qx_is_chassis_section(header: str | None) -> bool:
+    if header is None:
+        return True
+    key = header.lower()
+    return key.startswith("slot") or key.startswith("chassis")
+
+
+def _qx_serial(text: str) -> str | None:
+    """Comware の display device manuinfo / ESN からシャーシのシリアルを取る。"""
+    section: str | None = None
+    for raw in text.splitlines():
+        header = _QX_MANUINFO_HEADER.match(raw.strip())
+        if header:
+            section = header.group(1)
+            continue
+        match = _QX_DEVICE_SERIAL.match(raw.strip())
+        if match and _qx_is_chassis_section(section):
+            serial = match.group(1).strip().rstrip(".,;")
+            if _serial_looks_valid(serial):
+                return serial
+
+    for pattern in (_QX_ESN, _QX_SERIAL_SENTENCE, _IX_SERIAL):
+        match = pattern.search(text)
+        if match:
+            serial = match.group(1).strip().rstrip(".,;")
+            if _serial_looks_valid(serial):
+                return serial
+    return None
+
+
+def _qx_device_name_from_manuinfo(text: str) -> str:
+    section: str | None = None
+    for raw in text.splitlines():
+        header = _QX_MANUINFO_HEADER.match(raw.strip())
+        if header:
+            section = header.group(1)
+            continue
+        match = _QX_DEVICE_NAME_FIELD.match(raw.strip())
+        if match and _qx_is_chassis_section(section):
+            name = match.group(1).strip()
+            if name and name.lower() not in _INVALID_SERIALS:
+                return name
+    return ""
+
+
 # ---------------------------------------------------------------------------
 # QX（Comware）
 # ---------------------------------------------------------------------------
@@ -284,6 +349,10 @@ def _parse_qx(text: str) -> ParsedConfig:
     sysname = _QX_SYSNAME.search(text)
     if sysname:
         parsed.hostname = _unquote(sysname.group(1))
+
+    parsed.serial_number = _qx_serial(text)
+    if not parsed.model:
+        parsed.model = _qx_device_name_from_manuinfo(text)
 
     current: ParsedInterface | None = None
     current_vlan: int | None = None

@@ -1,6 +1,15 @@
 H3C Comware Platform Software
 Comware Software, Version 5.20.99, Release 6108
 NEC QX-S5528P Routing Switch uptime is 0 week, 3 days, 4 hours
+Slot 1:
+DEVICE_NAME          : QX-S5528P
+DEVICE_SERIAL_NUMBER : 210235A0L6C123000010
+MAC_ADDRESS          : 00E0-FC12-3456
+MANUFACTURING_DATE   : 2015-03-12
+VENDOR_NAME          : NEC
+Power 1:
+DEVICE_NAME          : LSR2200-56
+DEVICE_SERIAL_NUMBER : 210231A0PWR0000001
 #
  sysname qx-sw-01
 #
