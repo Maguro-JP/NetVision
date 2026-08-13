@@ -98,3 +98,31 @@ def test_collect_samples_formats_excel_dates_and_dedupes():
 
     assert samples["導入日"] == ["2021/04/01"]  # 重複と空欄は除く
     assert samples["拠点"] == ["本社", "大阪"]
+
+
+def test_parse_date_fast_path_accepts_common_separators():
+    assert parse_date("2024-04-01") == date(2024, 4, 1)
+    assert parse_date("2024/04/01") == date(2024, 4, 1)
+    assert parse_date("2024.04.01") == date(2024, 4, 1)
+    assert parse_date("2024/4") == date(2024, 4, 1)
+
+
+def test_sample_rows_prefers_errors():
+    from app.services.importer import _ROW_SAMPLE, RowAction, RowResult, _sample_rows
+
+    results = [
+        RowResult(row_number=i, key=f"sw-{i}", action=RowAction.CREATE)
+        for i in range(1, _ROW_SAMPLE + 50)
+    ]
+    # 後ろの方にエラーを置く。サンプルはエラーを優先して拾う
+    results[80].action = RowAction.ERROR
+    results[200].action = RowAction.ERROR
+    results[201].action = RowAction.ERROR
+
+    sampled = _sample_rows(results)
+    assert len(sampled) == _ROW_SAMPLE
+    assert [r.action for r in sampled[:3]] == [
+        RowAction.ERROR,
+        RowAction.ERROR,
+        RowAction.ERROR,
+    ]

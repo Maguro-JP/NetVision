@@ -42,4 +42,8 @@ class ImportResult(BaseModel):
     column_samples: dict[str, list[str]] = Field(
         default_factory=dict, description="{列名: 実データの例}。列の対応付けを判断する材料"
     )
+    #: 行ごとの結果。多いときはエラー優先で一部だけ（rows_total が実数）
     rows: list[ImportRowResult]
+    rows_total: int = Field(
+        default=0, description="行結果の実数。rows は画面が固まらないよう一部だけ返す"
+    )
