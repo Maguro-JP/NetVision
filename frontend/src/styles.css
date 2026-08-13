@@ -586,6 +586,11 @@ button:disabled {
 .topo-edge-label.center {
   color: var(--muted);
 }
+.topo-edge-label.circuit {
+  color: var(--text);
+  font-weight: 600;
+  border: 1px solid var(--border);
+}
 .topo-edge-label.warning {
   color: var(--sev-critical);
   font-weight: 700;

@@ -553,6 +553,44 @@ def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payloa
     assert where["here-rt"] != (1.0, 1.0)
 
 
+def test_initial_layout_is_dense_enough_to_read(client, device_payload):
+    """初期配置は余白を抑え、手で詰めなくても読める密度にすること。"""
+    site = client.post(f"{API}/sites", json={"name": "密度拠点"}).json()["id"]
+    rt = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="dense-rt", device_type="router", site_id=site),
+    ).json()["id"]
+    left = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="dense-a", device_type="switch", serial_number="A", site_id=site
+        ),
+    ).json()["id"]
+    right = client.post(
+        f"{API}/devices",
+        json=device_payload(
+            hostname="dense-b", device_type="switch", serial_number="B", site_id=site
+        ),
+    ).json()["id"]
+    for port, peer in (("Gi0/1", left), ("Gi0/2", right)):
+        client.post(
+            f"{API}/topology/links",
+            json={
+                "a_device_id": rt,
+                "a_interface": port,
+                "b_device_id": peer,
+                "b_interface": "Gi0/1",
+            },
+        )
+
+    nodes = client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+    xs = [n["x"] for n in nodes]
+    ys = [n["y"] for n in nodes]
+    # 3台・子2台なら横はおおよそ1間隔、縦は1段。広すぎると「必ず手直し」になる
+    assert max(xs) - min(xs) <= 260
+    assert max(ys) - min(ys) <= 180
+
+
 def test_initial_layout_stacks_connected_routers(client, device_payload):
     """初期配置は結線の上下で置く。同じ種別でも横一列にしない。
 
@@ -632,7 +670,7 @@ def test_arranging_keeps_the_order_a_person_chose(client, device_payload):
     nodes = {n["hostname"]: n for n in shown}
     assert nodes["sw-b"]["x"] < nodes["sw-a"]["x"]  # 人が入れ替えた順
     assert nodes["br-rt"]["y"] < nodes["sw-a"]["y"]
-    assert abs((nodes["sw-a"]["x"] - nodes["sw-b"]["x"]) - 300.0) < 1.0  # 間隔は均等
+    assert abs((nodes["sw-a"]["x"] - nodes["sw-b"]["x"]) - 230.0) < 1.0  # 間隔は均等
 
 
 def test_a_new_device_is_laid_out_without_moving_saved_ones(client, device_payload):

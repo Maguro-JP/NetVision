@@ -11,7 +11,7 @@ from openpyxl import load_workbook
 
 from tests.conftest import API
 
-HEADER = "機器A,ポートA,機器B,ポートB,備考\n"
+HEADER = "機器A,ポートA,機器B,ポートB,回線名\n"
 
 
 def upload(client, body: str, *, commit=True, filename="links.csv"):
@@ -37,9 +37,14 @@ def test_template_can_be_downloaded_and_filled_in(client):
     book = load_workbook(io.BytesIO(res.content))
     sheet = book["結線表"]
     headers = [cell.value for cell in sheet[1]]
-    assert headers == ["機器A", "ポートA", "機器B", "ポートB", "備考"]
+    assert headers == ["機器A", "ポートA", "機器B", "ポートB", "回線名"]
     # 書き方を別紙で持たせる。画面を離れても分かるように
     assert "書き方" in book.sheetnames
+    guide = "\n".join(
+        str(value or "") for row in book["書き方"].iter_rows(values_only=True) for value in row
+    )
+    assert "回線名" in guide
+    assert "ポート名は機器の脇" in guide
 
 
 def test_the_example_row_in_the_template_is_not_taken_in(client):

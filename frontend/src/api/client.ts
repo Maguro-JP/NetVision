@@ -415,7 +415,7 @@ export const api = {
     body: {
       a_interface?: string;
       b_interface?: string;
-      label?: string;
+      label?: string | null;
       /** 図の上でどの辺から線を出すか。null に戻すと自動に任せる */
       a_side?: string | null;
       b_side?: string | null;

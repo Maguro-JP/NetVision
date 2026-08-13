@@ -228,25 +228,24 @@ def render_svg(
         nx2, ny2 = points[-2]
 
         if edge.label:
-            # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
+            # 回線名は線の中央。ポート名は機器の脇。どちらか一方にしない
             parts.append(_center_label(*_path_middle(points), edge.label, placement))
-        else:
-            # ポート名はそれぞれの機器側に置く。1本の線に2つ並べると
-            # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
-            # 逆に読んでしまう。ポートの隣にあれば規則は要らない
-            parts.append(
-                _port_label(
-                    x1, y1, nx1, ny1, edge.source_interface, port_style, along_line, placement
-                )
+        # ポート名はそれぞれの機器側に置く。1本の線に2つ並べると
+        # 「左が上位」のような規則を覚える必要が出て、図の向きが変われば
+        # 逆に読んでしまう。ポートの隣にあれば規則は要らない
+        parts.append(
+            _port_label(
+                x1, y1, nx1, ny1, edge.source_interface, port_style, along_line, placement
             )
-            parts.append(
-                _port_label(
-                    x2, y2, nx2, ny2, edge.target_interface, port_style, along_line, placement
-                )
+        )
+        parts.append(
+            _port_label(
+                x2, y2, nx2, ny2, edge.target_interface, port_style, along_line, placement
             )
-            for name in (edge.source_interface, edge.target_interface):
-                if name:
-                    used_media.add(portlabel.media_of(name))
+        )
+        for name in (edge.source_interface, edge.target_interface):
+            if name:
+                used_media.add(portlabel.media_of(name))
 
     # --- 絞り込みの外にいる対向（簡易表示） ---
     for peer in peers:

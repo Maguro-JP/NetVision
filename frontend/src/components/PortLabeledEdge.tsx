@@ -5,7 +5,7 @@ import { MEDIA_COLOR, formatPort, mediaOf, type PortStyle } from "../lib/portlab
 export interface PortEdgeData extends Record<string, unknown> {
   sourceInterface: string;
   targetInterface: string;
-  /** 人が付けた線の名前。あればポート名より優先して中央に出す */
+  /** 回線名。ポート名とは別に、線の中央に出す */
   manualLabel: string | null;
   portStyle: PortStyle;
   /** ポート名を線に沿わせて回転する */
@@ -35,6 +35,8 @@ const DIRECTION: Record<Position, [number, number]> = {
  * 1本の線に2つのポート名を並べると「左が上位」のような規則を覚える必要が出る。
  * 図の向きが変わればその規則は成り立たず、逆に読んでしまう。
  * ポートの隣にあれば規則は要らない。
+ *
+ * 回線名（人が付けた呼び名）は線の中央に足す。ポート名を消して置き換えてはいけない。
  */
 export default function PortLabeledEdge({
   id,
@@ -73,47 +75,46 @@ export default function PortLabeledEdge({
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       {!info.hideLabels && (
         <EdgeLabelRenderer>
-          {info.manualLabel ? (
+          <PortLabel
+            name={info.sourceInterface ?? ""}
+            x={sourceX}
+            y={sourceY}
+            position={sourcePosition}
+            angle={angle}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+          />
+          <PortLabel
+            name={info.targetInterface ?? ""}
+            x={targetX}
+            y={targetY}
+            position={targetPosition}
+            // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
+            // 線の反対側に出るので、機器が近くても重ならない
+            angle={angle + 180}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+          />
+          {info.manualLabel && (
             <div
-              className="topo-edge-label center"
+              className="topo-edge-label center circuit"
               style={{
-                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                // ポート名と重ならないよう、線の中央から少し上へ
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY - 14}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
+              title="回線名"
             >
               {info.manualLabel}
             </div>
-          ) : (
-            <>
-              <PortLabel
-                name={info.sourceInterface ?? ""}
-                x={sourceX}
-                y={sourceY}
-                position={sourcePosition}
-                angle={angle}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-              />
-              <PortLabel
-                name={info.targetInterface ?? ""}
-                x={targetX}
-                y={targetY}
-                position={targetPosition}
-                // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
-                // 線の反対側に出るので、機器が近くても重ならない
-                angle={angle + 180}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-              />
-            </>
           )}
           {info.warning && (
             <div
               className="topo-edge-label warning"
               style={{
-                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY + (info.manualLabel ? 14 : 0)}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
             >

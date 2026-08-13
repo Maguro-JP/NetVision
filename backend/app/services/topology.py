@@ -20,6 +20,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
+from app.models.site import Site
 from app.models.topology import Interface, Link, LinkOrigin, TopologyNode
 from app.services.configparse import expand, normalize, vlanlist
 from app.services.lifecycle import Severity, evaluate
@@ -38,10 +39,16 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
-# ここが詰まっていると、自動生成した図でラベルの置き場所が無くなる
-_X_SPACING = 300.0
-_Y_SPACING = 200.0
+# 自動配置の間隔。機器の箱（190x78）にポート名の余白を足した程度に抑える。
+# 広げすぎると「必ず手で詰めないといけない」図になり、初期配置の意味が無い
+_X_SPACING = 230.0
+_Y_SPACING = 150.0
+
+# 島（繋がっていない塊）のあいだ。1マス空けると図が間延びする
+_ISLAND_GAP = 0.35
+
+# 対向を右へ離すときの倍率。自拠点の箱と被らなければ足りる
+_PEER_GAP = 1.2
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -126,8 +133,9 @@ def matching_device_ids(
         stmt = stmt.where(Device.site_id == site_id)
     if keyword:
         like = f"%{keyword}%"
-        stmt = stmt.where(
-            Device.hostname.ilike(like) | Device.mgmt_ip.ilike(like),
+        # 拠点名でも当たるようにする。機器名の規則を知らない人でも辿り着ける
+        stmt = stmt.outerjoin(Site, Device.site_id == Site.id).where(
+            Device.hostname.ilike(like) | Device.mgmt_ip.ilike(like) | Site.name.ilike(like)
         )
     return set(db.scalars(stmt))
 
@@ -549,7 +557,7 @@ def _compact(
 
     for root in roots:
         place(root)
-        slot += 1.0  # 島の間を1つ空ける
+        slot += _ISLAND_GAP  # 島の間。空けすぎると初期配置が間延びする
 
     move = {node.device_id for node in owned if polish or not node.placed}
     for device_id, node in by_id.items():
@@ -701,14 +709,14 @@ def _place_peers(
         node.x, node.y = middle + offset, top - _Y_SPACING
 
     for index, node in enumerate(beside):
-        node.x, node.y = right + (index + 1) * _X_SPACING * 1.6, top
+        node.x, node.y = right + (index + 1) * _X_SPACING * _PEER_GAP, top
 
     # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
-    column = right + _X_SPACING * 1.6 + _room_for(len(below))
+    column = right + _X_SPACING * _PEER_GAP + _room_for(len(below))
     for index, node in enumerate(below):
         # 自拠点の側と重ならないよう、線を通す余白を見込んで離す
         node.x = column
-        node.y = top + (index + 1) * (_Y_SPACING * 0.7)
+        node.y = top + (index + 1) * (_Y_SPACING * 0.75)
 
     if horizontal:
         # 左右に並べる指定のときは、上下と左右を入れ替える

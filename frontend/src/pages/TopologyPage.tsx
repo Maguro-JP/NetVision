@@ -87,8 +87,7 @@ function loadView(): ViewSettings {
 
 const LAYERS = [
   { value: "physical", label: "物理構成" },
-  { value: "l2", label: "L2 (VLAN)" },
-  { value: "l3", label: "L3 (セグメント)" },
+  // L2/L3 は結線が物理と同じで、層名だけが違う。未実装のまま出すと誤認のもと
   { value: "logical", label: "論理構成" },
 ];
 
@@ -326,7 +325,8 @@ function toFlow(
       manualLabel: edge.label,
       portStyle: options.portStyle,
       alongLine: options.alongLine,
-      hideLabels: false,
+      // シンプル表示は機器名と線だけ。ポート名まで残すと「シンプル」にならない
+      hideLabels: simple,
       // 同じところから出る線を、1本ずつ別の通り道へずらす
       lane: lanes.get(edge.id) ?? 0,
       warning: simple ? null : warningOf(edge),
@@ -660,10 +660,17 @@ function TopologyEditor() {
   });
 
   const createLink = useMutation({
-    mutationFn: (connection: Connection) =>
+    mutationFn: (payload: {
+      source: string;
+      target: string;
+      a_interface: string;
+      b_interface: string;
+    }) =>
       api.createLink({
-        a_device_id: Number(connection.source),
-        b_device_id: Number(connection.target),
+        a_device_id: Number(payload.source),
+        b_device_id: Number(payload.target),
+        a_interface: payload.a_interface,
+        b_interface: payload.b_interface,
       }),
     onSuccess: () => {
       setNotice("結線を追加しました");
@@ -681,10 +688,18 @@ function TopologyEditor() {
       body,
     }: {
       id: number;
-      body: { a_side?: string | null; b_side?: string | null };
+      body: {
+        a_side?: string | null;
+        b_side?: string | null;
+        label?: string | null;
+        a_interface?: string;
+        b_interface?: string;
+      };
     }) => api.updateLink(id, body),
-    onSuccess: () => {
-      setNotice("線の引き出し位置を変えました");
+    onSuccess: (_data, variables) => {
+      setNotice(
+        "label" in variables.body ? "回線名を変えました" : "線の引き出し位置を変えました",
+      );
       refresh();
     },
   });
@@ -821,11 +836,26 @@ function TopologyEditor() {
       // ロック中は React Flow 側でも掴めないようにしてあるが、ここでも止める。
       // 結線は保存が走るので、見た目の制御だけに任せない
       if (!editable) return;
+      if (!connection.source || !connection.target) return;
       if (connection.source === connection.target) return;
+      // ポート無しの線は検収・工事に使えない。ここで聞いてから作る
+      const aPort = window.prompt("接続元のポート名（例: Gi1/0/1）", "");
+      if (aPort === null) return;
+      const bPort = window.prompt("接続先のポート名（例: Gi0/0）", "");
+      if (bPort === null) return;
+      if (!aPort.trim() || !bPort.trim()) {
+        setNotice("ポート名を入れないと結線を作れません");
+        return;
+      }
       setEdges((current) =>
         addEdge({ ...connection, type: "smoothstep", className: "topo-edge manual" }, current),
       );
-      createLink.mutate(connection);
+      createLink.mutate({
+        source: connection.source,
+        target: connection.target,
+        a_interface: aPort.trim(),
+        b_interface: bPort.trim(),
+      });
     },
     [createLink, editable, setEdges],
   );
@@ -1007,9 +1037,26 @@ function TopologyEditor() {
         {/* 手で置いた左右は残して、段と間隔だけ整える。消して戻すのはリセット */}
         <button
           className="primary"
-          onClick={() => arrange.mutate()}
+          onClick={() => {
+            if (dirty) {
+              if (
+                !confirm(
+                  "未保存の配置があります。最適化するとサーバ上の配置を整え、編集中の移動は捨てます。続けますか？",
+                )
+              ) {
+                return;
+              }
+            } else if (
+              !confirm(
+                "いま見えている範囲の配置を整えて保存します。人が置いた左右の並びは残します。続けますか？",
+              )
+            ) {
+              return;
+            }
+            arrange.mutate();
+          }}
           disabled={arrange.isPending}
-          title="手で置いた左右の並びは残して、段と間隔を整えます。自動配置に戻すのはリセットです"
+          title="手で置いた左右の並びは残して、段と間隔を整えて保存します。自動配置に戻すのはリセットです"
         >
           {arrange.isPending ? "整えています…" : "配置を最適化"}
         </button>
@@ -1024,7 +1071,7 @@ function TopologyEditor() {
           配置をリセット
         </button>
         <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
-        <label className="vlan-chip" title="機器名と結線だけの表示に切り替えます">
+        <label className="vlan-chip" title="機器名と線だけの表示にします（ポート名・付帯情報を隠します）">
           <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
           シンプル表示
         </label>
@@ -1308,6 +1355,26 @@ function TopologyEditor() {
                 <br />
                 つなぎ替えは、図の上で<strong>線の端をつまんで別の機器へ</strong>持っていきます。
               </p>
+              <div className="toolbar" style={{ marginBottom: 8 }}>
+                <label className="vlan-chip" title="上位回線・予備回線など、線の呼び名。ポート名とは別です">
+                  回線名{" "}
+                  <input
+                    key={`label-${selectedEdgeData.id}-${selectedEdgeData.label ?? ""}`}
+                    defaultValue={selectedEdgeData.label ?? ""}
+                    placeholder="任意（例: 上位回線）"
+                    style={{ minWidth: 160 }}
+                    onBlur={(event) => {
+                      const next = event.target.value.trim();
+                      const prev = selectedEdgeData.label ?? "";
+                      if (next === prev) return;
+                      updateSide.mutate({
+                        id: selectedEdgeData.id,
+                        body: { label: next || null },
+                      });
+                    }}
+                  />
+                </label>
+              </div>
               <div className="toolbar" style={{ marginBottom: 0 }}>
                 <SidePicker
                   label={nodeName(graph, selectedEdgeData.source)}

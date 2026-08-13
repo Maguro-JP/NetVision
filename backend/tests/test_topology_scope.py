@@ -145,6 +145,18 @@ def test_endpoint_accepts_the_filter(client, db_session):
     assert [n["hostname"] for n in body["nodes"] if n["outside"]] == ["east-core-rt-01"]
 
 
+def test_endpoint_search_matches_site_name(client, db_session):
+    """API 経由でも拠点名で図が出せること。機器名だけだと空になるバグを防ぐ。"""
+    build(db_session)
+    response = client.get(f"{API}/topology", params={"q": "大阪府"})
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert {n["hostname"] for n in body["nodes"] if not n["outside"]} == {
+        "osaka-rt-01",
+        "osaka-sw-01",
+    }
+
+
 def build_center(db) -> dict[str, int]:
     """センターが2台構成で、営業所が2つぶら下がっている形。"""
     center = Site(name="西日本センター", address="大阪府")
