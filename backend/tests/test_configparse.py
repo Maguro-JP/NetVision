@@ -28,6 +28,9 @@ def load(name: str) -> str:
         ("Vl10", "Vlan10"),
         ("ge-0/0/0", "ge-0/0/0"),
         ("port1", "port1"),
+        ("GE1/0/1", "GigabitEthernet1/0/1"),
+        ("Ten-GigabitEthernet1/0/1", "TenGigabitEthernet1/0/1"),
+        ("GigaEthernet0.1", "GigaEthernet0.1"),
     ],
 )
 def test_interface_names_are_normalized(raw, expected):

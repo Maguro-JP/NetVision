@@ -4,8 +4,9 @@ NEC は系統が2つあり、書式がまったく違うので分けて扱う。
 
 - IX シリーズ（IX2000 / IX3000）… 自社系のルータ。`device-name` でホスト名、
   インターフェースは `GigaEthernet0.0` のようにサブインターフェース番号まで含む
-- QX シリーズ（QX-S）… H3C Comware ベースのスイッチ。`sysname` でホスト名、
-  否定は `no` ではなく `undo`
+- QX シリーズ（QX-S）… H3C Comware ベースのスイッチ。機器名は `sysname`
+  （`hostname` ではない）。否定は `no` ではなく `undo`。running-config
+  だけでも sysname で判別する
 
 どちらも Cisco 風に見える箇所があるため、判別は特徴的な語で確実に行う。
 `interface` や `description` のような共通語で判定すると Cisco と混同する。
@@ -50,7 +51,13 @@ _QX_MODEL = re.compile(r"\b(?:NEC\s+)?(QX-S\d+\w*)\b", re.IGNORECASE)
 _QX_COMWARE_VERSION = re.compile(
     r"Comware\s+(?:Software|Platform Software).*?Version\s+([\w.]+)", re.IGNORECASE | re.DOTALL
 )
-_QX_SYSNAME = re.compile(r"^\s*sysname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+_QX_SYSNAME = re.compile(r'^\s*sysname\s+"?([^"\n]+?)"?\s*$', re.IGNORECASE | re.MULTILINE)
+_HOSTNAME_CMD = re.compile(r"^\s*hostname\s+\S+", re.IGNORECASE | re.MULTILINE)
+_IX_IFACE = re.compile(r"^interface\s+GigaEthernet", re.IGNORECASE | re.MULTILINE)
+_QX_HINT = re.compile(
+    r"Comware|\bH3C\b|\bNEC\b|port\s+link-type|interface\s+Vlan-interface|^\s*undo\s+",
+    re.IGNORECASE | re.MULTILINE,
+)
 _QX_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 _QX_IP = re.compile(
     r"^\s*ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE
@@ -75,14 +82,19 @@ _QX_BIND_VPN = re.compile(
 _DESCRIPTION = re.compile(r"^\s*description\s+(.+?)\s*$", re.IGNORECASE)
 
 
+def _unquote(value: str) -> str:
+    return value.strip().strip('"')
+
+
 def detect(text: str) -> Vendor | None:
     """NEC かどうかを見る。共通語ではなく、その機種にしか出ない語で判別する。"""
-    if _IX_BANNER.search(text) or _IX_DEVICE_NAME.search(text):
+    if _IX_BANNER.search(text) or _IX_DEVICE_NAME.search(text) or _IX_IFACE.search(text):
         return Vendor.NEC_IX
-    # QX は Comware ベースなので、型番か sysname + Comware の組み合わせで見る
+    # QX は Comware ベース。現場では running-config だけ（sysname のみ、
+    # Comware のバナーも型番も無い）が来ることが多い
     if _QX_MODEL.search(text):
         return Vendor.NEC_QX
-    if _QX_SYSNAME.search(text) and re.search(r"Comware", text, re.IGNORECASE):
+    if _QX_SYSNAME.search(text) and (_QX_HINT.search(text) or not _HOSTNAME_CMD.search(text)):
         return Vendor.NEC_QX
     return None
 
@@ -106,9 +118,11 @@ def _parse_ix(text: str) -> ParsedConfig:
         parsed.model = banner.group(1)
         parsed.os_version = banner.group(2)
 
-    name = _IX_DEVICE_NAME.search(text) or _IX_HOSTNAME_LINE.search(text)
+    name = (
+        _IX_DEVICE_NAME.search(text) or _IX_HOSTNAME_LINE.search(text) or _QX_SYSNAME.search(text)
+    )
     if name:
-        parsed.hostname = name.group(1)
+        parsed.hostname = _unquote(name.group(1))
 
     serial = _IX_SERIAL.search(text)
     if serial:
@@ -174,24 +188,81 @@ def _parse_ix_vrfs(text: str, parsed: ParsedConfig) -> None:
             current.description = stripped.split(maxsplit=1)[1]
 
 
-# `show lldp info remote-device detail` 相当の出力から隣接を拾う
-_IX_LLDP_BLOCK = re.compile(
-    r"Interface\s*:\s*(\S+).*?System Name\s*:\s*(\S+).*?Port (?:ID|Description)\s*:\s*(\S+)",
-    re.IGNORECASE | re.DOTALL,
+# `show lldp info remote-device detail` は Port ID が System Name より先に来る。
+# 「Name のあとに Port」で拾うと、隣の機器のポートを掴んでしまう
+_IX_LLDP_IFACE = re.compile(r"^Interface\s*:\s*(\S+)", re.IGNORECASE)
+_IX_LLDP_FIELD = re.compile(
+    r"^\s*(System Name|Port ID|Port Description)\s*:\s*(.+?)\s*$", re.IGNORECASE
+)
+_IX_LLDP_TABLE_HEADER = re.compile(
+    r"^\s*Interface\s+Chassis ID\s+Port ID\s+System Name\s*$", re.IGNORECASE
 )
 
 
 def _parse_ix_lldp(text: str, parsed: ParsedConfig) -> None:
-    for match in _IX_LLDP_BLOCK.finditer(text):
-        local, remote_host, remote_port = match.groups()
-        parsed.add_neighbor(
-            ParsedNeighbor(
-                local_interface=local,
-                remote_hostname=remote_host,
-                remote_interface=remote_port,
-                protocol=NeighborProtocol.LLDP,
+    _parse_ix_lldp_detail(text, parsed)
+    _parse_ix_lldp_table(text, parsed)
+
+
+def _parse_ix_lldp_detail(text: str, parsed: ParsedConfig) -> None:
+    local: str | None = None
+    remote_host: str | None = None
+    remote_port: str | None = None
+
+    def flush() -> None:
+        if local and remote_host:
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=local,
+                    remote_hostname=remote_host,
+                    remote_interface=remote_port,
+                    protocol=NeighborProtocol.LLDP,
+                )
             )
-        )
+
+    for raw in text.splitlines():
+        iface = _IX_LLDP_IFACE.match(raw)
+        if iface:
+            flush()
+            local, remote_host, remote_port = iface.group(1), None, None
+            continue
+        field = _IX_LLDP_FIELD.match(raw)
+        if field and local:
+            key = field.group(1).lower()
+            value = _unquote(field.group(2))
+            if key == "system name":
+                remote_host = value
+            elif key == "port id" and not _looks_like_mac(value):
+                remote_port = value
+            elif key == "port description" and remote_port is None:
+                remote_port = value
+    flush()
+
+
+def _parse_ix_lldp_table(text: str, parsed: ParsedConfig) -> None:
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _IX_LLDP_TABLE_HEADER.match(line):
+            continue
+        for row in lines[index + 1 :]:
+            if not row.strip() or row.strip().startswith(("#", "!", "Total")):
+                break
+            columns = row.split()
+            if len(columns) < 4:
+                continue
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=columns[0],
+                    remote_hostname=columns[-1],
+                    remote_interface=columns[-2],
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
+
+
+def _looks_like_mac(value: str) -> bool:
+    compact = re.sub(r"[:.\-]", "", value)
+    return len(compact) >= 12 and all(c in "0123456789abcdefABCDEF" for c in compact)
 
 
 # ---------------------------------------------------------------------------
@@ -212,7 +283,7 @@ def _parse_qx(text: str) -> ParsedConfig:
 
     sysname = _QX_SYSNAME.search(text)
     if sysname:
-        parsed.hostname = sysname.group(1)
+        parsed.hostname = _unquote(sysname.group(1))
 
     current: ParsedInterface | None = None
     current_vlan: int | None = None
@@ -328,21 +399,30 @@ def _parse_qx_vpn_instances(text: str, parsed: ParsedConfig) -> None:
 _QX_LLDP_PORT = re.compile(
     r"LLDP\s+neighbor-information\s+of\s+port\s+\d+\s*\[([^\]]+)\]", re.IGNORECASE
 )
-_QX_LLDP_FIELD = re.compile(r"^\s*(System name|Port ID)\s*:\s*(\S+)", re.IGNORECASE)
+_QX_LLDP_FIELD = re.compile(
+    r"^\s*(System name|Port ID|Port description)\s*:\s*(.+?)\s*$", re.IGNORECASE
+)
+_QX_LLDP_LIST_HEADER = re.compile(
+    r"^\s*System Name\s+Local Interface\s+.*Port ID\s*$", re.IGNORECASE
+)
 
 
 def _parse_qx_lldp(text: str, parsed: ParsedConfig) -> None:
     local: str | None = None
     remote_host: str | None = None
     remote_port: str | None = None
+    port_descr: str | None = None
 
     def flush() -> None:
+        port = remote_port
+        if port is None or _looks_like_mac(port):
+            port = port_descr or port
         if local and remote_host:
             parsed.add_neighbor(
                 ParsedNeighbor(
                     local_interface=local,
                     remote_hostname=remote_host,
-                    remote_interface=remote_port,
+                    remote_interface=port,
                     protocol=NeighborProtocol.LLDP,
                 )
             )
@@ -351,12 +431,39 @@ def _parse_qx_lldp(text: str, parsed: ParsedConfig) -> None:
         port = _QX_LLDP_PORT.search(raw)
         if port:
             flush()
-            local, remote_host, remote_port = port.group(1), None, None
+            local, remote_host, remote_port, port_descr = port.group(1), None, None, None
             continue
         field = _QX_LLDP_FIELD.match(raw)
         if field and local:
-            if field.group(1).lower() == "system name":
-                remote_host = field.group(2)
+            key = field.group(1).lower()
+            value = _unquote(field.group(2))
+            if key == "system name":
+                remote_host = value
+            elif key == "port id":
+                remote_port = value
             else:
-                remote_port = field.group(2)
+                port_descr = value
     flush()
+    _parse_qx_lldp_list(text, parsed)
+
+
+def _parse_qx_lldp_list(text: str, parsed: ParsedConfig) -> None:
+    """`display lldp neighbor-information list` の表。詳細が無いときに使う。"""
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _QX_LLDP_LIST_HEADER.match(line):
+            continue
+        for row in lines[index + 1 :]:
+            if not row.strip() or row.strip().startswith(("#", "Total", "Displaying")):
+                break
+            columns = row.split()
+            if len(columns) < 3:
+                continue
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=columns[1],
+                    remote_hostname=columns[0],
+                    remote_interface=columns[-1],
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
