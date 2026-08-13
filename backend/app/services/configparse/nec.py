@@ -274,7 +274,7 @@ def _parse_ix_lldp_table(text: str, parsed: ParsedConfig) -> None:
 
 def _looks_like_mac(value: str) -> bool:
     compact = re.sub(r"[:.\-]", "", value)
-    return len(compact) >= 12 and all(c in "0123456789abcdefABCDEF" for c in compact)
+    return len(compact) == 12 and all(c in "0123456789abcdefABCDEF" for c in compact)
 
 
 def _serial_looks_valid(serial: str) -> bool:
