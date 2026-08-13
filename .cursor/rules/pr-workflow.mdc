@@ -1,0 +1,15 @@
+---
+description: PR は本線向けに1本だけ。積み上げ禁止。
+alwaysApply: true
+---
+
+# PR の出し方
+
+詳細はリポジトリ直下の `AGENTS.md` に従う。要約だけ書く。
+
+- 本線は `claude/youthful-heisenberg-p3gv5m`。機能 PR の base はここだけ。
+- open の `cursor/*` PR が1本でもあるなら、新しい PR は作らない。
+  続きならその枝を更新する。別件ならマージ待ちを伝える。
+- `cursor/` 枝を base にした積み上げは禁止。
+- 同じ作業の直しは新しい PR にしない。
+- `#1`（本線 → `main` のプレビュー）は触らない。
