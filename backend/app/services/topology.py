@@ -1,8 +1,12 @@
 """トポロジ図の組み立て。
 
 自動推定した結線を土台に、人が配置を直して図を仕上げる前提で作っている。
-- 位置は保存され、機器が増えても既存の配置は動かさない
-- 未配置のノードだけ、種別を段にした自動レイアウトで初期位置を与える
+
+- 初期の自動配置は、結線の上下関係とポート順で木を組む。種別の段だけに
+  並べると、同じ種別の上位・下位が横一列になり、図として正しくない
+- 人が動かして保存した位置は意思として残す。見るだけで戻したりしない
+- 「最適化」は、その左右の並び（意思）を読み取って段と間隔を整える。
+  消して作り直すのではない
 """
 
 from __future__ import annotations
@@ -103,14 +107,13 @@ class TopologyGraph:
     unplaced_count: int = 0
 
 
-def scoped_device_ids(
+def matching_device_ids(
     db: Session, *, site_id: int | None = None, q: str | None = None
 ) -> set[int] | None:
-    """図に要る機器だけを先に絞り込む。
+    """絞り込みに当たる機器だけを返す。対向は含めない。
 
-    拠点を選んで見るとき、必要なのはその拠点の機器と、そこから線が
-    出ている相手だけ。それ以外まで読み込むと、全国規模では図を1つ出す
-    のに何分もかかる（16万台では返ってこなかった）。
+    配置のリセットや最適化は、見ている範囲の機器だけに効かせる。
+    対向まで消すと、相手の拠点で直した配置まで巻き添えになる。
 
     絞り込みが無いときは None を返す（＝全部）。
     """
@@ -126,7 +129,23 @@ def scoped_device_ids(
         stmt = stmt.where(
             Device.hostname.ilike(like) | Device.mgmt_ip.ilike(like),
         )
-    inside = set(db.scalars(stmt))
+    return set(db.scalars(stmt))
+
+
+def scoped_device_ids(
+    db: Session, *, site_id: int | None = None, q: str | None = None
+) -> set[int] | None:
+    """図に要る機器だけを先に絞り込む。
+
+    拠点を選んで見るとき、必要なのはその拠点の機器と、そこから線が
+    出ている相手だけ。それ以外まで読み込むと、全国規模では図を1つ出す
+    のに何分もかかる（16万台では返ってこなかった）。
+
+    絞り込みが無いときは None を返す（＝全部）。
+    """
+    inside = matching_device_ids(db, site_id=site_id, q=q)
+    if inside is None:
+        return None
     if not inside:
         return inside
 
@@ -158,7 +177,7 @@ def get_graph(
         graph = topology_logical.build(
             db, include_retired=include_retired, orientation=orientation
         ).graph
-        return _apply_saved_positions(db, graph)
+        return _apply_saved_positions(db, graph, orientation=orientation)
 
     device_query = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
     if only is not None:
@@ -196,14 +215,10 @@ def get_graph(
     # 使っていないポートまで並べると、機器の箱が読めなくなる
     port_kinds = _port_kinds(links)
 
-    placeholders = _auto_layout(
-        [d for d in devices if d.id not in positions], orientation=orientation
-    )
-
     nodes: list[TopologyNodeView] = []
     for device in devices:
         saved = positions.get(device.id)
-        x, y = (saved.x, saved.y) if saved else placeholders[device.id]
+        x, y = (saved.x, saved.y) if saved else (0.0, 0.0)
         nodes.append(
             TopologyNodeView(
                 device_id=device.id,
@@ -227,16 +242,22 @@ def get_graph(
         )
 
     edges = [_edge_view(link, ports, defined) for link in links]
-
-    return TopologyGraph(
+    graph = TopologyGraph(
         layer=layer,
         nodes=nodes,
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
     )
+    # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
+    if nodes:
+        _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
+        graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
+    return graph
 
 
-def _apply_saved_positions(db: Session, graph: TopologyGraph) -> TopologyGraph:
+def _apply_saved_positions(
+    db: Session, graph: TopologyGraph, *, orientation: str = "vertical"
+) -> TopologyGraph:
     """人が動かした位置を反映する。図の種類が違っても、直した配置は残す。"""
     saved = {
         node.device_id: node
@@ -246,6 +267,8 @@ def _apply_saved_positions(db: Session, graph: TopologyGraph) -> TopologyGraph:
         position = saved.get(node.device_id)
         if position is not None:
             node.x, node.y, node.placed = position.x, position.y, True
+    if graph.nodes:
+        _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
     graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
 
@@ -435,25 +458,22 @@ def _compact(
     rank: dict[int, int] | None = None,
     inside: set[int] | None = None,
     orientation: str = "vertical",
+    polish: bool = False,
 ) -> None:
-    """絞り込んだ分だけで、上下（左右）の関係が分かる木に並べ直す。
+    """結線の上下関係で木に並べる。
 
-    座標は網全体を前提に振ってあるので、数台に絞ると機器が散らばり、
-    線を目で追えなくなる。ここで残った機器だけを並べ直す。
+    初期配置（`polish=False`）は、未配置だけをポート順の木に置く。
+    人が動かした位置は意思なので、見るだけでは触らない。
 
-    並べ方は木。上位を上（横向きなら左）に置き、その配下を1段下へ広げる。
-    同じ段に上位も下位も混ぜると、線が機器の間を横切って重なってしまう。
-
-    人が動かして保存した配置が混ざっている場合は何もしない。
-    直した配置を勝手に戻すと、直した意味が無くなる。
+    最適化（`polish=True`）は、いまの左右の並びを意思として読み、
+    段（上位が上）と間隔を整えて完成形にする。消して作り直すのではない。
     """
-    if not nodes or any(node.placed for node in nodes):
+    if not nodes:
         return
 
+    owned = [n for n in nodes if inside is None or n.device_id in inside] or list(nodes)
     everything = {node.device_id: node for node in nodes}
-    # 自拠点の機器だけで木を組む。対向を混ぜて組むと、対向を脇へ寄せたあとに
-    # 自拠点の側が歯抜けになって、真ん中が空いた図になる
-    tree_nodes = [n for n in nodes if not inside or n.device_id in inside] or nodes
+    tree_nodes = owned
     keep = {node.device_id for node in tree_nodes}
     by_id = {node.device_id: node for node in tree_nodes}
     graph = TopologyGraph(
@@ -465,12 +485,12 @@ def _compact(
         rank = hierarchy_rank(graph)
 
     neighbours = _adjacency(graph)
-    # 上位側から見たポート名。配下をポート順に並べると、線が交差しにくく、
-    # 図の並びと実機のポート番号の並びも揃う
     port_between: dict[tuple[int, int], str] = {}
     for edge in graph.edges:
         port_between[(edge.source, edge.target)] = edge.source_interface
         port_between[(edge.target, edge.source)] = edge.target_interface
+
+    horizontal = orientation == "horizontal"
     order = sorted(
         by_id,
         key=lambda device_id: (
@@ -480,8 +500,6 @@ def _compact(
         ),
     )
 
-    # 上位から幅優先でたどって親子を決める。段（種別）だけで決めると、
-    # 拠点ルータと支社ルータのように同じ種別が縦に並ぶ構成を表現できない
     depth: dict[int, int] = {}
     children: dict[int, list[int]] = {}
     seen: set[int] = set()
@@ -491,17 +509,21 @@ def _compact(
             continue
         roots.append(start)
         seen.add(start)
-        depth[start] = 0
+        # 繋がっていない機器は、種別の段に置く。全部 depth 0 だと
+        # ルータもスイッチも横一列になり、初期配置として正しくない
+        depth[start] = 0 if neighbours.get(start) else _tier_of(by_id[start])
         queue = [start]
         while queue:
             current = queue.pop(0)
-            ordered = sorted(
-                neighbours.get(current, []),
-                key=lambda i: (
-                    port_key(port_between.get((current, i), "")),
-                    by_id[i].hostname,
-                ),
+            ordered = _child_order(
+                current,
+                [i for i in neighbours.get(current, []) if i not in seen],
+                by_id,
+                port_between,
+                horizontal=horizontal,
+                polish=polish,
             )
+            # まだ見ていない相手だけ子にする。seen は下で足す
             for neighbour in ordered:
                 if neighbour in seen:
                     continue
@@ -529,8 +551,10 @@ def _compact(
         place(root)
         slot += 1.0  # 島の間を1つ空ける
 
-    horizontal = orientation == "horizontal"
+    move = {node.device_id for node in owned if polish or not node.placed}
     for device_id, node in by_id.items():
+        if device_id not in move:
+            continue
         along = across.get(device_id, 0.0) * _X_SPACING
         down = depth.get(device_id, 0) * _Y_SPACING
         node.x, node.y = (down, along) if horizontal else (along, down)
@@ -543,6 +567,59 @@ def _compact(
             rank,
             horizontal=horizontal,
         )
+
+
+def _child_order(
+    parent_id: int,
+    candidates: list[int],
+    by_id: dict[int, TopologyNodeView],
+    port_between: dict[tuple[int, int], str],
+    *,
+    horizontal: bool,
+    polish: bool,
+) -> list[int]:
+    """配下の左右の順。
+
+    初期配置はポート番号順。実機の並びと線が交差しないことの両方に効く。
+    最適化は、人が置いた左右を意思として残し、その間に未配置をポート順で入れる。
+    """
+    if not candidates:
+        return []
+
+    def by_port(device_id: int) -> tuple:
+        return (
+            port_key(port_between.get((parent_id, device_id), "")),
+            by_id[device_id].hostname,
+        )
+
+    ideal = sorted(candidates, key=by_port)
+    if not polish:
+        return ideal
+
+    placed = [device_id for device_id in candidates if by_id[device_id].placed]
+    if not placed:
+        return ideal
+
+    def across(device_id: int) -> float:
+        node = by_id[device_id]
+        return node.y if horizontal else node.x
+
+    intent = {device_id: index for index, device_id in enumerate(sorted(placed, key=across))}
+    ideal_index = {device_id: index for index, device_id in enumerate(ideal)}
+
+    def sort_key(device_id: int) -> tuple:
+        if device_id in intent:
+            return (intent[device_id], 0, 0)
+        i = ideal_index[device_id]
+        left = [intent[x] for x in ideal[:i] if x in intent]
+        if left:
+            return (left[-1], 1, i)
+        right = [intent[x] for x in ideal[i + 1 :] if x in intent]
+        if right:
+            return (right[0] - 0.5, i, 0)
+        return (0, i, 0)
+
+    return sorted(candidates, key=sort_key)
 
 
 # 機器の箱は、結線が多いほど横に広がる（画面側の widthFor と同じ規則）。
@@ -604,6 +681,9 @@ def _place_peers(
     below: list[TopologyNodeView] = []
     for device_id, node in by_id.items():
         if device_id in inside or device_id not in attached:
+            continue
+        if node.placed:
+            # 対向の保存済み位置は、相手の拠点の意思。こちらで動かさない
             continue
         level = rank.get(device_id, own_rank)
         if level < own_rank:
@@ -804,12 +884,21 @@ def _auto_layout(
     return positions
 
 
-def save_positions(db: Session, layer: str, positions: list[tuple[int, float, float]]) -> int:
+def save_positions(
+    db: Session,
+    layer: str,
+    positions: list[tuple[int, float, float]],
+    *,
+    pinned: bool | dict[int, bool] = True,
+) -> int:
     """動かした機器の位置を保存する。
 
     動かした分だけを読む。以前は層の保存済み位置を全部読み込んでいたため、
     1台つまんで置き直すたびに全機器分の読み書きが走っていた（台数が増える
     ほど、動かすたびに固まる）。
+
+    `pinned` は人の意思かどうか。画面から動かした保存は True。最適化が
+    整えただけの位置は False にして、次の最適化でも動けるようにする。
     """
     wanted = [device_id for device_id, _, _ in positions]
     existing = {
@@ -829,7 +918,7 @@ def save_positions(db: Session, layer: str, positions: list[tuple[int, float, fl
             db.add(node)
         node.x = x
         node.y = y
-        node.pinned = True
+        node.pinned = pinned[device_id] if isinstance(pinned, dict) else pinned
         saved += 1
 
     db.commit()
@@ -842,6 +931,8 @@ def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) ->
     `only` を渡すと、その機器の分だけ消す。拠点を1つ見ている最中の
     「リセット」で、他の拠点で直した配置まで消えるのは行き過ぎなため。
     """
+    if only is not None and len(only) == 0:
+        return 0
     stmt = select(TopologyNode).where(TopologyNode.layer == layer)
     if only is not None:
         stmt = stmt.where(TopologyNode.device_id.in_(only))
@@ -858,22 +949,54 @@ def arrange_positions(
     *,
     site_id: int | None = None,
     q: str | None = None,
+    scope: str = SCOPE_PEERS,
+    orientation: str = "vertical",
 ) -> int:
-    """いま見えている範囲を、自動配置で並べ直す。
+    """いま見えている範囲を、人の意思を残して完成形に整える。
 
-    手で置いていくとどうしてもずれる。並べ直しは自動配置がやることなので、
-    その範囲の手動配置を外して自動配置に任せる。
+    人が置いた左右の並びは意思として残す。そのうえで上位を上に揃え、
+    間隔を均等にする。消して自動配置に戻すのはリセットの仕事。
 
-    結果を保存しないのは、保存すると並べ直しが止まるため。図は「保存済みの
-    配置があればそれを尊重する」作りで（直した配置を勝手に戻さないため）、
-    自動配置の結果を保存すると、以後この範囲は並べ直されなくなる。
-    対向の機器を保存すると、その機器自身の拠点の図まで、こちらの都合で
-    決めた位置に変わってしまう問題もある。
-
-    戻り値は外した手動配置の数。
+    保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
+    その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
     """
-    only = scoped_device_ids(db, site_id=site_id, q=q)
-    return reset_positions(db, layer, only=only)
+    inside = matching_device_ids(db, site_id=site_id, q=q)
+    draw = scoped_device_ids(db, site_id=site_id, q=q)
+    graph = get_graph(db, layer, orientation=orientation, only=draw)
+    graph = scope_graph(
+        graph,
+        site_id=site_id,
+        q=q,
+        scope=scope,
+        orientation=orientation,
+        rank=network_rank(db) if draw is not None else None,
+    )
+
+    owned = inside if inside is not None else {n.device_id for n in graph.nodes if not n.outside}
+    if not owned:
+        return 0
+    _compact(
+        graph.nodes,
+        graph.edges,
+        rank=network_rank(db) if draw is not None else hierarchy_rank(graph),
+        inside=owned,
+        orientation=orientation,
+        polish=True,
+    )
+
+    already = {
+        node.device_id: node.pinned
+        for node in db.scalars(
+            select(TopologyNode).where(
+                TopologyNode.layer == layer, TopologyNode.device_id.in_(owned)
+            )
+        )
+    }
+    placed = [(n.device_id, n.x, n.y) for n in graph.nodes if n.device_id in owned]
+    if not placed:
+        return 0
+    flags = {device_id: already.get(device_id, False) for device_id, _, _ in placed}
+    return save_positions(db, layer, placed, pinned=flags)
 
 
 @dataclass

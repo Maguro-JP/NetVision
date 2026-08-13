@@ -322,6 +322,30 @@ function toFlow(
   return { nodes, edges };
 }
 
+/**
+ * 表示の切り替えで、人が動かした位置をサーバの古い値で上書きしない。
+ *
+ * 編集のオンオフやポート名の出し方を変えるたびに、取得済みのグラフから
+ * ノードを作り直していた。未保存の移動がそこで消え、「突然ロールバックした」
+ * ように見える。同じ機器が並んでいるときは、今の座標を残す。
+ */
+export function keepLocalPositions<T extends { id: string; position: { x: number; y: number } }>(
+  incoming: T[],
+  current: T[],
+  keep: boolean,
+): T[] {
+  if (!keep || current.length === 0) return incoming;
+  const seen = new Set(current.map((n) => n.id));
+  if (incoming.length !== current.length || incoming.some((n) => !seen.has(n.id))) {
+    return incoming;
+  }
+  const prev = new Map(current.map((n) => [n.id, n.position]));
+  return incoming.map((n) => {
+    const position = prev.get(n.id);
+    return position ? { ...n, position } : n;
+  });
+}
+
 function warningOf(edge: TopologyEdge): string | null {
   const warnings: string[] = [];
   if (edge.native_mismatch) warnings.push("ネイティブ不一致");
@@ -411,6 +435,11 @@ function TopologyEditor() {
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
+  // ドラッグで動かした機器。保存は動かした分だけ送る（見えている対向まで
+  // まとめて保存すると、相手の拠点の図までこちらの座標で上書きされる）
+  const movedIds = useRef(new Set<string>());
+  // 保存・リセット・最適化のあとは、取り直した配置をそのまま使う
+  const takeServerLayout = useRef(false);
 
   const scoped = selectedSite !== "" || appliedSearch.trim() !== "";
   const { data: stats } = useQuery({
@@ -485,9 +514,13 @@ function TopologyEditor() {
       });
     }
 
-    setNodes(flow.nodes);
+    setNodes((current) =>
+      keepLocalPositions(flow.nodes, current, dirty && !takeServerLayout.current),
+    );
+    takeServerLayout.current = false;
     setEdges(flow.edges);
-    setDirty(false);
+    // 未保存の移動は消さない。以前はここで dirty を落としていたため、
+    // 表示を切り替えただけで「保存済み」に見え、位置もサーバの古い値に戻った
   }, [
     graph,
     selectedVlans,
@@ -498,6 +531,7 @@ function TopologyEditor() {
     alongLine,
     editable,
     revision,
+    dirty,
     setNodes,
     setEdges,
   ]);
@@ -518,8 +552,11 @@ function TopologyEditor() {
     setParams(next, { replace: true });
   }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, setParams]);
 
-  const refresh = () => {
-    queryClient.invalidateQueries({ queryKey: ["topology"] });
+  const refresh = async () => {
+    // 取り直してから画面を作り直す。以前はキャッシュの古いグラフで
+    // 先に描いていたため、保存・リセットの直後に配置が戻って見えた
+    takeServerLayout.current = true;
+    await queryClient.refetchQueries({ queryKey: ["topology"] });
     queryClient.invalidateQueries({ queryKey: ["topologyStats"] });
     // 取得結果が前と同じ内容だと参照が変わらず、画面が作り直されない。
     // 「リセットしたのに戻らない」のはこれが原因なので、合図を出しておく
@@ -527,20 +564,26 @@ function TopologyEditor() {
   };
 
   const save = useMutation({
-    mutationFn: () =>
-      api.savePositions(
+    mutationFn: () => {
+      const byId = new Map((graph?.nodes ?? []).map((n) => [String(n.device_id), n]));
+      return api.savePositions(
         layer,
-        // 見た目のために左へずらした分は足し戻す（shiftFor を参照）
-        nodes.map((n) => ({
-          device_id: Number(n.id),
-          x: n.position.x + (n.data.shift ?? 0),
-          y: n.position.y,
-        })),
-      ),
-    onSuccess: () => {
+        nodes
+          .filter((n) => movedIds.current.has(n.id))
+          .filter((n) => byId.get(n.id)?.outside !== true)
+          .map((n) => ({
+            device_id: Number(n.id),
+            // 見た目のために左へずらした分は足し戻す（shiftFor を参照）
+            x: n.position.x + (n.data.shift ?? 0),
+            y: n.position.y,
+          })),
+      );
+    },
+    onSuccess: async () => {
+      movedIds.current.clear();
+      await refresh();
       setDirty(false);
       setNotice("配置を保存しました");
-      refresh();
     },
   });
 
@@ -552,24 +595,33 @@ function TopologyEditor() {
 
   const reset = useMutation({
     mutationFn: () => api.resetPositions(layer, viewScope),
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
+      movedIds.current.clear();
+      await refresh();
+      setDirty(false);
       setNotice(
         `配置をリセットしました（${result.reset} 台を自動レイアウトに戻しました）` +
           (viewScope.site_id || viewScope.q ? "。絞り込みの外は触っていません" : ""),
       );
-      refresh();
     },
   });
 
   const arrange = useMutation({
-    mutationFn: () => api.arrangePositions(layer, viewScope),
-    onSuccess: (result) => {
+    mutationFn: () =>
+      api.arrangePositions(layer, {
+        ...viewScope,
+        scope,
+        orientation,
+      }),
+    onSuccess: async (result) => {
+      movedIds.current.clear();
+      await refresh();
+      setDirty(false);
       setNotice(
         result.arranged
-          ? `配置を最適化しました（${result.arranged} 台の手動配置を外し、自動で並べ直しました）`
-          : "配置を最適化しました（すべて自動配置のままです）",
+          ? `配置を最適化しました（手で置いた並びを残して ${result.arranged} 台を整えました）`
+          : "配置を最適化しました（整える機器がありません）",
       );
-      refresh();
     },
   });
 
@@ -627,7 +679,13 @@ function TopologyEditor() {
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<DeviceNodeData>>[]) => {
       onNodesChange(changes);
-      if (changes.some((c) => c.type === "position" && c.dragging === false)) setDirty(true);
+      const moved = changes.filter(
+        (c): c is Extract<NodeChange<Node<DeviceNodeData>>, { type: "position" }> =>
+          c.type === "position" && c.dragging === false,
+      );
+      if (moved.length === 0) return;
+      for (const change of moved) movedIds.current.add(change.id);
+      setDirty(true);
     },
     [onNodesChange],
   );
@@ -804,14 +862,14 @@ function TopologyEditor() {
             </button>
           </>
         )}
-        {/* 手で置いていくとどうしてもずれる。並べ直しは自動配置に任せる */}
+        {/* 手で置いた左右は残して、段と間隔だけ整える。消して戻すのはリセット */}
         <button
           className="primary"
           onClick={() => arrange.mutate()}
           disabled={arrange.isPending}
-          title="いま見えている範囲を、上位を上・下位を下に並べ直します。手で置いた位置は外れます"
+          title="手で置いた左右の並びは残して、段と間隔を整えます。自動配置に戻すのはリセットです"
         >
-          {arrange.isPending ? "並べ直しています…" : "配置を最適化"}
+          {arrange.isPending ? "整えています…" : "配置を最適化"}
         </button>
         {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
         <button
