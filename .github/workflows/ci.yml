@@ -2,8 +2,16 @@ name: CI
 
 on:
   push:
-    branches: ["**"]
+    # cursor/* は PR の CI だけで見る。push と pull_request の二重実行を止める
+    branches-ignore:
+      - "cursor/**"
   pull_request:
+
+# 新しいコミットが来たら、古い実行は捨てる。
+# 直し済みの失敗が後から届いて「CI が落ちた」と出るのを防ぐ。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
