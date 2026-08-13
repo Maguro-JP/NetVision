@@ -4,7 +4,6 @@ import {
   MiniMap,
   ReactFlow,
   ReactFlowProvider,
-  addEdge,
   useEdgesState,
   useNodesState,
   type Connection,
@@ -440,6 +439,13 @@ function TopologyEditor() {
   const [orientation, setOrientation] = useState(view.orientation);
   // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
   const [editable, setEditable] = useState(false);
+  const [showStats, setShowStats] = useState(false);
+  const [showSegments, setShowSegments] = useState(
+    () => Boolean(params.get("vlan") || params.get("vrf")),
+  );
+  const [pendingLink, setPendingLink] = useState<{ source: string; target: string } | null>(null);
+  const [pendingA, setPendingA] = useState("");
+  const [pendingB, setPendingB] = useState("");
   // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
   // 動かした位置が画面に残ってしまうため、明示的に作り直す合図を持つ
   const [revision, setRevision] = useState(0);
@@ -838,27 +844,32 @@ function TopologyEditor() {
       if (!editable) return;
       if (!connection.source || !connection.target) return;
       if (connection.source === connection.target) return;
-      // ポート無しの線は検収・工事に使えない。ここで聞いてから作る
-      const aPort = window.prompt("接続元のポート名（例: Gi1/0/1）", "");
-      if (aPort === null) return;
-      const bPort = window.prompt("接続先のポート名（例: Gi0/0）", "");
-      if (bPort === null) return;
-      if (!aPort.trim() || !bPort.trim()) {
-        setNotice("ポート名を入れないと結線を作れません");
-        return;
-      }
-      setEdges((current) =>
-        addEdge({ ...connection, type: "smoothstep", className: "topo-edge manual" }, current),
-      );
-      createLink.mutate({
-        source: connection.source,
-        target: connection.target,
-        a_interface: aPort.trim(),
-        b_interface: bPort.trim(),
-      });
+      // ポート無しの線は検収・工事に使えない。図の上でポートを聞いてから作る
+      setPendingLink({ source: connection.source, target: connection.target });
+      setPendingA("");
+      setPendingB("");
     },
-    [createLink, editable, setEdges],
+    [editable],
   );
+
+  const submitPendingLink = () => {
+    if (!pendingLink) return;
+    const aPort = pendingA.trim();
+    const bPort = pendingB.trim();
+    if (!aPort || !bPort) {
+      setNotice("ポート名を入れないと結線を作れません");
+      return;
+    }
+    createLink.mutate({
+      source: pendingLink.source,
+      target: pendingLink.target,
+      a_interface: aPort,
+      b_interface: bPort,
+    });
+    setPendingLink(null);
+    setPendingA("");
+    setPendingB("");
+  };
 
   /** 選択中のものは常に出す。消えると外せなくなるため。 */
   const shownVlans = useMemo(() => {
@@ -917,220 +928,232 @@ function TopologyEditor() {
         )}
       </p>
 
-      <div className="toolbar">
-        <button
-          className={editable ? "primary" : ""}
-          onClick={() => {
-            if (editable && dirty) {
-              if (!confirm("編集中の配置を破棄して編集を終えますか？")) return;
-              discardEdits();
+      <div className="topo-toolbars">
+        <div className="topo-toolbar-row">
+          <span className="topo-toolbar-label">見る</span>
+          <select value={layer} onChange={(e) => setLayer(e.target.value)}>
+            {LAYERS.map((item) => (
+              <option key={item.value} value={item.value}>
+                {item.label}
+              </option>
+            ))}
+          </select>
+          <select
+            value={selectedSite}
+            onChange={(e) => setSelectedSite(e.target.value === "" ? "" : Number(e.target.value))}
+            title="拠点で絞り込みます。書き出すとその拠点だけの構成図になります"
+          >
+            <option value="">拠点: すべて</option>
+            {(sites ?? []).map((site) => (
+              <option key={site.id} value={site.id}>
+                拠点: {site.name}
+              </option>
+            ))}
+          </select>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              setAppliedSearch(search);
+            }}
+            style={{ display: "contents" }}
+          >
+            <input
+              type="search"
+              value={search}
+              placeholder="拠点名・機器名で探す"
+              onChange={(event) => setSearch(event.target.value)}
+              onBlur={() => setAppliedSearch(search)}
+              title="拠点名・機器名・管理IPで探します。全国規模になると一覧からは選べません"
+              style={{ minWidth: 180 }}
+            />
+            {appliedSearch && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setAppliedSearch("");
+                }}
+              >
+                検索を消す
+              </button>
+            )}
+          </form>
+          <select
+            value={scope}
+            onChange={(event) => setScope(event.target.value as "peers" | "site")}
+            title="絞ったときに、その先（対向）まで出すかどうか"
+          >
+            <option value="peers">範囲: 対向まで</option>
+            <option value="site">範囲: 絞った分だけ</option>
+          </select>
+          <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
+          <label className="vlan-chip" title="機器名と線だけの表示にします（ポート名・付帯情報を隠します）">
+            <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
+            シンプル表示
+          </label>
+          <select
+            value={orientation}
+            onChange={(e) => setOrientation(e.target.value as "vertical" | "horizontal")}
+            title="自動配置の向きを変えます。人が動かした配置はそのまま残ります"
+          >
+            <option value="vertical">並び: 上下</option>
+            <option value="horizontal">並び: 左右</option>
+          </select>
+          <select
+            value={portStyle}
+            onChange={(e) => setPortStyle(e.target.value as PortStyle)}
+            title={PORT_STYLES.find((item) => item.value === portStyle)?.hint}
+          >
+            {PORT_STYLES.map((item) => (
+              <option key={item.value} value={item.value}>
+                ポート名: {item.label}
+              </option>
+            ))}
+          </select>
+          <label className="vlan-chip" title="ポート名を線の向きに合わせて回転します">
+            <input
+              type="checkbox"
+              checked={alongLine}
+              onChange={(e) => setAlongLine(e.target.checked)}
+            />{" "}
+            線に沿わせる
+          </label>
+        </div>
+
+        <div className="topo-toolbar-row">
+          <span className="topo-toolbar-label">直す</span>
+          <button
+            className={editable ? "primary" : ""}
+            onClick={() => {
+              if (editable && dirty) {
+                if (!confirm("編集中の配置を破棄して編集を終えますか？")) return;
+                discardEdits();
+              }
+              setEditable((value) => !value);
+            }}
+            title={
+              editable
+                ? "編集を終える。未保存の配置があるときは破棄の確認を出します"
+                : "機器の移動・結線の追加ができるようになります"
             }
-            setEditable((value) => !value);
-          }}
-          title={
-            editable
-              ? "編集を終える。未保存の配置があるときは破棄の確認を出します"
-              : "機器の移動・結線の追加ができるようになります"
-          }
-        >
-          {editable ? "🔓 編集中" : "🔒 編集する"}
-        </button>
-        <select value={layer} onChange={(e) => setLayer(e.target.value)}>
-          {LAYERS.map((item) => (
-            <option key={item.value} value={item.value}>
-              {item.label}
-            </option>
-          ))}
-        </select>
-        <select
-          value={selectedSite}
-          onChange={(e) => setSelectedSite(e.target.value === "" ? "" : Number(e.target.value))}
-          title="拠点で絞り込みます。書き出すとその拠点だけの構成図になります"
-        >
-          <option value="">拠点: すべて</option>
-          {(sites ?? []).map((site) => (
-            <option key={site.id} value={site.id}>
-              拠点: {site.name}
-            </option>
-          ))}
-        </select>
-        <form
-          onSubmit={(event) => {
-            event.preventDefault();
-            setAppliedSearch(search);
-          }}
-          style={{ display: "contents" }}
-        >
-          <input
-            type="search"
-            value={search}
-            placeholder="拠点名・機器名で探す"
-            onChange={(event) => setSearch(event.target.value)}
-            onBlur={() => setAppliedSearch(search)}
-            title="拠点名・機器名・管理IPで探します。全国規模になると一覧からは選べません"
-            style={{ minWidth: 180 }}
-          />
-          {appliedSearch && (
-            <button
-              type="button"
-              onClick={() => {
-                setSearch("");
-                setAppliedSearch("");
-              }}
-            >
-              検索を消す
-            </button>
+          >
+            {editable ? "編集を終える" : "編集する"}
+          </button>
+          {editable && (
+            <>
+              <button
+                onClick={undoEdit}
+                disabled={!undoable}
+                title="一つ前の配置に戻します（Ctrl+Z）"
+              >
+                一つ戻す
+              </button>
+              <button
+                onClick={redoEdit}
+                disabled={!redoable}
+                title="取り消した配置を戻します（Ctrl+Shift+Z）"
+              >
+                やり直す
+              </button>
+              <button
+                className="primary"
+                disabled={!dirty || save.isPending}
+                onClick={() => {
+                  if (
+                    !confirm(
+                      "いまの配置を保存しますか？ 保存すると、この編集の取り消しはできなくなります。",
+                    )
+                  ) {
+                    return;
+                  }
+                  save.mutate();
+                }}
+                title="編集した配置をサーバに残します"
+              >
+                {dirty ? "配置を保存" : "保存済み"}
+              </button>
+              <button
+                disabled={!dirty}
+                onClick={() => {
+                  if (!confirm("編集中の配置を破棄して、保存前の状態に戻しますか？")) return;
+                  discardEdits();
+                }}
+                title="保存していない配置を捨てて、編集を始める前に戻します"
+              >
+                破棄
+              </button>
+              <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
+                Config から結線を作り直す
+              </button>
+            </>
           )}
-        </form>
-        <select
-          value={scope}
-          onChange={(event) => setScope(event.target.value as "peers" | "site")}
-          title="絞ったときに、その先（対向）まで出すかどうか"
-        >
-          <option value="peers">範囲: 対向まで</option>
-          <option value="site">範囲: 絞った分だけ</option>
-        </select>
-        {editable && (
-          <>
-            <button
-              onClick={undoEdit}
-              disabled={!undoable}
-              title="一つ前の配置に戻します（Ctrl+Z）"
-            >
-              一つ戻す
-            </button>
-            <button
-              onClick={redoEdit}
-              disabled={!redoable}
-              title="取り消した配置を戻します（Ctrl+Shift+Z）"
-            >
-              やり直す
-            </button>
-            <button
-              className="primary"
-              disabled={!dirty || save.isPending}
-              onClick={() => {
-                if (!confirm("いまの配置を保存しますか？ 保存すると、この編集の取り消しはできなくなります。")) {
+          <button
+            className="primary"
+            onClick={() => {
+              if (dirty) {
+                if (
+                  !confirm(
+                    "未保存の配置があります。最適化するとサーバ上の配置を整え、編集中の移動は捨てます。続けますか？",
+                  )
+                ) {
                   return;
                 }
-                save.mutate();
-              }}
-              title="編集した配置をサーバに残します"
-            >
-              {dirty ? "配置を保存" : "保存済み"}
-            </button>
-            <button
-              disabled={!dirty}
-              onClick={() => {
-                if (!confirm("編集中の配置を破棄して、保存前の状態に戻しますか？")) return;
-                discardEdits();
-              }}
-              title="保存していない配置を捨てて、編集を始める前に戻します"
-            >
-              破棄
-            </button>
-            <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
-              Config から結線を作り直す
-            </button>
-          </>
-        )}
-        {/* 手で置いた左右は残して、段と間隔だけ整える。消して戻すのはリセット */}
-        <button
-          className="primary"
-          onClick={() => {
-            if (dirty) {
-              if (
+              } else if (
                 !confirm(
-                  "未保存の配置があります。最適化するとサーバ上の配置を整え、編集中の移動は捨てます。続けますか？",
+                  "いま見えている範囲の配置を整えて保存します。人が置いた左右の並びは残します。続けますか？",
                 )
               ) {
                 return;
               }
-            } else if (
-              !confirm(
-                "いま見えている範囲の配置を整えて保存します。人が置いた左右の並びは残します。続けますか？",
-              )
-            ) {
-              return;
-            }
-            arrange.mutate();
-          }}
-          disabled={arrange.isPending}
-          title="手で置いた左右の並びは残して、段と間隔を整えて保存します。自動配置に戻すのはリセットです"
-        >
-          {arrange.isPending ? "整えています…" : "配置を最適化"}
-        </button>
-        {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
-        <button
-          onClick={() => {
-            const where =
-              viewScope.site_id || viewScope.q ? "いま絞り込んでいる範囲の配置" : "すべての配置";
-            if (confirm(`${where}をリセットして自動レイアウトに戻しますか？`)) reset.mutate();
-          }}
-        >
-          配置をリセット
-        </button>
-        <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
-        <label className="vlan-chip" title="機器名と線だけの表示にします（ポート名・付帯情報を隠します）">
-          <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
-          シンプル表示
-        </label>
-        <select
-          value={orientation}
-          onChange={(e) => setOrientation(e.target.value as "vertical" | "horizontal")}
-          title="自動配置の向きを変えます。人が動かした配置はそのまま残ります"
-        >
-          <option value="vertical">並び: 上下</option>
-          <option value="horizontal">並び: 左右</option>
-        </select>
-        <select
-          value={portStyle}
-          onChange={(e) => setPortStyle(e.target.value as PortStyle)}
-          title={PORT_STYLES.find((item) => item.value === portStyle)?.hint}
-        >
-          {PORT_STYLES.map((item) => (
-            <option key={item.value} value={item.value}>
-              ポート名: {item.label}
-            </option>
-          ))}
-        </select>
-        <label className="vlan-chip" title="ポート名を線の向きに合わせて回転します">
-          <input
-            type="checkbox"
-            checked={alongLine}
-            onChange={(e) => setAlongLine(e.target.checked)}
-          />{" "}
-          線に沿わせる
-        </label>
-        <a
-          className="button"
-          href={api.topologyExportUrl(layer, {
-            vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
-            vrf: selectedVrf || undefined,
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            style: simple ? "simple" : undefined,
-            port_style: portStyle,
-            along_line: alongLine ? "true" : undefined,
-            orientation,
-          })}
-          title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
-        >
-          図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
-        </a>
-        {/* Excel はまとめて1つ。ボタンを分けるより、開けば全部入っている方が配りやすい */}
-        <a
-          className="button"
-          href={api.workbookUrl(layer, {
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            scope,
-          })}
-          title="構成図（セルの罫線で描いた図）・結線表・ポート一覧を1つの Excel で出します。図は手元で直せます"
-        >
-          Excel で出す（図＋表）
-        </a>
-        <RouterLink to="/configs">
-          <button>Config を取り込む</button>
-        </RouterLink>
+              arrange.mutate();
+            }}
+            disabled={arrange.isPending}
+            title="手で置いた左右の並びは残して、段と間隔を整えて保存します。自動配置に戻すのはリセットです"
+          >
+            {arrange.isPending ? "整えています…" : "配置を最適化"}
+          </button>
+          <button
+            onClick={() => {
+              const where =
+                viewScope.site_id || viewScope.q ? "いま絞り込んでいる範囲の配置" : "すべての配置";
+              if (confirm(`${where}をリセットして自動レイアウトに戻しますか？`)) reset.mutate();
+            }}
+          >
+            配置をリセット
+          </button>
+        </div>
+
+        <div className="topo-toolbar-row">
+          <span className="topo-toolbar-label">出す</span>
+          <a
+            className="button"
+            href={api.topologyExportUrl(layer, {
+              vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
+              vrf: selectedVrf || undefined,
+              site_id: selectedSite === "" ? undefined : selectedSite,
+              style: simple ? "simple" : undefined,
+              port_style: portStyle,
+              along_line: alongLine ? "true" : undefined,
+              orientation,
+            })}
+            title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
+          >
+            図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
+          </a>
+          <a
+            className="button"
+            href={api.workbookUrl(layer, {
+              site_id: selectedSite === "" ? undefined : selectedSite,
+              scope,
+            })}
+            title="構成図（セルの罫線で描いた図）・結線表・ポート一覧を1つの Excel で出します。図は手元で直せます"
+          >
+            Excel で出す（図＋表）
+          </a>
+          <RouterLink to="/configs">
+            <button>Config を取り込む</button>
+          </RouterLink>
+        </div>
       </div>
 
       {notice && (
@@ -1145,32 +1168,92 @@ function TopologyEditor() {
       )}
 
       {stats && (
-        <div className="cards" style={{ marginBottom: 12 }}>
-          <div className="card">
-            <div className="label">機器</div>
-            <div className="value">{stats.device_count}</div>
-          </div>
-          <div className="card">
-            <div className="label">結線</div>
-            <div className="value">{stats.link_count}</div>
-          </div>
-          <div className="card">
-            <div className="label">両側で確認済み</div>
-            <div className="value" style={{ color: "var(--sev-ok)" }}>
-              {stats.confirmed_links}
+        <div className="topo-stats">
+          <button
+            type="button"
+            className="topo-stats-toggle"
+            onClick={() => setShowStats((value) => !value)}
+            title="件数の内訳を開きます"
+          >
+            機器 {stats.device_count.toLocaleString()} · 結線 {stats.link_count.toLocaleString()}
+            {stats.isolated_count > 0
+              ? ` · 未接続 ${stats.isolated_count.toLocaleString()}`
+              : ""}
+            {showStats ? " ▾" : " ▸"}
+          </button>
+          {showStats && (
+            <div className="cards" style={{ marginBottom: 0 }}>
+              <div className="card">
+                <div className="label">機器</div>
+                <div className="value">{stats.device_count}</div>
+              </div>
+              <div className="card">
+                <div className="label">結線</div>
+                <div className="value">{stats.link_count}</div>
+              </div>
+              <div className="card">
+                <div className="label">両側で確認済み</div>
+                <div className="value" style={{ color: "var(--sev-ok)" }}>
+                  {stats.confirmed_links}
+                </div>
+              </div>
+              <div className="card">
+                <div className="label">手動で追加</div>
+                <div className="value">{stats.manual_links}</div>
+              </div>
+              <div className="card">
+                <div className="label">未接続の機器</div>
+                <div className="value" style={{ color: "var(--sev-unknown)" }}>
+                  {stats.isolated_count.toLocaleString()}
+                </div>
+              </div>
             </div>
-          </div>
-          <div className="card">
-            <div className="label">手動で追加</div>
-            <div className="value">{stats.manual_links}</div>
-          </div>
-          <div className="card">
-            <div className="label">未接続の機器</div>
-            <div className="value" style={{ color: "var(--sev-unknown)" }}>
-              {stats.isolated_count.toLocaleString()}
-            </div>
-          </div>
+          )}
         </div>
+      )}
+
+      {pendingLink && (
+        <form
+          className="card topo-pending-link"
+          onSubmit={(event) => {
+            event.preventDefault();
+            submitPendingLink();
+          }}
+        >
+          <strong>結線を追加</strong>
+          <span>
+            {nodeName(graph, Number(pendingLink.source))} のポート
+            <input
+              value={pendingA}
+              onChange={(event) => setPendingA(event.target.value)}
+              placeholder="例: Gi1/0/1"
+              autoFocus
+              required
+            />
+          </span>
+          <span>
+            {nodeName(graph, Number(pendingLink.target))} のポート
+            <input
+              value={pendingB}
+              onChange={(event) => setPendingB(event.target.value)}
+              placeholder="例: Gi0/0"
+              required
+            />
+          </span>
+          <button className="primary" type="submit" disabled={createLink.isPending}>
+            追加
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setPendingLink(null);
+              setPendingA("");
+              setPendingB("");
+            }}
+          >
+            やめる
+          </button>
+        </form>
       )}
 
       <div className="topo-canvas">
@@ -1227,110 +1310,143 @@ function TopologyEditor() {
         )}
       </div>
 
-      <div className="toolbar" style={{ marginTop: 12 }}>
-        {(vlans ?? []).length > 0 && (
+      <div className="topo-below">
+        {((vlans ?? []).length > 0 || (vrfs ?? []).length > 0) && (
           <div className="vlan-filter">
             <div className="vlan-filter-head">
-              <strong>VLAN で絞り込む</strong>
-              <span className="muted">
-                選ぶと、その VLAN を持たない機器が薄くなります（どこまで伸びているかを見るため）
-              </span>
-              <input
-                type="search"
-                placeholder="番号・名称で絞る"
-                value={vlanFilter}
-                onChange={(e) => setVlanFilter(e.target.value)}
-              />
-              {selectedVlans.length > 0 && (
-                <button onClick={() => setSelectedVlans([])}>選択を解除</button>
-              )}
-              <RouterLink to="/vlans">
-                <button title="VLAN の名称と用途を登録します">名称・用途を編集</button>
-              </RouterLink>
-            </div>
-            <div className="vlan-filter-list">
-              {shownVlans.map((vlan) => (
-                <label key={vlan.vlan_id} className="vlan-chip">
-                  <input
-                    type="checkbox"
-                    checked={selectedVlans.includes(vlan.vlan_id)}
-                    onChange={(e) =>
-                      setSelectedVlans((prev) =>
-                        e.target.checked
-                          ? [...prev, vlan.vlan_id]
-                          : prev.filter((v) => v !== vlan.vlan_id),
-                      )
-                    }
-                  />{" "}
-                  <strong>VLAN {vlan.vlan_id}</strong>
-                  {vlan.name && <span> {vlan.name}</span>}
-                  <span className="muted">
-                    {" "}
-                    / {vlan.device_ids.length}台
-                    {vlan.access_port_count > 0 && ` / アクセス${vlan.access_port_count}`}
-                    {vlan.trunk_port_count > 0 && ` / トランク${vlan.trunk_port_count}`}
-                  </span>
-                </label>
-              ))}
-              {shownVlans.length < (vlans ?? []).length && (
-                <span className="muted">
-                  ほか {(vlans ?? []).length - shownVlans.length} 件（絞り込んで表示）
-                </span>
+              <button
+                type="button"
+                onClick={() => setShowSegments((value) => !value)}
+                title="VLAN / VRF の一覧を開きます"
+              >
+                VLAN / VRF で絞る
+                {selectedVlans.length > 0 ? `（VLAN ${selectedVlans.join(", ")}）` : ""}
+                {selectedVrf ? `（${selectedVrf}）` : ""}
+                {showSegments ? " ▾" : " ▸"}
+              </button>
+              {(selectedVlans.length > 0 || selectedVrf) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedVlans([]);
+                    setSelectedVrf("");
+                  }}
+                >
+                  絞り込みを外す
+                </button>
               )}
             </div>
+            {showSegments && (
+              <>
+                {(vlans ?? []).length > 0 && (
+                  <>
+                    <div className="vlan-filter-head">
+                      <strong>VLAN</strong>
+                      <span className="muted">
+                        選ぶと、その VLAN を持たない機器が薄くなります
+                      </span>
+                      <input
+                        type="search"
+                        placeholder="番号・名称で絞る"
+                        value={vlanFilter}
+                        onChange={(e) => setVlanFilter(e.target.value)}
+                      />
+                      <RouterLink to="/vlans">
+                        <button title="VLAN の名称と用途を登録します">名称・用途を編集</button>
+                      </RouterLink>
+                    </div>
+                    <div className="vlan-filter-list">
+                      {shownVlans.map((vlan) => (
+                        <label key={vlan.vlan_id} className="vlan-chip">
+                          <input
+                            type="checkbox"
+                            checked={selectedVlans.includes(vlan.vlan_id)}
+                            onChange={(e) =>
+                              setSelectedVlans((prev) =>
+                                e.target.checked
+                                  ? [...prev, vlan.vlan_id]
+                                  : prev.filter((v) => v !== vlan.vlan_id),
+                              )
+                            }
+                          />{" "}
+                          <strong>VLAN {vlan.vlan_id}</strong>
+                          {vlan.name && <span> {vlan.name}</span>}
+                          <span className="muted">
+                            {" "}
+                            / {vlan.device_ids.length}台
+                            {vlan.access_port_count > 0 && ` / アクセス${vlan.access_port_count}`}
+                            {vlan.trunk_port_count > 0 && ` / トランク${vlan.trunk_port_count}`}
+                          </span>
+                        </label>
+                      ))}
+                      {shownVlans.length < (vlans ?? []).length && (
+                        <span className="muted">
+                          ほか {(vlans ?? []).length - shownVlans.length} 件（絞り込んで表示）
+                        </span>
+                      )}
+                    </div>
+                  </>
+                )}
+                {(vrfs ?? []).length > 0 && (
+                  <>
+                    <div className="vlan-filter-head">
+                      <strong>VRF（仮想ルータ）</strong>
+                      <span className="muted">
+                        同じ線で繋がって見えても、VRF が違えば通信できません
+                      </span>
+                      <select
+                        value={selectedVrf}
+                        onChange={(e) => setSelectedVrf(e.target.value)}
+                      >
+                        <option value="">すべて</option>
+                        {(vrfs ?? []).map((vrf) => (
+                          <option key={vrf.name} value={vrf.name}>
+                            {vrf.name}（{vrf.device_ids.length}台）
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="vlan-filter-list">
+                      {(vrfs ?? []).map((vrf) => (
+                        <span key={vrf.name} className="vlan-chip">
+                          <strong>{vrf.name}</strong>
+                          {vrf.rd && <span className="muted"> RD {vrf.rd}</span>}
+                          <span className="muted"> / {vrf.device_ids.length}台</span>
+                          {vrf.rd_mismatch && (
+                            <span
+                              className="badge warning"
+                              title="同じ VRF 名なのに機器ごとに RD が違います"
+                            >
+                              RD 不一致
+                            </span>
+                          )}
+                        </span>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </>
+            )}
           </div>
         )}
 
-        {(vrfs ?? []).length > 0 && (
-          <div className="vlan-filter">
-            <div className="vlan-filter-head">
-              <strong>VRF（仮想ルータ）で絞り込む</strong>
-              <span className="muted">同じ線で繋がって見えても、VRF が違えば通信できません</span>
-              <select value={selectedVrf} onChange={(e) => setSelectedVrf(e.target.value)}>
-                <option value="">すべて</option>
-                {(vrfs ?? []).map((vrf) => (
-                  <option key={vrf.name} value={vrf.name}>
-                    {vrf.name}（{vrf.device_ids.length}台）
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="vlan-filter-list">
-              {(vrfs ?? []).map((vrf) => (
-                <span key={vrf.name} className="vlan-chip">
-                  <strong>{vrf.name}</strong>
-                  {vrf.rd && <span className="muted"> RD {vrf.rd}</span>}
-                  <span className="muted"> / {vrf.device_ids.length}台</span>
-                  {vrf.rd_mismatch && (
-                    <span
-                      className="badge warning"
-                      title="同じ VRF 名なのに機器ごとに RD が違います"
-                    >
-                      RD 不一致
-                    </span>
-                  )}
-                </span>
+        <div className="topo-legend-row">
+          {legend.map((item) => (
+            <span key={item.text} className="topo-legend">
+              <span className={`topo-legend-line ${item.className}`} /> {item.text}
+            </span>
+          ))}
+          {usedMedia.length > 0 && (
+            <span className="topo-legend" title="ポート名の色は種別（速度）を表します">
+              ポート種別:{" "}
+              {usedMedia.map((media) => (
+                <strong key={media} style={{ color: MEDIA_COLOR[media], marginLeft: 8 }}>
+                  {MEDIA_LABEL[media]}
+                </strong>
               ))}
-            </div>
-          </div>
-        )}
-
-        {legend.map((item) => (
-          <span key={item.text} className="topo-legend">
-            <span className={`topo-legend-line ${item.className}`} /> {item.text}
-          </span>
-        ))}
-
-        {usedMedia.length > 0 && (
-          <span className="topo-legend" title="ポート名の色は種別（速度）を表します">
-            ポート種別:{" "}
-            {usedMedia.map((media) => (
-              <strong key={media} style={{ color: MEDIA_COLOR[media], marginLeft: 8 }}>
-                {MEDIA_LABEL[media]}
-              </strong>
-            ))}
-          </span>
-        )}
+            </span>
+          )}
+        </div>
       </div>
 
       {selectedEdge && (

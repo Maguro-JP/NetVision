@@ -439,8 +439,62 @@ button:disabled {
 }
 
 /* --- トポロジ図 --- */
+.topo-toolbars {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+.topo-toolbar-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.topo-toolbar-label {
+  font-size: 11px;
+  color: var(--muted);
+  min-width: 2.4em;
+  letter-spacing: 0.04em;
+}
+.topo-stats {
+  margin-bottom: 10px;
+}
+.topo-stats-toggle {
+  background: transparent;
+  border: none;
+  padding: 0;
+  color: var(--muted);
+  font-size: 13px;
+}
+.topo-stats-toggle:hover {
+  color: var(--text);
+  border-color: transparent;
+}
+.topo-pending-link {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+  border-color: var(--accent);
+}
+.topo-pending-link input {
+  margin-left: 6px;
+  min-width: 140px;
+}
+.topo-below {
+  margin-top: 12px;
+}
+.topo-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: center;
+  margin-top: 8px;
+}
 .topo-canvas {
-  height: 620px;
+  height: min(72vh, 760px);
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
