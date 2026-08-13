@@ -589,15 +589,11 @@ def test_arranging_keeps_the_order_a_person_chose(client, device_payload):
     ).json()["id"]
     left = client.post(
         f"{API}/devices",
-        json=device_payload(
-            hostname="sw-b", device_type="switch", serial_number="B", site_id=site
-        ),
+        json=device_payload(hostname="sw-b", device_type="switch", serial_number="B", site_id=site),
     ).json()["id"]
     right = client.post(
         f"{API}/devices",
-        json=device_payload(
-            hostname="sw-a", device_type="switch", serial_number="A", site_id=site
-        ),
+        json=device_payload(hostname="sw-a", device_type="switch", serial_number="A", site_id=site),
     ).json()["id"]
     # ポート順なら sw-a (Gi0/1) が左、sw-b (Gi0/2) が右。人は逆に置いた
     client.post(

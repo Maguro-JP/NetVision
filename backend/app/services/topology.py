@@ -268,9 +268,7 @@ def _apply_saved_positions(
         if position is not None:
             node.x, node.y, node.placed = position.x, position.y, True
     if graph.nodes:
-        _compact(
-            graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation
-        )
+        _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
     graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
 
