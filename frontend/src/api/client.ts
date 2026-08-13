@@ -52,6 +52,8 @@ import type {
 } from "./types";
 
 const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
+/** 応答が無いときに「読み込み中」のまま固まらないようにする */
+const TIMEOUT_MS = 20_000;
 
 export class ApiError extends Error {
   constructor(
@@ -62,8 +64,41 @@ export class ApiError extends Error {
   }
 }
 
+/** 4xx は同じ内容を送り直しても直らない。待たせてストレスになるだけ。 */
+export function isRetryableError(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return true;
+  if (error.status === 0) return true;
+  return error.status >= 500;
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof Error && error.name === "AbortError";
+}
+
+async function send(path: string, init: RequestInit = {}): Promise<Response> {
+  if (typeof navigator !== "undefined" && navigator.onLine === false) {
+    throw new ApiError(0, "オフラインです。接続してからやり直してください");
+  }
+
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  init.signal?.addEventListener("abort", () => controller.abort());
+
+  try {
+    return await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+  } catch (error) {
+    if (error instanceof ApiError) throw error;
+    if (isAbortError(error)) {
+      throw new ApiError(0, "応答がありません。しばらくしてからもう一度試してください");
+    }
+    throw new ApiError(0, "接続できませんでした。ネットワークを確認してください");
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await send(path, {
     ...init,
     headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
   });
@@ -81,7 +116,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
  * 送れないので、本体はページ、総数はヘッダに分けて受け取る。
  */
 async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: number }> {
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await send(path, {
     headers: { "Content-Type": "application/json" },
   });
   if (!res.ok) {
@@ -94,11 +129,19 @@ async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: n
 
 /** multipart 送信。Content-Type はブラウザに境界文字列ごと決めさせる。 */
 async function upload<T>(path: string, form: FormData): Promise<T> {
-  const res = await fetch(`${BASE}${path}`, { method: "POST", body: form });
+  const res = await send(path, { method: "POST", body: form });
   if (!res.ok) {
     throw new ApiError(res.status, await extractError(res));
   }
   return (await res.json()) as T;
+}
+
+export function humanizeHttpError(status: number, fallback: string): string {
+  if (status === 404) return "見つかりませんでした。削除されたか、アドレスが違う可能性があります";
+  if (status === 409) return "他の操作と衝突しました。画面を読み直してからやり直してください";
+  if (status === 413) return "ファイルが大きすぎます。分けて取り込むか、小さいファイルにしてください";
+  if (status >= 500) return "サーバで問題が起きました。しばらくしてからやり直してください";
+  return fallback;
 }
 
 /** FastAPI のエラー形式（detail が文字列 or バリデーション配列）を読める文字列にする。 */
@@ -118,7 +161,7 @@ async function extractError(res: Response): Promise<string> {
   } catch {
     /* JSON でない場合は下のフォールバックへ */
   }
-  return `${res.status} ${res.statusText}`;
+  return humanizeHttpError(res.status, `${res.status} ${res.statusText}`);
 }
 
 function query(params: Record<string, string | number | boolean | undefined>): string {
@@ -245,7 +288,7 @@ export const api = {
     form.append("encoding", options.encoding ?? "utf-8");
     if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
 
-    const res = await fetch(`${BASE}/import/devices/errors.csv`, { method: "POST", body: form });
+    const res = await send("/import/devices/errors.csv", { method: "POST", body: form });
     if (!res.ok) throw new ApiError(res.status, await extractError(res));
     return res.blob();
   },

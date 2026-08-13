@@ -11,6 +11,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
     items: [
       { to: "/dashboard", label: "ダッシュボード" },
       { to: "/topology", label: "トポロジ図" },
+      { to: "/space", label: "立体で眺める" },
       { to: "/insights", label: "最適化の指摘" },
     ],
   },

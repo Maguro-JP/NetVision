@@ -3,12 +3,13 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
+import QueryError from "../components/QueryError";
 
 export default function SitesPage() {
   const queryClient = useQueryClient();
   const [form, setForm] = useState({ name: "", address: "" });
 
-  const { data, isLoading, error } = useQuery({ queryKey: ["sites"], queryFn: api.listSites });
+  const { data, isLoading, error, refetch } = useQuery({ queryKey: ["sites"], queryFn: api.listSites });
 
   const invalidate = () => {
     queryClient.invalidateQueries({ queryKey: ["sites"] });
@@ -34,7 +35,7 @@ export default function SitesPage() {
       <p className="subtitle">機器の設置場所を登録します。削除しても機器は残ります。</p>
 
       {(error || create.error) && (
-        <div className="error">{((error ?? create.error) as Error).message}</div>
+        <QueryError error={error ?? create.error} onRetry={error ? () => refetch() : undefined} />
       )}
 
       <form

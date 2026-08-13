@@ -1,9 +1,10 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { IngestResult } from "../api/types";
+import QueryError from "../components/QueryError";
 import { formatTimestamp } from "../lib/format";
 
 /** 取り込み1ファイル分の結果。読み取れたものと、台帳との差分を見せる。 */
@@ -98,6 +99,15 @@ export default function ConfigsPage() {
   const [createMissing, setCreateMissing] = useState(true);
   const [results, setResults] = useState<IngestResult[] | null>(null);
   const [diffTarget, setDiffTarget] = useState<number | null>(null);
+  const [over, setOver] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  const takeFiles = (list: FileList | File[] | null) => {
+    const next = Array.from(list ?? []);
+    if (!next.length) return;
+    setFiles(next);
+    setResults(null);
+  };
 
   const { data: snapshots } = useQuery({ queryKey: ["configs"], queryFn: () => api.listConfigs() });
   const { data: diff } = useQuery({
@@ -130,19 +140,52 @@ export default function ConfigsPage() {
       </p>
 
       <div className="form-grid">
-        <div className="field wide">
-          <label htmlFor="files">
-            ファイル（複数選択できます。Cisco IOS / NX-OS、Junos、FortiOS に対応）
-          </label>
-          <input
-            id="files"
-            type="file"
-            multiple
-            onChange={(e) => {
-              setFiles(Array.from(e.target.files ?? []));
-              setResults(null);
+        <div className="field wide config-drop">
+          <label>ファイル（複数可。Cisco / Juniper / Fortinet / NEC IX・QX）</label>
+          <div
+            className={`dropzone${over ? " over" : ""}`}
+            onDragOver={(e) => {
+              e.preventDefault();
+              setOver(true);
             }}
-          />
+            onDragLeave={() => setOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOver(false);
+              takeFiles(e.dataTransfer.files);
+            }}
+            onClick={() => inputRef.current?.click()}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") inputRef.current?.click();
+            }}
+          >
+            <input
+              ref={inputRef}
+              id="files"
+              type="file"
+              multiple
+              hidden
+              onChange={(e) => {
+                takeFiles(e.target.files);
+                e.target.value = "";
+              }}
+            />
+            {files.length === 0 ? (
+              <span>
+                ここに<strong>ドラッグ＆ドロップ</strong>
+                <br />
+                <span className="muted">クリックして選ぶこともできます</span>
+              </span>
+            ) : (
+              <span>
+                {files.length} 件を選びました
+                <br />
+                <span className="muted">{files.map((f) => f.name).join("、")}</span>
+              </span>
+            )}
+          </div>
         </div>
         <div className="field">
           <label htmlFor="apply">読み取った型番・バージョンの扱い</label>
@@ -183,7 +226,7 @@ export default function ConfigsPage() {
         </button>
       </div>
 
-      {run.error && <div className="error">{(run.error as Error).message}</div>}
+      {run.error && <QueryError error={run.error} onRetry={() => run.mutate()} />}
 
       {results && (
         <>

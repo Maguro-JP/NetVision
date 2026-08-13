@@ -5,6 +5,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { Device } from "../api/types";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL } from "../lib/format";
+import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 
 type FormState = Record<string, string>;
 
@@ -61,6 +62,9 @@ export default function DeviceFormPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [form, setForm] = useState<FormState>(EMPTY);
+  const [baseline, setBaseline] = useState<FormState>(EMPTY);
+  const dirty = JSON.stringify(form) !== JSON.stringify(baseline);
+  useUnsavedWarning(dirty);
 
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: api.listSites });
   const { data: device } = useQuery({
@@ -70,7 +74,11 @@ export default function DeviceFormPage() {
   });
 
   useEffect(() => {
-    if (device) setForm(toForm(device));
+    if (device) {
+      const next = toForm(device);
+      setForm(next);
+      setBaseline(next);
+    }
   }, [device]);
 
   const save = useMutation({
@@ -87,10 +95,17 @@ export default function DeviceFormPage() {
   const set = (key: string) => (e: { target: { value: string } }) =>
     setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
-  const text = (key: keyof typeof EMPTY, label: string, type = "text") => (
+  const text = (key: keyof typeof EMPTY, label: string, type = "text", extra: { required?: boolean; autoFocus?: boolean } = {}) => (
     <div className="field">
       <label htmlFor={key}>{label}</label>
-      <input id={key} type={type} value={form[key]} onChange={set(key)} />
+      <input
+        id={key}
+        type={type}
+        value={form[key]}
+        onChange={set(key)}
+        required={extra.required}
+        autoFocus={extra.autoFocus}
+      />
     </div>
   );
 
@@ -98,7 +113,14 @@ export default function DeviceFormPage() {
     <>
       <h1>{isEdit ? "機器を編集" : "機器を追加"}</h1>
       <p className="subtitle">
-        <Link to={isEdit ? `/devices/${id}` : "/devices"}>← 戻る</Link>
+        <Link
+          to={isEdit ? `/devices/${id}` : "/devices"}
+          onClick={(event) => {
+            if (!confirmLeave(dirty)) event.preventDefault();
+          }}
+        >
+          ← 戻る
+        </Link>
       </p>
 
       {save.error && <div className="error">{(save.error as Error).message}</div>}
@@ -110,9 +132,9 @@ export default function DeviceFormPage() {
         }}
       >
         <div className="form-grid">
-          {text("hostname", "ホスト名 *")}
-          {text("vendor", "ベンダー *")}
-          {text("model", "型番 *")}
+          {text("hostname", "ホスト名 *", "text", { required: true, autoFocus: true })}
+          {text("vendor", "ベンダー *", "text", { required: true })}
+          {text("model", "型番 *", "text", { required: true })}
           {text("serial_number", "シリアル番号")}
 
           <div className="field">
@@ -184,7 +206,12 @@ export default function DeviceFormPage() {
           <button className="primary" type="submit" disabled={save.isPending}>
             {save.isPending ? "保存中…" : "保存"}
           </button>
-          <button type="button" onClick={() => navigate(-1)}>
+          <button
+            type="button"
+            onClick={() => {
+              if (confirmLeave(dirty)) navigate(-1);
+            }}
+          >
             キャンセル
           </button>
         </div>

@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import type { MaintenanceContract } from "../api/types";
 import ConfigDropZone from "../components/ConfigDropZone";
 import ChangeLogTable from "../components/ChangeLogTable";
+import QueryError from "../components/QueryError";
 import { DOC_TYPE_LABEL, versionRange } from "../lib/docs";
 import SeverityBadge from "../components/SeverityBadge";
 import {
@@ -39,6 +40,7 @@ export default function DeviceDetailPage() {
     data: device,
     isLoading,
     error,
+    refetch,
   } = useQuery({
     queryKey: ["device", id],
     queryFn: () => api.getDevice(deviceId),
@@ -112,7 +114,7 @@ export default function DeviceDetailPage() {
   });
 
   if (isLoading) return <p className="muted">読み込み中…</p>;
-  if (error) return <div className="error">{(error as Error).message}</div>;
+  if (error) return <QueryError error={error} onRetry={() => refetch()} />;
   if (!device) return null;
 
   const lc = device.lifecycle;

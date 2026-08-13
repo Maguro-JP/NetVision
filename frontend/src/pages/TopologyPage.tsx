@@ -28,6 +28,7 @@ import DeviceNode, {
 } from "../components/DeviceNode";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
 import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 
 const NODE_TYPES = { device: DeviceNode };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -432,6 +433,7 @@ function TopologyEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
+  useUnsavedWarning(dirty);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
@@ -793,7 +795,14 @@ function TopologyEditor() {
         >
           {editable ? "🔓 編集中" : "🔒 編集する"}
         </button>
-        <select value={layer} onChange={(e) => setLayer(e.target.value)}>
+        <select
+          value={layer}
+          onChange={(e) => {
+            if (!confirmLeave(dirty)) return;
+            setDirty(false);
+            setLayer(e.target.value);
+          }}
+        >
           {LAYERS.map((item) => (
             <option key={item.value} value={item.value}>
               {item.label}

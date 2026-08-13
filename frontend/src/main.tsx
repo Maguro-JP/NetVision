@@ -3,6 +3,8 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 
+import { isRetryableError } from "./api/client";
+
 import App from "./App";
 import ChangesPage from "./pages/ChangesPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
@@ -29,7 +31,15 @@ import SitesPage from "./pages/SitesPage";
 import "./styles.css";
 
 const queryClient = new QueryClient({
-  defaultOptions: { queries: { refetchOnWindowFocus: false, retry: 1 } },
+  defaultOptions: {
+    queries: {
+      refetchOnWindowFocus: false,
+      retry: (count, error) => isRetryableError(error) && count < 1,
+    },
+    mutations: {
+      retry: false,
+    },
+  },
 });
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
