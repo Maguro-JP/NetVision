@@ -248,11 +248,11 @@ def test_a_saved_layout_is_not_rearranged(db_session):
 
 
 def test_a_placed_peer_does_not_block_rearranging_the_site(db_session):
-    """対向が保存済みでも、自拠点の並べ直しは止まらないこと。
+    """対向がこの拠点の図で保存済みでも、自拠点の並べ直しは止まらないこと。
 
     対向の位置まで「保存済み」と見なすと、拠点を見ているときの最適化も
-    リセットも効かなくなる。対向は脇へ寄せる対象なので、内側は並べ直す。
-    保存済みの座標が自拠点の上に残ると線が隠れるので、表示だけは脇へ寄せる。
+    リセットも効かなくなる。対向はこの図の脇へ寄せる対象なので、内側は並べ直す。
+    この図で置いた対向は残す。
     """
     ids = build(db_session)
     graph = topology.get_graph(db_session)
@@ -264,9 +264,8 @@ def test_a_placed_peer_does_not_block_rearranging_the_site(db_session):
     scoped = topology.scope_graph(graph, site_id=ids["osaka"])
     kept = {n.hostname: n for n in scoped.nodes}
 
-    assert kept["east-core-rt-01"].placed is True  # DB の保存は残る
-    assert (kept["east-core-rt-01"].x, kept["east-core-rt-01"].y) != (9999.0, 9999.0)
-    assert kept["east-core-rt-01"].y < kept["osaka-rt-01"].y  # 上位は上へ
+    assert kept["east-core-rt-01"].placed is True
+    assert (kept["east-core-rt-01"].x, kept["east-core-rt-01"].y) == (9999.0, 9999.0)
     assert (kept["osaka-rt-01"].x, kept["osaka-rt-01"].y) != (50.0, 800.0)
     assert kept["osaka-rt-01"].y < kept["osaka-sw-01"].y
 

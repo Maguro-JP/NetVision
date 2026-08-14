@@ -399,10 +399,14 @@ export const api = {
       device_count: number;
       unresolved: { device: string; name: string; destination: string | null; kind: string | null }[];
     }>("/topology/tunnels"),
-  savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>
+  savePositions: (
+    layer: string,
+    positions: { device_id: number; x: number; y: number }[],
+    siteId?: number,
+  ) =>
     request<{ saved: number }>("/topology/positions", {
       method: "PUT",
-      body: JSON.stringify({ layer, positions }),
+      body: JSON.stringify({ layer, site_id: siteId ?? null, positions }),
     }),
   createTopologyGroup: (body: {
     layer: string;

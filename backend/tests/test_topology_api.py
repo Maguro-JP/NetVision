@@ -399,7 +399,7 @@ def test_saving_a_position_only_touches_the_devices_that_moved(client, device_pa
 
 
 def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, device_payload):
-    """1拠点を見ている最中のリセットで、他の拠点の配置まで消さないこと。"""
+    """1拠点の図をリセットしても、別拠点の図は消さないこと。"""
     here = client.post(f"{API}/sites", json={"name": "見ている拠点"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "別の拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="here-01", site_id=here)).json()[
@@ -414,19 +414,27 @@ def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, devic
         f"{API}/topology/positions",
         json={
             "layer": "physical",
-            "positions": [
-                {"device_id": a, "x": 1.0, "y": 1.0},
-                {"device_id": b, "x": 500.0, "y": 500.0},
-            ],
+            "site_id": here,
+            "positions": [{"device_id": a, "x": 1.0, "y": 1.0}],
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": there,
+            "positions": [{"device_id": b, "x": 500.0, "y": 500.0}],
         },
     )
 
     client.delete(f"{API}/topology/positions", params={"site_id": here})
 
-    graph = client.get(f"{API}/topology").json()
-    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
-    assert where["there-01"][:2] == (500.0, 500.0)  # 別の拠点は残る
-    assert where["here-01"][2] is False  # 見ていた拠点だけ自動配置に戻る
+    here_graph = client.get(f"{API}/topology", params={"site_id": here}).json()
+    there_graph = client.get(f"{API}/topology", params={"site_id": there}).json()
+    here_where = {n["hostname"]: n["placed"] for n in here_graph["nodes"]}
+    there_where = {n["hostname"]: (n["x"], n["y"]) for n in there_graph["nodes"]}
+    assert here_where["here-01"] is False
+    assert there_where["there-01"] == (500.0, 500.0)
 
 
 def test_arranging_aligns_near_rows_without_rebuilding_the_tree(client, device_payload):
@@ -446,6 +454,7 @@ def test_arranging_aligns_near_rows_without_rebuilding_the_tree(client, device_p
         f"{API}/topology/positions",
         json={
             "layer": "physical",
+            "site_id": site,
             "positions": [
                 {"device_id": a, "x": 12.0, "y": 18.0},
                 {"device_id": b, "x": 312.0, "y": 22.0},
@@ -482,25 +491,28 @@ def test_arranging_one_site_leaves_the_other_sites_alone(client, device_payload)
         f"{API}/topology/positions",
         json={
             "layer": "physical",
-            "positions": [
-                {"device_id": a, "x": 1.0, "y": 1.0},
-                {"device_id": b, "x": 700.0, "y": 700.0},
-            ],
+            "site_id": there,
+            "positions": [{"device_id": b, "x": 700.0, "y": 700.0}],
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": here,
+            "positions": [{"device_id": a, "x": 1.0, "y": 1.0}],
         },
     )
 
     client.post(f"{API}/topology/positions/arrange", params={"site_id": here})
 
-    graph = client.get(f"{API}/topology").json()
-    where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
+    there_graph = client.get(f"{API}/topology", params={"site_id": there}).json()
+    where = {n["hostname"]: (n["x"], n["y"]) for n in there_graph["nodes"]}
     assert where["b-01"] == (700.0, 700.0)
 
 
 def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
-    """対向の機器は、相手の拠点で置いた位置を持っている。
-
-    こちらをリセットしたときに対向まで消すと、相手側の図が突然戻ってしまう。
-    """
+    """こちらをリセットしても、対向の拠点の図は残ること。"""
     here = client.post(f"{API}/sites", json={"name": "見ている拠点"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "対向の拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="here-rt", site_id=here)).json()[
@@ -518,23 +530,34 @@ def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
         f"{API}/topology/positions",
         json={
             "layer": "physical",
+            "site_id": here,
             "positions": [
                 {"device_id": a, "x": 1.0, "y": 1.0},
-                {"device_id": b, "x": 700.0, "y": 700.0},
+                {"device_id": b, "x": 80.0, "y": 80.0},
             ],
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": there,
+            "positions": [{"device_id": b, "x": 700.0, "y": 700.0}],
         },
     )
 
     client.delete(f"{API}/topology/positions", params={"site_id": here})
 
-    graph = client.get(f"{API}/topology").json()
-    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
-    assert where["there-rt"] == (700.0, 700.0, True)
-    assert where["here-rt"][2] is False
+    there_graph = client.get(f"{API}/topology", params={"site_id": there}).json()
+    here_graph = client.get(f"{API}/topology", params={"site_id": here}).json()
+    there_where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in there_graph["nodes"]}
+    here_where = {n["hostname"]: n["placed"] for n in here_graph["nodes"]}
+    assert there_where["there-rt"] == (700.0, 700.0, True)
+    assert here_where["here-rt"] is False
 
 
-def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payload):
-    """保存した対向の位置は、自拠点の図では残る。別拠点から見るときは脇へ寄せる。"""
+def test_a_device_can_sit_in_different_places_on_two_site_diagrams(client, device_payload):
+    """同じ機器でも、拠点の図ごとに座標を持てること。"""
     here = client.post(f"{API}/sites", json={"name": "本社"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "支社"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="core-sw", site_id=here)).json()[
@@ -552,25 +575,38 @@ def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payloa
         f"{API}/topology/positions",
         json={
             "layer": "physical",
+            "site_id": here,
             "positions": [
                 {"device_id": a, "x": 40.0, "y": 80.0},
                 {"device_id": b, "x": 800.0, "y": 240.0},
             ],
         },
     )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": there,
+            "positions": [
+                {"device_id": b, "x": 10.0, "y": 20.0},
+                {"device_id": a, "x": 400.0, "y": -200.0},
+            ],
+        },
+    )
+
     from_here = client.get(f"{API}/topology", params={"site_id": here, "scope": "peers"}).json()
-    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in from_here["nodes"]}
-    assert where["core-sw"][:2] == (40.0, 80.0)
-    assert where["br-rt"][:2] != (800.0, 240.0)  # 本社から見る簡易表示は自動配置
-    assert where["br-rt"][2] is True
+    here_where = {n["hostname"]: (n["x"], n["y"]) for n in from_here["nodes"]}
+    assert here_where["core-sw"] == (40.0, 80.0)
+    assert here_where["br-rt"] == (800.0, 240.0)
 
     from_there = client.get(f"{API}/topology", params={"site_id": there, "scope": "peers"}).json()
-    peer = {n["hostname"]: (n["x"], n["y"]) for n in from_there["nodes"]}["br-rt"]
-    assert peer == (800.0, 240.0)
+    there_where = {n["hostname"]: (n["x"], n["y"]) for n in from_there["nodes"]}
+    assert there_where["br-rt"] == (10.0, 20.0)
+    assert there_where["core-sw"] == (400.0, -200.0)
 
 
 def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payload):
-    """最適化で対向の位置まで上書きしないこと。"""
+    """整えても、対向の拠点の図は上書きしないこと。"""
     here = client.post(f"{API}/sites", json={"name": "整える拠点"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "対向の拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="here-rt", site_id=here)).json()[
@@ -588,19 +624,27 @@ def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payloa
         f"{API}/topology/positions",
         json={
             "layer": "physical",
-            "positions": [
-                {"device_id": a, "x": 1.0, "y": 1.0},
-                {"device_id": b, "x": 700.0, "y": 700.0},
-            ],
+            "site_id": there,
+            "positions": [{"device_id": b, "x": 700.0, "y": 700.0}],
+        },
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": here,
+            "positions": [{"device_id": a, "x": 1.0, "y": 1.0}],
         },
     )
 
     client.post(f"{API}/topology/positions/arrange", params={"site_id": here})
 
-    graph = client.get(f"{API}/topology").json()
-    where = {n["hostname"]: (n["x"], n["y"]) for n in graph["nodes"]}
-    assert where["there-rt"] == (700.0, 700.0)
-    assert where["here-rt"] != (1.0, 1.0)
+    there_graph = client.get(f"{API}/topology", params={"site_id": there}).json()
+    here_graph = client.get(f"{API}/topology", params={"site_id": here}).json()
+    there_where = {n["hostname"]: (n["x"], n["y"]) for n in there_graph["nodes"]}
+    here_where = {n["hostname"]: (n["x"], n["y"]) for n in here_graph["nodes"]}
+    assert there_where["there-rt"] == (700.0, 700.0)
+    assert here_where["here-rt"] != (1.0, 1.0)
 
 
 def test_initial_layout_stacks_connected_routers(client, device_payload):
@@ -668,6 +712,7 @@ def test_arranging_keeps_the_order_a_person_chose(client, device_payload):
         f"{API}/topology/positions",
         json={
             "layer": "physical",
+            "site_id": site,
             "positions": [
                 {"device_id": rt, "x": 0.0, "y": 0.0},
                 {"device_id": left, "x": -400.0, "y": 280.0},
@@ -711,6 +756,7 @@ def test_a_new_device_is_laid_out_without_moving_saved_ones(client, device_paylo
         f"{API}/topology/positions",
         json={
             "layer": "physical",
+            "site_id": site,
             "positions": [
                 {"device_id": rt, "x": 12.0, "y": 34.0},
                 {"device_id": old, "x": 56.0, "y": 78.0},

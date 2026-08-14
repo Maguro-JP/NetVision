@@ -9,11 +9,13 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -141,13 +143,40 @@ class Link(Base):
 
 
 class TopologyNode(Base):
-    """図の中でのノード配置。人が動かした位置を覚えておく。"""
+    """図の中でのノード配置。人が動かした位置を覚えておく。
+
+    座標は機器ではなく、見ている拠点の図に紐づける。同じ対向機器でも、
+    本社から見た位置と支社から見た位置は別。site_id が空なのは全体図。
+    """
 
     __tablename__ = "topology_nodes"
-    __table_args__ = (UniqueConstraint("device_id", "layer", name="uq_topology_node"),)
+    __table_args__ = (
+        # NULL は UNIQUE で同一視されないので、全体図と拠点図を分けて一意にする
+        Index(
+            "uq_topology_node_site",
+            "device_id",
+            "layer",
+            "site_id",
+            unique=True,
+            sqlite_where=text("site_id IS NOT NULL"),
+            postgresql_where=text("site_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_topology_node_global",
+            "device_id",
+            "layer",
+            unique=True,
+            sqlite_where=text("site_id IS NULL"),
+            postgresql_where=text("site_id IS NULL"),
+        ),
+    )
 
     id: Mapped[int] = mapped_column(primary_key=True)
     device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+    # どの拠点の図か。空は全体図。拠点を消したら、その図の配置だけ消える
+    site_id: Mapped[int | None] = mapped_column(
+        ForeignKey("sites.id", ondelete="CASCADE"), default=None, index=True
+    )
     # レイヤ別に別々の配置を持てるようにしておく（物理 / L2 / L3）
     layer: Mapped[str] = mapped_column(String(20), default="physical", index=True)
 

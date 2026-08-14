@@ -67,6 +67,22 @@ _WRAP = 6
 _WRAP_SPACING = 130.0
 
 
+def _layout_of(site_id: int | None):
+    """この図の配置だけを取る。全体図は site_id が空の行。"""
+    if site_id is None:
+        return TopologyNode.site_id.is_(None)
+    return TopologyNode.site_id == site_id
+
+
+def _saved_positions(db: Session, layer: str, site_id: int | None) -> dict[int, TopologyNode]:
+    return {
+        node.device_id: node
+        for node in db.scalars(
+            select(TopologyNode).where(TopologyNode.layer == layer, _layout_of(site_id))
+        )
+    }
+
+
 @dataclass
 class TopologyNodeView:
     device_id: int
@@ -207,6 +223,7 @@ def get_graph(
     include_retired: bool = False,
     orientation: str = "vertical",
     only: set[int] | None = None,
+    site_id: int | None = None,
 ) -> TopologyGraph:
     if layer == "logical":
         # 論理図はトンネルから組み立てる。物理の結線とは別の話なので、
@@ -216,7 +233,7 @@ def get_graph(
         graph = topology_logical.build(
             db, include_retired=include_retired, orientation=orientation
         ).graph
-        graph = _apply_saved_positions(db, graph, orientation=orientation)
+        graph = _apply_saved_positions(db, graph, orientation=orientation, site_id=site_id)
         # 拠点で絞ったときは、その拠点の機器に加え、scoped_device_ids が
         # 拾った対向（センター等）に張られたトンネルも残す。
         # ここを拠点の site_id だけで切ると、本社を選んだときに論理が空になる。
@@ -242,10 +259,7 @@ def get_graph(
 
     visible_ids = {d.id for d in devices}
 
-    positions = {
-        node.device_id: node
-        for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == layer))
-    }
+    positions = _saved_positions(db, layer, site_id)
     interface_counts = _interface_counts(db)
     interface_query = select(Interface)
     if only is not None:
@@ -392,13 +406,17 @@ def _as_l3(graph: TopologyGraph, ports: dict[tuple[int, str], Interface]) -> Top
 
 
 def _apply_saved_positions(
-    db: Session, graph: TopologyGraph, *, orientation: str = "vertical"
+    db: Session,
+    graph: TopologyGraph,
+    *,
+    orientation: str = "vertical",
+    site_id: int | None = None,
 ) -> TopologyGraph:
-    """人が動かした位置を反映する。図の種類が違っても、直した配置は残す。"""
-    saved = {
-        node.device_id: node
-        for node in db.scalars(select(TopologyNode).where(TopologyNode.layer == graph.layer))
-    }
+    """人が動かした位置を反映する。図の種類が違っても、直した配置は残す。
+
+    取るのはいま見ている拠点の図。別拠点で置いた座標は使わない。
+    """
+    saved = _saved_positions(db, graph.layer, site_id)
     for node in graph.nodes:
         position = saved.get(node.device_id)
         if position is not None:
@@ -1197,8 +1215,9 @@ def _place_peers(
     for device_id, node in by_id.items():
         if device_id in inside or device_id not in attached:
             continue
-        # 絞り込みの外では、相手拠点で保存した座標は使わない。
-        # そのまま残すと自拠点の箱と重なり、線が隠れる。
+        if node.placed:
+            # この拠点の図で置いた対向は意思。別拠点の座標は get_graph で載らない
+            continue
         kind = _peer_kind(device_id, inside, rank, own_rank, world_adj, world_by_id)
         if kind == "up":
             above.append(node)
@@ -1410,13 +1429,17 @@ def save_positions(
     layer: str,
     positions: list[tuple[int, float, float]],
     *,
+    site_id: int | None = None,
     pinned: bool | dict[int, bool] = True,
 ) -> int:
-    """動かした機器の位置を保存する。
+    """動かした機器の位置を、いま見ている拠点の図として保存する。
 
     動かした分だけを読む。以前は層の保存済み位置を全部読み込んでいたため、
     1台つまんで置き直すたびに全機器分の読み書きが走っていた（台数が増える
     ほど、動かすたびに固まる）。
+
+    `site_id` がその図。空は全体図。対向機器もこの図の座標として残す。
+    相手の拠点の図は別の行なので、上書きしない。
 
     `pinned` は人の意思かどうか。画面から動かした保存は True。最適化が
     整えただけの位置は False にして、次の最適化でも動けるようにする。
@@ -1426,7 +1449,9 @@ def save_positions(
         node.device_id: node
         for node in db.scalars(
             select(TopologyNode).where(
-                TopologyNode.layer == layer, TopologyNode.device_id.in_(wanted)
+                TopologyNode.layer == layer,
+                TopologyNode.device_id.in_(wanted),
+                _layout_of(site_id),
             )
         )
     }
@@ -1435,7 +1460,7 @@ def save_positions(
     for device_id, x, y in positions:
         node = existing.get(device_id)
         if node is None:
-            node = TopologyNode(device_id=device_id, layer=layer)
+            node = TopologyNode(device_id=device_id, layer=layer, site_id=site_id)
             db.add(node)
         node.x = x
         node.y = y
@@ -1446,15 +1471,21 @@ def save_positions(
     return saved
 
 
-def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) -> int:
+def reset_positions(
+    db: Session,
+    layer: str,
+    *,
+    site_id: int | None = None,
+    only: set[int] | None = None,
+) -> int:
     """保存済みの配置を消して、自動レイアウトに戻す。
 
-    `only` を渡すと、その機器の分だけ消す。拠点を1つ見ている最中の
-    「リセット」で、他の拠点で直した配置まで消えるのは行き過ぎなため。
+    消すのはいま見ている拠点の図だけ。`only` は検索で絞ったとき用。
+    拠点を指定せず `only` だけだと、全体図のうちその機器だけを消す。
     """
     if only is not None and len(only) == 0:
         return 0
-    stmt = select(TopologyNode).where(TopologyNode.layer == layer)
+    stmt = select(TopologyNode).where(TopologyNode.layer == layer, _layout_of(site_id))
     if only is not None:
         stmt = stmt.where(TopologyNode.device_id.in_(only))
     nodes = list(db.scalars(stmt))
@@ -1707,12 +1738,12 @@ def arrange_positions(
     マス目に乗せ、近い段・列を揃え、重なりを少し空ける。木を組み直して
     初期配置へ戻すのではない。消して自動配置に戻すのはリセットの仕事。
 
-    保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
-    その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
+    保存するのはいま見ている拠点の図。対向もこの図の座標として残す。
+    相手の拠点の図は site_id が違う行なので、上書きしない。
     """
     inside = matching_device_ids(db, site_id=site_id, q=q)
     draw = scoped_device_ids(db, site_id=site_id, q=q)
-    graph = get_graph(db, layer, orientation=orientation, only=draw)
+    graph = get_graph(db, layer, orientation=orientation, only=draw, site_id=site_id)
     graph = scope_graph(
         graph,
         site_id=site_id,
@@ -1728,10 +1759,12 @@ def arrange_positions(
     targets = [node for node in graph.nodes if node.device_id in owned]
     _polish_layout(targets, edges=graph.edges, owned=owned)
 
-    placed = [(n.device_id, n.x, n.y) for n in targets]
+    # 対向の自動配置も、この拠点の図として残す。残さないと次に開いたとき
+    # また自動配置になり、人が動かした対向が戻ってしまう
+    placed = [(n.device_id, n.x, n.y) for n in graph.nodes]
     if not placed:
         return 0
-    return save_positions(db, layer, placed, pinned=True)
+    return save_positions(db, layer, placed, site_id=site_id, pinned=True)
 
 
 @dataclass

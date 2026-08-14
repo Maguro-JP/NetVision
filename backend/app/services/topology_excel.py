@@ -202,7 +202,7 @@ def to_xlsx(
     from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
     from openpyxl.utils import get_column_letter
 
-    whole = get_graph(db, layer)
+    whole = get_graph(db, layer, site_id=site_id)
     # 上下関係は網全体で見る。拠点だけを切り出した中で決めると、
     # その拠点でたまたま枝の多い機器が一番上に来てしまう
     rank = hierarchy_rank(whole)

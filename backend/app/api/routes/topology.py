@@ -71,7 +71,12 @@ def get_topology(
             "機器が多すぎて全体図は出せません。拠点か機器名で絞ってください",
         )
     graph = service.get_graph(
-        db, layer, include_retired=include_retired, orientation=orientation, only=only
+        db,
+        layer,
+        include_retired=include_retired,
+        orientation=orientation,
+        only=only,
+        site_id=site_id,
     )
     if layer == "logical":
         # 論理は get_graph 側で対向（only）まで残してある。
@@ -452,7 +457,10 @@ def save_positions(payload: SavePositions, db: DbSession) -> dict[str, int]:
         )
 
     saved = service.save_positions(
-        db, payload.layer, [(p.device_id, p.x, p.y) for p in payload.positions]
+        db,
+        payload.layer,
+        [(p.device_id, p.x, p.y) for p in payload.positions],
+        site_id=payload.site_id,
     )
     return {"saved": saved}
 
@@ -466,12 +474,11 @@ def reset_positions(
 ) -> dict[str, int]:
     """配置を自動レイアウトに戻す。
 
-    拠点や検索を指定すればその範囲だけ、指定しなければ全部。1拠点を見て
-    いる最中のリセットで他の拠点の配置まで消えるのは行き過ぎなので、
-    画面からは範囲つきで呼ぶ。
+    拠点や検索を指定すればその範囲だけ、指定しなければ全体図だけ。
+    1拠点を見ている最中のリセットで、他の拠点の図まで消えるのは行き過ぎ。
     """
-    only = service.matching_device_ids(db, site_id=site_id, q=q)
-    return {"reset": service.reset_positions(db, layer, only=only)}
+    only = service.matching_device_ids(db, site_id=None, q=q) if q else None
+    return {"reset": service.reset_positions(db, layer, site_id=site_id, only=only)}
 
 
 @router.post("/positions/arrange", response_model=dict[str, int])

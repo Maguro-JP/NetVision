@@ -758,10 +758,16 @@ function TopologyEditor() {
     setRevision((value) => value + 1);
   };
 
+  /** いま見えている範囲。保存・リセット・整列もこの図に効かせる */
+  const viewScope = {
+    site_id: selectedSite === "" ? undefined : selectedSite,
+    q: appliedSearch.trim() || undefined,
+  };
+
   const save = useMutation({
     mutationFn: () => {
       const current = instance.current?.getNodes() ?? nodes;
-      return api.savePositions(layer, positionsToSave(current));
+      return api.savePositions(layer, positionsToSave(current), viewScope.site_id);
     },
     onSuccess: async () => {
       const current = instance.current?.getNodes() ?? nodes;
@@ -772,12 +778,6 @@ function TopologyEditor() {
       setNotice("配置を保存しました");
     },
   });
-
-  /** いま見えている範囲。リセットも整列もこの範囲だけに効かせる */
-  const viewScope = {
-    site_id: selectedSite === "" ? undefined : selectedSite,
-    q: appliedSearch.trim() || undefined,
-  };
 
   const reset = useMutation({
     mutationFn: () => api.resetPositions(layer, viewScope),
@@ -856,7 +856,11 @@ function TopologyEditor() {
         ...(input.site_id != null ? { site_id: input.site_id } : {}),
       });
       try {
-        await api.savePositions(layer, [{ device_id: device.id, x: input.x, y: input.y }]);
+        await api.savePositions(
+          layer,
+          [{ device_id: device.id, x: input.x, y: input.y }],
+          viewScope.site_id,
+        );
         return { device, placed: true };
       } catch {
         return { device, placed: false };
