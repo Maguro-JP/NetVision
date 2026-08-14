@@ -27,6 +27,10 @@ export interface DeviceNodeData extends Record<string, unknown> {
   width?: number;
   /** 箱を広げたぶん左へ戻した量。保存時に足し戻す（TopologyPage の shiftFor）。 */
   shift?: number;
+  /** 種別の枠の色。人が凡例に合わせて変えられる */
+  accent?: string;
+  /** キャリア網の段（コア網 / メトロ / アクセス） */
+  planeLabel?: string;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
@@ -79,7 +83,10 @@ export default function DeviceNode({
 }) {
   return (
     <div
-      style={data.width ? { width: data.width } : undefined}
+      style={{
+        ...(data.width ? { width: data.width } : {}),
+        ...(data.accent ? { borderColor: data.accent } : {}),
+      }}
       className={
         `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
         (data.outside ? "outside " : "") +
@@ -113,6 +120,9 @@ export default function DeviceNode({
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
         <span className="topo-hostname">{data.hostname}</span>
       </div>
+      {data.planeLabel && !data.outside && (
+        <div className="muted topo-plane">{data.planeLabel}</div>
+      )}
       {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
           ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}
       {/* 対向は簡易表示。見たいのは絞り込んだ側で、相手は「どこへ出ているか」が

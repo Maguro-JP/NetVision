@@ -171,6 +171,15 @@ class TopologyNodeRead(BaseModel):
     port_kinds: list[str] = []
     outside: bool = False
     hidden_peers: int = 0
+    plane: str = "access"
+
+
+class TopologyGroupRead(BaseModel):
+    id: int
+    name: str
+    plane: str
+    color: str
+    device_ids: list[int]
 
 
 class TopologyEdgeRead(BaseModel):
@@ -197,6 +206,7 @@ class TopologyGraphRead(BaseModel):
     nodes: list[TopologyNodeRead]
     edges: list[TopologyEdgeRead]
     unplaced_count: int
+    groups: list[TopologyGroupRead] = []
 
 
 class NodePosition(BaseModel):
@@ -266,3 +276,20 @@ class TopologyStatsRead(BaseModel):
 class RebuildResult(BaseModel):
     links_created: int
     unresolved_neighbors: list[UnresolvedNeighborRead]
+
+
+class GroupCreate(BaseModel):
+    layer: str = "physical"
+    name: str = Field(min_length=1, max_length=120)
+    device_ids: list[int]
+    plane: str = "custom"
+    color: str | None = Field(default=None, max_length=16)
+
+
+class GroupUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    name: str | None = Field(default=None, max_length=120)
+    plane: str | None = None
+    color: str | None = Field(default=None, max_length=16)
+    device_ids: list[int] | None = None

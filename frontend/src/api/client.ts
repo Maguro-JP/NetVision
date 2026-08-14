@@ -39,6 +39,7 @@ import type {
   Site,
   TopologyEdge,
   TopologyGraph,
+  TopologyGroup,
   TopologyStats,
   TopologyVlan,
   TopologyVrf,
@@ -403,6 +404,37 @@ export const api = {
       method: "PUT",
       body: JSON.stringify({ layer, positions }),
     }),
+  createTopologyGroup: (body: {
+    layer: string;
+    name: string;
+    device_ids: number[];
+    plane?: string;
+    color?: string;
+  }) =>
+    request<TopologyGroup>("/topology/groups", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  updateTopologyGroup: (
+    id: number,
+    body: { name?: string; plane?: string; color?: string; device_ids?: number[] },
+  ) =>
+    request<TopologyGroup>(`/topology/groups/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteTopologyGroup: (id: number) =>
+    request<void>(`/topology/groups/${id}`, { method: "DELETE" }),
+  groupsFromSites: (layer: string, deviceIds: number[]) =>
+    request<TopologyGroup[]>(
+      `/topology/groups/from-sites${query({ layer, device_ids: deviceIds.join(",") })}`,
+      { method: "POST" },
+    ),
+  groupsFromPlanes: (layer: string, deviceIds: number[]) =>
+    request<TopologyGroup[]>(
+      `/topology/groups/from-planes${query({ layer, device_ids: deviceIds.join(",") })}`,
+      { method: "POST" },
+    ),
   /** 配置を自動レイアウトに戻す。拠点や検索で絞っていればその範囲だけ。 */
   resetPositions: (layer: string, scope: { site_id?: number; q?: string } = {}) =>
     request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {

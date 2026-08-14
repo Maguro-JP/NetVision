@@ -19,6 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { orthogonalBusPath } from "../components/PortLabeledEdge";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
@@ -26,6 +27,8 @@ import {
   shiftFor,
   sideToward,
   storedFromDisplay,
+  placementFromClick,
+  positionsToSave,
 } from "./TopologyPage";
 
 function node(
@@ -143,52 +146,124 @@ describe("引き出し口と通り道", () => {
     }
   });
 
-  it("近い相手ほど、外側の通り道を通る", () => {
-    // 通り道のずれは相手から遠ざかる向きに効く。ずれが小さいほど外側
-    const graph = branchOffice(6);
-    const { lanes } = assignAnchors(graph);
-    const offsets = graph.nodes
-      .filter((n) => n.device_id >= 10)
+  it("相手の並び順どおりに通り道を振る（近くても順を入れ替えない）", () => {
+    // ハブが列の途中にいると、近い順だと上下が入れ替わって交差する
+    const hub = node(1, "core", 0, 200);
+    const dests = [
+      node(2, "top", 400, 0),
+      node(3, "mid", 400, 180),
+      node(4, "bot", 400, 400),
+    ];
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...dests],
+      edges: [link(10, 1, 2), link(11, 1, 3), link(12, 1, 4)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { lanes, anchors } = assignAnchors(graph);
+    const edgeOf: Record<number, number> = { 2: 10, 3: 11, 4: 12 };
+    const byY = dests
+      .slice()
       .sort((a, b) => a.y - b.y)
-      .map((office) => lanes.get(office.device_id) ?? 0);
-
-    for (let i = 1; i < offsets.length; i += 1) {
-      expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
-    }
+      .map((d) => ({
+        slot: Number(anchors.get(edgeOf[d.device_id])?.source.split("-")[1]),
+        lane: lanes.get(edgeOf[d.device_id]) ?? 0,
+      }));
+    expect(byY[0].slot).toBeLessThan(byY[1].slot);
+    expect(byY[1].slot).toBeLessThan(byY[2].slot);
+    expect(byY[0].lane).toBeLessThan(byY[1].lane);
+    expect(byY[1].lane).toBeLessThan(byY[2].lane);
+    expect(byY[1].lane).toBeGreaterThan(byY[0].lane);
   });
 
-  it("通り道の束は、相手との間に収まる", () => {
+  it("通り道の束は、箱と箱の間に収まる", () => {
     // はみ出すと線がいったん行き過ぎてから戻る。その戻りが交差に見える
     const graph = branchOffice(10);
     const { lanes } = assignAnchors(graph);
-    const widest = Math.max(
-      ...graph.edges.map((edge) => lanes.get(edge.id) ?? 0),
+    const widest = Math.max(...graph.edges.map((edge) => lanes.get(edge.id) ?? 0));
+    const hub = graph.nodes.find((n) => n.device_id === 2)!;
+    const nearestX = Math.min(
+      ...graph.nodes.filter((n) => n.device_id >= 10).map((office) => office.x - hub.x),
     );
-    const nearest = Math.min(
-      ...graph.nodes
-        .filter((n) => n.device_id >= 10)
-        .map((office) => office.y - 0),
-    );
-    expect(widest).toBeLessThan(nearest / 2);
+    expect(widest).toBeLessThan(nearestX / 2);
+  });
+});
+
+describe("直交の通り道", () => {
+  it("右から左へは縦横だけ通し、束の順で交差しない", () => {
+    const a = orthogonalBusPath({
+      sourceX: 0,
+      sourceY: 0,
+      targetX: 400,
+      targetY: 80,
+      sourceFace: "right",
+      targetFace: "left",
+      rank: 0,
+      count: 3,
+    });
+    const b = orthogonalBusPath({
+      sourceX: 0,
+      sourceY: 40,
+      targetX: 400,
+      targetY: 200,
+      sourceFace: "right",
+      targetFace: "left",
+      rank: 1,
+      count: 3,
+    });
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(a!.path).toMatch(/^M .+ L .+ L .+ L .+$/);
+    expect(a!.path.includes("C ")).toBe(false);
+    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
+    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
+    // 先頭の線ほど相手に近い縦の通り道を使うので、後続の横線を横切らない
+    expect(busA).toBeGreaterThan(busB);
+  });
+
+  it("上下が近いときは直交バスにしない", () => {
+    expect(
+      orthogonalBusPath({
+        sourceX: 0,
+        sourceY: 0,
+        targetX: 20,
+        targetY: 10,
+        sourceFace: "right",
+        targetFace: "left",
+        rank: 0,
+        count: 1,
+      }),
+    ).toBeNull();
   });
 });
 
 describe("保存する座標", () => {
-  it("広げた箱のずれはマス目の外でも、見た目の位置へ戻る", () => {
+  it("広げた箱のずれは、見た目の位置へ戻る", () => {
     const shift = shiftFor(245);
     expect(shift).toBe(27.5);
-    const display = { x: 80, y: 120 };
+    const display = { x: 83, y: 117 };
     const stored = storedFromDisplay(display, shift);
-    expect(stored).toEqual({ x: 107.5, y: 120 });
+    expect(stored).toEqual({ x: 110.5, y: 117 });
     expect({ x: stored.x - shift, y: stored.y }).toEqual(display);
   });
 
-  it("ずれを足してから丸めると、読み込みで箱がマス目から外れる", () => {
+  it("保存でマス目に丸めない", () => {
     const shift = shiftFor(245);
-    const display = { x: 80, y: 120 };
-    const wrong = Math.round((display.x + shift) / 40) * 40;
-    expect(wrong - shift).not.toBe(display.x);
+    const display = { x: 83, y: 117 };
     expect(storedFromDisplay(display, shift).x - shift).toBe(display.x);
+    expect(storedFromDisplay(display, shift).y).toBe(display.y);
+  });
+
+  it("保存は画面にある機器を全部送る（差分や対向だけ落とさない）", () => {
+    expect(
+      positionsToSave([
+        { id: "1", position: { x: 40, y: 80 }, data: { shift: 0 } },
+        { id: "2", position: { x: 200, y: 80 }, data: { shift: 0 } },
+      ]),
+    ).toEqual([
+      { device_id: 1, x: 40, y: 80 },
+      { device_id: 2, x: 200, y: 80 },
+    ]);
   });
 });
 
@@ -211,9 +286,33 @@ describe("動かした位置を表示の切り替えで消さない", () => {
     expect(keepLocalPositions(incoming, current, true)).toEqual(incoming);
   });
 
+  it("台数が増えても、残っている機器の未保存位置は保つ", () => {
+    const incoming = [
+      { id: "1", position: { x: 0, y: 0 } },
+      { id: "2", position: { x: 100, y: 0 } },
+      { id: "3", position: { x: 200, y: 0 } },
+    ];
+    const current = [
+      { id: "1", position: { x: 40, y: 80 } },
+      { id: "2", position: { x: 100, y: 0 } },
+    ];
+    expect(keepLocalPositions(incoming, current, true)).toEqual([
+      { id: "1", position: { x: 40, y: 80 } },
+      { id: "2", position: { x: 100, y: 0 } },
+      { id: "3", position: { x: 200, y: 0 } },
+    ]);
+  });
+
   it("保存・リセットのあとは、サーバの配置をそのまま使う", () => {
     const incoming = [{ id: "1", position: { x: 0, y: 0 } }];
     const current = [{ id: "1", position: { x: 40, y: 80 } }];
     expect(keepLocalPositions(incoming, current, false)).toEqual(incoming);
+  });
+});
+
+describe("図をクリックして機器を置く位置", () => {
+  it("クリックした位置をそのまま使う", () => {
+    expect(placementFromClick(23, 61)).toEqual({ x: 23, y: 61 });
+    expect(placementFromClick(0, 0)).toEqual({ x: 0, y: 0 });
   });
 });

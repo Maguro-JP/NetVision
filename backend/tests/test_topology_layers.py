@@ -77,6 +77,46 @@ def test_l2_keeps_vlan_links_and_drops_plain_wan(db_session):
     assert ends == {core.id, acc.id}
 
 
+def test_l2_keeps_manual_links_even_without_vlan(db_session):
+    """手で引いた線は、VLAN が無くても L2 から消えない。"""
+    core = _device(db_session, "core-sw", DeviceType.SWITCH)
+    acc = _device(db_session, "acc-sw", DeviceType.SWITCH)
+    link = Link(
+        a_device_id=core.id,
+        a_interface="",
+        b_device_id=acc.id,
+        b_interface="",
+        origin=LinkOrigin.MANUAL,
+    )
+    db_session.add(link)
+    db_session.commit()
+
+    l2 = topology.get_graph(db_session, "l2")
+    assert len(l2.edges) == 1
+    assert l2.edges[0].origin is LinkOrigin.MANUAL
+    assert {n.hostname for n in l2.nodes} == {"core-sw", "acc-sw"}
+
+
+def test_l3_keeps_manual_links_even_without_ip(db_session):
+    """手で引いた線は、IP が無くても L3 から消えない。"""
+    left = _device(db_session, "sw-a", DeviceType.SWITCH)
+    right = _device(db_session, "sw-b", DeviceType.SWITCH)
+    db_session.add(
+        Link(
+            a_device_id=left.id,
+            a_interface="",
+            b_device_id=right.id,
+            b_interface="",
+            origin=LinkOrigin.MANUAL,
+        )
+    )
+    db_session.commit()
+
+    l3 = topology.get_graph(db_session, "l3")
+    assert len(l3.edges) == 1
+    assert l3.edges[0].origin is LinkOrigin.MANUAL
+
+
 def test_l3_keeps_router_links_and_drops_switch_trunks(db_session):
     """L3 はルータ同士（や IP 付き）。スイッチ間トランクは L2 側。"""
     edge = _device(db_session, "edge-rt", DeviceType.ROUTER)

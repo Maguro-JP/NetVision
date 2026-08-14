@@ -10,7 +10,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
     label: "見る",
     items: [
       { to: "/dashboard", label: "ダッシュボード" },
-      { to: "/topology", label: "トポロジ図" },
+      { to: "/topology", label: "トポロジー図" },
       // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
       { to: "/insights", label: "最適化の指摘" },
     ],

@@ -448,13 +448,57 @@ button:disabled {
   width: auto;
 }
 
-/* --- トポロジ図 --- */
+/* --- トポロジー図 --- */
 .topo-canvas {
   height: 620px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+.topo-canvas.placing .react-flow__pane {
+  cursor: crosshair;
+}
+
+/* 選んだ線の操作。図を塞がない細いバーとして、キャンバス左上に出す */
+.topo-selection-panel {
+  margin: 8px;
+  max-width: min(720px, calc(100% - 16px));
+  pointer-events: none;
+}
+.topo-selection-panel-body {
+  pointer-events: auto;
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
+  border: 1px solid var(--accent);
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
+}
+.topo-selection-panel-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 8px;
+  align-items: center;
+}
+.topo-selection-panel-label {
+  font-size: 12px;
+  font-weight: 600;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topo-selection-panel-close {
+  margin-left: auto;
+  min-width: 28px;
+  padding-inline: 8px;
+}
+.topo-selection-panel .toolbar {
+  gap: 6px;
+}
+.topo-selection-panel select {
+  max-width: 120px;
 }
 
 .topo-node {
@@ -479,6 +523,22 @@ button:disabled {
 .topo-node.selected {
   outline: 2px solid var(--accent);
 }
+.topo-group {
+  border: 1.6px dashed;
+  border-radius: 10px;
+  pointer-events: all;
+  box-sizing: border-box;
+}
+.topo-group.selected {
+  border-style: solid;
+  outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+.topo-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  letter-spacing: 0.02em;
+}
 .topo-node.sev-expired {
   border-left-color: var(--sev-expired);
 }
@@ -502,6 +562,7 @@ button:disabled {
 }
 
 .topo-node-head {
+
   display: flex;
   gap: 6px;
   align-items: center;
@@ -514,6 +575,10 @@ button:disabled {
 .topo-hostname {
   font-weight: 700;
   font-size: 13px;
+}
+.topo-plane {
+  font-size: 10px;
+  padding: 0 2px 4px;
 }
 .topo-node-body {
   line-height: 1.45;

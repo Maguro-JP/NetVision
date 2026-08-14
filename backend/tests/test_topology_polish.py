@@ -1,13 +1,35 @@
-"""配置の整頓。木を組み直さず、マス目・揃い・間隔だけ触る。"""
+"""配置の整頓。ツリーを組み直さず、マス目・揃い・近すぎる重なりだけ触る。"""
 
 from app.models.device import DeviceStatus, DeviceType
+from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.topology import (
     LAYOUT_GRID,
+    TopologyEdgeView,
     TopologyNodeView,
     _polish_layout,
     _snap_to_grid,
 )
+
+
+def edge(
+    edge_id: int,
+    source: int,
+    target: int,
+    source_interface: str,
+    target_interface: str = "GigabitEthernet0/0",
+) -> TopologyEdgeView:
+    return TopologyEdgeView(
+        id=edge_id,
+        source=source,
+        target=target,
+        source_interface=source_interface,
+        target_interface=target_interface,
+        origin=LinkOrigin.MANUAL,
+        protocol=None,
+        label=None,
+        confirmed_both_ways=True,
+    )
 
 
 def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
@@ -43,14 +65,13 @@ def test_near_rows_are_aligned_to_the_grid():
 
 
 def test_polish_does_not_rebuild_into_a_tree():
-    """人が離して置いた機器を、初期の木配置へ飛ばさない。"""
+    """人が離して置いた機器を、初期のツリー配置へ飛ばさない。"""
     nodes = [
         node(1, "left", 40, 40),
         node(2, "right", 800, 40),
         node(3, "below", 40, 400),
     ]
     _polish_layout(nodes)
-    # 位置はマス目に乗るが、塊の場所は残る
     by_id = {n.device_id: (n.x, n.y) for n in nodes}
     assert by_id[2][0] >= 720
     assert by_id[3][1] >= 320
@@ -75,3 +96,141 @@ def test_max_move_does_not_split_an_aligned_row():
     ]
     _polish_layout(nodes)
     assert len({n.y for n in nodes}) == 1
+
+
+def test_polish_is_idempotent():
+    """同じ図で二度押しても、位置が変わらない。"""
+    nodes = [
+        node(1, "a", 100, 100),
+        node(2, "b", 120, 105),
+        node(3, "c", 140, 98),
+    ]
+    _polish_layout(nodes)
+    first = [(n.device_id, n.x, n.y) for n in nodes]
+    _polish_layout(nodes)
+    second = [(n.device_id, n.x, n.y) for n in nodes]
+    assert first == second
+
+
+def test_polish_does_not_creep_apart_on_repeated_passes():
+    """足りない間隔を、押すたびに少しずつ広げていかない。"""
+    nodes = [
+        node(1, "a", 100, 100),
+        node(2, "b", 120, 100),
+        node(3, "c", 140, 100),
+    ]
+    positions = []
+    for _ in range(5):
+        _polish_layout(nodes)
+        positions.append([(n.device_id, n.x, n.y) for n in nodes])
+    assert positions[0] == positions[-1]
+
+
+def test_near_overlap_within_budget_is_cleared():
+    """上限内で空けられる近さなら、箱が重ならない間隔まで空ける。"""
+    nodes = [
+        node(1, "a", 0, 0),
+        node(2, "b", 180, 0),  # 230 まで 50。上限 80 以内
+    ]
+    _polish_layout(nodes)
+    assert nodes[1].x - nodes[0].x >= 230
+
+
+def test_a_column_is_not_flattened_into_a_row():
+    """縦に並んだ列を1段に潰して横へ飛ばさない。"""
+    nodes = [
+        node(1, "a", 800, 0),
+        node(2, "b", 800, 20),
+        node(3, "c", 800, 40),
+        node(4, "d", 800, 60),
+        node(5, "e", 800, 80),
+    ]
+    _polish_layout(nodes)
+    xs = {n.x for n in nodes}
+    ys = {n.y for n in nodes}
+    assert len(xs) == 1
+    assert len(ys) >= 3
+    assert max(n.x for n in nodes) - min(n.x for n in nodes) < 80
+
+
+def test_stacked_nodes_are_separated_in_one_polish():
+    """同じ座標に積み重なった機器は、一回で読める間隔まで離す。"""
+    nodes = [
+        node(1, "a", 0, 0),
+        node(2, "b", 0, 0),
+        node(3, "c", 0, 0),
+    ]
+    _polish_layout(nodes)
+    xs = sorted(n.x for n in nodes)
+    assert xs[1] - xs[0] >= 230
+    assert xs[2] - xs[1] >= 230
+    first = [(n.device_id, n.x, n.y) for n in nodes]
+    _polish_layout(nodes)
+    second = [(n.device_id, n.x, n.y) for n in nodes]
+    assert first == second
+
+
+def test_polish_reorders_a_column_to_match_port_order():
+    """同じ列の相手を、ハブのポート順に入れ替えて交差を減らす。"""
+    hub = node(1, "hub", 0, 200)
+    # ポートは 1,2,3 なのに、縦の並びが逆になっている
+    a = node(2, "a", 400, 400)
+    b = node(3, "b", 400, 200)
+    c = node(4, "c", 400, 0)
+    nodes = [hub, a, b, c]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 3, "GigabitEthernet0/2"),
+        edge(3, 1, 4, "GigabitEthernet0/3"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3, 4})
+    by_id = {n.device_id: n for n in nodes}
+    assert by_id[2].y < by_id[3].y < by_id[4].y
+    assert len({n.x for n in (a, b, c)}) == 1
+
+
+def test_wobbly_column_is_not_flattened_into_a_row():
+    """手置きで列が数pxずれていても、1段に潰して横へ飛ばさない。"""
+    nodes = [
+        node(1, "a", 800, 0),
+        node(2, "b", 808, 20),
+        node(3, "c", 796, 40),
+        node(4, "d", 804, 60),
+        node(5, "e", 802, 80),
+    ]
+    _polish_layout(nodes)
+    xs = {n.x for n in nodes}
+    ys = {n.y for n in nodes}
+    assert len(xs) == 1
+    assert len(ys) >= 3
+    assert max(n.x for n in nodes) - min(n.x for n in nodes) < 80
+
+
+def test_parallel_links_do_not_stack_neighbors():
+    """同じ相手への線が2本あっても、整頓で箱を重ねない。"""
+    hub = node(1, "hub", 0, 200)
+    a = node(2, "a", 400, 80)
+    b = node(3, "b", 400, 320)
+    nodes = [hub, a, b]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 2, "GigabitEthernet0/2"),
+        edge(3, 1, 3, "GigabitEthernet0/3"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3})
+    assert {a.x, a.y} != {b.x, b.y}
+
+
+def test_uncross_does_not_pull_unaligned_neighbors():
+    """同じ列にいない相手まで入れ替えて、揃えた行を崩さない。"""
+    hub = node(1, "hub", 0, 200)
+    row = node(2, "row", 400, 200)
+    below = node(3, "below", 80, 480)
+    nodes = [hub, row, below]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 3, "GigabitEthernet0/2"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3})
+    assert abs(row.y - 200) <= LAYOUT_GRID * 2
+    assert below.y >= 400

@@ -105,7 +105,7 @@ def _layout(
             port_between[(edge.target, edge.source)] = edge.target_interface
 
     def order_of(parent_id: int, child_id: int) -> tuple:
-        # 上位側のポート番号の若い順。画面のトポロジ図と同じ規則にする
+        # 上位側のポート番号の若い順。画面のトポロジー図と同じ規則にする
         return (port_key(port_between.get((parent_id, child_id), "")), nodes[child_id].hostname)
 
     order = sorted(

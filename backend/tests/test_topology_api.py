@@ -122,6 +122,20 @@ def test_manual_link_can_be_drawn_and_removed(client, device_payload):
     assert graph(client)["edges"] == []
 
 
+def test_manual_link_stays_visible_on_l2_without_ports(client, device_payload):
+    """手で引いた線は、ポート無しでも L2 の図から消えない。"""
+    ids = seed_fleet(client, device_payload)
+    res = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": ids["core"], "b_device_id": ids["acc"]},
+    )
+    assert res.status_code == 201
+    link_id = res.json()["id"]
+
+    l2 = client.get(f"{API}/topology", params={"layer": "l2"}).json()
+    assert any(edge["id"] == link_id for edge in l2["edges"])
+
+
 def test_duplicate_manual_link_is_rejected(client, device_payload):
     ids = seed_fleet(client, device_payload)
     payload = {"a_device_id": ids["core"], "b_device_id": ids["acc"]}
@@ -517,6 +531,37 @@ def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
     where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
     assert where["there-rt"] == (700.0, 700.0, True)
     assert where["here-rt"][2] is False
+
+
+def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payload):
+    """拠点で絞った図でも、保存した対向の位置は取り直しで戻さない。"""
+    here = client.post(f"{API}/sites", json={"name": "本社"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "支社"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="core-sw", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="br-rt", serial_number="B1", site_id=there),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/0"},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 40.0, "y": 80.0},
+                {"device_id": b, "x": 800.0, "y": 240.0},
+            ],
+        },
+    )
+    graph = client.get(f"{API}/topology", params={"site_id": here, "scope": "peers"}).json()
+    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
+    assert where["core-sw"][:2] == (40.0, 80.0)
+    assert where["br-rt"][:2] == (800.0, 240.0)
 
 
 def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payload):

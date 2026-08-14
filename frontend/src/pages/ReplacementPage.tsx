@@ -213,7 +213,7 @@ export default function ReplacementPage() {
           </div>
           <div className="actions">
             <Link className="button" to="/topology">
-              トポロジ図で見る
+              トポロジー図で見る
             </Link>
             <button onClick={() => setImpactFor(null)}>閉じる</button>
           </div>

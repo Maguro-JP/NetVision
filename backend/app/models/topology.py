@@ -158,3 +158,37 @@ class TopologyNode(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+
+
+class TopologyGroup(Base):
+    """図の上で機器を囲む枠。キャリア網の段や拠点のまとまりに使う。"""
+
+    __tablename__ = "topology_groups"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    layer: Mapped[str] = mapped_column(String(20), default="physical", index=True)
+    name: Mapped[str] = mapped_column(String(120))
+    # backbone = コア網 / metro = メトロ・集約 / access = アクセス / custom = 任意
+    plane: Mapped[str] = mapped_column(String(20), default="custom")
+    color: Mapped[str] = mapped_column(String(16), default="#5a7a9a")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
+    members: Mapped[list[TopologyGroupMember]] = relationship(
+        back_populates="group", cascade="all, delete-orphan"
+    )
+
+
+class TopologyGroupMember(Base):
+    __tablename__ = "topology_group_members"
+    __table_args__ = (UniqueConstraint("group_id", "device_id", name="uq_topology_group_member"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    group_id: Mapped[int] = mapped_column(
+        ForeignKey("topology_groups.id", ondelete="CASCADE"), index=True
+    )
+    device_id: Mapped[int] = mapped_column(ForeignKey("devices.id", ondelete="CASCADE"), index=True)
+
+    group: Mapped[TopologyGroup] = relationship(back_populates="members")

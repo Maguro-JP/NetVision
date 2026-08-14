@@ -239,7 +239,7 @@ export default function DeviceDetailPage() {
 
       <h2>図から想定 Config を起こす</h2>
       <p className="muted" style={{ marginTop: -6 }}>
-        トポロジ図に描いた結線と VLAN 台帳から、この機器の Config を組み立てます。
+        トポロジー図に描いた結線と VLAN 台帳から、この機器の Config を組み立てます。
         <strong>新規構築やテスト環境</strong>で、図を描いてから書き起こす手間を減らすためのものです。
         図に無い情報（アクセスポート・経路・ACL）は起こせないので、その箇所は印を残します。
       </p>
@@ -264,7 +264,7 @@ export default function DeviceDetailPage() {
               {designConfig.data.link_count === 0 && (
                 <div className="empty" style={{ marginBottom: 10 }}>
                   この機器にはまだ線が引かれていません。
-                  <Link to={`/topology`}> トポロジ図</Link>
+                  <Link to={`/topology`}> トポロジー図</Link>
                   で結線してから開くと、ポートの設定まで入ります。
                 </div>
               )}
