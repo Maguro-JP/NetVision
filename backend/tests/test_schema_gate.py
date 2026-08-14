@@ -53,9 +53,7 @@ def _prepare_old_db(url: str, extra_env: dict[str, str]) -> None:
 
 
 def _client_code(script: str) -> str:
-    indented = "\n".join(
-        f"    {line}" if line else "" for line in script.strip("\n").split("\n")
-    )
+    indented = "\n".join(f"    {line}" if line else "" for line in script.strip("\n").split("\n"))
     return (
         "from fastapi.testclient import TestClient\n"
         "from app.main import app\n"
@@ -76,9 +74,7 @@ def test_empty_database_is_ready_without_a_backup_page(tmp_path: Path):
     body = json.loads(out)
     assert body["phase"] == "ready"
     assert body["pending"] == []
-    assert not list((tmp_path / "backups").glob("*")) or not any(
-        (tmp_path / "backups").iterdir()
-    )
+    assert not list((tmp_path / "backups").glob("*")) or not any((tmp_path / "backups").iterdir())
 
 
 def test_outdated_schema_opens_the_migration_gate(tmp_path: Path):
@@ -153,10 +149,7 @@ def test_apply_copies_the_old_db_then_upgrades(tmp_path: Path):
 
     confirm_out = _run(
         url,
-        _client_code(
-            "r = c.post('/api/v1/schema/confirm')\n"
-            "print(json.dumps(r.json()))"
-        ),
+        _client_code("r = c.post('/api/v1/schema/confirm')\nprint(json.dumps(r.json()))"),
         extra,
     )
     confirmed = json.loads(confirm_out)

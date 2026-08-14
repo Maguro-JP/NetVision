@@ -27,9 +27,7 @@ def _run_backend(database_url: str, code: str) -> None:
     env["NETVISION_DATABASE_URL"] = database_url
     env["NETVISION_SKIP_SCHEMA"] = "0"
     existing = env.get("PYTHONPATH", "")
-    env["PYTHONPATH"] = (
-        str(BACKEND) if not existing else f"{BACKEND}{os.pathsep}{existing}"
-    )
+    env["PYTHONPATH"] = str(BACKEND) if not existing else f"{BACKEND}{os.pathsep}{existing}"
     result = subprocess.run(
         [sys.executable, "-c", code],
         # backend/ を cwd にすると、同名の alembic/ がライブラリを隠す
