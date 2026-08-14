@@ -241,29 +241,39 @@ export function assignAnchors(graph: TopologyGraph): {
 
   // 同じところから何本も出るときの通り道。基板の配線と同じで、
   // 線を1本ずつ別の高さ（または横位置）に通すと重ならない。
-  // 近い相手ほど手前の通り道にすると、線どうしが交差しない
+  // 引き出し口と同じ順（相手の並び）で振らないと交差する。
+  // 「近い相手から」だと、ハブが列の途中にいるときに順が入れ替わる。
   const lanes = new Map<number, number>();
-  for (const [, members] of groups) {
-    if (members.length < 2) continue;
+  const bundles = [...groups.values()]
+    .filter((members) => members.length >= 2)
+    .sort((a, b) => b.length - a.length);
+  for (const members of bundles) {
     const side = members[0].side;
     const vertical = side === "top" || side === "bottom";
-    const distance = (end: (typeof members)[number]) => {
+    const along = (id: number) => {
+      const node = nodes.get(id);
+      if (!node) return 0;
+      return vertical ? node.x : node.y;
+    };
+    // 通り道は辺と垂直な隙間に置く。左右から出すなら箱の間の横幅。
+    const separation = (end: (typeof members)[number]) => {
       const here = nodes.get(end.device);
       const there = nodes.get(end.other);
       if (!here || !there) return 0;
-      return vertical ? Math.abs(there.x - here.x) : Math.abs(there.y - here.y);
+      return vertical ? Math.abs(there.y - here.y) : Math.abs(there.x - here.x);
     };
     // 通り道は折れ点をずらして作るので、相手までの半分までしか使えない。
     // はみ出すと線がいったん行き過ぎてから戻り、その戻りが交差に見える。
-    // 入る隙間しかないときは間隔を詰める（詰めても重ねない）
-    const closest = Math.min(...members.map(distance));
+    const closest = Math.min(...members.map(separation));
     const room = Math.max(0, closest / 2 - 20);
-    const gap = Math.max(4, Math.min(LANE_GAP, room / Math.max(1, members.length - 1)));
+    const steps = Math.max(1, members.length - 1);
+    const fitMin = 8 * steps;
+    const gap =
+      room >= fitMin ? Math.min(LANE_GAP, room / steps) : Math.max(0, room / steps);
 
     [...members]
-      .sort((a, b) => distance(a) - distance(b))
+      .sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge)
       .forEach((end, index) => {
-        // 既に別の辺で通り道が決まっていれば、そちらを優先する
         if (!lanes.has(end.edge)) lanes.set(end.edge, index * gap);
       });
   }
@@ -722,6 +732,7 @@ function TopologyEditor() {
         orientation,
       }),
     onSuccess: async (result) => {
+      shouldFit.current = true;
       await refresh();
       setDirty(false);
       setNotice(

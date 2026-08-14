@@ -114,6 +114,23 @@ def test_near_overlap_within_budget_is_cleared():
     assert nodes[1].x - nodes[0].x >= 230
 
 
+def test_a_column_is_not_flattened_into_a_row():
+    """縦に並んだ列を1段に潰して横へ飛ばさない。"""
+    nodes = [
+        node(1, "a", 800, 0),
+        node(2, "b", 800, 20),
+        node(3, "c", 800, 40),
+        node(4, "d", 800, 60),
+        node(5, "e", 800, 80),
+    ]
+    _polish_layout(nodes)
+    xs = {n.x for n in nodes}
+    ys = {n.y for n in nodes}
+    assert len(xs) == 1
+    assert len(ys) >= 3
+    assert max(n.x for n in nodes) - min(n.x for n in nodes) < 80
+
+
 def test_stacked_nodes_are_separated_in_one_polish():
     """同じ座標に積み重なった機器は、一回で読める間隔まで離す。"""
     nodes = [

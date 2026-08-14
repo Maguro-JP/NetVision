@@ -144,33 +144,46 @@ describe("引き出し口と通り道", () => {
     }
   });
 
-  it("近い相手ほど、外側の通り道を通る", () => {
-    // 通り道のずれは相手から遠ざかる向きに効く。ずれが小さいほど外側
-    const graph = branchOffice(6);
-    const { lanes } = assignAnchors(graph);
-    const offsets = graph.nodes
-      .filter((n) => n.device_id >= 10)
+  it("相手の並び順どおりに通り道を振る（近くても順を入れ替えない）", () => {
+    // ハブが列の途中にいると、近い順だと上下が入れ替わって交差する
+    const hub = node(1, "core", 0, 200);
+    const dests = [
+      node(2, "top", 400, 0),
+      node(3, "mid", 400, 180),
+      node(4, "bot", 400, 400),
+    ];
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...dests],
+      edges: [link(10, 1, 2), link(11, 1, 3), link(12, 1, 4)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { lanes, anchors } = assignAnchors(graph);
+    const edgeOf: Record<number, number> = { 2: 10, 3: 11, 4: 12 };
+    const byY = dests
+      .slice()
       .sort((a, b) => a.y - b.y)
-      .map((office) => lanes.get(office.device_id) ?? 0);
-
-    for (let i = 1; i < offsets.length; i += 1) {
-      expect(offsets[i]).toBeGreaterThan(offsets[i - 1]);
-    }
+      .map((d) => ({
+        slot: Number(anchors.get(edgeOf[d.device_id])?.source.split("-")[1]),
+        lane: lanes.get(edgeOf[d.device_id]) ?? 0,
+      }));
+    expect(byY[0].slot).toBeLessThan(byY[1].slot);
+    expect(byY[1].slot).toBeLessThan(byY[2].slot);
+    expect(byY[0].lane).toBeLessThan(byY[1].lane);
+    expect(byY[1].lane).toBeLessThan(byY[2].lane);
+    expect(byY[1].lane).toBeGreaterThan(byY[0].lane);
   });
 
-  it("通り道の束は、相手との間に収まる", () => {
+  it("通り道の束は、箱と箱の間に収まる", () => {
     // はみ出すと線がいったん行き過ぎてから戻る。その戻りが交差に見える
     const graph = branchOffice(10);
     const { lanes } = assignAnchors(graph);
-    const widest = Math.max(
-      ...graph.edges.map((edge) => lanes.get(edge.id) ?? 0),
+    const widest = Math.max(...graph.edges.map((edge) => lanes.get(edge.id) ?? 0));
+    const hub = graph.nodes.find((n) => n.device_id === 2)!;
+    const nearestX = Math.min(
+      ...graph.nodes.filter((n) => n.device_id >= 10).map((office) => office.x - hub.x),
     );
-    const nearest = Math.min(
-      ...graph.nodes
-        .filter((n) => n.device_id >= 10)
-        .map((office) => office.y - 0),
-    );
-    expect(widest).toBeLessThan(nearest / 2);
+    expect(widest).toBeLessThan(nearestX / 2);
   });
 });
 

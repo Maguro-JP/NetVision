@@ -1080,13 +1080,19 @@ def _clamp_move(delta: float, limit: float = _POLISH_MAX_MOVE) -> float:
 
 
 def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int, float]:
-    """近い値を同じ段・列にまとめる。中央値をマス目に乗せる。"""
+    """近い値を同じ段・列にまとめる。中央値をマス目に乗せる。
+
+    隣どうしが近いだけで数珠つなぎにすると、縦に並んだ列が1段に潰れる。
+    グループの端から端は threshold までに抑える。
+    """
     if not items:
         return {}
     ordered = sorted(items, key=lambda item: (item[1], item[0]))
     groups: list[list[tuple[int, float]]] = [[ordered[0]]]
     for item in ordered[1:]:
-        if item[1] - groups[-1][-1][1] <= threshold:
+        start = groups[-1][0][1]
+        prev = groups[-1][-1][1]
+        if item[1] - prev <= threshold and item[1] - start <= threshold:
             groups[-1].append(item)
         else:
             groups.append([item])
@@ -1099,7 +1105,41 @@ def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int
     return aligned
 
 
-def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> set[int]:
+def _align_axis(nodes: list[TopologyNodeView], *, axis: str, threshold: float) -> None:
+    """近い段・列を揃える。同じ列の機器を同じ段へ潰して横に飛ばさない。"""
+    if len(nodes) < 2:
+        return
+    other = "y" if axis == "x" else "x"
+    ordered = sorted(nodes, key=lambda node: (getattr(node, axis), node.device_id))
+    groups: list[list[TopologyNodeView]] = [[ordered[0]]]
+    for node in ordered[1:]:
+        group = groups[-1]
+        start = getattr(group[0], axis)
+        prev = getattr(group[-1], axis)
+        value = getattr(node, axis)
+        if value - prev <= threshold and value - start <= threshold:
+            other_v = getattr(node, other)
+            stacked = any(abs(getattr(member, other) - other_v) < 1.0 for member in group)
+            if stacked:
+                groups.append([node])
+                continue
+            group.append(node)
+        else:
+            groups.append([node])
+    for group in groups:
+        mid = sorted(getattr(member, axis) for member in group)[len(group) // 2]
+        target = _snap_to_grid(mid)
+        for member in group:
+            setattr(member, axis, target)
+
+
+def _unstick_along(
+    nodes: list[TopologyNodeView],
+    *,
+    axis: str,
+    min_gap: float,
+    origins: dict[int, tuple[float, float]] | None = None,
+) -> set[int]:
     """重なっている（または近すぎる）機器だけ、軸方向に空ける。
 
     一気に空けられるときだけ動かす。足りない押しを何度も繰り返すと、
@@ -1118,6 +1158,12 @@ def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) 
         if len(group) < 2:
             continue
         group.sort(key=lambda node: (getattr(node, axis), node.device_id))
+        if axis == "x" and origins:
+            xs = [origins[node.device_id][0] for node in group]
+            ys = [origins[node.device_id][1] for node in group]
+            if max(xs) - min(xs) < 1.0 and max(ys) - min(ys) > 1.0:
+                # もともと同じ列。同じ段に潰れてても横へ飛ばさない。
+                continue
         for index in range(1, len(group)):
             prev = getattr(group[index - 1], axis)
             current = getattr(group[index], axis)
@@ -1152,15 +1198,11 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
 
     origin = {node.device_id: (node.x, node.y) for node in nodes}
 
-    aligned_y = _cluster_align([(n.device_id, n.y) for n in nodes], _ALIGN_WITHIN)
-    for node in nodes:
-        node.y = aligned_y[node.device_id]
-    aligned_x = _cluster_align([(n.device_id, n.x) for n in nodes], _ALIGN_WITHIN)
-    for node in nodes:
-        node.x = aligned_x[node.device_id]
+    _align_axis(nodes, axis="y", threshold=_ALIGN_WITHIN)
+    _align_axis(nodes, axis="x", threshold=_ALIGN_WITHIN)
 
-    forced_x = _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X)
-    forced_y = _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
+    forced_x = _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X, origins=origin)
+    forced_y = _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y, origins=origin)
 
     for node in nodes:
         ox, oy = origin[node.device_id]
