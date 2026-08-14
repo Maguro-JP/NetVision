@@ -717,7 +717,7 @@ function TopologyEditor() {
       setDirty(false);
       setNotice(
         result.arranged
-          ? `配置を整えました（マス目に乗せ、近い段・列を揃えて ${result.arranged} 台を直しました）`
+          ? `配置を整えました（マス目・揃い。${result.arranged} 台）`
           : "配置を整えました（動かす機器がありません）",
       );
     },
@@ -1102,7 +1102,7 @@ function TopologyEditor() {
           className="primary"
           onClick={() => arrange.mutate()}
           disabled={arrange.isPending}
-          title="マス目に乗せ、近い段と列を揃えます。初期配置へ戻すのはリセットです"
+          title="マス目に乗せ、近い段と列を揃えます。大きく動かしすぎないよう、空けられない重なりは触りません。初期配置へ戻すのはリセットです"
         >
           {arrange.isPending ? "整えています…" : "配置を整える"}
         </button>

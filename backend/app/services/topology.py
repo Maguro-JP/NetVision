@@ -1091,8 +1091,13 @@ def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int
     return aligned
 
 
-def _spread_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
-    """同じ段（または列）の機器が重ならないよう、軸方向に少しだけ空ける。"""
+def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
+    """重なっている（または近すぎる）機器だけ、軸方向に空ける。
+
+    一気に空けられるときだけ動かす。足りない押しを何度も繰り返すと、
+    押すたびに図が変わるので、足りないときは触らない。
+    同じマスに完全に重なっているときだけ、マス目1つ分ずらす。
+    """
     buckets: dict[float, list[TopologyNodeView]] = {}
     other = "y" if axis == "x" else "x"
     for node in nodes:
@@ -1104,40 +1109,24 @@ def _spread_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -
         for index in range(1, len(group)):
             prev = getattr(group[index - 1], axis)
             current = getattr(group[index], axis)
-            if current - prev < min_gap:
+            gap = current - prev
+            if gap >= min_gap:
+                continue
+            needed = min_gap - gap
+            if needed <= _POLISH_MAX_MOVE:
                 setattr(group[index], axis, prev + min_gap)
-
-
-def _even_if_regular(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
-    """ほぼ等間隔なら、完全に揃える。大きく空いた塊は分けたままにする。"""
-    buckets: dict[float, list[TopologyNodeView]] = {}
-    other = "y" if axis == "x" else "x"
-    for node in nodes:
-        buckets.setdefault(getattr(node, other), []).append(node)
-    for group in buckets.values():
-        if len(group) < 3:
-            continue
-        group.sort(key=lambda node: (getattr(node, axis), node.device_id))
-        gaps = [
-            getattr(group[index], axis) - getattr(group[index - 1], axis)
-            for index in range(1, len(group))
-        ]
-        smallest = min(gaps)
-        if smallest <= 0:
-            continue
-        if max(gaps) / smallest > 1.4:
-            continue
-        step = max(min_gap, _snap_to_grid(sum(gaps) / len(gaps)))
-        start = getattr(group[0], axis)
-        for index, node in enumerate(group):
-            setattr(node, axis, start + index * step)
+                continue
+            # 同じマスへの完全な重なりだけは、1マスずらす（上限内）
+            if gap < LAYOUT_GRID and (LAYOUT_GRID - gap) <= _POLISH_MAX_MOVE:
+                setattr(group[index], axis, prev + LAYOUT_GRID)
 
 
 def _polish_layout(nodes: list[TopologyNodeView]) -> None:
-    """人が置いた配置を、マス目・揃い・間隔だけ整える。
+    """人が置いた配置を、マス目・揃い・近すぎる重なりだけ整える。
 
-    木を組み直さない。初期配置へ戻すのはリセットの仕事。
-    動かす量は軸ごとにマス目2つ分までに抑える。それを超えると「作り直し」に見える。
+    ツリーを組み直さない。初期配置へ戻すのはリセットの仕事。
+    動かす量は軸ごとにマス目2つ分まで。足りない押しを何度も繰り返さない
+    （同じ図で二度押しても、位置が変わらないこと）。
     """
     if len(nodes) < 2:
         if nodes:
@@ -1154,14 +1143,12 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
     for node in nodes:
         node.x = aligned_x[node.device_id]
 
-    _even_if_regular(nodes, axis="x", min_gap=_MIN_GAP_X)
-    _even_if_regular(nodes, axis="y", min_gap=_MIN_GAP_Y)
-    _spread_along(nodes, axis="x", min_gap=_MIN_GAP_X)
-    _spread_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
+    _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X)
+    _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
 
     for node in nodes:
         ox, oy = origin[node.device_id]
-        # 軸ごとに切る。距離で両方を縮めると、横に空けたときに揃えた段まで戻る
+        # 軸ごとに切る。距離で両方を縮めると、揃えた段まで戻る
         node.x = ox + _clamp_move(node.x - ox)
         node.y = oy + _clamp_move(node.y - oy)
         node.x = _snap_to_grid(node.x)

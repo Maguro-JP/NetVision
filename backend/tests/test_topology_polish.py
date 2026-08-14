@@ -1,4 +1,4 @@
-"""配置の整頓。木を組み直さず、マス目・揃い・間隔だけ触る。"""
+"""配置の整頓。ツリーを組み直さず、マス目・揃い・近すぎる重なりだけ触る。"""
 
 from app.models.device import DeviceStatus, DeviceType
 from app.services.lifecycle import Severity
@@ -43,14 +43,13 @@ def test_near_rows_are_aligned_to_the_grid():
 
 
 def test_polish_does_not_rebuild_into_a_tree():
-    """人が離して置いた機器を、初期の木配置へ飛ばさない。"""
+    """人が離して置いた機器を、初期のツリー配置へ飛ばさない。"""
     nodes = [
         node(1, "left", 40, 40),
         node(2, "right", 800, 40),
         node(3, "below", 40, 400),
     ]
     _polish_layout(nodes)
-    # 位置はマス目に乗るが、塊の場所は残る
     by_id = {n.device_id: (n.x, n.y) for n in nodes}
     assert by_id[2][0] >= 720
     assert by_id[3][1] >= 320
@@ -75,3 +74,41 @@ def test_max_move_does_not_split_an_aligned_row():
     ]
     _polish_layout(nodes)
     assert len({n.y for n in nodes}) == 1
+
+
+def test_polish_is_idempotent():
+    """同じ図で二度押しても、位置が変わらない。"""
+    nodes = [
+        node(1, "a", 100, 100),
+        node(2, "b", 120, 105),
+        node(3, "c", 140, 98),
+    ]
+    _polish_layout(nodes)
+    first = [(n.device_id, n.x, n.y) for n in nodes]
+    _polish_layout(nodes)
+    second = [(n.device_id, n.x, n.y) for n in nodes]
+    assert first == second
+
+
+def test_polish_does_not_creep_apart_on_repeated_passes():
+    """足りない間隔を、押すたびに少しずつ広げていかない。"""
+    nodes = [
+        node(1, "a", 100, 100),
+        node(2, "b", 120, 100),
+        node(3, "c", 140, 100),
+    ]
+    positions = []
+    for _ in range(5):
+        _polish_layout(nodes)
+        positions.append([(n.device_id, n.x, n.y) for n in nodes])
+    assert positions[0] == positions[-1]
+
+
+def test_near_overlap_within_budget_is_cleared():
+    """上限内で空けられる近さなら、箱が重ならない間隔まで空ける。"""
+    nodes = [
+        node(1, "a", 0, 0),
+        node(2, "b", 180, 0),  # 230 まで 50。上限 80 以内
+    ]
+    _polish_layout(nodes)
+    assert nodes[1].x - nodes[0].x >= 230
