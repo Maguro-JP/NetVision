@@ -175,9 +175,11 @@ function query(params: Record<string, string | number | boolean | undefined>): s
   return entries.length ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}` : "";
 }
 
+export type ImportKeyField = "code" | "hostname" | "serial_number";
+
 export interface ImportOptions {
   file: File;
-  keyField: "hostname" | "serial_number";
+  keyField: ImportKeyField;
   updateExisting: boolean;
   /** 自動判別を上書きする {列名: 項目名}。空文字はその列を取り込まない。 */
   mapping?: Record<string, string>;
