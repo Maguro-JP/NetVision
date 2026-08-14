@@ -21,6 +21,7 @@ def test_meta_reports_the_schema_revision_key(client):
     """
     body = client.get(f"{API}/meta").json()
     assert "schema_revision" in body
+    assert "schema_phase" in body
 
 
 def test_the_version_matches_the_package_metadata():

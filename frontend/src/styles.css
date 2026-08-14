@@ -1115,3 +1115,56 @@ button:disabled {
 .link-import .issues li {
   color: var(--warning, #d9a441);
 }
+
+/* 表の更新。メニューは出さず、手順だけに集中する */
+.migration-page {
+  max-width: 40em;
+  margin: 0 auto;
+  padding: 48px 20px 80px;
+}
+.migration-page h1 {
+  margin: 0 0 16px;
+  font-size: 22px;
+}
+.migration-page h2 {
+  margin: 20px 0 8px;
+  font-size: 16px;
+}
+.migration-page p {
+  line-height: 1.7;
+}
+.migration-brand {
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  margin-bottom: 24px;
+}
+.migration-brand span {
+  color: var(--accent);
+}
+.migration-steps ol,
+.migration-check {
+  padding-left: 22px;
+  line-height: 1.8;
+}
+.migration-steps li {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+}
+.migration-steps code,
+.migration-path {
+  font-size: 12px;
+  word-break: break-all;
+}
+.migration-backup {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  background: var(--panel);
+  margin: 16px 0;
+}
+.migration-page .error {
+  margin-top: 16px;
+}

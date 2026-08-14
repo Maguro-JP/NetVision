@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { NavLink, Outlet, useLocation } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "./api/client";
 
@@ -178,6 +178,13 @@ export default function App() {
           </label>
         </div>
 
+        {meta?.schema_phase === "needs_confirm" && (
+          <div className="demo-banner">
+            <strong>表を更新しました。</strong>
+            機器の台数や図を確かめたら、<Link to="/migration">控えの確認</Link>
+            へ進んでください。控えは確認するまで残しています。
+          </div>
+        )}
         {meta?.demo_mode && (
           <div className="demo-banner">
             <strong>デモ環境です。</strong>

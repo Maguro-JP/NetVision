@@ -1,7 +1,8 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     changes,
@@ -22,6 +23,7 @@ from app.api.routes import (
     sites,
     topology,
 )
+from app.api.routes import schema as schema_routes
 from app.config import settings
 from app.services import audit  # noqa: F401  変更履歴のフック登録
 
@@ -67,6 +69,46 @@ app.include_router(config_plans.router, prefix=api)
 app.include_router(replacement.router, prefix=api)
 app.include_router(remediation.router, prefix=api)
 app.include_router(exposures.router, prefix=api)
+app.include_router(schema_routes.router, prefix=api)
+
+_SCHEMA_OPEN = (
+    "/health",
+    "/docs",
+    "/redoc",
+    "/openapi.json",
+    "/api/v1/meta",
+    "/api/v1/schema",
+    "/api/v1/schema/apply",
+    "/api/v1/schema/confirm",
+)
+
+
+@app.middleware("http")
+async def block_until_schema_is_current(request: Request, call_next):  # noqa: ANN001
+    """表に差分があるあいだは、専用ページ以外の API を止める。
+
+    古い形のまま一部の画面だけ動くと、壊れたように見えて原因が分からない。
+    """
+    path = request.url.path
+    if not path.startswith("/api/"):
+        return await call_next(request)
+    if path in _SCHEMA_OPEN or path.startswith("/api/v1/schema"):
+        return await call_next(request)
+
+    from app.services.schema_gate import SCHEMA_BLOCK_HINT, needs_apply
+
+    if needs_apply():
+        return JSONResponse(
+            status_code=409,
+            content={
+                "detail": (
+                    "表の形を更新する必要があります。"
+                    "専用のページで控えを取ってから更新してください。"
+                ),
+                "hint": SCHEMA_BLOCK_HINT,
+            },
+        )
+    return await call_next(request)
 
 
 @app.get("/health", tags=["meta"])
@@ -82,30 +124,17 @@ def meta() -> dict[str, object]:
     確かめる先が無いと、上げ忘れや入れ替え漏れに気づけない。閉域では
     画面を開いて確かめられることが大事なので、API から見えるようにしておく。
     """
+    from app.services.schema_gate import schema_status
+
+    status = schema_status()
     return {
         "demo_mode": settings.demo_mode,
         "warning_days": settings.warning_days,
         "critical_days": settings.critical_days,
         "version": app.version,
-        "schema_revision": _schema_revision(),
+        "schema_revision": status["current_revision"],
+        "schema_phase": status["phase"],
     }
-
-
-def _schema_revision() -> str | None:
-    """いま DB に入っているスキーマの世代（Alembic のリビジョン）。
-
-    版を上げてもスキーマが古いままだと、動くように見えて一部の画面だけ
-    落ちる。上げたあとに突き合わせられるよう、番号を見えるところに出す。
-    """
-    from sqlalchemy import text
-
-    from app.db import engine
-
-    try:
-        with engine.connect() as connection:
-            return connection.execute(text("select version_num from alembic_version")).scalar()
-    except Exception:
-        return None
 
 
 def _mount_frontend(directory: str) -> None:

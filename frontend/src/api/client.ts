@@ -36,6 +36,7 @@ import type {
   ScenarioDetail,
   ScenarioItem,
   ScenarioSummary,
+  SchemaStatus,
   Site,
   TopologyEdge,
   TopologyGraph,
@@ -665,6 +666,9 @@ export const api = {
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
 
   meta: () => request<AppMeta>("/meta"),
+  schemaStatus: () => request<SchemaStatus>("/schema"),
+  applySchema: () => request<SchemaStatus>("/schema/apply", { method: "POST" }),
+  confirmSchema: () => request<SchemaStatus>("/schema/confirm", { method: "POST" }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

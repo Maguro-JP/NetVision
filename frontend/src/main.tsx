@@ -6,6 +6,7 @@ import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
 import { isRetryableError } from "./api/client";
 
 import App from "./App";
+import SchemaGate from "./SchemaGate";
 import ChangesPage from "./pages/ChangesPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
 import ConfigTemplatesPage from "./pages/ConfigTemplatesPage";
@@ -18,6 +19,7 @@ import DeviceListPage from "./pages/DeviceListPage";
 import ExposuresPage from "./pages/ExposuresPage";
 import ImportPage from "./pages/ImportPage";
 import InsightsPage from "./pages/InsightsPage";
+import MigrationPage from "./pages/MigrationPage";
 import ScenarioDetailPage from "./pages/ScenarioDetailPage";
 import ReferencePage from "./pages/ReferencePage";
 import RemediationPage from "./pages/RemediationPage";
@@ -47,8 +49,10 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<App />}>
-            <Route index element={<Navigate to="/dashboard" replace />} />
+          <Route path="/migration" element={<MigrationPage />} />
+          <Route element={<SchemaGate />}>
+            <Route path="/" element={<App />}>
+              <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
             <Route path="devices" element={<DeviceListPage />} />
             <Route path="devices/new" element={<DeviceFormPage />} />
@@ -72,6 +76,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="exposures" element={<ExposuresPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
+            </Route>
           </Route>
         </Routes>
       </BrowserRouter>
