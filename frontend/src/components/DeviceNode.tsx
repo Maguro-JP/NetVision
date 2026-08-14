@@ -12,7 +12,10 @@ export interface DeviceNodeData extends Record<string, unknown> {
   deviceType: DeviceType;
   /** null のときは付帯情報を出さない「シンプル表示」 */
   severity: Severity | null;
+  siteId?: number | null;
   siteName: string | null;
+  /** 機器名中心の構成図表示。型番や保守状態は出さない */
+  compact?: boolean;
   mgmtIp: string | null;
   interfaceCount: number;
   /** この機器で図に出てくるポートの種類。線のラベルを短くしても読めるようにする */
@@ -90,6 +93,7 @@ export default function DeviceNode({
       className={
         `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
         (data.outside ? "outside " : "") +
+        (data.compact ? "compact " : "") +
         (data.editable ? "editable " : "") +
         (selected ? "selected" : "")
       }
@@ -117,10 +121,10 @@ export default function DeviceNode({
       ))}
 
       <div className="topo-node-head">
-        <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
+        {!data.compact && <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>}
         <span className="topo-hostname">{data.hostname}</span>
       </div>
-      {data.planeLabel && !data.outside && (
+      {data.planeLabel && !data.outside && !data.compact && (
         <div className="muted topo-plane">{data.planeLabel}</div>
       )}
       {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
@@ -130,7 +134,7 @@ export default function DeviceNode({
       {data.outside ? (
         <div className="topo-node-body">
           <div className="muted">{data.siteName ?? "拠点未登録"}</div>
-          {(data.hiddenPeers ?? 0) > 0 && (
+          {!data.compact && (data.hiddenPeers ?? 0) > 0 && (
             <div className="muted">ほかに {data.hiddenPeers} 台（この拠点内）</div>
           )}
         </div>

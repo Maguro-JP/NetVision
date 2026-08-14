@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { orthogonalBusPath } from "../components/PortLabeledEdge";
+import { orthogonalBusPath, manhattanRoute } from "../components/PortLabeledEdge";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
@@ -234,6 +234,26 @@ describe("直交の通り道", () => {
         count: 1,
       }),
     ).toBeNull();
+  });
+
+  it("バスが使えない向きでも縦横だけ通す", () => {
+    const routed = manhattanRoute({
+      sourceX: 0,
+      sourceY: 0,
+      targetX: 20,
+      targetY: 10,
+      sourceFace: "right",
+      targetFace: "left",
+      rank: 0,
+      count: 1,
+    });
+    expect(routed.path.includes("C ")).toBe(false);
+    expect(routed.path.startsWith("M ")).toBe(true);
+    for (const part of routed.path.split(" ").slice(1)) {
+      if (!part.includes(",")) continue;
+      const [x, y] = part.split(",").map(Number);
+      expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
+    }
   });
 });
 

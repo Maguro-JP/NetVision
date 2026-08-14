@@ -56,7 +56,7 @@ import {
   undo as undoHistory,
   type EditHistory,
 } from "./topologyEditHistory";
-import { groupBox, updateGroupBounds } from "./topologyGroups";
+import { framesFromSites, groupBox, updateGroupBounds } from "./topologyGroups";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -68,7 +68,7 @@ const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
 ];
 
 /** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
-const VIEW_KEY = "netvision.topology.view";
+const VIEW_KEY = "netvision.topology.view.v2";
 
 // これを超えたら、絞らずに全体を描かない。全国規模になると全体図は読めないし、
 // 描くだけで重い。拠点を選ぶか、名前で探してもらう
@@ -101,7 +101,7 @@ function loadView(): ViewSettings {
   const fallback: ViewSettings = {
     portStyle: "short",
     alongLine: false,
-    simple: false,
+    simple: true,
     orientation: "vertical",
   };
   try {
@@ -382,7 +382,8 @@ function toFlow(
       model: simple ? "" : node.model,
       deviceType: node.device_type,
       severity: simple ? null : node.severity,
-      siteName: simple ? null : node.site_name,
+      siteId: node.site_id,
+      siteName: node.site_name,
       mgmtIp: simple ? null : node.mgmt_ip,
       interfaceCount: simple ? 0 : node.interface_count,
       portKinds: simple ? [] : node.port_kinds,
@@ -391,8 +392,10 @@ function toFlow(
       hiddenPeers: node.hidden_peers,
       width,
       shift,
-      accent: options.colors.types[node.device_type],
-      planeLabel: node.plane ? (PLANE_LABEL[node.plane] ?? node.plane) : undefined,
+      compact: simple,
+      accent: simple ? undefined : options.colors.types[node.device_type],
+      planeLabel:
+        simple || !node.plane ? undefined : (PLANE_LABEL[node.plane] ?? node.plane),
     } satisfies DeviceNodeData,
     draggable: options.editable,
     };
@@ -430,7 +433,8 @@ function toFlow(
     ];
   });
 
-  const nodes = [...groups, ...devices];
+  const autoGroups = groups.length > 0 ? [] : framesFromSites(devices);
+  const nodes = [...groups, ...autoGroups, ...devices];
 
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),
@@ -445,7 +449,9 @@ function toFlow(
     animated: false,
     // 編集中は端をつまんで別の機器へ持っていける。引き直すより早い
     reconnectable: options.editable,
-    style: { stroke: options.colors.media[mediaOf(edge.source_interface)] },
+    style: {
+      stroke: simple ? "#4a5364" : options.colors.media[mediaOf(edge.source_interface)],
+    },
     className:
       `topo-edge ${edge.origin} ${edge.confirmed_both_ways || simple ? "confirmed" : ""}` +
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
@@ -1240,7 +1246,10 @@ function TopologyEditor() {
             Shift を押しながら機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
           </>
         ) : (
-          <>図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。</>
+          <>
+            機器名と縦横の線で構成図を出します。型番や保守状態は「シンプル表示」を外すと載ります。
+            並べ替えたいときは「編集する」を押してください。
+          </>
         )}
         <br />
         {LAYERS.find((item) => item.value === layer)?.hint}
@@ -1562,7 +1571,7 @@ function TopologyEditor() {
         </div>
       )}
 
-      <div className={`topo-canvas${placing ? " placing" : ""}`}>
+      <div className={`topo-canvas${placing ? " placing" : ""}${simple ? " diagram" : ""}`}>
         {tooWide ? (
           // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
           // それでも見たい人のために、出す手段は残しておく
@@ -1667,7 +1676,7 @@ function TopologyEditor() {
               variant={BackgroundVariant.Lines}
               gap={LAYOUT_GRID}
               size={1}
-              color="#2a3340"
+              color={simple ? "#d8d2c6" : "#2a3340"}
             />
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}

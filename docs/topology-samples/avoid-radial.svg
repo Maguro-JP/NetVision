@@ -1,28 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420">
-  <style>
-    .box { fill: #f7f4ee; stroke: #2c2a26; stroke-width: 1.6; }
-    .label { font: 12px sans-serif; fill: #2c2a26; }
-    .note { font: 11px sans-serif; fill: #8a3b2a; }
-    .wire { fill: none; stroke: #8a3b2a; stroke-width: 1.4; }
-  </style>
-  <text class="note" x="16" y="22">Õã: >∂
-L≠ÅZ⁄L§ÓYã</text>
-  <rect class="box" x="290" y="180" width="140" height="44" rx="4"/>
-  <text class="label" x="360" y="207" text-anchor="middle">/> RT</text>
-  <rect class="box" x="330" y="40" width="120" height="36" rx="4"/>
-  <text class="label" x="390" y="63" text-anchor="middle">ªÛø¸</text>
-  <rect class="box" x="80" y="120" width="120" height="36" rx="4"/>
-  <text class="label" x="140" y="143" text-anchor="middle">∂m@ 1</text>
-  <rect class="box" x="80" y="260" width="120" height="36" rx="4"/>
-  <text class="label" x="140" y="283" text-anchor="middle">∂m@ 2</text>
-  <rect class="box" x="520" y="120" width="120" height="36" rx="4"/>
-  <text class="label" x="580" y="143" text-anchor="middle">∂m@ 3</text>
-  <rect class="box" x="300" y="340" width="120" height="36" rx="4"/>
-  <text class="label" x="360" y="363" text-anchor="middle">/> SW</text>
-  <path class="wire" d="M390,58 L360,180"/>
-  <path class="wire" d="M200,138 L290,200"/>
-  <path class="wire" d="M200,278 L290,210"/>
-  <path class="wire" d="M520,138 L430,200"/>
-  <path class="wire" d="M360,340 L360,224"/>
-  <text class="note" x="16" y="400">X_hgÇSFnOhÀÛhWf≠ÅjD</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 420" width="720" height="420" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+  <rect width="100%" height="100%" fill="#fff8f5"/>
+  <text x="16" y="22" font-size="13" fill="#8a3b2a">??: ????????????????????</text>
+  <rect x="290" y="180" width="140" height="44" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="360" y="207" text-anchor="middle" font-size="12" fill="#2c2a26">?? RT</text>
+  <rect x="300" y="40" width="120" height="36" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="360" y="63" text-anchor="middle" font-size="12" fill="#2c2a26">????</text>
+  <rect x="80" y="120" width="120" height="36" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="140" y="143" text-anchor="middle" font-size="12" fill="#2c2a26">??? 1</text>
+  <rect x="80" y="260" width="120" height="36" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="140" y="283" text-anchor="middle" font-size="12" fill="#2c2a26">??? 2</text>
+  <rect x="520" y="120" width="120" height="36" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="580" y="143" text-anchor="middle" font-size="12" fill="#2c2a26">??? 3</text>
+  <rect x="300" y="340" width="120" height="36" rx="4" fill="#f7f4ee" stroke="#2c2a26" stroke-width="1.6"/>
+  <text x="360" y="363" text-anchor="middle" font-size="12" fill="#2c2a26">?? SW</text>
+  <path d="M390,58 L360,180" fill="none" stroke="#8a3b2a" stroke-width="1.4"/>
+  <path d="M200,138 L290,200" fill="none" stroke="#8a3b2a" stroke-width="1.4"/>
+  <path d="M200,278 L290,210" fill="none" stroke="#8a3b2a" stroke-width="1.4"/>
+  <path d="M520,138 L430,200" fill="none" stroke="#8a3b2a" stroke-width="1.4"/>
+  <path d="M360,340 L360,224" fill="none" stroke="#8a3b2a" stroke-width="1.4"/>
+  <text x="16" y="400" font-size="12" fill="#8a3b2a">?????????????????????</text>
 </svg>
