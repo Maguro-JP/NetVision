@@ -390,6 +390,7 @@ function toFlow(
       editable: options.editable,
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
+      peerKind: node.peer_kind ?? null,
       width,
       shift,
       compact: simple,
@@ -1677,17 +1678,19 @@ function TopologyEditor() {
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >
-            <Background
-              id="layout-grid"
-              variant={BackgroundVariant.Lines}
-              gap={LAYOUT_GRID}
-              size={1}
-              color={simple ? "#d8d2c6" : "#2a3340"}
-            />
+            {!simple && (
+              <Background
+                id="layout-grid"
+                variant={BackgroundVariant.Lines}
+                gap={LAYOUT_GRID}
+                size={1}
+                color="#2a3340"
+              />
+            )}
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="topo-minimap" />
+            {!simple && <MiniMap pannable zoomable className="topo-minimap" />}
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">

@@ -156,7 +156,7 @@ def render_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
         f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="{FONT}">'
     )
-    parts.append('<rect width="100%" height="100%" fill="#ffffff"/>')
+    parts.append('<rect width="100%" height="100%" fill="#f4f1ea"/>')
 
     # 資料に載る時刻は、サーバの時計ではなく使う人の時刻でなければ意味が無い
     generated = localtime.format(localtime.now(), with_zone=True)
@@ -249,6 +249,7 @@ def render_svg(
             lane_rank.setdefault(edge_id, (index, len(members)))
 
     # --- 結線（ノードより先に描いて背面に回す） ---
+    pending: list[tuple[list[tuple[float, float]], object]] = []
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
@@ -271,21 +272,24 @@ def render_svg(
             offset_x = -(y2 - y1) / length * shift
             offset_y = (x2 - x1) / length * shift
             points = [(x + offset_x, y + offset_y) for x, y in points]
-            x1, y1 = points[0]
-            x2, y2 = points[-1]
+        pending.append((points, edge))
 
+    gapped = _cut_gaps([item[0] for item in pending])
+    stroke = "#2f4d6a" if simple else "#8a94a6"
+    for index, (points, edge) in enumerate(pending):
         dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
-        stroke = "#4a5364" if simple else "#8a94a6"
-        parts.append(
-            f'<polyline points="{_path_points(points)}" fill="none" '
-            f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
-        )
-
+        for piece in gapped[index]:
+            parts.append(
+                f'<polyline points="{_path_points(piece)}" fill="none" '
+                f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
+            )
+        x1, y1 = points[0]
+        x2, y2 = points[-1]
         if edge.label:
-            # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
             parts.append(_center_label(*_path_middle(points), edge.label, placement))
         else:
-            # ポート名は機器の中心から枠の外へ出す。線の折れ点を使うと中央に寄る
+            source = at[edge.source]
+            target = at[edge.target]
             sx, sy = source[0] + NODE_W / 2, source[1] + NODE_H / 2
             tx, ty = target[0] + NODE_W / 2, target[1] + NODE_H / 2
             parts.append(
@@ -349,9 +353,10 @@ def render_svg(
                     f'fill="#6b6b6b" text-anchor="middle">{_esc(_clip(node.site_name, 22))}</text>'
                 )
             name_y = y + NODE_H / 2 + (0 if subtitle else 5)
+            fill = _role_fill(node)
             parts.append(
                 f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
-                f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
+                f'height="{NODE_H:.0f}" rx="4" fill="{fill}" stroke="#2c2a26" '
                 f'stroke-width="1.6"/>'
                 f'<text x="{x + NODE_W / 2:.0f}" y="{name_y:.0f}" font-size="14" '
                 f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
@@ -533,9 +538,10 @@ def _orthogonal_bus(
     rank: int,
     count: int,
 ) -> list[tuple[float, float]] | None:
-    """縦横だけの通り道。束の先頭ほど相手に近いレーンを使う。"""
+    """縦横だけの通り道。ハブ側で重ねてから、相手の高さで扇に開く。"""
     gap = 16.0
     inset = 28.0
+    stack = 36.0
     rank = max(0, rank)
     steps = max(0, count - 1)
     sx, sy = source
@@ -544,21 +550,33 @@ def _orthogonal_bus(
         usable = max(0.0, tx - sx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx - inset - rank * pitch
+        stack_x = sx + stack
+        if bus_x - stack_x > 8:
+            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "left" and target_face == "right" and sx - tx > 40:
         usable = max(0.0, sx - tx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx + inset + rank * pitch
+        stack_x = sx - stack
+        if stack_x - bus_x > 8:
+            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "bottom" and target_face == "top" and ty - sy > 40:
         usable = max(0.0, ty - sy - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty - inset - rank * pitch
+        stack_y = sy + stack
+        if bus_y - stack_y > 8:
+            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "bottom" and sy - ty > 40:
         usable = max(0.0, sy - ty - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty + inset + rank * pitch
+        stack_y = sy - stack
+        if stack_y - bus_y > 8:
+            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -729,6 +747,109 @@ def _length(route: list[tuple[float, float]]) -> float:
 
 def _path_points(points: list[tuple[float, float]]) -> str:
     return " ".join(f"{x:.0f},{y:.0f}" for x, y in points)
+
+
+def _role_fill(node: object) -> str:
+    """資料の箱色。役割が一目で残るようにする。"""
+    kind = getattr(node, "peer_kind", None)
+    device_type = getattr(node, "device_type", "")
+    if device_type == "firewall":
+        return "#f3e6e2"
+    if kind == "up":
+        return "#e7eef6"
+    if kind == "down":
+        return "#eef3ea"
+    if device_type == "router":
+        return "#e7eef6"
+    return "#f6f1e8"
+
+
+def _interior_cross(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+) -> tuple[float, float] | None:
+    """直角に交わる線の内側の交点。端で接する重なりは隙間にしない。"""
+    ah = abs(a1[1] - a2[1]) <= 0.5
+    av = abs(a1[0] - a2[0]) <= 0.5
+    bh = abs(b1[1] - b2[1]) <= 0.5
+    bv = abs(b1[0] - b2[0]) <= 0.5
+    if ah and bv:
+        x, y = b1[0], a1[1]
+        if (
+            min(a1[0], a2[0]) + 2 < x < max(a1[0], a2[0]) - 2
+            and min(b1[1], b2[1]) + 2 < y < max(b1[1], b2[1]) - 2
+        ):
+            return (x, y)
+    if av and bh:
+        x, y = a1[0], b1[1]
+        if (
+            min(b1[0], b2[0]) + 2 < x < max(b1[0], b2[0]) - 2
+            and min(a1[1], a2[1]) + 2 < y < max(a1[1], a2[1]) - 2
+        ):
+            return (x, y)
+    return None
+
+
+def _cut_segment(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    holes: list[tuple[float, float]],
+    radius: float,
+) -> list[list[tuple[float, float]]]:
+    if not holes:
+        return [[p1, p2]]
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = max((dx * dx + dy * dy) ** 0.5, 1.0)
+    ux, uy = dx / length, dy / length
+
+    def along(point: tuple[float, float]) -> float:
+        return (point[0] - p1[0]) * ux + (point[1] - p1[1]) * uy
+
+    ordered = sorted(holes, key=along)
+    pieces: list[list[tuple[float, float]]] = []
+    cursor = p1
+    for hole in ordered:
+        t = along(hole)
+        stop = (p1[0] + ux * max(0.0, t - radius), p1[1] + uy * max(0.0, t - radius))
+        start = (p1[0] + ux * min(length, t + radius), p1[1] + uy * min(length, t + radius))
+        if along(stop) - along(cursor) > 1:
+            pieces.append([cursor, stop])
+        cursor = start
+    if along(p2) - along(cursor) > 1:
+        pieces.append([cursor, p2])
+    return pieces or [[p1, p2]]
+
+
+def _cut_gaps(
+    wires: list[list[tuple[float, float]]], *, radius: float = 5.0
+) -> list[list[list[tuple[float, float]]]]:
+    """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。"""
+    out: list[list[list[tuple[float, float]]]] = []
+    earlier: list[tuple[tuple[float, float], tuple[float, float]]] = []
+    for wire in wires:
+        pieces: list[list[tuple[float, float]]] = []
+        current: list[tuple[float, float]] = [wire[0]]
+        for a, b in zip(wire, wire[1:], strict=False):
+            holes = [
+                cross
+                for seg in earlier
+                if (cross := _interior_cross(a, b, seg[0], seg[1])) is not None
+            ]
+            chunks = _cut_segment(a, b, holes, radius)
+            for index, chunk in enumerate(chunks):
+                if index == 0:
+                    current.extend(chunk[1:])
+                else:
+                    if len(current) >= 2:
+                        pieces.append(current)
+                    current = list(chunk)
+        if len(current) >= 2:
+            pieces.append(current)
+        out.append(pieces or [wire])
+        earlier.extend(zip(wire, wire[1:], strict=False))
+    return out
 
 
 def _path_middle(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:

@@ -591,8 +591,20 @@ button:disabled {
 }
 .topo-node.simple.compact.outside {
   background: #f7f4ee;
-  border-style: dashed;
+  border-style: solid;
   opacity: 1;
+}
+.topo-canvas.diagram .topo-node.simple.compact.type-firewall {
+  background: #f3e6e2;
+}
+.topo-canvas.diagram .topo-node.simple.compact.type-router {
+  background: #e7eef6;
+}
+.topo-canvas.diagram .topo-node.simple.compact.peer-up {
+  background: #e7eef6;
+}
+.topo-canvas.diagram .topo-node.simple.compact.peer-down {
+  background: #eef3ea;
 }
 .topo-node.simple.compact.outside .muted {
   color: #5a6270;

@@ -227,8 +227,10 @@ export interface TopologyNode {
   port_kinds: string[];
   /** 絞り込みの外にいて、対向として出しているだけの機器 */
   outside: boolean;
-  /** 同じ拠点にいて、代表1台にまとめた分の台数 */
+  /** 同じ拠点にいて、代表1台にまとめた分の台数。境界の冗長対は折りたたまない */
   hidden_peers: number;
+  /** 対向の向き。up=上位 / down=配下 / side=横 */
+  peer_kind?: "up" | "down" | "side" | null;
   /** キャリア網の段。backbone / metro / access */
   plane?: "backbone" | "metro" | "access";
 }

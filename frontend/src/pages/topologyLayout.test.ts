@@ -190,7 +190,7 @@ describe("引き出し口と通り道", () => {
 });
 
 describe("直交の通り道", () => {
-  it("右から左へは縦横だけ通し、束の順で交差しない", () => {
+  it("右から左へはハブ側で重ねてから扇に開き、縦横だけ通す", () => {
     const a = orthogonalBusPath({
       sourceX: 0,
       sourceY: 0,
@@ -213,12 +213,14 @@ describe("直交の通り道", () => {
     });
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
-    expect(a!.path).toMatch(/^M .+ L .+ L .+ L .+$/);
     expect(a!.path.includes("C ")).toBe(false);
-    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
-    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
-    // 先頭の線ほど相手に近い縦の通り道を使うので、後続の横線を横切らない
-    expect(busA).toBeGreaterThan(busB);
+    const stackA = Number(a!.path.split(" ")[3].split(",")[0]);
+    const stackB = Number(b!.path.split(" ")[3].split(",")[0]);
+    expect(stackA).toBe(stackB);
+    const peelA = Number(a!.path.split(" ")[5].split(",")[1]);
+    const peelB = Number(b!.path.split(" ")[5].split(",")[1]);
+    expect(peelA).toBe(80);
+    expect(peelB).toBe(200);
   });
 
   it("上下が近いときは直交バスにしない", () => {

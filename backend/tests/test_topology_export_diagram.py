@@ -42,7 +42,7 @@ def test_site_export_matches_the_screen_diagram(db_session):
     assert placed["west-core-rt-01"].y < placed["ksi-br-rt-01"].y
     assert placed["kyoto-rt-01"].x > placed["ksi-br-rt-01"].x + 80
     assert not has_diagonal(svg), "線が斜め。縦横だけで通すこと"
-    assert svg_width(svg) < 1200
+    assert svg_width(svg) < 1800
 
 
 def test_site_export_does_not_keep_world_coordinates(db_session):

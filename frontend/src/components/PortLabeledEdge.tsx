@@ -42,45 +42,82 @@ export function orthogonalBusPath(input: {
 }): { path: string; labelX: number; labelY: number } | null {
   const gap = input.gap ?? 16;
   const inset = 28;
+  const stack = 36;
   const rank = Math.max(0, input.rank);
   const steps = Math.max(0, input.count - 1);
-  if (input.sourceFace === "right" && input.targetFace === "left" && input.targetX - input.sourceX > 40) {
-    const usable = Math.max(0, input.targetX - input.sourceX - inset * 2);
+  const sx = input.sourceX;
+  const sy = input.sourceY;
+  const tx = input.targetX;
+  const ty = input.targetY;
+  if (input.sourceFace === "right" && input.targetFace === "left" && tx - sx > 40) {
+    const usable = Math.max(0, tx - sx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busX = input.targetX - inset - rank * pitch;
+    const busX = tx - inset - rank * pitch;
+    const stackX = sx + stack;
+    if (busX - stackX > 8) {
+      return {
+        path: `M ${sx},${sy} L ${stackX},${sy} L ${stackX},${ty} L ${busX},${ty} L ${tx},${ty}`,
+        labelX: stackX,
+        labelY: sy,
+      };
+    }
     return {
-      path: `M ${input.sourceX},${input.sourceY} L ${busX},${input.sourceY} L ${busX},${input.targetY} L ${input.targetX},${input.targetY}`,
+      path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
       labelX: busX,
-      labelY: (input.sourceY + input.targetY) / 2,
+      labelY: (sy + ty) / 2,
     };
   }
-  if (input.sourceFace === "left" && input.targetFace === "right" && input.sourceX - input.targetX > 40) {
-    const usable = Math.max(0, input.sourceX - input.targetX - inset * 2);
+  if (input.sourceFace === "left" && input.targetFace === "right" && sx - tx > 40) {
+    const usable = Math.max(0, sx - tx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busX = input.targetX + inset + rank * pitch;
+    const busX = tx + inset + rank * pitch;
+    const stackX = sx - stack;
+    if (stackX - busX > 8) {
+      return {
+        path: `M ${sx},${sy} L ${stackX},${sy} L ${stackX},${ty} L ${busX},${ty} L ${tx},${ty}`,
+        labelX: stackX,
+        labelY: sy,
+      };
+    }
     return {
-      path: `M ${input.sourceX},${input.sourceY} L ${busX},${input.sourceY} L ${busX},${input.targetY} L ${input.targetX},${input.targetY}`,
+      path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
       labelX: busX,
-      labelY: (input.sourceY + input.targetY) / 2,
+      labelY: (sy + ty) / 2,
     };
   }
-  if (input.sourceFace === "bottom" && input.targetFace === "top" && input.targetY - input.sourceY > 40) {
-    const usable = Math.max(0, input.targetY - input.sourceY - inset * 2);
+  if (input.sourceFace === "bottom" && input.targetFace === "top" && ty - sy > 40) {
+    const usable = Math.max(0, ty - sy - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busY = input.targetY - inset - rank * pitch;
+    const busY = ty - inset - rank * pitch;
+    const stackY = sy + stack;
+    if (busY - stackY > 8) {
+      return {
+        path: `M ${sx},${sy} L ${sx},${stackY} L ${tx},${stackY} L ${tx},${busY} L ${tx},${ty}`,
+        labelX: sx,
+        labelY: stackY,
+      };
+    }
     return {
-      path: `M ${input.sourceX},${input.sourceY} L ${input.sourceX},${busY} L ${input.targetX},${busY} L ${input.targetX},${input.targetY}`,
-      labelX: (input.sourceX + input.targetX) / 2,
+      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
+      labelX: (sx + tx) / 2,
       labelY: busY,
     };
   }
-  if (input.sourceFace === "top" && input.targetFace === "bottom" && input.sourceY - input.targetY > 40) {
-    const usable = Math.max(0, input.sourceY - input.targetY - inset * 2);
+  if (input.sourceFace === "top" && input.targetFace === "bottom" && sy - ty > 40) {
+    const usable = Math.max(0, sy - ty - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busY = input.targetY + inset + rank * pitch;
+    const busY = ty + inset + rank * pitch;
+    const stackY = sy - stack;
+    if (stackY - busY > 8) {
+      return {
+        path: `M ${sx},${sy} L ${sx},${stackY} L ${tx},${stackY} L ${tx},${busY} L ${tx},${ty}`,
+        labelX: sx,
+        labelY: stackY,
+      };
+    }
     return {
-      path: `M ${input.sourceX},${input.sourceY} L ${input.sourceX},${busY} L ${input.targetX},${busY} L ${input.targetX},${input.targetY}`,
-      labelX: (input.sourceX + input.targetX) / 2,
+      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
+      labelX: (sx + tx) / 2,
       labelY: busY,
     };
   }

@@ -107,8 +107,10 @@ class TopologyNodeView:
     port_kinds: list[str] = field(default_factory=list)
     # 絞り込みの外にいて、対向として足しただけの機器
     outside: bool = False
-    # 同じ拠点にいて、代表1台にまとめた分の台数
+    # 同じ拠点にいて、代表1台にまとめた分の台数。境界の冗長対は折りたたまない
     hidden_peers: int = 0
+    # 対向の向き。up=上位 / down=配下 / side=横。自拠点は空
+    peer_kind: str | None = None
     # キャリア網の段。backbone=コア網 / metro=メトロ / access=アクセス
     plane: str = "access"
 
@@ -468,34 +470,16 @@ def scope_graph(
         return True
 
     inside = {node.device_id for node in graph.nodes if matches(node)}
-    by_id = {node.device_id: node for node in graph.nodes}
     keep = set(inside)
-    hidden: dict[int, int] = {}
 
     if scope != SCOPE_SITE:
-        # 対向は「向こう側の入口1台」だけにする。
-        # 東京を見たいのに群馬まで出てきては、肝心の東京が読めない。
-        # 相手の拠点ごとに、こちらと一番多く繋がっている1台を代表にする
-        links_to_inside: dict[int, int] = {}
+        # こちらと線がある対向は、全部出す。拠点ごとに1台へ折ると、
+        # 冗長の2台目が消えて片系に読まれる。
+        # 線の無い「隣の家の中」までは出さない。群馬まで広がるのはそれ。
         for edge in graph.edges:
             for near, far in ((edge.source, edge.target), (edge.target, edge.source)):
                 if near in inside and far not in inside:
-                    links_to_inside[far] = links_to_inside.get(far, 0) + 1
-
-        groups: dict[object, list[int]] = {}
-        for device_id in links_to_inside:
-            node = by_id[device_id]
-            # 拠点が入っていない機器は、まとめずに1台ずつ扱う
-            groups.setdefault(node.site_id if node.site_id is not None else device_id, []).append(
-                device_id
-            )
-
-        for members in groups.values():
-            members.sort(key=lambda i: (-links_to_inside[i], by_id[i].hostname))
-            keep.add(members[0])
-            # 隠した分は数として出す。黙って消すと「そこには1台しかない」と読まれる
-            if len(members) > 1:
-                hidden[members[0]] = len(members) - 1
+                    keep.add(far)
 
     nodes = [node for node in graph.nodes if node.device_id in keep]
     # 上下関係は網全体で見る。切り出した中だけで決めると、その範囲で
@@ -511,7 +495,9 @@ def scope_graph(
     for node in nodes:
         # 対向として足しただけの機器は、図の上で区別できるようにする
         node.outside = node.device_id not in inside
-        node.hidden_peers = hidden.get(node.device_id, 0)
+        if not node.outside:
+            node.peer_kind = None
+        node.hidden_peers = 0
 
     used_rank = rank if rank is not None else hierarchy_rank(graph)
     used_rank = _align_redundant_pairs(
@@ -949,8 +935,8 @@ def _compact(
 ) -> None:
     """結線の上下で段を決め、同じ段は横に並べる。
 
-    初期配置（`polish=False`）は、未配置だけをポート順の木に置く。
-    冗長の2台は同じ段。BFS の親子に積まない。
+    初期配置（`polish=False`）は、未配置だけをポート順で置く。
+    冗長の2台は同じ段。親子に積まない。
     人が動かした位置は意思なので、見るだけでは触らない。
 
     人が動かした配置の整頓は `_polish_layout` の仕事。こちらで木を組み直すと
@@ -1005,7 +991,7 @@ def _compact(
 
     horizontal = orientation == "horizontal"
 
-    # 段はホップ（rank）。BFS の木の深さだと、同じ段の冗長対が親子になる
+    # 段はホップ（rank）。同じ段の冗長対を親子に積まない
     depth: dict[int, int] = {}
     linked = [device_id for device_id in by_id if neighbours.get(device_id)]
     if linked:
@@ -1306,10 +1292,11 @@ def _place_peers(
     for device_id, node in by_id.items():
         if device_id in inside or device_id not in attached:
             continue
+        kind = _peer_kind(device_id, inside, rank, own_rank, world_adj, world_by_id)
+        node.peer_kind = kind
         if node.placed:
             # この拠点の図で置いた対向は意思。別拠点の座標は get_graph で載らない
             continue
-        kind = _peer_kind(device_id, inside, rank, own_rank, world_adj, world_by_id)
         if kind == "up":
             above.append(node)
         elif kind == "side":
@@ -1317,17 +1304,41 @@ def _place_peers(
         else:
             below.append(node)
 
-    for group in (above, beside, below):
-        group.sort(key=lambda node: node.hostname)
+    def site_key(node: TopologyNodeView) -> object:
+        return node.site_id if node.site_id is not None else node.device_id
 
-    for index, node in enumerate(above):
-        offset = (index - (len(above) - 1) / 2) * _X_SPACING
+    def rows_of(group: list[TopologyNodeView]) -> list[list[TopologyNodeView]]:
+        buckets: dict[object, list[TopologyNodeView]] = {}
+        for node in group:
+            buckets.setdefault(site_key(node), []).append(node)
+        rows = list(buckets.values())
+        for members in rows:
+            members.sort(key=lambda node: node.hostname)
+
+        def port_of(members: list[TopologyNodeView]) -> tuple:
+            ids = {node.device_id for node in members}
+            keys = []
+            for edge in graph.edges:
+                if edge.source in inside and edge.target in ids:
+                    keys.append(port_key(edge.source_interface))
+                elif edge.target in inside and edge.source in ids:
+                    keys.append(port_key(edge.target_interface))
+            return (min(keys) if keys else (1, (), ""), members[0].hostname)
+
+        rows.sort(key=port_of)
+        return rows
+
+    above_rows = rows_of(above)
+    flat_above = [node for row in above_rows for node in row]
+    for index, node in enumerate(flat_above):
+        offset = (index - (len(flat_above) - 1) / 2) * _X_SPACING
         node.x, node.y = middle + offset, top - _Y_SPACING
 
     for index, node in enumerate(beside):
         node.x, node.y = right + (index + 1) * _X_SPACING, top
 
-    # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
+    # 配下は右へ、拠点ごとに1行。同じ拠点の2台は横並び（冗長）。
+    below_rows = rows_of(below)
     below_ids = {node.device_id for node in below}
     peer_links = 0
     for edge in graph.edges:
@@ -1335,14 +1346,14 @@ def _place_peers(
             peer_links += 1
         elif edge.target in inside and edge.source in below_ids:
             peer_links += 1
-    column = right + _X_SPACING + _lane_room(max(peer_links, len(below)))
-    for index, node in enumerate(below):
-        # 自拠点の上端から縦に並べる。一段下げて始めると図が間延びする
-        node.x = column
-        node.y = top + index * (_Y_SPACING * 0.7)
+    column = right + _X_SPACING + _lane_room(max(peer_links, len(below_rows)))
+    for index, members in enumerate(below_rows):
+        y = top + index * (_Y_SPACING * 0.7)
+        for col, node in enumerate(members):
+            node.x = column + col * _X_SPACING
+            node.y = y
 
     if horizontal:
-        # 左右に並べる指定のときは、上下と左右を入れ替える
         for node in above + beside + below:
             node.x, node.y = node.y, node.x
 

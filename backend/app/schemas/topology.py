@@ -171,6 +171,7 @@ class TopologyNodeRead(BaseModel):
     port_kinds: list[str] = []
     outside: bool = False
     hidden_peers: int = 0
+    peer_kind: str | None = None
     plane: str = "access"
 
 
