@@ -4,6 +4,8 @@
 
 import type { Node } from "@xyflow/react";
 
+import type { GroupFrameData } from "../components/GroupFrame";
+
 export const GROUP_PAD = 22;
 export const GROUP_HEAD = 22;
 
@@ -39,7 +41,7 @@ type SiteFrameMember = {
 };
 
 /** 保存枠が無いとき、見えている拠点ごとに破線の枠を仮置きする。 */
-export function framesFromSites(devices: SiteFrameMember[]): Node[] {
+export function framesFromSites(devices: SiteFrameMember[]): Node<GroupFrameData>[] {
   const buckets = new Map<string, { label: string; members: SiteFrameMember[] }>();
   for (const device of devices) {
     const siteId = device.data.siteId;
@@ -72,13 +74,13 @@ export function framesFromSites(devices: SiteFrameMember[]): Node[] {
       connectable: false,
       data: {
         label: bucket.label,
-        plane: "custom",
+        plane: "custom" as const,
         color,
         width: box?.width ?? 0,
         height: box?.height ?? 0,
         groupId: -1 - index,
         deviceIds: bucket.members.map((node) => Number(node.id)),
-      },
+      } satisfies GroupFrameData,
     };
   });
 }
