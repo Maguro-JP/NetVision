@@ -27,6 +27,7 @@ import {
   sideToward,
   storedFromDisplay,
   placementFromClick,
+  positionsToSave,
 } from "./TopologyPage";
 
 function node(
@@ -203,6 +204,18 @@ describe("保存する座標", () => {
     const wrong = Math.round((display.x + shift) / 40) * 40;
     expect(wrong - shift).not.toBe(display.x);
     expect(storedFromDisplay(display, shift).x - shift).toBe(display.x);
+  });
+
+  it("保存は画面にある機器を全部送る（差分や対向だけ落とさない）", () => {
+    expect(
+      positionsToSave([
+        { id: "1", position: { x: 40, y: 80 }, data: { shift: 0 } },
+        { id: "2", position: { x: 200, y: 80 }, data: { shift: 0 } },
+      ]),
+    ).toEqual([
+      { device_id: 1, x: 40, y: 80 },
+      { device_id: 2, x: 200, y: 80 },
+    ]);
   });
 });
 

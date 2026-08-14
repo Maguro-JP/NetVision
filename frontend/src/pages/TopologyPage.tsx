@@ -37,7 +37,6 @@ import {
   canRedo,
   canUndo,
   capturePositions,
-  changedIds,
   currentPositions,
   isDirty as historyIsDirty,
   pushStep,
@@ -324,6 +323,21 @@ export function storedFromDisplay(
   };
 }
 
+/** いま画面にある配置を、保存用の座標にする。差分だけ送ると、履歴に
+ * 載っていない移動や対向機器が落ちて、保存直後に自動配置へ戻る。 */
+export function positionsToSave(
+  nodes: { id: string; position: { x: number; y: number }; data?: { shift?: number } }[],
+): { device_id: number; x: number; y: number }[] {
+  const out: { device_id: number; x: number; y: number }[] = [];
+  for (const node of nodes) {
+    const id = Number(node.id);
+    if (!Number.isFinite(id)) continue;
+    const stored = storedFromDisplay(node.position, node.data?.shift ?? 0);
+    out.push({ device_id: id, x: stored.x, y: stored.y });
+  }
+  return out;
+}
+
 function toFlow(
   graph: TopologyGraph,
   simple: boolean,
@@ -506,6 +520,8 @@ function TopologyEditor() {
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
+  const dirtyRef = useRef(false);
+  dirtyRef.current = dirty;
   useUnsavedWarning(dirty);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -611,7 +627,7 @@ function TopologyEditor() {
       });
     }
 
-    const keepLocal = dirty && !takeServerLayout.current;
+    const keepLocal = dirtyRef.current && !takeServerLayout.current;
     takeServerLayout.current = false;
     let nextNodes = flow.nodes;
     setNodes((current) => {
@@ -635,7 +651,6 @@ function TopologyEditor() {
     alongLine,
     editable,
     revision,
-    dirty,
     setNodes,
     setEdges,
   ]);
@@ -680,27 +695,15 @@ function TopologyEditor() {
 
   const save = useMutation({
     mutationFn: () => {
-      const history = historyRef.current;
-      const moved = new Set(history ? changedIds(history) : []);
-      const byId = new Map((graph?.nodes ?? []).map((n) => [String(n.device_id), n]));
-      return api.savePositions(
-        layer,
-        nodes
-          .filter((n) => moved.has(n.id))
-          .filter((n) => byId.get(n.id)?.outside !== true)
-          .map((n) => {
-            const stored = storedFromDisplay(n.position, n.data.shift ?? 0);
-            return {
-              device_id: Number(n.id),
-              x: stored.x,
-              y: stored.y,
-            };
-          }),
-      );
+      const current = instance.current?.getNodes() ?? nodes;
+      return api.savePositions(layer, positionsToSave(current));
     },
     onSuccess: async () => {
-      await refresh();
+      const current = instance.current?.getNodes() ?? nodes;
+      historyRef.current = startHistory(capturePositions(current));
+      setHistoryTick((value) => value + 1);
       setDirty(false);
+      await refresh();
       setNotice("配置を保存しました");
     },
   });

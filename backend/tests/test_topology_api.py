@@ -533,6 +533,37 @@ def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
     assert where["here-rt"][2] is False
 
 
+def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payload):
+    """拠点で絞った図でも、保存した対向の位置は取り直しで戻さない。"""
+    here = client.post(f"{API}/sites", json={"name": "本社"}).json()["id"]
+    there = client.post(f"{API}/sites", json={"name": "支社"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="core-sw", site_id=here)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="br-rt", serial_number="B1", site_id=there),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/0"},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "positions": [
+                {"device_id": a, "x": 40.0, "y": 80.0},
+                {"device_id": b, "x": 800.0, "y": 240.0},
+            ],
+        },
+    )
+    graph = client.get(f"{API}/topology", params={"site_id": here, "scope": "peers"}).json()
+    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
+    assert where["core-sw"][:2] == (40.0, 80.0)
+    assert where["br-rt"][:2] == (800.0, 240.0)
+
+
 def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payload):
     """最適化で対向の位置まで上書きしないこと。"""
     here = client.post(f"{API}/sites", json={"name": "整える拠点"}).json()["id"]
