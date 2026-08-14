@@ -415,11 +415,8 @@ def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, devic
     assert where["here-01"][2] is False  # 見ていた拠点だけ自動配置に戻る
 
 
-def test_arranging_puts_the_layout_back_in_order(client, device_payload):
-    """ずれた配置を、上下関係を保ったまま間隔を整えること。
-
-    人が置いた左右は意思として残す。消して作り直すのはリセットの仕事。
-    """
+def test_arranging_aligns_near_rows_without_rebuilding_the_tree(client, device_payload):
+    """整頓は、近い段を揃えてマス目に乗せる。木を組み直して飛ばさない。"""
     site = client.post(f"{API}/sites", json={"name": "整列する拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="tidy-rt", site_id=site)).json()[
         "id"
@@ -431,14 +428,13 @@ def test_arranging_puts_the_layout_back_in_order(client, device_payload):
         f"{API}/topology/links",
         json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
     )
-    # わざとぐちゃぐちゃに置く
     client.put(
         f"{API}/topology/positions",
         json={
             "layer": "physical",
             "positions": [
-                {"device_id": a, "x": 999.0, "y": 999.0},
-                {"device_id": b, "x": -999.0, "y": -999.0},
+                {"device_id": a, "x": 12.0, "y": 18.0},
+                {"device_id": b, "x": 312.0, "y": 22.0},
             ],
         },
     )
@@ -449,11 +445,12 @@ def test_arranging_puts_the_layout_back_in_order(client, device_payload):
     graph = client.get(f"{API}/topology", params={"site_id": site}).json()
     nodes = {n["hostname"]: n for n in graph["nodes"]}
     assert nodes["tidy-rt"]["placed"] is True
-    assert (nodes["tidy-rt"]["x"], nodes["tidy-rt"]["y"]) != (999.0, 999.0)
-    # 上位が上、下位が下に並ぶ
-    assert nodes["tidy-rt"]["y"] < nodes["tidy-sw"]["y"]
+    # 近い段は揃い、人が置いた左右は残る
+    assert nodes["tidy-rt"]["y"] == nodes["tidy-sw"]["y"]
+    assert nodes["tidy-sw"]["x"] > nodes["tidy-rt"]["x"] + 100
+    # 初期の木（下に飛ばす）へは戻さない
+    assert nodes["tidy-sw"]["y"] < 80
 
-    # もう一度押しても効く（意思を読み直して整え直す）
     again = client.post(f"{API}/topology/positions/arrange", params={"site_id": site}).json()
     assert again["arranged"] == 2
 
@@ -635,7 +632,8 @@ def test_arranging_keeps_the_order_a_person_chose(client, device_payload):
     nodes = {n["hostname"]: n for n in shown}
     assert nodes["sw-b"]["x"] < nodes["sw-a"]["x"]  # 人が入れ替えた順
     assert nodes["br-rt"]["y"] < nodes["sw-a"]["y"]
-    assert abs((nodes["sw-a"]["x"] - nodes["sw-b"]["x"]) - 300.0) < 1.0  # 間隔は均等
+    # 広く置いた左右を、初期の木の間隔へ縮めない
+    assert nodes["sw-a"]["x"] - nodes["sw-b"]["x"] > 600
 
 
 def test_a_new_device_is_laid_out_without_moving_saved_ones(client, device_payload):

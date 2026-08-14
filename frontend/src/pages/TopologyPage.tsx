@@ -1,5 +1,6 @@
 import {
   Background,
+  BackgroundVariant,
   Controls,
   MiniMap,
   ReactFlow,
@@ -45,6 +46,13 @@ const VIEW_KEY = "netvision.topology.view";
 // これを超えたら、絞らずに全体を描かない。全国規模になると全体図は読めないし、
 // 描くだけで重い。拠点を選ぶか、名前で探してもらう
 const WIDE_LIMIT = 40;
+
+/** 配置のマス目。整頓・ドラッグの吸着と揃える。 */
+const LAYOUT_GRID = 40;
+
+function snapToGrid(value: number): number {
+  return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;
+}
 
 /** 線を通す道の間隔。狭いと線が重なって、広いと図が間延びする */
 const LANE_GAP = 16;
@@ -457,6 +465,9 @@ function TopologyEditor() {
   const movedIds = useRef(new Set<string>());
   // 保存・リセット・最適化のあとは、取り直した配置をそのまま使う
   const takeServerLayout = useRef(false);
+  // 図を開いたとき・拠点を変えたときだけ全体を収める。
+  // 保存のたびに fitView すると、置いた位置がリセットされたように見える
+  const shouldFit = useRef(true);
 
   const scoped = selectedSite !== "" || appliedSearch.trim() !== "";
   const { data: stats } = useQuery({
@@ -570,6 +581,16 @@ function TopologyEditor() {
     setEdges,
   ]);
 
+  useEffect(() => {
+    shouldFit.current = true;
+  }, [layer, selectedSite, appliedSearch, orientation, scope]);
+
+  useEffect(() => {
+    if (!graph || !instance.current || !shouldFit.current) return;
+    instance.current.fitView({ padding: 0.2 });
+    shouldFit.current = false;
+  }, [graph, nodes.length]);
+
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
   useEffect(() => {
@@ -608,8 +629,8 @@ function TopologyEditor() {
           .map((n) => ({
             device_id: Number(n.id),
             // 見た目のために左へずらした分は足し戻す（shiftFor を参照）
-            x: n.position.x + (n.data.shift ?? 0),
-            y: n.position.y,
+            x: snapToGrid(n.position.x + (n.data.shift ?? 0)),
+            y: snapToGrid(n.position.y),
           })),
       );
     },
@@ -631,6 +652,7 @@ function TopologyEditor() {
     mutationFn: () => api.resetPositions(layer, viewScope),
     onSuccess: async (result) => {
       movedIds.current.clear();
+      shouldFit.current = true;
       await refresh();
       setDirty(false);
       setNotice(
@@ -653,8 +675,8 @@ function TopologyEditor() {
       setDirty(false);
       setNotice(
         result.arranged
-          ? `配置を最適化しました（手で置いた並びを残して ${result.arranged} 台を整えました）`
-          : "配置を最適化しました（整える機器がありません）",
+          ? `配置を整えました（マス目に乗せ、近い段・列を揃えて ${result.arranged} 台を直しました）`
+          : "配置を整えました（動かす機器がありません）",
       );
     },
   });
@@ -811,7 +833,7 @@ function TopologyEditor() {
             <strong>「配置を保存」を押すまで反映されません。</strong>
           </>
         ) : (
-          <>図は動かせません。並べ替えたいときは「編集する」を押してください。</>
+          <>図は動かせません。並べ替えたいときは「編集する」を押してください。マス目に合わせて置けます。</>
         )}
         <br />
         {LAYERS.find((item) => item.value === layer)?.hint}
@@ -906,14 +928,14 @@ function TopologyEditor() {
             </button>
           </>
         )}
-        {/* 手で置いた左右は残して、段と間隔だけ整える。消して戻すのはリセット */}
+        {/* 人が置いた位置を起点に、マス目・揃い・間隔だけ整える。木に組み直すのはリセット */}
         <button
           className="primary"
           onClick={() => arrange.mutate()}
           disabled={arrange.isPending}
-          title="手で置いた左右の並びは残して、段と間隔を整えます。自動配置に戻すのはリセットです"
+          title="マス目に乗せ、近い段と列を揃えます。初期配置へ戻すのはリセットです"
         >
-          {arrange.isPending ? "整えています…" : "配置を最適化"}
+          {arrange.isPending ? "整えています…" : "配置を整える"}
         </button>
         {/* リセットは編集中でなくても要る。ロックしたまま「元に戻したい」が普通 */}
         <button
@@ -1089,6 +1111,8 @@ function TopologyEditor() {
             nodesDraggable={editable}
             nodesConnectable={editable}
             elementsSelectable
+            snapToGrid={editable}
+            snapGrid={[LAYOUT_GRID, LAYOUT_GRID]}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onConnect={onConnect}
@@ -1098,13 +1122,21 @@ function TopologyEditor() {
             onPaneClick={() => setSelectedEdge(null)}
             onInit={(flow) => {
               instance.current = flow;
-              flow.fitView({ padding: 0.2 });
+              if (shouldFit.current) {
+                flow.fitView({ padding: 0.2 });
+                shouldFit.current = false;
+              }
             }}
-            fitView
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >
-            <Background gap={24} color="#2a3340" />
+            <Background
+              id="layout-grid"
+              variant={BackgroundVariant.Lines}
+              gap={LAYOUT_GRID}
+              size={1}
+              color="#2a3340"
+            />
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
