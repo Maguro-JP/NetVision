@@ -1,5 +1,4 @@
 # 積み上げ PR と、未マージのまま次の PR を出すことを止める。
-# ルールの本文は AGENTS.md。
 name: PR policy
 
 on:
