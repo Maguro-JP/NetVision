@@ -25,6 +25,64 @@ export function groupBox(
   };
 }
 
+const SITE_FRAME_COLORS = ["#2f4d6a", "#4a7a58", "#8a6a3a", "#5a7a9a"];
+
+type SiteFrameMember = {
+  id: string;
+  position: { x: number; y: number };
+  data: {
+    width?: number;
+    siteId?: number | null;
+    siteName?: string | null;
+    outside?: boolean;
+  };
+};
+
+/** 保存枠が無いとき、見えている拠点ごとに破線の枠を仮置きする。 */
+export function framesFromSites(devices: SiteFrameMember[]): Node[] {
+  const buckets = new Map<string, { label: string; members: SiteFrameMember[] }>();
+  for (const device of devices) {
+    const siteId = device.data.siteId;
+    const name = device.data.siteName?.trim();
+    const key =
+      siteId != null ? `id:${siteId}` : name ? `name:${name}` : `solo:${device.id}`;
+    const label = name || (device.data.outside ? "対向" : "この拠点");
+    const bucket = buckets.get(key) ?? { label, members: [] };
+    bucket.members.push(device);
+    buckets.set(key, bucket);
+  }
+  if (buckets.size < 2) return [];
+
+  return [...buckets.values()].map((bucket, index) => {
+    const box = groupBox(
+      bucket.members.map((node) => ({
+        x: node.position.x,
+        y: node.position.y,
+        width: node.data.width,
+      })),
+    );
+    const color = SITE_FRAME_COLORS[index % SITE_FRAME_COLORS.length];
+    return {
+      id: `g-site-${index}`,
+      type: "group" as const,
+      position: { x: box?.x ?? 0, y: box?.y ?? 0 },
+      zIndex: 0,
+      selectable: false,
+      draggable: false,
+      connectable: false,
+      data: {
+        label: bucket.label,
+        plane: "custom",
+        color,
+        width: box?.width ?? 0,
+        height: box?.height ?? 0,
+        groupId: -1 - index,
+        deviceIds: bucket.members.map((node) => Number(node.id)),
+      },
+    };
+  });
+}
+
 /** 機器を動かしたあと、囲み枠を箱の外側へ追従させる。 */
 export function updateGroupBounds<T extends Node>(nodes: T[]): T[] {
   const devices = nodes.filter((node) => node.type !== "group");

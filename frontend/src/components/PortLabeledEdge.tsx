@@ -1,4 +1,4 @@
-import { BaseEdge, EdgeLabelRenderer, Position, getSmoothStepPath, type EdgeProps } from "@xyflow/react";
+import { BaseEdge, EdgeLabelRenderer, Position, type EdgeProps } from "@xyflow/react";
 
 import { MEDIA_COLOR, formatPort, mediaOf, type PortStyle } from "../lib/portlabel";
 
@@ -87,6 +87,40 @@ export function orthogonalBusPath(input: {
   return null;
 }
 
+/** どの向きの引き出しでも縦横だけ。バスが使えないときも曲線にしない。 */
+export function manhattanRoute(input: {
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  sourceFace: "top" | "bottom" | "left" | "right";
+  targetFace: "top" | "bottom" | "left" | "right";
+  rank: number;
+  count: number;
+  gap?: number;
+}): { path: string; labelX: number; labelY: number } {
+  const bus = orthogonalBusPath(input);
+  if (bus) return bus;
+
+  const out = 16;
+  const sx =
+    input.sourceX + (input.sourceFace === "right" ? out : input.sourceFace === "left" ? -out : 0);
+  const sy =
+    input.sourceY + (input.sourceFace === "bottom" ? out : input.sourceFace === "top" ? -out : 0);
+  const tx =
+    input.targetX + (input.targetFace === "right" ? out : input.targetFace === "left" ? -out : 0);
+  const ty =
+    input.targetY + (input.targetFace === "bottom" ? out : input.targetFace === "top" ? -out : 0);
+  const horizontalFirst = input.sourceFace === "left" || input.sourceFace === "right";
+  const midX = horizontalFirst ? sx : tx;
+  const midY = horizontalFirst ? ty : sy;
+  return {
+    path: `M ${input.sourceX},${input.sourceY} L ${sx},${sy} L ${midX},${midY} L ${tx},${ty} L ${input.targetX},${input.targetY}`,
+    labelX: (sx + tx) / 2,
+    labelY: (sy + ty) / 2,
+  };
+}
+
 const FACE_OF: Record<Position, "top" | "bottom" | "left" | "right"> = {
   [Position.Top]: "top",
   [Position.Bottom]: "bottom",
@@ -121,7 +155,7 @@ export default function PortLabeledEdge({
   data,
 }: EdgeProps) {
   const info = (data ?? {}) as Partial<PortEdgeData>;
-  const bus = orthogonalBusPath({
+  const routed = manhattanRoute({
     sourceX,
     sourceY,
     targetX,
@@ -131,24 +165,9 @@ export default function PortLabeledEdge({
     rank: info.laneRank ?? 0,
     count: info.laneCount ?? 1,
   });
-  const lane = info.lane ?? 0;
-  const vertical = sourcePosition === Position.Top || sourcePosition === Position.Bottom;
-  const smooth = getSmoothStepPath({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourcePosition,
-    targetPosition,
-    ...(lane
-      ? vertical
-        ? { centerY: (sourceY + targetY) / 2 + (sourceY < targetY ? -lane : lane) }
-        : { centerX: (sourceX + targetX) / 2 + (sourceX < targetX ? -lane : lane) }
-      : {}),
-  });
-  const path = bus?.path ?? smooth[0];
-  const labelX = bus?.labelX ?? smooth[1];
-  const labelY = bus?.labelY ?? smooth[2];
+  const path = routed.path;
+  const labelX = routed.labelX;
+  const labelY = routed.labelY;
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
 
   return (
