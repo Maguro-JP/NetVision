@@ -438,7 +438,7 @@ def test_resetting_while_looking_at_one_site_keeps_the_other_sites(client, devic
 
 
 def test_arranging_aligns_near_rows_without_rebuilding_the_tree(client, device_payload):
-    """整頓は、近い段を揃えてマス目に乗せる。木を組み直して飛ばさない。"""
+    """整頓は、近い段を揃えてマス目に乗せる。初期配置へ飛ばさない。"""
     site = client.post(f"{API}/sites", json={"name": "整列する拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="tidy-rt", site_id=site)).json()[
         "id"
@@ -519,10 +519,10 @@ def test_looking_again_does_not_move_saved_positions(client, device_payload):
 
 
 def test_arrange_starts_from_the_canvas_not_the_auto_tree(client, device_payload):
-    """整頓は今画面にある位置が起点。未保存でも自動配置の木へ戻さない。
+    """整頓は今画面にある位置が起点。未保存でも初期配置へ戻さない。
 
-    「配置を整える」がサーバ上の未配置グラフから組み直すと、人が動かした箱は
-    消えて、見るたびに初期配置へ強制リセットされたように見える。
+    「配置を整える」が画面の箱を使わず組み直すと、人が動かした位置は消えて、
+    強制リセットに見える。
     """
     site = client.post(f"{API}/sites", json={"name": "画面の拠点"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="hand-rt", site_id=site)).json()[
@@ -541,7 +541,7 @@ def test_arrange_starts_from_the_canvas_not_the_auto_tree(client, device_payload
         for n in client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
         if not n["outside"]
     }
-    # 自動配置は縦の木。人が横に置いたつもりで整頓する
+    # 自動配置は上が上位の縦並び。人が横に置いたつもりで整頓する
     assert auto["hand-sw"][1] > auto["hand-rt"][1] + 80
 
     result = client.post(
@@ -563,7 +563,7 @@ def test_arrange_starts_from_the_canvas_not_the_auto_tree(client, device_payload
     }
     assert nodes["hand-rt"]["y"] == nodes["hand-sw"]["y"]
     assert nodes["hand-sw"]["x"] > nodes["hand-rt"]["x"] + 100
-    # 置いた段の近く。自動配置の縦の木（上が 0、下が 150）へは戻していない
+    # 置いた段の近く。自動配置の縦並び（上が 0、下が 150）へは戻していない
     assert abs(nodes["hand-rt"]["y"] - 200) <= 40
     assert (nodes["hand-rt"]["x"], nodes["hand-rt"]["y"]) != auto["hand-rt"]
 

@@ -480,7 +480,7 @@ def arrange_positions(
 ) -> dict[str, int]:
     """いま見えている範囲を、人の意思を残して完成形に整える。
 
-    起点は画面の配置。未保存の移動を捨てて自動配置の木へ戻すのはリセット。
+    起点は画面の配置。未保存の移動を捨てて初期配置へ戻すのはリセット。
     人が置いた左右の並びは残し、近い段を揃え、マス目に乗せる。
     """
     canvas = [(p.device_id, p.x, p.y) for p in (body.positions if body else [])]

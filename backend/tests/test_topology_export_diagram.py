@@ -29,7 +29,7 @@ def has_diagonal(svg: str) -> bool:
 
 
 def test_site_export_matches_the_screen_diagram(db_session):
-    """書き出しは画面と同じ機器・同じ Dual Tree を使う。"""
+    """書き出しは画面と同じ機器・同じ配置を使う。"""
     ids = build_center(db_session)
     screen = load_diagram(db_session, "physical", site_id=ids["branch"])
     svg = export_svg(db_session, "physical", site_id=ids["branch"], style="simple")
