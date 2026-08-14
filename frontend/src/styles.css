@@ -458,36 +458,44 @@ button:disabled {
   position: relative;
 }
 
-/* 選んだ線の操作。図の外のカードではなく、見ている図の上に出す */
+/* 選んだ線の操作。図を塞がない細いバーとして、キャンバス左上に出す */
 .topo-selection-panel {
-  margin: 10px;
-  max-width: min(560px, calc(100% - 24px));
+  margin: 8px;
+  max-width: min(720px, calc(100% - 16px));
   pointer-events: none;
 }
 .topo-selection-panel-body {
   pointer-events: auto;
-  background: var(--panel-2);
+  background: color-mix(in srgb, var(--panel-2) 92%, transparent);
   border: 1px solid var(--accent);
-  border-radius: 8px;
-  padding: 10px 12px;
-  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+  border-radius: 6px;
+  padding: 6px 8px;
+  box-shadow: 0 4px 14px rgb(0 0 0 / 35%);
 }
-.topo-selection-panel-title {
+.topo-selection-panel-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px 12px;
-  align-items: baseline;
-  margin-bottom: 8px;
+  gap: 6px 8px;
+  align-items: center;
 }
-.topo-selection-panel-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-bottom: 6px;
-}
-.topo-selection-panel-hint {
-  margin: 0 0 8px;
+.topo-selection-panel-label {
   font-size: 12px;
+  font-weight: 600;
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.topo-selection-panel-close {
+  margin-left: auto;
+  min-width: 28px;
+  padding-inline: 8px;
+}
+.topo-selection-panel .toolbar {
+  gap: 6px;
+}
+.topo-selection-panel select {
+  max-width: 120px;
 }
 
 .topo-node {

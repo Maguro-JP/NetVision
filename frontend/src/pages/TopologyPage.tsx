@@ -432,7 +432,7 @@ function SidePicker({
 }) {
   return (
     <label className="vlan-chip">
-      {label} 側{" "}
+      {label}{" "}
       <select
         value={value ?? "auto"}
         onChange={(event) => onChange(event.target.value === "auto" ? null : event.target.value)}
@@ -967,7 +967,7 @@ function TopologyEditor() {
             <strong>編集中です。</strong>
             機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
-            線を選ぶと、図の上に削除などの操作が出ます（Delete / Backspace でも消えます）。
+            線を選ぶと、図の左上に削除などの短い操作が出ます（Delete でも消えます）。
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
             機器の追加・削除は機器台帳で行います。
           </>
@@ -1320,10 +1320,10 @@ function TopologyEditor() {
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
             {selectedEdge && selectedEdgeData && (
-              <Panel position="top-center" className="topo-selection-panel">
+              <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
-                  <div className="topo-selection-panel-title">
-                    <strong>
+                  <div className="topo-selection-panel-row">
+                    <span className="topo-selection-panel-label" title="選択中の結線">
                       {nodeName(graph, selectedEdgeData.source)}
                       {selectedEdgeData.source_interface
                         ? ` ${selectedEdgeData.source_interface}`
@@ -1333,30 +1333,19 @@ function TopologyEditor() {
                       {selectedEdgeData.target_interface
                         ? ` ${selectedEdgeData.target_interface}`
                         : ""}
-                    </strong>
-                    <span className="muted">線を選んでいます</span>
-                  </div>
-                  {editable ? (
-                    <>
-                      <div className="topo-selection-panel-actions">
+                    </span>
+                    {editable ? (
+                      <>
                         <button
                           className="danger"
                           onClick={() => removeLink.mutate(Number(selectedEdge.id))}
                           disabled={removeLink.isPending}
-                          title="選択中の結線を消します（Delete / Backspace でも可）"
+                          title="Delete / Backspace でも消えます"
                         >
-                          この結線を削除
+                          削除
                         </button>
-                        <button type="button" onClick={() => setSelectedEdge(null)}>
-                          選択を解除
-                        </button>
-                      </div>
-                      <p className="muted topo-selection-panel-hint">
-                        削除は Delete / Backspace でもできます。線の端をつまむとつなぎ替え、下の選択肢で出す辺を変えられます。
-                      </p>
-                      <div className="toolbar" style={{ marginBottom: 0 }}>
                         <SidePicker
-                          label={nodeName(graph, selectedEdgeData.source)}
+                          label="出る辺"
                           value={selectedEdgeData.source_side}
                           onChange={(side) =>
                             updateSide.mutate({
@@ -1366,7 +1355,7 @@ function TopologyEditor() {
                           }
                         />
                         <SidePicker
-                          label={nodeName(graph, selectedEdgeData.target)}
+                          label="入る辺"
                           value={selectedEdgeData.target_side}
                           onChange={(side) =>
                             updateSide.mutate({
@@ -1375,13 +1364,19 @@ function TopologyEditor() {
                             })
                           }
                         />
-                      </div>
-                    </>
-                  ) : (
-                    <p className="muted topo-selection-panel-hint">
-                      消す・つなぎ替えるときは「編集する」を押してください。
-                    </p>
-                  )}
+                      </>
+                    ) : (
+                      <span className="muted">消すときは編集する</span>
+                    )}
+                    <button
+                      type="button"
+                      className="topo-selection-panel-close"
+                      onClick={() => setSelectedEdge(null)}
+                      title="選択を解除"
+                    >
+                      ×
+                    </button>
+                  </div>
                 </div>
               </Panel>
             )}
