@@ -478,6 +478,96 @@ def test_arranging_aligns_near_rows_without_rebuilding_the_tree(client, device_p
     assert again["arranged"] == 2
 
 
+def test_looking_again_does_not_move_saved_positions(client, device_payload):
+    """見るだけでは、保存した位置を動かさない。"""
+    site = client.post(f"{API}/sites", json={"name": "手置きの拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="stay-rt", site_id=site)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="stay-sw", serial_number="X2", site_id=site),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+    client.put(
+        f"{API}/topology/positions",
+        json={
+            "layer": "physical",
+            "site_id": site,
+            "positions": [
+                {"device_id": a, "x": 880.0, "y": 40.0},
+                {"device_id": b, "x": 120.0, "y": 640.0},
+            ],
+        },
+    )
+
+    first = {
+        n["hostname"]: (n["x"], n["y"])
+        for n in client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+        if not n["outside"]
+    }
+    second = {
+        n["hostname"]: (n["x"], n["y"])
+        for n in client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+        if not n["outside"]
+    }
+    assert first == {"stay-rt": (880.0, 40.0), "stay-sw": (120.0, 640.0)}
+    assert second == first
+
+
+def test_arrange_starts_from_the_canvas_not_the_auto_tree(client, device_payload):
+    """整頓は今画面にある位置が起点。未保存でも自動配置の木へ戻さない。
+
+    「配置を整える」がサーバ上の未配置グラフから組み直すと、人が動かした箱は
+    消えて、見るたびに初期配置へ強制リセットされたように見える。
+    """
+    site = client.post(f"{API}/sites", json={"name": "画面の拠点"}).json()["id"]
+    a = client.post(f"{API}/devices", json=device_payload(hostname="hand-rt", site_id=site)).json()[
+        "id"
+    ]
+    b = client.post(
+        f"{API}/devices",
+        json=device_payload(hostname="hand-sw", serial_number="X2", site_id=site),
+    ).json()["id"]
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": a, "a_interface": "Gi0/0", "b_device_id": b, "b_interface": "Gi0/1"},
+    )
+    auto = {
+        n["hostname"]: (n["x"], n["y"])
+        for n in client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+        if not n["outside"]
+    }
+    # 自動配置は縦の木。人が横に置いたつもりで整頓する
+    assert auto["hand-sw"][1] > auto["hand-rt"][1] + 80
+
+    result = client.post(
+        f"{API}/topology/positions/arrange",
+        params={"site_id": site},
+        json={
+            "positions": [
+                {"device_id": a, "x": 40.0, "y": 200.0},
+                {"device_id": b, "x": 400.0, "y": 208.0},
+            ]
+        },
+    ).json()
+    assert result["arranged"] == 2
+
+    nodes = {
+        n["hostname"]: n
+        for n in client.get(f"{API}/topology", params={"site_id": site}).json()["nodes"]
+        if not n["outside"]
+    }
+    assert nodes["hand-rt"]["y"] == nodes["hand-sw"]["y"]
+    assert nodes["hand-sw"]["x"] > nodes["hand-rt"]["x"] + 100
+    # 置いた段の近く。自動配置の縦の木（上が 0、下が 150）へは戻していない
+    assert abs(nodes["hand-rt"]["y"] - 200) <= 40
+    assert (nodes["hand-rt"]["x"], nodes["hand-rt"]["y"]) != auto["hand-rt"]
+
+
 def test_arranging_one_site_leaves_the_other_sites_alone(client, device_payload):
     here = client.post(f"{API}/sites", json={"name": "整える拠点"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "触らない拠点"}).json()["id"]

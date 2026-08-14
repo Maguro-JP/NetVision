@@ -222,6 +222,12 @@ class SavePositions(BaseModel):
     positions: list[NodePosition]
 
 
+class ArrangePositions(BaseModel):
+    """整頓の起点。空ならサーバ上の保存済み（無ければ自動配置）から整える。"""
+
+    positions: list[NodePosition] = []
+
+
 class LinkCreate(BaseModel):
     a_device_id: int
     b_device_id: int

@@ -9,6 +9,7 @@ from app.db import get_db
 from app.models import Device, Vlan
 from app.models.topology import Link, LinkOrigin
 from app.schemas.topology import (
+    ArrangePositions,
     GroupCreate,
     GroupUpdate,
     LinkCreate,
@@ -475,15 +476,23 @@ def arrange_positions(
     q: str | None = None,
     scope: str = Query(default=service.SCOPE_PEERS),
     orientation: str = Query(default="vertical"),
+    body: ArrangePositions | None = None,
 ) -> dict[str, int]:
     """いま見えている範囲を、人の意思を残して完成形に整える。
 
-    人が置いた左右の並びは残し、上位を上・間隔を均等にする。
-    消して自動配置に戻すのはリセット。範囲は絞り込みの内側だけ。
+    起点は画面の配置。未保存の移動を捨てて自動配置の木へ戻すのはリセット。
+    人が置いた左右の並びは残し、近い段を揃え、マス目に乗せる。
     """
+    canvas = [(p.device_id, p.x, p.y) for p in (body.positions if body else [])]
     return {
         "arranged": service.arrange_positions(
-            db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
+            db,
+            layer,
+            site_id=site_id,
+            q=q,
+            scope=scope,
+            orientation=orientation,
+            positions=canvas or None,
         )
     }
 

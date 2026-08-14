@@ -1823,25 +1823,29 @@ def arrange_positions(
     q: str | None = None,
     scope: str = SCOPE_PEERS,
     orientation: str = "vertical",
+    positions: list[tuple[int, float, float]] | None = None,
 ) -> int:
     """いま見えている範囲を、人が置いた位置を起点に整える。
 
     マス目に乗せ、近い段・列を揃え、重なりを少し空ける。木を組み直して
     初期配置へ戻すのではない。消して自動配置に戻すのはリセットの仕事。
 
+    画面の座標が渡っていれば、それを起点にする。未保存の移動を捨てて
+    サーバ上の未配置グラフから組み直すと、整頓が強制リセットになる。
+
     保存するのはいま見ている拠点の図。対向もこの図の座標として残す。
     相手の拠点の図は site_id が違う行なので、上書きしない。
     """
-    draw = scoped_device_ids(db, site_id=site_id, q=q)
-    graph = get_graph(db, layer, orientation=orientation, only=draw, site_id=site_id)
-    graph = scope_graph(
-        graph,
-        site_id=site_id,
-        q=q,
-        scope=scope,
-        orientation=orientation,
-        rank=network_rank(db) if draw is not None else None,
+    graph = load_diagram(
+        db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
     )
+    if positions:
+        by_id = {node.device_id: node for node in graph.nodes}
+        for device_id, x, y in positions:
+            node = by_id.get(device_id)
+            if node is None:
+                continue
+            node.x, node.y, node.placed = x, y, True
 
     owned = {n.device_id for n in graph.nodes}
     if not owned:

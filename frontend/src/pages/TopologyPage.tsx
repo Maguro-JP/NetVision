@@ -799,12 +799,18 @@ function TopologyEditor() {
   });
 
   const arrange = useMutation({
-    mutationFn: () =>
-      api.arrangePositions(layer, {
-        ...viewScope,
-        scope,
-        orientation,
-      }),
+    mutationFn: () => {
+      const current = instance.current?.getNodes() ?? nodes;
+      return api.arrangePositions(
+        layer,
+        {
+          ...viewScope,
+          scope,
+          orientation,
+        },
+        positionsToSave(current),
+      );
+    },
     onSuccess: async (result) => {
       shouldFit.current = true;
       await refresh();
@@ -825,7 +831,7 @@ function TopologyEditor() {
         `Config から ${result.links_created} 本の結線を作り直しました` +
           (unresolved ? `（台帳に無い隣接先が ${unresolved} 件あります）` : ""),
       );
-      refresh();
+      refresh({ takeLayout: false });
     },
   });
 
