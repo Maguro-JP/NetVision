@@ -58,9 +58,9 @@ TIER_ORDER: dict[DeviceType, int] = {
 }
 
 # 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
-# ここが詰まっていると、自動生成した図でラベルの置き場所が無くなる
-_X_SPACING = 300.0
-_Y_SPACING = 200.0
+# 広げすぎると開いた図が間延びして、構成図として読めない
+_X_SPACING = 240.0
+_Y_SPACING = 150.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -326,8 +326,11 @@ def get_graph(
 
     # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
     if graph.nodes:
-        _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
-        apply_planes(graph.nodes, hierarchy_rank(graph))
+        rank = _align_redundant_pairs(
+            hierarchy_rank(graph), _adjacency(graph), edges=graph.edges, nodes=graph.nodes
+        )
+        _compact(graph.nodes, graph.edges, rank=rank, orientation=orientation)
+        apply_planes(graph.nodes, rank)
         graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
 
@@ -511,6 +514,12 @@ def scope_graph(
         node.hidden_peers = hidden.get(node.device_id, 0)
 
     used_rank = rank if rank is not None else hierarchy_rank(graph)
+    used_rank = _align_redundant_pairs(
+        used_rank,
+        _adjacency(TopologyGraph(layer="", nodes=nodes, edges=graph.edges)),
+        edges=graph.edges,
+        nodes=nodes,
+    )
     apply_planes(nodes, used_rank)
     return TopologyGraph(
         layer=graph.layer,
@@ -831,13 +840,24 @@ def groups_from_planes(db: Session, layer: str, device_ids: list[int]) -> list[T
     return created
 
 
+def _pair_key(left: int, right: int) -> tuple[int, int]:
+    return (left, right) if left < right else (right, left)
+
+
 def _align_redundant_pairs(
-    rank: dict[int, int], neighbours: dict[int, list[int]]
+    rank: dict[int, int],
+    neighbours: dict[int, list[int]],
+    *,
+    edges: list[TopologyEdgeView] | None = None,
+    nodes: list[TopologyNodeView] | None = None,
 ) -> dict[int, int]:
     """冗長の対を同じ段にする。
 
     網の中心からのホップだと、2台のコアの片方だけが中心になり、
-    もう一台が一段下に落ちる。両方に同じ配下が2つ以上ある対は、同じ段。
+    もう一台が一段下に落ちる。同じ段にするのは次の対。
+
+    - 両方に同じ配下が2つ以上ある（Dual Tree）
+    - 同じ拠点で、同じ相手へ線が2本以上ある（VSS / MLAG の束）
     """
     adjusted = dict(rank)
     seen: set[tuple[int, int]] = set()
@@ -846,7 +866,7 @@ def _align_redundant_pairs(
         for other in nbs:
             if other == device_id:
                 continue
-            pair = (device_id, other) if device_id < other else (other, device_id)
+            pair = _pair_key(device_id, other)
             if pair in seen:
                 continue
             seen.add(pair)
@@ -860,6 +880,23 @@ def _align_redundant_pairs(
             layer = min(adjusted.get(device_id, 0), adjusted.get(other, 0))
             adjusted[device_id] = layer
             adjusted[other] = layer
+
+    if not edges:
+        return adjusted
+    sites = {node.device_id: node.site_id for node in nodes or []}
+    bundle: dict[tuple[int, int], int] = defaultdict(int)
+    for edge in edges:
+        bundle[_pair_key(edge.source, edge.target)] += 1
+    for (left, right), count in bundle.items():
+        if count < 2 or left not in adjusted or right not in adjusted:
+            continue
+        if abs(adjusted[left] - adjusted[right]) > 1:
+            continue
+        if sites and sites.get(left) != sites.get(right):
+            continue
+        layer = min(adjusted[left], adjusted[right])
+        adjusted[left] = layer
+        adjusted[right] = layer
     return adjusted
 
 
@@ -897,9 +934,33 @@ def _compact(
     )
     if rank is None:
         rank = hierarchy_rank(graph)
+    else:
+        rank = dict(rank)
+    # 対向の上下は網全体のホップのまま。出口からの段に上書きしない
+    peer_rank = dict(rank)
 
     neighbours = _adjacency(graph)
-    rank = _align_redundant_pairs(rank, neighbours)
+    if inside is not None and world is not None:
+        # 拠点の図は、出口（対向につながる機器）を上にする。
+        # 網全体の中心からのホップだと、本社ではコアが上になり、出口が下に落ちる。
+        world_adj = _adjacency(world)
+        gateways = [
+            device_id
+            for device_id in by_id
+            if any(nb not in inside for nb in world_adj.get(device_id, []))
+        ]
+        if gateways:
+            from_gw = {gateway: 0 for gateway in gateways}
+            queue = list(gateways)
+            while queue:
+                current = queue.pop(0)
+                for neighbour in neighbours.get(current, []):
+                    if neighbour not in from_gw:
+                        from_gw[neighbour] = from_gw[current] + 1
+                        queue.append(neighbour)
+            for device_id, hops in from_gw.items():
+                rank[device_id] = hops
+    rank = _align_redundant_pairs(rank, neighbours, edges=graph.edges, nodes=tree_nodes)
     port_between: dict[tuple[int, int], str] = {}
     for edge in graph.edges:
         port_between[(edge.source, edge.target)] = edge.source_interface
@@ -1025,7 +1086,7 @@ def _compact(
             everything,
             TopologyGraph(layer="", nodes=nodes, edges=list(edges or [])),
             inside,
-            rank,
+            peer_rank,
             horizontal=horizontal,
             world=world,
         )
@@ -1227,7 +1288,7 @@ def _place_peers(
         node.x, node.y = middle + offset, top - _Y_SPACING
 
     for index, node in enumerate(beside):
-        node.x, node.y = right + (index + 1) * _X_SPACING * 1.6, top
+        node.x, node.y = right + (index + 1) * _X_SPACING, top
 
     # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
     below_ids = {node.device_id for node in below}
@@ -1237,11 +1298,11 @@ def _place_peers(
             peer_links += 1
         elif edge.target in inside and edge.source in below_ids:
             peer_links += 1
-    column = right + _X_SPACING * 1.6 + _lane_room(max(peer_links, len(below)))
+    column = right + _X_SPACING + _lane_room(max(peer_links, len(below)))
     for index, node in enumerate(below):
-        # 自拠点の側と重ならないよう、線を通す余白を見込んで離す
+        # 自拠点の上端から縦に並べる。一段下げて始めると図が間延びする
         node.x = column
-        node.y = top + (index + 1) * (_Y_SPACING * 0.7)
+        node.y = top + index * (_Y_SPACING * 0.7)
 
     if horizontal:
         # 左右に並べる指定のときは、上下と左右を入れ替える
