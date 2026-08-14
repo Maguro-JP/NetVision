@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
+from app.config import settings
 from app.db import get_db
 from app.schemas.imports import ImportFieldInfo, ImportResult
 from app.services import importer, linkimport
@@ -18,10 +19,17 @@ router = APIRouter(prefix="/import", tags=["import"])
 
 DbSession = Annotated[Session, Depends(get_db)]
 
-MAX_UPLOAD_BYTES = 100 * 1024 * 1024
-
 ERROR_COLUMN = "エラー内容"
 ERROR_CSV_ENCODINGS = {"utf-8": "utf-8-sig", "shift_jis": "cp932"}
+
+
+def _max_upload_bytes() -> int:
+    return settings.max_import_bytes
+
+
+def _too_large_message() -> str:
+    limit_mb = max(1, _max_upload_bytes() // (1024 * 1024))
+    return f"ファイルサイズが大きすぎます（上限 {limit_mb}MB）"
 
 
 def _cell(value: object) -> str:
@@ -106,10 +114,8 @@ async def _run(
     keep_rows: int | None = importer._ROW_SAMPLE,
 ) -> tuple[Table, importer.ImportOutcome]:
     content = await file.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 100MB）"
-        )
+    if len(content) > _max_upload_bytes():
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
 
     try:
         table = read_table(file.filename or "", content)
@@ -262,10 +268,8 @@ def link_template() -> Response:
 
 async def _run_links(db: Session, file: UploadFile, commit: bool) -> LinkImportResultRead:
     content = await file.read()
-    if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 100MB）"
-        )
+    if len(content) > _max_upload_bytes():
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
     try:
         outcome = linkimport.run_import(db, file.filename or "links", content, commit=commit)
     except TableFileError as error:
