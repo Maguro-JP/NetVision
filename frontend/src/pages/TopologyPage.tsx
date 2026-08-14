@@ -374,7 +374,8 @@ function toFlow(
     id: String(node.device_id),
     type: "device" as const,
     position: { x: node.x - shift, y: node.y },
-    zIndex: 1,
+    // 対向（簡易表示）は線の下に置く。箱が結線を隠さないようにする
+    zIndex: node.outside ? 0 : 2,
     data: {
       hostname: node.hostname,
       vendor: simple ? "" : node.vendor,
@@ -435,6 +436,7 @@ function toFlow(
     id: String(edge.id),
     source: String(edge.source),
     target: String(edge.target),
+    zIndex: 1,
     // 引き出し口は位置関係から選ぶ（人が指定していればそちら）
     sourceHandle: `s-${anchors.get(edge.id)?.source ?? "bottom-1"}`,
     targetHandle: `t-${anchors.get(edge.id)?.target ?? "top-1"}`,

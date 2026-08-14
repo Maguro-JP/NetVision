@@ -1075,6 +1075,34 @@ _BOX_MAX = 620.0
 _LANE_GAP = 16.0
 
 
+def _box_width(links: int) -> float:
+    """結線本数から、画面上の箱幅を出す（frontend の widthFor と同じ）。"""
+    if links <= 3:
+        return _BOX_WIDTH
+    return min(_BOX_MAX, _BOX_WIDTH + (links - 3) * _BOX_GROW)
+
+
+def _visual_left(stored_x: float, links: int) -> float:
+    """保存座標（左上）から、画面に見える左端を出す。"""
+    width = _box_width(links)
+    shift = (width - _BOX_WIDTH) / 2
+    return stored_x - shift
+
+
+def _visual_right(stored_x: float, links: int) -> float:
+    """保存座標（左上）から、画面に見える右端を出す。"""
+    width = _box_width(links)
+    shift = (width - _BOX_WIDTH) / 2
+    return stored_x - shift + width
+
+
+def _lane_room(links: int) -> float:
+    """束ねた線を通す通り道の幅。箱の広がりは _visual_right で見込む。"""
+    if links <= 0:
+        return 0.0
+    return links * _LANE_GAP
+
+
 def _room_for(links: int) -> float:
     """配下を何台ぶら下げるかから、右へ余分に空ける幅を出す。"""
     if links <= 0:
@@ -1136,8 +1164,18 @@ def _place_peers(
     own = [by_id[i] for i in inside if i in by_id]
     if not own:
         return
-    left = min(node.x for node in own)
-    right = max(node.x for node in own)
+    link_count: dict[int, int] = defaultdict(int)
+    for edge in graph.edges:
+        if edge.source in inside:
+            link_count[edge.source] += 1
+        if edge.target in inside:
+            link_count[edge.target] += 1
+
+    def links_of(node: TopologyNodeView) -> int:
+        return link_count.get(node.device_id, 0)
+
+    left = min(_visual_left(node.x, links_of(node)) for node in own)
+    right = max(_visual_right(node.x, links_of(node)) for node in own)
     top = min(node.y for node in own)
     middle = (left + right) / 2
     own_rank = min(rank.get(node.device_id, 0) for node in own)
@@ -1159,9 +1197,8 @@ def _place_peers(
     for device_id, node in by_id.items():
         if device_id in inside or device_id not in attached:
             continue
-        if node.placed:
-            # 対向の保存済み位置は、相手の拠点の意思。こちらで動かさない
-            continue
+        # 絞り込みの外では、相手拠点で保存した座標は使わない。
+        # そのまま残すと自拠点の箱と重なり、線が隠れる。
         kind = _peer_kind(device_id, inside, rank, own_rank, world_adj, world_by_id)
         if kind == "up":
             above.append(node)
@@ -1181,7 +1218,14 @@ def _place_peers(
         node.x, node.y = right + (index + 1) * _X_SPACING * 1.6, top
 
     # 配下は右へ縦に並べる。斜め下に伸ばすと、台数が増えたとき紙に収まらない
-    column = right + _X_SPACING * 1.6 + _room_for(len(below))
+    below_ids = {node.device_id for node in below}
+    peer_links = 0
+    for edge in graph.edges:
+        if edge.source in inside and edge.target in below_ids:
+            peer_links += 1
+        elif edge.target in inside and edge.source in below_ids:
+            peer_links += 1
+    column = right + _X_SPACING * 1.6 + _lane_room(max(peer_links, len(below)))
     for index, node in enumerate(below):
         # 自拠点の側と重ならないよう、線を通す余白を見込んで離す
         node.x = column

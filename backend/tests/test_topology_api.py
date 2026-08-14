@@ -534,7 +534,7 @@ def test_resetting_a_site_does_not_move_a_linked_peer(client, device_payload):
 
 
 def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payload):
-    """拠点で絞った図でも、保存した対向の位置は取り直しで戻さない。"""
+    """保存した対向の位置は、自拠点の図では残る。別拠点から見るときは脇へ寄せる。"""
     here = client.post(f"{API}/sites", json={"name": "本社"}).json()["id"]
     there = client.post(f"{API}/sites", json={"name": "支社"}).json()["id"]
     a = client.post(f"{API}/devices", json=device_payload(hostname="core-sw", site_id=here)).json()[
@@ -558,10 +558,15 @@ def test_saved_peer_positions_survive_a_site_scoped_reload(client, device_payloa
             ],
         },
     )
-    graph = client.get(f"{API}/topology", params={"site_id": here, "scope": "peers"}).json()
-    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in graph["nodes"]}
+    from_here = client.get(f"{API}/topology", params={"site_id": here, "scope": "peers"}).json()
+    where = {n["hostname"]: (n["x"], n["y"], n["placed"]) for n in from_here["nodes"]}
     assert where["core-sw"][:2] == (40.0, 80.0)
-    assert where["br-rt"][:2] == (800.0, 240.0)
+    assert where["br-rt"][:2] != (800.0, 240.0)  # 本社から見る簡易表示は自動配置
+    assert where["br-rt"][2] is True
+
+    from_there = client.get(f"{API}/topology", params={"site_id": there, "scope": "peers"}).json()
+    peer = {n["hostname"]: (n["x"], n["y"]) for n in from_there["nodes"]}["br-rt"]
+    assert peer == (800.0, 240.0)
 
 
 def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payload):
