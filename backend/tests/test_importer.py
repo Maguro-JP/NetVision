@@ -126,3 +126,69 @@ def test_sample_rows_prefers_errors():
         RowAction.ERROR,
         RowAction.ERROR,
     ]
+
+
+def test_reimport_with_contracts_does_not_query_per_row(db_session):
+    """保守契約列がある再取り込みで、行数分の問い合わせにならないこと。
+
+    以前は device.contracts を1台ずつ見に行き、数千行でフリーズしていた。
+    """
+    from sqlalchemy import event
+
+    from app.services.importer import KeyField, run_import
+
+    headers = [
+        "管理ID",
+        "ホスト名",
+        "メーカー",
+        "型番",
+        "シリアル番号",
+        "種別",
+        "状態",
+        "設置場所",
+        "保守ベンダー",
+        "保守終了日",
+    ]
+
+    def rows(n: int, end: str = "2027/3/31"):
+        return [
+            {
+                "管理ID": f"A{i:04d}",
+                "ホスト名": f"sw-{i:04d}",
+                "メーカー": "Cisco",
+                "型番": "C9300",
+                "シリアル番号": f"SN{i}",
+                "種別": "スイッチ",
+                "状態": "稼働中",
+                "設置場所": "本社",
+                "保守ベンダー": "Vendor",
+                "保守終了日": end,
+            }
+            for i in range(n)
+        ]
+
+    n = 400
+    first = run_import(
+        db_session, headers, rows(n), key_field=KeyField.CODE, commit=True
+    )
+    assert first.created == n
+    assert first.contracts_added == n
+
+    queries = {"n": 0}
+    engine = db_session.get_bind()
+
+    def count(conn, cursor, statement, parameters, context, executemany):  # noqa: ARG001
+        queries["n"] += 1
+
+    event.listen(engine, "before_cursor_execute", count)
+    try:
+        preview = run_import(
+            db_session, headers, rows(n, end="2028/3/31"), key_field=KeyField.CODE, commit=False
+        )
+    finally:
+        event.remove(engine, "before_cursor_execute", count)
+
+    assert preview.updated == n
+    assert preview.contracts_added == n
+    # 行ごとに契約を見に行くと n 回以上増える。塊読みなら数百で足りる
+    assert queries["n"] < n, queries["n"]

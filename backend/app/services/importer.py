@@ -17,7 +17,7 @@ from dataclasses import dataclass, field
 from datetime import date, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
 from app.models.change_log import ChangeSource
@@ -661,23 +661,12 @@ def _run_import(
         text = str(values.get("device_id") or "").strip()
         if text.isdigit():
             wanted_ids.add(int(text))
-    by_id: dict[int, Device] = {}
-    if wanted_ids:
-        ids = sorted(wanted_ids)
-        for start in range(0, len(ids), _LOOKUP_CHUNK):
-            chunk = ids[start : start + _LOOKUP_CHUNK]
-            for device in db.scalars(select(Device).where(Device.id.in_(chunk))):
-                by_id[device.id] = device
+    by_id = _devices_by_ids(db, wanted_ids)
 
     # 重複判定に使う表。ファイルに出てくる名前の分だけ台帳を引く
     # （全件読むと、台数が増えたときに取り込みが終わらなくなる）
     wanted_names = [str(values.get("hostname") or "").strip() for values, _ in extracted]
-    existing_by_name: dict[str, Device] = {}
-    unique_names = [n for n in dict.fromkeys(wanted_names) if n]
-    for start in range(0, len(unique_names), _LOOKUP_CHUNK):
-        chunk = unique_names[start : start + _LOOKUP_CHUNK]
-        for device in db.scalars(select(Device).where(Device.hostname.in_(chunk))):
-            existing_by_name[normalize_hostname(device.hostname)] = device
+    existing_by_name = _devices_by_hostnames(db, wanted_names)
 
     # このファイルで名前が変わる機器。入れ替えは正しい操作なので弾かない
     renaming_ids: set[int] = set()
@@ -927,6 +916,15 @@ def _find_existing(db: Session, key_field: KeyField, key_value: str) -> Device |
 _LOOKUP_CHUNK = 500
 
 
+def _device_lookup():
+    """既存機器を引くときの共通オプション。
+
+    保守契約列があると、契約の有無を1台ずつ見に行って行数分の問い合わせに
+    なる。先に契約も載せておけば、16万行でも問い合わせは塊の数だけになる。
+    """
+    return selectinload(Device.contracts)
+
+
 def _existing_by_key(db: Session, key_field: KeyField, keys: list[str]) -> dict[str, Device]:
     """ファイルに出てくる鍵の分だけ、既存機器をまとめて引く。
 
@@ -939,10 +937,35 @@ def _existing_by_key(db: Session, key_field: KeyField, keys: list[str]) -> dict[
     unique = [key for key in dict.fromkeys(keys) if key]
     for start in range(0, len(unique), _LOOKUP_CHUNK):
         chunk = unique[start : start + _LOOKUP_CHUNK]
-        for device in db.scalars(select(Device).where(column.in_(chunk))):
+        stmt = select(Device).where(column.in_(chunk)).options(_device_lookup())
+        for device in db.scalars(stmt):
             value = getattr(device, column.key)
             if value is not None:
                 found[str(value)] = device
+    return found
+
+
+def _devices_by_ids(db: Session, wanted_ids: set[int]) -> dict[int, Device]:
+    by_id: dict[int, Device] = {}
+    if not wanted_ids:
+        return by_id
+    ids = sorted(wanted_ids)
+    for start in range(0, len(ids), _LOOKUP_CHUNK):
+        chunk = ids[start : start + _LOOKUP_CHUNK]
+        stmt = select(Device).where(Device.id.in_(chunk)).options(_device_lookup())
+        for device in db.scalars(stmt):
+            by_id[device.id] = device
+    return by_id
+
+
+def _devices_by_hostnames(db: Session, names: list[str]) -> dict[str, Device]:
+    found: dict[str, Device] = {}
+    unique = [n for n in dict.fromkeys(names) if n]
+    for start in range(0, len(unique), _LOOKUP_CHUNK):
+        chunk = unique[start : start + _LOOKUP_CHUNK]
+        stmt = select(Device).where(Device.hostname.in_(chunk)).options(_device_lookup())
+        for device in db.scalars(stmt):
+            found[normalize_hostname(device.hostname)] = device
     return found
 
 
