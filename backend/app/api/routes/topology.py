@@ -70,6 +70,10 @@ def get_topology(
     graph = service.get_graph(
         db, layer, include_retired=include_retired, orientation=orientation, only=only
     )
+    if layer == "logical":
+        # 論理は get_graph 側で対向（only）まで残してある。
+        # site_id で再度切ると本社ビューが空になるので、ここでは触らない。
+        return TopologyGraphRead.model_validate(graph, from_attributes=True)
     graph = service.scope_graph(
         graph,
         site_id=site_id,

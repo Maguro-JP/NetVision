@@ -125,3 +125,25 @@ def test_logical_differs_from_physical_via_tunnels(db_session):
     assert len(logical.edges) == 1
     assert {logical.edges[0].source, logical.edges[0].target} == {center.id, station.id}
     assert "br-rt" not in {n.hostname for n in logical.nodes}
+
+
+def test_logical_survives_duplicate_mgmt_ips_by_preferring_later_devices(db_session):
+    """同じ管理IPが二台にあるとき、先勝ちでトンネル先を間違えないこと。"""
+    fw = _device(db_session, "fw-01", DeviceType.FIREWALL, mgmt_ip="10.1.0.1")
+    center = _device(db_session, "east-core-rt-01", DeviceType.ROUTER, mgmt_ip="10.1.0.1")
+    station = _device(db_session, "osaka-rt-01", DeviceType.ROUTER, mgmt_ip="10.101.1.1")
+    db_session.add(
+        DeviceTunnel(
+            device_id=station.id,
+            name="Tunnel0",
+            kind="ipsec",
+            destination="10.1.0.1",
+            description="センター向け",
+        )
+    )
+    db_session.commit()
+
+    graph = topology.get_graph(db_session, "logical")
+    assert len(graph.edges) == 1
+    assert {graph.edges[0].source, graph.edges[0].target} == {center.id, station.id}
+    assert fw.id not in {graph.edges[0].source, graph.edges[0].target}

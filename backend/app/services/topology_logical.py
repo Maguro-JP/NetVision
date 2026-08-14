@@ -48,11 +48,17 @@ class LogicalGraph:
 
 
 def _address_index(db: Session) -> dict[str, int]:
-    """IP から機器を引く表。管理IPとインターフェースIPの両方を入れる。"""
+    """IP から機器を引く表。管理IPとインターフェースIPの両方を入れる。
+
+    管理IPは後から読んだ機器で上書きする。デモで FW とセンターが同じ
+    アドレスを持ってしまったとき、先に入った FW にトンネルが全部吸われる
+    と論理図が壊れる。インターフェースIPは setdefault のまま（管理IPを
+    勝手に奪わない）。
+    """
     index: dict[str, int] = {}
     for device in db.scalars(select(Device)):
         if device.mgmt_ip:
-            index.setdefault(device.mgmt_ip.split("/")[0], device.id)
+            index[device.mgmt_ip.split("/")[0]] = device.id
     for interface in db.scalars(select(Interface)):
         if interface.ip_address:
             index.setdefault(interface.ip_address.split("/")[0], interface.device_id)

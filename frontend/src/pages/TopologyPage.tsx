@@ -79,6 +79,11 @@ const LAYERS = [
     hint: "ケーブル・LLDP の結線。機器がどう繋がっているか",
   },
   {
+    value: "logical",
+    label: "論理構成",
+    hint: "IPsec / GRE などのトンネル。物理とは別の通り道",
+  },
+  {
     value: "l2",
     label: "L2 (VLAN)",
     hint: "VLAN が載っている結線だけ。同じ VLAN がどこまで伸びているか",
@@ -87,11 +92,6 @@ const LAYERS = [
     value: "l3",
     label: "L3 (セグメント)",
     hint: "ルータ同士や IP 付きの結線。ルーティングの段",
-  },
-  {
-    value: "logical",
-    label: "論理構成",
-    hint: "IPsec / GRE などのトンネル。物理とは別の通り道",
   },
 ];
 
@@ -491,6 +491,18 @@ function TopologyEditor() {
     queryFn: () => api.listTopologyVrfs(),
   });
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
+
+  // 物理の全体図が出せない規模なら、最初から本社を選ぶ。
+  // 「表示できる機器がありません」だけのデモにはしない。
+  useEffect(() => {
+    if (selectedSite !== "") return;
+    if (params.get("site")) return;
+    if (layer !== "physical") return;
+    if (!sites?.length || !stats) return;
+    if (stats.device_count <= WIDE_LIMIT) return;
+    const hq = sites.find((site) => site.name.includes("本社")) ?? sites[0];
+    setSelectedSite(hq.id);
+  }, [sites, stats, selectedSite, layer, params]);
 
   useEffect(() => {
     if (!graph) return;

@@ -116,7 +116,7 @@ def _seed(force: bool) -> None:
                 os_name="FortiOS",
                 os_version="7.2.8",
                 site_id=branch.id,
-                mgmt_ip="10.1.0.1",
+                mgmt_ip="10.0.0.2",
                 install_date=date(2022, 6, 15),
                 eol_date=_d(900),
             ),

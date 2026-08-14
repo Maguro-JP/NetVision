@@ -188,7 +188,19 @@ def get_graph(
         graph = topology_logical.build(
             db, include_retired=include_retired, orientation=orientation
         ).graph
-        return _apply_saved_positions(db, graph, orientation=orientation)
+        graph = _apply_saved_positions(db, graph, orientation=orientation)
+        # 拠点で絞ったときは、その拠点の機器に加え、scoped_device_ids が
+        # 拾った対向（センター等）に張られたトンネルも残す。
+        # ここを拠点の site_id だけで切ると、本社を選んだときに論理が空になる。
+        if only is not None:
+            edges = [e for e in graph.edges if e.source in only or e.target in only]
+            graph = _shrink_to(graph, edges)
+            if graph.nodes:
+                _compact(
+                    graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation
+                )
+                graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
+        return graph
 
     device_query = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
     if only is not None:

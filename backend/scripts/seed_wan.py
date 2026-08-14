@@ -151,7 +151,7 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
     sites: dict[str, Site] = {}
     devices: list[Device] = []
     links: list[tuple[str, str, str, str]] = []
-    interfaces: list[tuple[str, str]] = []
+    interfaces: list[tuple[str, str, str | None, int | None, int | None, str | None]] = []
     # (機器, トンネル名, 種別, 宛先IP, 説明)。物理では支社を経由していても、
     # 論理ではセンターと直結して見える——そのズレを図で見せるために入れる
     tunnels: list[tuple[str, str, str, str, str]] = []
@@ -276,10 +276,16 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
             links.append(
                 (station_rt, "GigaEthernet0/0", branch_rt, f"GigabitEthernet0/1/{pref_index}")
             )
-            # 拠点スイッチは 24 ポート想定で、埋まっているのは数ポートだけ。
-            # 「空きがどれだけあるか」を割付表で見せるため
-            interfaces.extend((station_sw, f"GigabitEthernet1/0/{port}") for port in range(1, 25))
-            interfaces.append((station_sw, "GigabitEthernet1/0/25"))
+            # 拠点スイッチにも VLAN を持たせる。L2 図が拠点で空だとデモにならない
+            for port in range(1, 5):
+                interfaces.append(
+                    (station_sw, f"GigabitEthernet1/0/{port}", "access", 10, None, None)
+                )
+            for port in range(5, 25):
+                interfaces.append(
+                    (station_sw, f"GigabitEthernet1/0/{port}", None, None, None, None)
+                )
+            interfaces.append((station_sw, "GigabitEthernet1/0/25", "trunk", None, 1, "10,30"))
             # 拠点からセンターへは IPsec で直に張る。物理は支社経由、論理は直結
             tunnels.append(
                 (
@@ -290,6 +296,12 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
                     f"{'東' if side == 'east' else '西'}日本センター向け",
                 )
             )
+
+    # センターのコアスイッチにもトランクを付ける（L2 がセンターで空にならないように）
+    for side in ("east", "west"):
+        interfaces.append(
+            (f"{side}-core-sw-01", "TenGigabitEthernet1/0/1", "trunk", None, 1, "10,30,40")
+        )
 
     db.add_all(devices)
     db.flush()
@@ -340,8 +352,13 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
                 device_id=by_host[host].id,
                 name=name,
                 normalized_name=normalize(name),
+                mode=mode,
+                vlan=access,
+                native_vlan=native,
+                trunk_vlans=trunk,
             )
-            for host, name in interfaces
+            for host, name, mode, access, native, trunk in interfaces
+            if host in by_host
         ]
     )
     db.commit()
