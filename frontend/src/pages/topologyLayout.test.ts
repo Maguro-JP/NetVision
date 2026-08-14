@@ -26,6 +26,7 @@ import {
   shiftFor,
   sideToward,
   storedFromDisplay,
+  placementFromClick,
 } from "./TopologyPage";
 
 function node(
@@ -232,5 +233,12 @@ describe("動かした位置を表示の切り替えで消さない", () => {
     const incoming = [{ id: "1", position: { x: 0, y: 0 } }];
     const current = [{ id: "1", position: { x: 40, y: 80 } }];
     expect(keepLocalPositions(incoming, current, false)).toEqual(incoming);
+  });
+});
+
+describe("図をクリックして機器を置く位置", () => {
+  it("マス目に乗せる", () => {
+    expect(placementFromClick(23, 61)).toEqual({ x: 40, y: 80 });
+    expect(placementFromClick(0, 0)).toEqual({ x: 0, y: 0 });
   });
 });

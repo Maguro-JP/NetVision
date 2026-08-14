@@ -17,11 +17,11 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
+import type { DeviceType, TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import DeviceNode, {
   SLOTS,
   anchorId,
@@ -29,6 +29,7 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
+import { DEVICE_TYPE_LABEL } from "../lib/format";
 import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 import {
@@ -67,6 +68,11 @@ const LAYOUT_GRID = 40;
 
 export function snapToGrid(value: number): number {
   return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;
+}
+
+/** 図をクリックした位置を、箱の左上としてマス目に乗せる。 */
+export function placementFromClick(x: number, y: number): { x: number; y: number } {
+  return { x: snapToGrid(x), y: snapToGrid(y) };
 }
 
 /** 線を通す道の間隔。狭いと線が重なって、広いと図が間延びする */
@@ -480,6 +486,10 @@ function TopologyEditor() {
   const [orientation, setOrientation] = useState(view.orientation);
   // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
   const [editable, setEditable] = useState(false);
+  // 図の空きをクリックして機器の枠を置く。台帳画面へ往復しないと図が作れないのを避ける
+  const [placing, setPlacing] = useState(false);
+  const [placeHostname, setPlaceHostname] = useState("");
+  const [placeType, setPlaceType] = useState<DeviceType>("switch");
   // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
   // 動かした位置が画面に残ってしまうため、明示的に作り直す合図を持つ
   const [revision, setRevision] = useState(0);
@@ -750,6 +760,35 @@ function TopologyEditor() {
     },
   });
 
+  const placeDevice = useMutation({
+    mutationFn: async (input: {
+      x: number;
+      y: number;
+      hostname: string;
+      device_type: DeviceType;
+      site_id: number | null;
+    }) => {
+      const device = await api.createDevice({
+        hostname: input.hostname,
+        vendor: "未記入",
+        model: "未記入",
+        device_type: input.device_type,
+        status: "active",
+        ...(input.site_id != null ? { site_id: input.site_id } : {}),
+      });
+      await api.savePositions(layer, [{ device_id: device.id, x: input.x, y: input.y }]);
+      return device;
+    },
+    onSuccess: async (device) => {
+      setPlaceHostname("");
+      setNotice(
+        `${device.hostname} を図に置きました。箱のハンドルをドラッグすると線を引けます`,
+      );
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+      await refresh({ takeLayout: false });
+    },
+  });
+
   const selectedEdgeData = selectedEdge
     ? graph?.edges.find((e) => String(e.id) === selectedEdge.id)
     : undefined;
@@ -913,6 +952,33 @@ function TopologyEditor() {
     [createLink, editable, layer, setEdges],
   );
 
+  const onPaneClick = useCallback(
+    (event: MouseEvent) => {
+      setSelectedEdge(null);
+      if (!placing || !editable) return;
+      if (layer !== "physical") {
+        setNotice("機器の枠は物理構成で置きます。L2 / L3 / 論理では線の無い箱は出ません");
+        return;
+      }
+      const hostname = placeHostname.trim();
+      if (!hostname) {
+        setNotice("先に機器名を入れてから、図の空きをクリックしてください");
+        return;
+      }
+      const flow = instance.current;
+      if (!flow || placeDevice.isPending) return;
+      const point = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const position = placementFromClick(point.x, point.y);
+      placeDevice.mutate({
+        ...position,
+        hostname,
+        device_type: placeType,
+        site_id: selectedSite === "" ? null : selectedSite,
+      });
+    },
+    [editable, layer, placeDevice, placeHostname, placeType, placing, selectedSite],
+  );
+
   const onEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       if (!editable) return;
@@ -978,10 +1044,10 @@ function TopologyEditor() {
           <>
             <strong>編集中です。</strong>
             機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
+            「機器を置く」を押して名前を入れ、図の空きをクリックすると枠が置かれます。
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
             線を選ぶと、図の左上に削除などの短い操作が出ます（Delete でも消えます）。
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
-            機器の追加・削除は機器台帳で行います。
           </>
         ) : (
           <>図は動かせません。並べ替えたいときは「編集する」を押してください。マス目に合わせて置けます。</>
@@ -999,6 +1065,7 @@ function TopologyEditor() {
               discardEdits();
             }
             setEditable((value) => !value);
+            setPlacing(false);
           }}
           title={
             editable
@@ -1014,6 +1081,7 @@ function TopologyEditor() {
           onChange={(e) => {
             if (!confirmLeave(dirty)) return;
             setDirty(false);
+            setPlacing(false);
             setLayer(e.target.value);
           }}
         >
@@ -1105,9 +1173,52 @@ function TopologyEditor() {
             >
               破棄
             </button>
-            <button onClick={() => rebuild.mutate()} disabled={rebuild.isPending}>
+            <button
+              onClick={() => rebuild.mutate()}
+              disabled={rebuild.isPending}
+            >
               Config から結線を作り直す
             </button>
+            {layer === "physical" && (
+              <>
+                <button
+                  className={placing ? "primary" : ""}
+                  onClick={() => {
+                    if (tooWide) {
+                      setNotice("全体図では置けません。拠点を選んでから機器を置いてください");
+                      return;
+                    }
+                    setPlacing((value) => !value);
+                  }}
+                  title="名前を入れて図の空きをクリックすると、機器の枠を置けます"
+                >
+                  {placing ? "置くのをやめる" : "機器を置く"}
+                </button>
+                {placing && (
+                  <>
+                    <input
+                      type="text"
+                      value={placeHostname}
+                      placeholder="機器名"
+                      onChange={(event) => setPlaceHostname(event.target.value)}
+                      title="図に出すホスト名"
+                      style={{ minWidth: 140 }}
+                    />
+                    <select
+                      value={placeType}
+                      onChange={(event) => setPlaceType(event.target.value as DeviceType)}
+                      title="機器の種別"
+                    >
+                      {(Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).map((type) => (
+                        <option key={type} value={type}>
+                          {DEVICE_TYPE_LABEL[type]}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
+              </>
+            )}
           </>
         )}
         {/* 人が置いた位置を起点に、マス目・揃い・間隔だけ整える。木に組み直すのはリセット */}
@@ -1197,9 +1308,17 @@ function TopologyEditor() {
           {notice}
         </div>
       )}
-      {(save.error || createLink.error || rebuild.error || reconnect.error) && (
+      {(save.error || createLink.error || rebuild.error || reconnect.error || placeDevice.error) && (
         <div className="error">
-          {((save.error ?? createLink.error ?? rebuild.error ?? reconnect.error) as Error).message}
+          {
+            (
+              (save.error ??
+                createLink.error ??
+                rebuild.error ??
+                reconnect.error ??
+                placeDevice.error) as Error
+            ).message
+          }
         </div>
       )}
 
@@ -1232,7 +1351,7 @@ function TopologyEditor() {
         </div>
       )}
 
-      <div className="topo-canvas">
+      <div className={`topo-canvas${placing ? " placing" : ""}`}>
         {tooWide ? (
           // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
           // それでも見たい人のために、出す手段は残しておく
@@ -1250,7 +1369,7 @@ function TopologyEditor() {
           <p className="muted" style={{ padding: 20 }}>
             読み込み中…
           </p>
-        ) : nodes.length === 0 ? (
+        ) : nodes.length === 0 && !(editable && layer === "physical") ? (
           <div className="empty" style={{ margin: 40 }}>
             {layer === "l2" ? (
               <>
@@ -1281,7 +1400,10 @@ function TopologyEditor() {
                 </p>
               </>
             ) : (
-              <>表示できる機器がありません。台帳に機器を登録してください。</>
+              <>
+                表示できる機器がありません。編集中に「機器を置く」から図へ枠を置けます。台帳から
+                登録しても出ます。
+              </>
             )}
           </div>
         ) : (
@@ -1308,7 +1430,7 @@ function TopologyEditor() {
             onReconnect={onReconnect}
             edgesReconnectable={editable}
             onEdgeClick={(_, edge) => setSelectedEdge(edge)}
-            onPaneClick={() => setSelectedEdge(null)}
+            onPaneClick={onPaneClick}
             onInit={(flow) => {
               instance.current = flow;
               if (shouldFit.current) {

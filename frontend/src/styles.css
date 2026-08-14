@@ -457,6 +457,9 @@ button:disabled {
   overflow: hidden;
   position: relative;
 }
+.topo-canvas.placing .react-flow__pane {
+  cursor: crosshair;
+}
 
 /* 選んだ線の操作。図を塞がない細いバーとして、キャンバス左上に出す */
 .topo-selection-panel {
