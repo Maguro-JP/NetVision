@@ -55,6 +55,8 @@ const BASE = import.meta.env.VITE_API_BASE ?? "/api/v1";
 /** 画面の読み込みが 10 秒以上止まらないようにする。取り込みは別で長く待つ */
 const GET_TIMEOUT_MS = 8_000;
 const LONG_TIMEOUT_MS = 120_000;
+/** 台帳の大規模取り込み（16万行級）は数分かかることがある */
+const IMPORT_TIMEOUT_MS = 30 * 60_000;
 
 export class ApiError extends Error {
   constructor(
@@ -131,8 +133,8 @@ async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: n
 }
 
 /** multipart 送信。Content-Type はブラウザに境界文字列ごと決めさせる。 */
-async function upload<T>(path: string, form: FormData): Promise<T> {
-  const res = await send(path, { method: "POST", body: form });
+async function upload<T>(path: string, form: FormData, timeoutMs?: number): Promise<T> {
+  const res = await send(path, { method: "POST", body: form }, timeoutMs);
   if (!res.ok) {
     throw new ApiError(res.status, await extractError(res));
   }
@@ -142,7 +144,8 @@ async function upload<T>(path: string, form: FormData): Promise<T> {
 export function humanizeHttpError(status: number, fallback: string): string {
   if (status === 404) return "見つかりませんでした。削除されたか、アドレスが違う可能性があります";
   if (status === 409) return "他の操作と衝突しました。画面を読み直してからやり直してください";
-  if (status === 413) return "ファイルが大きすぎます。分けて取り込むか、小さいファイルにしてください";
+  if (status === 413)
+    return "ファイルが大きすぎます。CSV に分けるか、サーバの NETVISION_MAX_IMPORT_BYTES を確認してください";
   if (status >= 500) return "サーバで問題が起きました。しばらくしてからやり直してください";
   return fallback;
 }
@@ -292,6 +295,7 @@ export const api = {
     return upload<ImportResult>(
       options.commit ? "/import/devices" : "/import/devices/preview",
       form,
+      IMPORT_TIMEOUT_MS,
     );
   },
 
@@ -304,7 +308,11 @@ export const api = {
     form.append("encoding", options.encoding ?? "utf-8");
     if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
 
-    const res = await send("/import/devices/errors.csv", { method: "POST", body: form });
+    const res = await send(
+      "/import/devices/errors.csv",
+      { method: "POST", body: form },
+      IMPORT_TIMEOUT_MS,
+    );
     if (!res.ok) throw new ApiError(res.status, await extractError(res));
     return res.blob();
   },

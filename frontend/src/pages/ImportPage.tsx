@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api, type ImportKeyField } from "../api/client";
@@ -39,6 +39,15 @@ const KEY_OPTIONS: { value: ImportKeyField; label: string; hint: string }[] = [
   },
 ];
 
+/** だいたいこのサイズを超えたら「時間がかかる」と先に伝える（Excel は特に重い） */
+const LARGE_FILE_BYTES = 20 * 1024 * 1024;
+
+function formatElapsed(seconds: number): string {
+  const m = Math.floor(seconds / 60);
+  const s = seconds % 60;
+  return m > 0 ? `${m}分${s}秒` : `${s}秒`;
+}
+
 /**
  * 機器台帳の取り込み。
  *
@@ -53,6 +62,7 @@ export default function ImportPage() {
   const [updateExisting, setUpdateExisting] = useState(true);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
+  const [elapsedSec, setElapsedSec] = useState(0);
 
   const { data: fields } = useQuery({ queryKey: ["importFields"], queryFn: api.importFields });
 
@@ -89,6 +99,19 @@ export default function ImportPage() {
     },
   });
 
+  useEffect(() => {
+    if (!run.isPending && !downloadErrors.isPending) {
+      setElapsedSec(0);
+      return;
+    }
+    setElapsedSec(0);
+    const started = Date.now();
+    const timer = window.setInterval(() => {
+      setElapsedSec(Math.floor((Date.now() - started) / 1000));
+    }, 1000);
+    return () => window.clearInterval(timer);
+  }, [run.isPending, downloadErrors.isPending]);
+
   const pickFile = (picked: File | null) => {
     setFile(picked);
     setMapping({});
@@ -109,6 +132,9 @@ export default function ImportPage() {
   const columns = result ? [...Object.keys(result.mapping), ...result.unmapped_columns] : [];
   const blocked = !result || result.errors > 0 || result.missing_required_fields.length > 0;
   const keyHint = KEY_OPTIONS.find((o) => o.value === keyField)?.hint;
+  const busy = run.isPending || downloadErrors.isPending;
+  const largeFile = Boolean(file && file.size >= LARGE_FILE_BYTES);
+  const excelFile = Boolean(file && /\.xlsx?$/i.test(file.name));
 
   return (
     <>
@@ -119,6 +145,8 @@ export default function ImportPage() {
         <br />
         既存機器との突合は、まず「管理ID」を使うのがおすすめです。書き出したファイルに
         「内部ID」列がある場合は、それがいちばん確実です。
+        <br />
+        行数が多いとき（数万〜十数万）は CSV の方が速く、待ち時間も短くなります。
         <br />
         <Link to="/devices">機器一覧</Link>
         から書き出したファイルは、そのまま編集して取り込み直せます。
@@ -133,6 +161,12 @@ export default function ImportPage() {
             accept=".csv,.tsv,.xlsx,.xlsm"
             onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
           />
+          {largeFile && (
+            <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+              大きなファイルです。確認・取り込みに数分かかることがあります
+              {excelFile ? "（可能なら CSV にすると速いです）" : ""}。
+            </p>
+          )}
         </div>
         <div className="field">
           <label htmlFor="key">既存機器の判定キー</label>
@@ -174,17 +208,24 @@ export default function ImportPage() {
       </div>
 
       <div className="actions">
-        <button disabled={!file || run.isPending} onClick={() => run.mutate(false)}>
-          {run.isPending ? "確認中…" : "内容を確認（取り込まない）"}
+        <button disabled={!file || busy} onClick={() => run.mutate(false)}>
+          {run.isPending && run.variables === false ? "確認中…" : "内容を確認（取り込まない）"}
         </button>
         <button
           className="primary"
-          disabled={blocked || run.isPending}
+          disabled={blocked || busy}
           onClick={() => run.mutate(true)}
         >
-          取り込む
+          {run.isPending && run.variables === true ? "取り込み中…" : "取り込む"}
         </button>
       </div>
+
+      {busy && (
+        <p className="muted" style={{ marginTop: 12 }} role="status">
+          処理中です（{formatElapsed(elapsedSec)}）。行数が多いと数分かかることがあります。
+          画面を閉じず、そのまま待ってください。
+        </p>
+      )}
 
       {run.error && <div className="error">{(run.error as Error).message}</div>}
 
@@ -313,7 +354,7 @@ export default function ImportPage() {
             </tbody>
           </table>
           <div className="actions">
-            <button disabled={run.isPending} onClick={() => run.mutate(false)}>
+            <button disabled={busy} onClick={() => run.mutate(false)}>
               対応付けを反映して再確認
             </button>
           </div>

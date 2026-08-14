@@ -20,6 +20,10 @@ class Settings(BaseSettings):
     document_storage_path: str = "./data/documents"
     max_document_bytes: int = 200 * 1024 * 1024
 
+    # 台帳取り込み（CSV / Excel）1ファイルの上限。16万行規模の Excel は
+    # 100MB を超えうるので、既定は 512MB。必要なら環境変数で上げる。
+    max_import_bytes: int = 512 * 1024 * 1024
+
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # 画面や書き出しに出す時刻の地域。DB には UTC で持ち、見せるときだけ変換する。
