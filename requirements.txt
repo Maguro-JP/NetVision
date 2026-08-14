@@ -2,6 +2,8 @@
 # 開発・本番は backend/pyproject.toml が正で、ここはプレビュー用に合わせて置いている。
 fastapi>=0.115
 sqlalchemy>=2.0.36
+# プレビューは起動時に Alembic で表を作る。無いと API が起きず画面が出ない
+alembic>=1.14
 pydantic>=2.9
 pydantic-settings>=2.6
 python-dateutil>=2.9

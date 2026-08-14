@@ -104,11 +104,15 @@ async function send(path: string, init: RequestInit = {}, timeoutMs?: number): P
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await send(path, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+async function request<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
+  const res = await send(
+    path,
+    {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    },
+    timeoutMs,
+  );
 
   if (!res.ok) {
     throw new ApiError(res.status, await extractError(res));
@@ -666,7 +670,8 @@ export const api = {
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
 
   meta: () => request<AppMeta>("/meta"),
-  schemaStatus: () => request<SchemaStatus>("/schema"),
+  // プレビューの初回は表の作成とデモ投入が走る。8秒だと「起動できませんでした」になる
+  schemaStatus: () => request<SchemaStatus>("/schema", undefined, 25_000),
   applySchema: () => request<SchemaStatus>("/schema/apply", { method: "POST" }),
   confirmSchema: () => request<SchemaStatus>("/schema/confirm", { method: "POST" }),
 
