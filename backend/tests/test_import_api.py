@@ -184,7 +184,8 @@ def test_import_rejects_empty_management_code_when_it_is_the_key(client):
     csv_text = "管理ID,ホスト名,メーカー,型番\n,sw-01,Cisco,C9200\n"
     body = upload(client, csv_text, path="/import/devices/preview", key_field="code").json()
     assert body["errors"] == 1
-    assert any("管理ID" in (i["message"] or "") or i.get("column") == "code" for r in body["rows"] for i in r["issues"])
+    issues = [i for r in body["rows"] for i in r["issues"]]
+    assert any(i.get("column") == "code" for i in issues)
 
 
 def test_template_includes_management_code_column(client):
