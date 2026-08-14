@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
-from app.services.topology import TopologyGraph, get_graph
+from app.services.topology import TopologyGraph, attach_groups, get_graph
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
 SEVERITY_COLOR: dict[str, str] = {
@@ -114,6 +114,11 @@ def render_svg(
     min_y = min([n.y for n in nodes] + [p.y for p in peers])
     max_x = max([n.x + NODE_W for n in nodes] + [p.x + PEER_W for p in peers])
     max_y = max([n.y + NODE_H for n in nodes] + [p.y + PEER_H for p in peers])
+    if graph.groups:
+        min_x -= 24
+        min_y -= 28
+        max_x += 24
+        max_y += 24
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
     legend_h = 0.0 if simple else LEGEND_H
@@ -172,6 +177,22 @@ def render_svg(
             f'<text x="{width - MARGIN:.0f}" y="30" font-size="11" fill="#6b6b6b" '
             f'text-anchor="end">{_esc(generated)} 時点 / レイヤ: {_esc(graph.layer)}'
             f"{_esc(scope)} / {_esc(counts)}</text>"
+        )
+
+    for group in graph.groups:
+        members = [at[i] for i in group.device_ids if i in at]
+        if not members:
+            continue
+        gx = min(x for x, _ in members) - 18
+        gy = min(y for _, y in members) - 26
+        gw = max(x + NODE_W for x, _ in members) - gx + 18
+        gh = max(y + NODE_H for _, y in members) - gy + 18
+        parts.append(
+            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gw:.0f}" height="{gh:.0f}" rx="10" '
+            f'fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" stroke-width="1.6" '
+            f'stroke-dasharray="6 4"/>'
+            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" fill="{_esc(group.color)}">'
+            f"{_esc(group.name)}</text>"
         )
 
     # 同じ機器同士を何本も結んでいる場合（LAG など）に、線を平行にずらすための番号。
@@ -948,7 +969,7 @@ def export_svg(
     orientation: str = "vertical",
 ) -> str:
     return render_svg(
-        get_graph(db, layer, orientation=orientation),
+        attach_groups(db, get_graph(db, layer, orientation=orientation)),
         title=title,
         vlan=vlan,
         vrf=vrf,

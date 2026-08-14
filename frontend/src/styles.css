@@ -523,6 +523,22 @@ button:disabled {
 .topo-node.selected {
   outline: 2px solid var(--accent);
 }
+.topo-group {
+  border: 1.6px dashed;
+  border-radius: 10px;
+  pointer-events: all;
+  box-sizing: border-box;
+}
+.topo-group.selected {
+  border-style: solid;
+  outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
+}
+.topo-group-label {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 6px 10px;
+  letter-spacing: 0.02em;
+}
 .topo-node.sev-expired {
   border-left-color: var(--sev-expired);
 }

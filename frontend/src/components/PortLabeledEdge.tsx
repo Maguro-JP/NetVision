@@ -177,6 +177,7 @@ export default function PortLabeledEdge({
                 style={info.portStyle ?? "short"}
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
+                color={typeof style?.stroke === "string" ? style.stroke : undefined}
               />
               <PortLabel
                 name={info.targetInterface ?? ""}
@@ -189,6 +190,7 @@ export default function PortLabeledEdge({
                 style={info.portStyle ?? "short"}
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
+                color={typeof style?.stroke === "string" ? style.stroke : undefined}
               />
             </>
           )}
@@ -218,6 +220,7 @@ function PortLabel({
   style,
   alongLine,
   opacity,
+  color,
 }: {
   name: string;
   x: number;
@@ -227,6 +230,7 @@ function PortLabel({
   style: PortStyle;
   alongLine: boolean;
   opacity?: number | string;
+  color?: string;
 }) {
   if (!name) return null;
 
@@ -246,7 +250,7 @@ function PortLabel({
       className="topo-edge-label port"
       style={{
         transform: `translate(-50%, -50%) translate(${px}px, ${py}px) rotate(${rotation}deg)`,
-        color: MEDIA_COLOR[mediaOf(name)],
+        color: color ?? MEDIA_COLOR[mediaOf(name)],
         ...(opacity ? { opacity } : {}),
       }}
       title={name}

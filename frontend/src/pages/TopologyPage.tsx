@@ -28,9 +28,18 @@ import DeviceNode, {
   type DeviceNodeData,
   type Side,
 } from "../components/DeviceNode";
+import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
 import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
 import { DEVICE_TYPE_LABEL } from "../lib/format";
-import { MEDIA_COLOR, MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import {
+  DEFAULT_TYPE_COLOR,
+  PLANE_LABEL,
+  defaultColors,
+  loadColors,
+  saveColors,
+  type TopologyColors,
+} from "../lib/topologyColors";
 import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 import {
   applyPositions,
@@ -45,8 +54,9 @@ import {
   undo as undoHistory,
   type EditHistory,
 } from "./topologyEditHistory";
+import { groupBox, updateGroupBounds } from "./topologyGroups";
 
-const NODE_TYPES = { device: DeviceNode };
+const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
 
 const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
@@ -132,6 +142,7 @@ interface LabelOptions {
   portStyle: PortStyle;
   alongLine: boolean;
   editable: boolean;
+  colors: TopologyColors;
 }
 
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
@@ -330,13 +341,15 @@ export function storedFromDisplay(
 /** いま画面にある配置を、保存用の座標にする。差分だけ送ると、履歴に
  * 載っていない移動や対向機器が落ちて、保存直後に自動配置へ戻る。 */
 export function positionsToSave(
-  nodes: { id: string; position: { x: number; y: number }; data?: { shift?: number } }[],
+  nodes: { id: string; position: { x: number; y: number }; data?: { shift?: number } | object }[],
 ): { device_id: number; x: number; y: number }[] {
   const out: { device_id: number; x: number; y: number }[] = [];
   for (const node of nodes) {
     const id = Number(node.id);
     if (!Number.isFinite(id)) continue;
-    const stored = storedFromDisplay(node.position, node.data?.shift ?? 0);
+    const shift =
+      node.data && "shift" in node.data && typeof node.data.shift === "number" ? node.data.shift : 0;
+    const stored = storedFromDisplay(node.position, shift);
     out.push({ device_id: id, x: stored.x, y: stored.y });
   }
   return out;
@@ -347,18 +360,19 @@ function toFlow(
   simple: boolean,
   options: LabelOptions,
 ): {
-  nodes: Node<DeviceNodeData>[];
+  nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
   const { anchors, busiest, lanes, laneRank } = assignAnchors(graph);
 
-  const nodes = graph.nodes.map((node) => {
+  const devices = graph.nodes.map((node) => {
     const width = widthFor(busiest.get(node.device_id) ?? 0);
     const shift = shiftFor(width);
     return {
     id: String(node.device_id),
-    type: "device",
+    type: "device" as const,
     position: { x: node.x - shift, y: node.y },
+    zIndex: 1,
     data: {
       hostname: node.hostname,
       vendor: simple ? "" : node.vendor,
@@ -368,18 +382,52 @@ function toFlow(
       siteName: simple ? null : node.site_name,
       mgmtIp: simple ? null : node.mgmt_ip,
       interfaceCount: simple ? 0 : node.interface_count,
-      // 番号だけの表示にしたときに、何のポートかを機器側で読ませる
       portKinds: simple ? [] : node.port_kinds,
       editable: options.editable,
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
-      // 線が多い機器は箱を広げる。引き出し口が詰まると線が重なって読めない
       width,
       shift,
+      accent: options.colors.types[node.device_type],
+      planeLabel: node.plane ? (PLANE_LABEL[node.plane] ?? node.plane) : undefined,
     } satisfies DeviceNodeData,
     draggable: options.editable,
     };
   });
+
+  const groups = (graph.groups ?? []).flatMap((group) => {
+    const members = devices.filter((node) => group.device_ids.includes(Number(node.id)));
+    const box = groupBox(
+      members.map((node) => ({
+        x: node.position.x,
+        y: node.position.y,
+        width: node.data.width,
+      })),
+    );
+    if (!box) return [];
+    return [
+      {
+        id: groupNodeId(group),
+        type: "group" as const,
+        position: { x: box.x, y: box.y },
+        zIndex: 0,
+        selectable: true,
+        draggable: false,
+        connectable: false,
+        data: {
+          label: group.name,
+          plane: group.plane,
+          color: group.color,
+          width: box.width,
+          height: box.height,
+          groupId: group.id,
+          deviceIds: group.device_ids,
+        } satisfies GroupFrameData,
+      },
+    ];
+  });
+
+  const nodes = [...groups, ...devices];
 
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),
@@ -393,6 +441,7 @@ function toFlow(
     animated: false,
     // 編集中は端をつまんで別の機器へ持っていける。引き直すより早い
     reconnectable: options.editable,
+    style: { stroke: options.colors.media[mediaOf(edge.source_interface)] },
     className:
       `topo-edge ${edge.origin} ${edge.confirmed_both_ways || simple ? "confirmed" : ""}` +
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
@@ -514,6 +563,9 @@ function TopologyEditor() {
   const [portStyle, setPortStyle] = useState<PortStyle>(view.portStyle);
   const [alongLine, setAlongLine] = useState(view.alongLine);
   const [orientation, setOrientation] = useState(view.orientation);
+  const [colors, setColors] = useState<TopologyColors>(() => loadColors());
+  const [selectedDeviceIds, setSelectedDeviceIds] = useState<number[]>([]);
+  const [selectedGroupId, setSelectedGroupId] = useState<number | null>(null);
   // 既定は編集不可。開いた直後にうっかり動かしてしまうのを防ぐ
   const [editable, setEditable] = useState(false);
   // 図の空きをクリックして機器の枠を置く。台帳画面へ往復しないと図が作れないのを避ける
@@ -523,7 +575,7 @@ function TopologyEditor() {
   // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
   // 動かした位置が画面に残ってしまうため、明示的に作り直す合図を持つ
   const [revision, setRevision] = useState(0);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData | GroupFrameData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
@@ -531,7 +583,7 @@ function TopologyEditor() {
   useUnsavedWarning(dirty);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const instance = useRef<ReactFlowInstance<Node<DeviceNodeData>, Edge> | null>(null);
+  const instance = useRef<ReactFlowInstance<Node<DeviceNodeData | GroupFrameData>> | null>(null);
   // ドラッグの過程。保存は基準から動いた機器だけ送る
   const historyRef = useRef<EditHistory | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
@@ -591,7 +643,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
-    const flow = toFlow(graph, simple, { portStyle, alongLine, editable });
+    const flow = toFlow(graph, simple, { portStyle, alongLine, editable, colors });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
@@ -637,7 +689,7 @@ function TopologyEditor() {
     takeServerLayout.current = false;
     let nextNodes = flow.nodes;
     setNodes((current) => {
-      nextNodes = keepLocalPositions(flow.nodes, current, keepLocal);
+      nextNodes = updateGroupBounds(keepLocalPositions(flow.nodes, current, keepLocal));
       return nextNodes;
     });
     if (!keepLocal) {
@@ -656,6 +708,7 @@ function TopologyEditor() {
     portStyle,
     alongLine,
     editable,
+    colors,
     revision,
     setNodes,
     setEdges,
@@ -836,6 +889,60 @@ function TopologyEditor() {
     },
   });
 
+  const encloseGroup = useMutation({
+    mutationFn: () =>
+      api.createTopologyGroup({
+        layer,
+        name:
+          graph?.nodes.find((node) => selectedDeviceIds.includes(node.device_id))?.site_name ??
+          "枠",
+        device_ids: selectedDeviceIds,
+      }),
+    onSuccess: async () => {
+      setNotice("選んだ機器を枠で囲みました");
+      await refresh({ takeLayout: false });
+    },
+    onError: () => setNotice("枠を作れませんでした。機器を選んでから押してください"),
+  });
+
+  const encloseSites = useMutation({
+    mutationFn: () =>
+      api.groupsFromSites(
+        layer,
+        (graph?.nodes ?? []).map((node) => node.device_id),
+      ),
+    onSuccess: async (created) => {
+      setNotice(
+        created.length
+          ? `拠点ごとの枠を ${created.length} 個作りました`
+          : "新しく囲む拠点はありません（既にある枠は触っていません）",
+      );
+      await refresh({ takeLayout: false });
+    },
+  });
+
+  const patchGroup = useMutation({
+    mutationFn: (body: { name?: string; plane?: string; color?: string }) =>
+      api.updateTopologyGroup(selectedGroupId!, body),
+    onSuccess: async () => {
+      await refresh({ takeLayout: false });
+    },
+  });
+
+  const removeGroup = useMutation({
+    mutationFn: () => api.deleteTopologyGroup(selectedGroupId!),
+    onSuccess: async () => {
+      setSelectedGroupId(null);
+      setNotice("枠を外しました（機器は残しています）");
+      await refresh({ takeLayout: false });
+    },
+  });
+
+  const paintColors = (next: TopologyColors) => {
+    setColors(next);
+    saveColors(next);
+  };
+
   const rememberHistory = useCallback((next: EditHistory) => {
     historyRef.current = next;
     setDirty(historyIsDirty(next));
@@ -846,7 +953,7 @@ function TopologyEditor() {
     const history = historyRef.current;
     if (!history) return;
     applyingHistory.current = true;
-    setNodes((current) => applyPositions(current, history.baseline));
+    setNodes((current) => updateGroupBounds(applyPositions(current, history.baseline)));
     applyingHistory.current = false;
     rememberHistory(startHistory(history.baseline));
     setNotice("編集中の配置を破棄しました");
@@ -858,7 +965,7 @@ function TopologyEditor() {
     const next = undoHistory(history);
     if (!next) return;
     applyingHistory.current = true;
-    setNodes((current) => applyPositions(current, currentPositions(next)));
+    setNodes((current) => updateGroupBounds(applyPositions(current, currentPositions(next))));
     applyingHistory.current = false;
     rememberHistory(next);
   }, [rememberHistory, setNodes]);
@@ -869,13 +976,13 @@ function TopologyEditor() {
     const next = redoHistory(history);
     if (!next) return;
     applyingHistory.current = true;
-    setNodes((current) => applyPositions(current, currentPositions(next)));
+    setNodes((current) => updateGroupBounds(applyPositions(current, currentPositions(next))));
     applyingHistory.current = false;
     rememberHistory(next);
   }, [rememberHistory, setNodes]);
 
   const handleNodesChange = useCallback(
-    (changes: NodeChange<Node<DeviceNodeData>>[]) => {
+    (changes: NodeChange<Node<DeviceNodeData | GroupFrameData>>[]) => {
       onNodesChange(changes);
       if (applyingHistory.current) return;
       // ドラッグ中の途中座標は残さない
@@ -889,13 +996,15 @@ function TopologyEditor() {
       if (!settled) return;
       requestAnimationFrame(() => {
         if (applyingHistory.current) return;
-        const current = instance.current?.getNodes() ?? [];
-        if (current.length === 0) return;
-        const history = historyRef.current ?? startHistory(capturePositions(current));
-        rememberHistory(pushStep(history, capturePositions(current)));
+        setNodes((current) => {
+          const next = updateGroupBounds(current);
+          const history = historyRef.current ?? startHistory(capturePositions(next));
+          rememberHistory(pushStep(history, capturePositions(next)));
+          return next;
+        });
       });
     },
-    [onNodesChange, rememberHistory],
+    [onNodesChange, rememberHistory, setNodes],
   );
 
   // 入力欄にいるときはショートカットを奪わない
@@ -1030,7 +1139,14 @@ function TopologyEditor() {
     return keyword ? matched : matched.slice(0, 60);
   }, [vlans, vlanFilter, selectedVlans]);
 
-  /** 実際に使われている種別だけ凡例に出す。使っていない色を並べても読み手が困る。 */
+  const usedTypes = useMemo(() => {
+    const found = new Set<DeviceType>();
+    for (const node of graph?.nodes ?? []) found.add(node.device_type);
+    return (Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).filter((type) => found.has(type));
+  }, [graph]);
+
+  const selectedGroup = graph?.groups?.find((group) => group.id === selectedGroupId);
+
   const usedMedia = useMemo(() => {
     const found = new Set<Media>();
     for (const edge of graph?.edges ?? []) {
@@ -1068,6 +1184,7 @@ function TopologyEditor() {
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
             線を選ぶと、図の左上に削除などの短い操作が出ます（Delete でも消えます）。
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
+            機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
           </>
         ) : (
           <>図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。</>
@@ -1239,6 +1356,20 @@ function TopologyEditor() {
                 )}
               </>
             )}
+            <button
+              onClick={() => encloseGroup.mutate()}
+              disabled={selectedDeviceIds.length < 1 || encloseGroup.isPending}
+              title="選んだ機器を破線の枠で囲みます。キャリア網の段や拠点のまとまりに使います"
+            >
+              枠で囲む
+            </button>
+            <button
+              onClick={() => encloseSites.mutate()}
+              disabled={!graph?.nodes.length || encloseSites.isPending}
+              title="見えている機器を拠点ごとに枠へ入れます。既にある枠は触りません"
+            >
+              拠点ごとに枠
+            </button>
           </>
         )}
         {/* 人が置いた位置を起点に、マス目・揃い・間隔だけ整える。木に組み直すのはリセット */}
@@ -1449,6 +1580,17 @@ function TopologyEditor() {
             edgesReconnectable={editable}
             onEdgeClick={(_, edge) => setSelectedEdge(edge)}
             onPaneClick={onPaneClick}
+            onSelectionChange={({ nodes: picked }) => {
+              const devices = picked.filter((node) => node.type !== "group");
+              const frame = picked.find((node) => node.type === "group");
+              setSelectedDeviceIds(
+                devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
+              );
+              setSelectedGroupId(
+                frame ? ((frame.data as GroupFrameData).groupId ?? null) : null,
+              );
+              if (picked.length > 0) setSelectedEdge(null);
+            }}
             onInit={(flow) => {
               instance.current = flow;
               if (shouldFit.current) {
@@ -1470,6 +1612,61 @@ function TopologyEditor() {
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
+            {selectedGroup && (
+              <Panel position="top-left" className="topo-selection-panel">
+                <div className="topo-selection-panel-body">
+                  <div className="topo-selection-panel-row">
+                    <span className="topo-selection-panel-label">枠 {selectedGroup.name}</span>
+                    <input
+                      type="text"
+                      defaultValue={selectedGroup.name}
+                      key={selectedGroup.id + selectedGroup.name}
+                      onBlur={(event) => {
+                        const name = event.target.value.trim();
+                        if (name && name !== selectedGroup.name) patchGroup.mutate({ name });
+                      }}
+                      title="枠の名前"
+                      style={{ minWidth: 100 }}
+                    />
+                    <select
+                      value={selectedGroup.plane}
+                      onChange={(event) => patchGroup.mutate({ plane: event.target.value })}
+                      title="キャリア網の段"
+                    >
+                      {Object.entries(PLANE_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                    <input
+                      type="color"
+                      value={selectedGroup.color}
+                      onChange={(event) => patchGroup.mutate({ color: event.target.value })}
+                      title="枠の色"
+                    />
+                    {editable && (
+                      <button
+                        className="danger"
+                        onClick={() => removeGroup.mutate()}
+                        disabled={removeGroup.isPending}
+                        title="枠だけ外します。中の機器は残ります"
+                      >
+                        枠を外す
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      className="topo-selection-panel-close"
+                      onClick={() => setSelectedGroupId(null)}
+                      title="選択を解除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                </div>
+              </Panel>
+            )}
             {selectedEdge && selectedEdgeData && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
@@ -1632,13 +1829,57 @@ function TopologyEditor() {
         ))}
 
         {usedMedia.length > 0 && (
-          <span className="topo-legend" title="ポート名の色は種別（速度）を表します">
+          <span className="topo-legend" title="ポート名の色は種別（速度）を表します。色は変えられます">
             ポート種別:{" "}
             {usedMedia.map((media) => (
-              <strong key={media} style={{ color: MEDIA_COLOR[media], marginLeft: 8 }}>
-                {MEDIA_LABEL[media]}
-              </strong>
+              <label key={media} style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="color"
+                  value={colors.media[media]}
+                  onChange={(event) =>
+                    paintColors({
+                      ...colors,
+                      media: { ...colors.media, [media]: event.target.value },
+                    })
+                  }
+                  title={`${MEDIA_LABEL[media]} の線の色`}
+                  style={{ width: 22, height: 18, padding: 0, border: "none" }}
+                />
+                <strong style={{ color: colors.media[media] }}>{MEDIA_LABEL[media]}</strong>
+              </label>
             ))}
+          </span>
+        )}
+        {usedTypes.length > 0 && (
+          <span className="topo-legend" title="機器の枠の色。現場の凡例に合わせられます">
+            機器種別:{" "}
+            {usedTypes.map((type) => (
+              <label key={type} style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+                <input
+                  type="color"
+                  value={colors.types[type] ?? DEFAULT_TYPE_COLOR[type]}
+                  onChange={(event) =>
+                    paintColors({
+                      ...colors,
+                      types: { ...colors.types, [type]: event.target.value },
+                    })
+                  }
+                  title={`${DEVICE_TYPE_LABEL[type]} の枠の色`}
+                  style={{ width: 22, height: 18, padding: 0, border: "none" }}
+                />
+                <strong style={{ color: colors.types[type] ?? DEFAULT_TYPE_COLOR[type] }}>
+                  {DEVICE_TYPE_LABEL[type]}
+                </strong>
+              </label>
+            ))}
+            <button
+              type="button"
+              onClick={() => paintColors(defaultColors())}
+              title="種別と線の色を最初の値に戻します"
+              style={{ marginLeft: 8 }}
+            >
+              色を戻す
+            </button>
           </span>
         )}
       </div>

@@ -20,6 +20,8 @@ from app.models.topology import (
     Interface,
     Link,
     LinkOrigin,
+    TopologyGroup,
+    TopologyGroupMember,
     TopologyNode,
 )
 from app.models.tunnel import DeviceTunnel
@@ -39,6 +41,8 @@ __all__ = [
     "Link",
     "LinkOrigin",
     "TopologyNode",
+    "TopologyGroup",
+    "TopologyGroupMember",
     "ChangeLog",
     "ChangeSource",
     "Device",

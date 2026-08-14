@@ -229,6 +229,16 @@ export interface TopologyNode {
   outside: boolean;
   /** 同じ拠点にいて、代表1台にまとめた分の台数 */
   hidden_peers: number;
+  /** キャリア網の段。backbone / metro / access */
+  plane?: "backbone" | "metro" | "access";
+}
+
+export interface TopologyGroup {
+  id: number;
+  name: string;
+  plane: "backbone" | "metro" | "access" | "custom";
+  color: string;
+  device_ids: number[];
 }
 
 export interface TopologyVlan {
@@ -303,6 +313,7 @@ export interface TopologyGraph {
   nodes: TopologyNode[];
   edges: TopologyEdge[];
   unplaced_count: number;
+  groups?: TopologyGroup[];
 }
 
 export interface TopologyStats {

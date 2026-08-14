@@ -9,12 +9,15 @@ from app.db import get_db
 from app.models import Device, Vlan
 from app.models.topology import Link, LinkOrigin
 from app.schemas.topology import (
+    GroupCreate,
+    GroupUpdate,
     LinkCreate,
     LinkRead,
     LinkUpdate,
     RebuildResult,
     SavePositions,
     TopologyGraphRead,
+    TopologyGroupRead,
     TopologyStatsRead,
     VlanCatalogCreate,
     VlanCatalogRead,
@@ -73,6 +76,7 @@ def get_topology(
     if layer == "logical":
         # 論理は get_graph 側で対向（only）まで残してある。
         # site_id で再度切ると本社ビューが空になるので、ここでは触らない。
+        graph = service.attach_groups(db, graph)
         return TopologyGraphRead.model_validate(graph, from_attributes=True)
     graph = service.scope_graph(
         graph,
@@ -83,7 +87,60 @@ def get_topology(
         # 上下は網全体で見る。絞ったあとのグラフで求めると順番が狂う
         rank=service.network_rank(db) if only is not None else None,
     )
+    graph = service.attach_groups(db, graph)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
+
+
+@router.post("/groups", response_model=TopologyGroupRead)
+def create_group(body: GroupCreate, db: DbSession) -> TopologyGroupRead:
+    """選んだ機器を枠で囲む。"""
+    try:
+        group = service.create_group(
+            db,
+            body.layer,
+            body.name,
+            body.device_ids,
+            plane=body.plane,
+            color=body.color,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
+    return TopologyGroupRead.model_validate(group, from_attributes=True)
+
+
+@router.post("/groups/from-sites", response_model=list[TopologyGroupRead])
+def groups_from_sites(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    device_ids: str = Query(default="", description="カンマ区切りの機器ID"),
+) -> list[TopologyGroupRead]:
+    """見えている機器を拠点ごとの枠にする。キャリア網を拠点単位で読むとき。"""
+    ids = [int(part) for part in device_ids.split(",") if part.strip().isdigit()]
+    return [
+        TopologyGroupRead.model_validate(item, from_attributes=True)
+        for item in service.groups_from_sites(db, layer, ids)
+    ]
+
+
+@router.patch("/groups/{group_id}", response_model=TopologyGroupRead)
+def update_group(group_id: int, body: GroupUpdate, db: DbSession) -> TopologyGroupRead:
+    group = service.update_group(
+        db,
+        group_id,
+        name=body.name,
+        plane=body.plane,
+        color=body.color,
+        device_ids=body.device_ids,
+    )
+    if group is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "枠が見つかりません")
+    return TopologyGroupRead.model_validate(group, from_attributes=True)
+
+
+@router.delete("/groups/{group_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_group(group_id: int, db: DbSession) -> None:
+    if not service.delete_group(db, group_id):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "枠が見つかりません")
 
 
 @router.get("/tunnels")

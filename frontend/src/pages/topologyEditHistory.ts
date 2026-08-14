@@ -23,6 +23,8 @@ export function capturePositions(
 ): PositionMap {
   const out: PositionMap = {};
   for (const node of nodes) {
+    // 囲み枠の位置は機器から計算するので、過程には載せない
+    if (node.id.startsWith("g-")) continue;
     out[node.id] = { x: node.position.x, y: node.position.y };
   }
   return out;

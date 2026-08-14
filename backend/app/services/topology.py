@@ -29,7 +29,14 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
-from app.models.topology import Interface, Link, LinkOrigin, TopologyNode
+from app.models.topology import (
+    Interface,
+    Link,
+    LinkOrigin,
+    TopologyGroup,
+    TopologyGroupMember,
+    TopologyNode,
+)
 from app.services.configparse import expand, normalize, vlanlist
 from app.services.lifecycle import Severity, evaluate
 
@@ -86,6 +93,8 @@ class TopologyNodeView:
     outside: bool = False
     # 同じ拠点にいて、代表1台にまとめた分の台数
     hidden_peers: int = 0
+    # キャリア網の段。backbone=コア網 / metro=メトロ / access=アクセス
+    plane: str = "access"
 
 
 @dataclass
@@ -112,11 +121,21 @@ class TopologyEdgeView:
 
 
 @dataclass
+class TopologyGroupView:
+    id: int
+    name: str
+    plane: str
+    color: str
+    device_ids: list[int]
+
+
+@dataclass
 class TopologyGraph:
     layer: str
     nodes: list[TopologyNodeView] = field(default_factory=list)
     edges: list[TopologyEdgeView] = field(default_factory=list)
     unplaced_count: int = 0
+    groups: list[TopologyGroupView] = field(default_factory=list)
 
 
 def matching_device_ids(
@@ -209,6 +228,8 @@ def get_graph(
                     graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation
                 )
                 graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
+        if graph.nodes:
+            apply_planes(graph.nodes, hierarchy_rank(graph))
         return graph
 
     device_query = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
@@ -291,6 +312,7 @@ def get_graph(
     # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
     if graph.nodes:
         _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
+        apply_planes(graph.nodes, hierarchy_rank(graph))
         graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
 
@@ -314,6 +336,7 @@ def _shrink_to(graph: TopologyGraph, edges: list[TopologyEdgeView]) -> TopologyG
         nodes=nodes,
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
+        groups=graph.groups,
     )
 
 
@@ -468,6 +491,8 @@ def scope_graph(
         node.outside = node.device_id not in inside
         node.hidden_peers = hidden.get(node.device_id, 0)
 
+    used_rank = rank if rank is not None else hierarchy_rank(graph)
+    apply_planes(nodes, used_rank)
     return TopologyGraph(
         layer=graph.layer,
         nodes=nodes,
@@ -479,6 +504,7 @@ def scope_graph(
             if e.source in keep and e.target in keep and (e.source in inside or e.target in inside)
         ],
         unplaced_count=graph.unplaced_count,
+        groups=graph.groups,
     )
 
 
@@ -560,6 +586,188 @@ def _rank_from_adjacency(adjacency: dict[int, set[int]]) -> dict[int, int]:
             ranks[device_id] = distance.get(device_id, 0)
             remaining.discard(device_id)
     return ranks
+
+
+PLANE_BACKBONE = "backbone"
+PLANE_METRO = "metro"
+PLANE_ACCESS = "access"
+PLANE_COLORS = {
+    PLANE_BACKBONE: "#2f4d6a",
+    PLANE_METRO: "#4a7a58",
+    PLANE_ACCESS: "#8a6a3a",
+    "custom": "#5a7a9a",
+}
+
+
+def plane_of(rank: int, deepest: int) -> str:
+    """ホップからキャリア網の段を決める。
+
+    コア網は中心、アクセスは端。中間はメトロ（集約）。
+    1段しか無い網は全部コアにしない。端の営業所までコアに見える。
+    """
+    if deepest <= 0:
+        return PLANE_ACCESS
+    if deepest == 1:
+        return PLANE_BACKBONE if rank <= 0 else PLANE_ACCESS
+    ratio = rank / deepest
+    if ratio <= 0.34:
+        return PLANE_BACKBONE
+    if ratio <= 0.67:
+        return PLANE_METRO
+    return PLANE_ACCESS
+
+
+def apply_planes(nodes: list[TopologyNodeView], rank: dict[int, int]) -> None:
+    """見える機器に、コア／メトロ／アクセスの段を付ける。"""
+    if not nodes:
+        return
+    deepest = max((rank.get(node.device_id, 0) for node in nodes), default=0)
+    for node in nodes:
+        node.plane = plane_of(rank.get(node.device_id, deepest), deepest)
+
+
+def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
+    """今見えている機器が属する枠だけを図に載せる。"""
+    visible = {node.device_id for node in graph.nodes}
+    rows = list(
+        db.scalars(
+            select(TopologyGroup)
+            .options(selectinload(TopologyGroup.members))
+            .where(TopologyGroup.layer == graph.layer)
+        )
+    )
+    groups: list[TopologyGroupView] = []
+    for row in rows:
+        ids = [member.device_id for member in row.members if member.device_id in visible]
+        if not ids:
+            continue
+        groups.append(
+            TopologyGroupView(
+                id=row.id,
+                name=row.name,
+                plane=row.plane,
+                color=row.color,
+                device_ids=ids,
+            )
+        )
+    graph.groups = groups
+    return graph
+
+
+def create_group(
+    db: Session,
+    layer: str,
+    name: str,
+    device_ids: list[int],
+    *,
+    plane: str = "custom",
+    color: str | None = None,
+) -> TopologyGroupView:
+    """選んだ機器を枠で囲む。"""
+    wanted = list(dict.fromkeys(device_ids))
+    if len(wanted) < 1:
+        raise ValueError("枠に入れる機器が無い")
+    hue = color or PLANE_COLORS.get(plane, PLANE_COLORS["custom"])
+    row = TopologyGroup(layer=layer, name=name.strip() or "枠", plane=plane, color=hue)
+    db.add(row)
+    db.flush()
+    for device_id in wanted:
+        db.add(TopologyGroupMember(group_id=row.id, device_id=device_id))
+    db.commit()
+    db.refresh(row)
+    return TopologyGroupView(
+        id=row.id,
+        name=row.name,
+        plane=row.plane,
+        color=row.color,
+        device_ids=wanted,
+    )
+
+
+def update_group(
+    db: Session,
+    group_id: int,
+    *,
+    name: str | None = None,
+    plane: str | None = None,
+    color: str | None = None,
+    device_ids: list[int] | None = None,
+) -> TopologyGroupView | None:
+    row = db.get(TopologyGroup, group_id)
+    if row is None:
+        return None
+    if name is not None:
+        row.name = name.strip() or row.name
+    if plane is not None:
+        row.plane = plane
+        if color is None:
+            row.color = PLANE_COLORS.get(plane, row.color)
+    if color is not None:
+        row.color = color
+    if device_ids is not None:
+        wanted = list(dict.fromkeys(device_ids))
+        row.members.clear()
+        db.flush()
+        for device_id in wanted:
+            db.add(TopologyGroupMember(group_id=row.id, device_id=device_id))
+    db.commit()
+    db.refresh(row)
+    return TopologyGroupView(
+        id=row.id,
+        name=row.name,
+        plane=row.plane,
+        color=row.color,
+        device_ids=[member.device_id for member in row.members],
+    )
+
+
+def delete_group(db: Session, group_id: int) -> bool:
+    row = db.get(TopologyGroup, group_id)
+    if row is None:
+        return False
+    db.delete(row)
+    db.commit()
+    return True
+
+
+def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[TopologyGroupView]:
+    """見えている機器を拠点ごとに枠へ入れる。既にある枠は触らない。"""
+    if not device_ids:
+        return []
+    devices = list(
+        db.scalars(select(Device).where(Device.id.in_(device_ids)).options(selectinload(Device.site)))
+    )
+    taken: set[int] = set()
+    existing = list(
+        db.scalars(
+            select(TopologyGroup)
+            .options(selectinload(TopologyGroup.members))
+            .where(TopologyGroup.layer == layer)
+        )
+    )
+    for row in existing:
+        taken.update(member.device_id for member in row.members)
+    by_site: dict[int | None, list[Device]] = {}
+    for device in devices:
+        if device.id in taken:
+            continue
+        by_site.setdefault(device.site_id, []).append(device)
+    created: list[TopologyGroupView] = []
+    for _site_id, members in by_site.items():
+        if len(members) < 1:
+            continue
+        name = members[0].site.name if members[0].site else "拠点未登録"
+        created.append(
+            create_group(
+                db,
+                layer,
+                name,
+                [device.id for device in members],
+                plane="custom",
+                color=PLANE_COLORS["custom"],
+            )
+        )
+    return created
 
 
 def _align_redundant_pairs(
