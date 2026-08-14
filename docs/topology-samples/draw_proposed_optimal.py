@@ -1,171 +1,115 @@
-"""関西支社の物理構成図を、手置きの座標で SVG にする。
+"""良い図の見た目を、手置きの座標で SVG にする。
 
-NetVision は使わない。箱の位置と通り道は、現場の紙面と同じ決め方。
+関西6営業所のレシピの再掲ではない。紙の資料として読める線の引き方の見本。
+NetVision は使わない。製品の自動配置でもない。
 """
 
 from pathlib import Path
 
 OUT = Path(__file__).with_name("proposed-optimal.svg")
-
-W, H = 188, 50
 FONT = "'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Yu Gothic', sans-serif"
 
 
-def box(x: float, y: float, title: str, sub: str) -> str:
-    mid = x + W / 2
-    sub_line = (
-        f'<text x="{mid:.0f}" y="{y + 38:.0f}" text-anchor="middle" font-size="10" '
-        f'fill="#5a5a5a">{sub}</text>'
-        if sub
-        else ""
-    )
-    title_y = y + (22 if sub else 32)
-    return (
-        f'<g>\n'
-        f'  <rect x="{x:.0f}" y="{y:.0f}" width="{W:.0f}" height="{H:.0f}" '
-        f'rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>\n'
-        f'  <text x="{mid:.0f}" y="{title_y:.0f}" text-anchor="middle" font-size="13" '
-        f'font-weight="700" fill="#1a1a1a">{title}</text>\n'
-        f"  {sub_line}\n"
-        f"</g>"
-    )
+def main() -> None:
+    svg = f"""\
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" width="1120" height="640">
+  <style>
+    text {{ font-family: {FONT}; fill: #2c2a26; }}
+    .title {{ font-size: 18px; font-weight: 700; }}
+    .sub {{ font-size: 11px; fill: #6a655c; }}
+    .box {{ fill: #f6f1e8; stroke: #2c2a26; stroke-width: 1.7; }}
+    .core {{ fill: #e7eef6; }}
+    .fw {{ fill: #f3e6e2; }}
+    .wan {{ fill: #eeeae3; }}
+    .office {{ fill: #eef3ea; }}
+    .name {{ font-size: 13px; font-weight: 600; }}
+    .host {{ font-size: 10px; fill: #5c574e; }}
+    .port {{ font-size: 9px; fill: #3d6b8c; }}
+    .wire {{ fill: none; stroke: #3a5a40; stroke-width: 1.7; }}
+    .uplink {{ stroke: #2f4d6a; }}
+    .layer {{ font-size: 10px; fill: #8a8478; letter-spacing: 0.08em; }}
+    .legend {{ font-size: 11px; fill: #5c574e; }}
+  </style>
+
+  <rect x="0" y="0" width="1120" height="640" fill="#fbfaf7"/>
+  <text class="title" x="40" y="36">良い図（紙の資料として読める構成図）</text>
+  <text class="sub" x="40" y="56">物理ケーブルのみ。論理は別紙。手置き。製品の出力ではない。</text>
+
+  <text class="layer" x="40" y="96">WAN / 境界</text>
+  <rect class="box wan" x="468" y="72" width="184" height="40" rx="4"/>
+  <text class="name" x="560" y="90" text-anchor="middle">インターネット</text>
+  <text class="host" x="560" y="104" text-anchor="middle">回線</text>
+
+  <rect class="box fw" x="476" y="132" width="168" height="50" rx="4"/>
+  <text class="name" x="560" y="152" text-anchor="middle">本社 FW</text>
+  <text class="host" x="560" y="168" text-anchor="middle">hq-fw-01</text>
+
+  <text class="layer" x="40" y="214">コア（冗長は同じ段）</text>
+  <rect class="box core" x="360" y="208" width="156" height="54" rx="4"/>
+  <text class="name" x="438" y="230" text-anchor="middle">本社コア A</text>
+  <text class="host" x="438" y="246" text-anchor="middle">hq-core-rt-01</text>
+  <rect class="box core" x="604" y="208" width="156" height="54" rx="4"/>
+  <text class="name" x="682" y="230" text-anchor="middle">本社コア B</text>
+  <text class="host" x="682" y="246" text-anchor="middle">hq-core-rt-02</text>
+
+  <text class="layer" x="40" y="348">自拠点（見る対象）</text>
+  <rect class="box" x="476" y="328" width="168" height="54" rx="4"/>
+  <text class="name" x="560" y="350" text-anchor="middle">関西支社 RT</text>
+  <text class="host" x="560" y="366" text-anchor="middle">ksi-br-rt-01</text>
+  <rect class="box" x="476" y="434" width="168" height="54" rx="4"/>
+  <text class="name" x="560" y="456" text-anchor="middle">関西支社 SW</text>
+  <text class="host" x="560" y="472" text-anchor="middle">ksi-br-sw-01</text>
+
+  <text class="layer" x="860" y="268">配下拠点（右の列）</text>
+  <rect class="box office" x="860" y="280" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="300" text-anchor="middle">京都営業所 RT</text>
+  <text class="host" x="948" y="316" text-anchor="middle">kyo-rt-01</text>
+  <rect class="box office" x="860" y="368" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="388" text-anchor="middle">奈良営業所 RT</text>
+  <text class="host" x="948" y="404" text-anchor="middle">nara-rt-01</text>
+  <rect class="box office" x="860" y="456" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="476" text-anchor="middle">神戸営業所 RT</text>
+  <text class="host" x="948" y="492" text-anchor="middle">kobe-rt-01</text>
+
+  <path class="wire uplink" d="M560,112 L560,132"/>
+  <path class="wire uplink" d="M560,182 L560,196 L438,196 L438,208"/>
+  <path class="wire uplink" d="M560,182 L560,196 L682,196 L682,208"/>
+  <path class="wire uplink" d="M516,235 L604,235"/>
+  <path class="wire uplink" d="M438,262 L438,300 L560,300 L560,328"/>
+  <path class="wire uplink" d="M682,262 L682,300 L560,300 L560,328"/>
+  <path class="wire" d="M560,382 L560,434"/>
+  <path class="wire" d="M644,348 L790,348 L790,304 L860,304"/>
+  <path class="wire" d="M644,355 L776,355 L776,392 L860,392"/>
+  <path class="wire" d="M644,362 L762,362 L762,480 L860,480"/>
+
+  <text class="port" x="548" y="126" text-anchor="end">Gi0/0</text>
+  <text class="port" x="548" y="194" text-anchor="end">Gi0/1</text>
+  <text class="port" x="450" y="202">Te1/0/1</text>
+  <text class="port" x="690" y="202">Te1/0/1</text>
+  <text class="port" x="520" y="228">Gi0/0</text>
+  <text class="port" x="578" y="228">Gi0/0</text>
+  <text class="port" x="450" y="276">Gi0/1</text>
+  <text class="port" x="690" y="276">Gi0/1</text>
+  <text class="port" x="572" y="322">Gi0/0</text>
+  <text class="port" x="572" y="396">Gi0/2</text>
+  <text class="port" x="572" y="430">Gi1/0/1</text>
+  <text class="port" x="650" y="342">Gi0/1/1</text>
+  <text class="port" x="650" y="368">Gi0/1/2</text>
+  <text class="port" x="650" y="394">Gi0/1/3</text>
+  <text class="port" x="854" y="300" text-anchor="end">Gi0/0</text>
+  <text class="port" x="854" y="388" text-anchor="end">Gi0/0</text>
+  <text class="port" x="854" y="476" text-anchor="end">Gi0/0</text>
+
+  <rect x="40" y="530" width="520" height="86" rx="6" fill="#fff" stroke="#d9d3c8"/>
+  <text class="legend" x="56" y="554">この図が守っていること（並べ方の百科ではない）</text>
+  <text class="legend" x="56" y="574">1. 段で上下が読める。冗長は横並び（縦に積むと片系に見える）</text>
+  <text class="legend" x="56" y="592">2. 配下は右の列。下に置くと上り回線を横切る</text>
+  <text class="legend" x="56" y="610">3. 線は直角。束は等間隔。ポート名は、その箱の折れ曲がり</text>
+</svg>
+"""
+    OUT.write_text(svg, encoding="utf-8")
+    print(OUT)
 
 
-def frame(x: float, y: float, w: float, h: float, name: str) -> str:
-    return (
-        f'<rect x="{x:.0f}" y="{y:.0f}" width="{w:.0f}" height="{h:.0f}" rx="2" '
-        f'fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>\n'
-        f'<text x="{x + 8:.0f}" y="{y + 16:.0f}" font-size="11" fill="#5a6570">{name}</text>'
-    )
-
-
-def wire(points: list[tuple[float, float]]) -> str:
-    pts = " ".join(f"{x:.0f},{y:.0f}" for x, y in points)
-    return f'<polyline points="{pts}" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>'
-
-
-def port(x: float, y: float, text: str, anchor: str = "start") -> str:
-    return (
-        f'<text x="{x:.1f}" y="{y:.1f}" font-size="10" fill="#1e4f8a" text-anchor="{anchor}" '
-        f'paint-order="stroke" stroke="#f7f4ee" stroke-width="3">{text}</text>'
-    )
-
-
-# --- 座標。上段が上位。冗長は同じ高さ。配下は右の列。 ---
-core_a = (48.0, 88.0)
-core_b = (276.0, 88.0)
-br_rt = (162.0, 252.0)
-br_sw = (162.0, 348.0)
-
-offices = [
-    ("shiga-rt-01", "shiga-sw-01", "滋賀県営業所"),
-    ("kyoto-rt-01", "kyoto-sw-01", "京都府営業所"),
-    ("osaka-rt-01", "osaka-sw-01", "大阪府営業所"),
-    ("hyogo-rt-01", "hyogo-sw-01", "兵庫県営業所"),
-    ("nara-rt-01", "nara-sw-01", "奈良県営業所"),
-    ("wakayama-rt-01", "wakayama-sw-01", "和歌山県営業所"),
-]
-office_x = 560.0
-office_sw_x = office_x + W + 18
-office_ys = [252.0 + i * 88.0 for i in range(6)]
-
-parts: list[str] = []
-width, height = 1000, 860
-parts.append(
-    f'<svg xmlns="http://www.w3.org/2000/svg" width="{width}" height="{height}" '
-    f'viewBox="0 0 {width} {height}" font-family="{FONT}">'
-)
-parts.append('<rect width="100%" height="100%" fill="#f7f4ee"/>')
-parts.append(
-    '<text x="40" y="36" font-size="18" font-weight="700" fill="#1a1a1a">'
-    "関西支社 物理構成図</text>"
-)
-parts.append(
-    '<text x="960" y="34" font-size="11" fill="#6b6b6b" text-anchor="end">'
-    "物理ケーブルのみ · 論理は別紙</text>"
-)
-
-# 枠
-parts.append(frame(24, 56, 464, 98, "西日本センター"))
-parts.append(frame(138, 224, 236, 190, "関西支社"))
-for i, (_, _, site) in enumerate(offices):
-    y = office_ys[i]
-    parts.append(frame(546, y - 24, 430, 86, site))
-
-# 線（箱より先に描く）
-ca_x, ca_y = core_a
-cb_x, cb_y = core_b
-rt_x, rt_y = br_rt
-sw_x, sw_y = br_sw
-# センター間
-parts.append(wire([(ca_x + W, ca_y + 16), (cb_x, ca_y + 16)]))
-parts.append(wire([(ca_x + W, ca_y + 34), (cb_x, ca_y + 34)]))
-parts.append(port(ca_x + W + 4, ca_y + 12, "Te0/0/0"))
-parts.append(port(cb_x - 4, ca_y + 12, "Te0/0/0", "end"))
-parts.append(port(ca_x + W + 4, ca_y + 46, "Te0/0/1"))
-parts.append(port(cb_x - 4, ca_y + 46, "Te0/0/1", "end"))
-
-# 支社→センター（2本。同じ高さの対へ、縦横、等間隔）
-rt_top_l = rt_x + 48
-rt_top_r = rt_x + 140
-ca_bot = (ca_x + W / 2, ca_y + H)
-cb_bot = (cb_x + W / 2, cb_y + H)
-parts.append(wire([(ca_bot[0], ca_bot[1]), (ca_bot[0], 176), (rt_top_l, 176), (rt_top_l, rt_y)]))
-parts.append(wire([(cb_bot[0], cb_bot[1]), (cb_bot[0], 208), (rt_top_r, 208), (rt_top_r, rt_y)]))
-parts.append(port(ca_bot[0] + 6, ca_bot[1] + 12, "ge-0/0/5"))
-parts.append(port(cb_bot[0] + 6, cb_bot[1] + 12, "ge-0/0/5"))
-parts.append(port(rt_top_l + 6, rt_y - 6, "Gi0/0/0"))
-parts.append(port(rt_top_r + 6, rt_y - 6, "Gi0/0/1"))
-
-# 支社 RT→SW
-parts.append(wire([(rt_x + W / 2, rt_y + H), (sw_x + W / 2, sw_y)]))
-parts.append(port(rt_x + W / 2 + 6, rt_y + H + 12, "Gi0/0/1"))
-parts.append(port(sw_x + W / 2 + 6, sw_y - 4, "Gi1/0/1"))
-
-# 営業所。右へ出して縦の通り道、高さで抜く。斜めは出さない
-bus0 = 418.0
-for i, (rt_name, sw_name, _site) in enumerate(offices):
-    oy = office_ys[i]
-    bus_x = bus0 + i * 14
-    leave_y = rt_y + 10 + i * 6
-    enter_y = oy + H / 2
-    parts.append(
-        wire(
-            [
-                (rt_x + W, leave_y),
-                (bus_x, leave_y),
-                (bus_x, enter_y),
-                (office_x, enter_y),
-            ]
-        )
-    )
-    parts.append(port(rt_x + W + 4, leave_y - 3, f"Gi0/1/{i + 1}"))
-    parts.append(port(office_x - 4, enter_y - 3, "GE0/0", "end"))
-    # 営業所内 RT→SW
-    parts.append(wire([(office_x + W, oy + H / 2), (office_sw_x, oy + H / 2)]))
-    parts.append(port(office_x + W + 4, oy + H / 2 - 3, "GE0/1"))
-    parts.append(port(office_sw_x - 4, oy + H / 2 - 3, "Gi1/0/25", "end"))
-
-# 機器
-parts.append(box(*core_a, "west-core-rt-01", "MX304"))
-parts.append(box(*core_b, "west-core-rt-02", "MX304"))
-parts.append(box(*br_rt, "ksi-br-rt-01", "ISR4451-X"))
-parts.append(box(*br_sw, "ksi-br-sw-01", "C9300-48P"))
-for i, (rt_name, sw_name, _site) in enumerate(offices):
-    y = office_ys[i]
-    parts.append(box(office_x, y, rt_name, "IX2215"))
-    parts.append(box(office_sw_x, y, sw_name, "QX-S5528P"))
-
-parts.append(
-    '<text x="40" y="828" font-size="11" fill="#4a4a4a">'
-    "上段が上位。冗長は同じ高さに横並び。"
-    "配下拠点は右の列（下に置くと上り回線を横切る）。"
-    "線は箱の辺から縦横。ポート名はその機器の外。</text>"
-)
-parts.append(
-    '<text x="40" y="846" font-size="11" fill="#4a4a4a">'
-    "手置き。製品の自動配置ではない。</text>"
-)
-parts.append("</svg>")
-OUT.write_text("\n".join(parts) + "\n", encoding="utf-8")
-print(OUT)
+if __name__ == "__main__":
+    main()

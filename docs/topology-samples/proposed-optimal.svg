@@ -1,154 +1,94 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="860" viewBox="0 0 1000 860" font-family="'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Yu Gothic', sans-serif">
-<rect width="100%" height="100%" fill="#f7f4ee"/>
-<text x="40" y="36" font-size="18" font-weight="700" fill="#1a1a1a">関西支社 物理構成図</text>
-<text x="960" y="34" font-size="11" fill="#6b6b6b" text-anchor="end">物理ケーブルのみ · 論理は別紙</text>
-<rect x="24" y="56" width="464" height="98" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="32" y="72" font-size="11" fill="#5a6570">西日本センター</text>
-<rect x="138" y="224" width="236" height="190" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="146" y="240" font-size="11" fill="#5a6570">関西支社</text>
-<rect x="546" y="228" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="244" font-size="11" fill="#5a6570">滋賀県営業所</text>
-<rect x="546" y="316" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="332" font-size="11" fill="#5a6570">京都府営業所</text>
-<rect x="546" y="404" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="420" font-size="11" fill="#5a6570">大阪府営業所</text>
-<rect x="546" y="492" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="508" font-size="11" fill="#5a6570">兵庫県営業所</text>
-<rect x="546" y="580" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="596" font-size="11" fill="#5a6570">奈良県営業所</text>
-<rect x="546" y="668" width="430" height="86" rx="2" fill="none" stroke="#7a8699" stroke-width="1.2" stroke-dasharray="5 3"/>
-<text x="554" y="684" font-size="11" fill="#5a6570">和歌山県営業所</text>
-<polyline points="236,104 276,104" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<polyline points="236,122 276,122" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="240.0" y="100.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Te0/0/0</text>
-<text x="272.0" y="100.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Te0/0/0</text>
-<text x="240.0" y="134.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Te0/0/1</text>
-<text x="272.0" y="134.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Te0/0/1</text>
-<polyline points="142,138 142,176 210,176 210,252" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<polyline points="370,138 370,208 302,208 302,252" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="148.0" y="150.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">ge-0/0/5</text>
-<text x="376.0" y="150.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">ge-0/0/5</text>
-<text x="216.0" y="246.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/0/0</text>
-<text x="308.0" y="246.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/0/1</text>
-<polyline points="256,302 256,348" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="262.0" y="314.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/0/1</text>
-<text x="262.0" y="344.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/1</text>
-<polyline points="350,262 418,262 418,277 560,277" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="259.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/1</text>
-<text x="556.0" y="274.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,277 766,277" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="274.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="274.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<polyline points="350,268 432,268 432,365 560,365" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="265.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/2</text>
-<text x="556.0" y="362.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,365 766,365" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="362.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="362.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<polyline points="350,274 446,274 446,453 560,453" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="271.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/3</text>
-<text x="556.0" y="450.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,453 766,453" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="450.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="450.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<polyline points="350,280 460,280 460,541 560,541" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="277.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/4</text>
-<text x="556.0" y="538.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,541 766,541" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="538.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="538.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<polyline points="350,286 474,286 474,629 560,629" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="283.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/5</text>
-<text x="556.0" y="626.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,629 766,629" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="626.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="626.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<polyline points="350,292 488,292 488,717 560,717" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="354.0" y="289.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi0/1/6</text>
-<text x="556.0" y="714.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/0</text>
-<polyline points="748,717 766,717" fill="none" stroke="#2a2a2a" stroke-width="1.5"/>
-<text x="752.0" y="714.0" font-size="10" fill="#1e4f8a" text-anchor="start" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">GE0/1</text>
-<text x="762.0" y="714.0" font-size="10" fill="#1e4f8a" text-anchor="end" paint-order="stroke" stroke="#f7f4ee" stroke-width="3">Gi1/0/25</text>
-<g>
-  <rect x="48" y="88" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="142" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">west-core-rt-01</text>
-  <text x="142" y="126" text-anchor="middle" font-size="10" fill="#5a5a5a">MX304</text>
-</g>
-<g>
-  <rect x="276" y="88" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="370" y="110" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">west-core-rt-02</text>
-  <text x="370" y="126" text-anchor="middle" font-size="10" fill="#5a5a5a">MX304</text>
-</g>
-<g>
-  <rect x="162" y="252" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="256" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">ksi-br-rt-01</text>
-  <text x="256" y="290" text-anchor="middle" font-size="10" fill="#5a5a5a">ISR4451-X</text>
-</g>
-<g>
-  <rect x="162" y="348" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="256" y="370" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">ksi-br-sw-01</text>
-  <text x="256" y="386" text-anchor="middle" font-size="10" fill="#5a5a5a">C9300-48P</text>
-</g>
-<g>
-  <rect x="560" y="252" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">shiga-rt-01</text>
-  <text x="654" y="290" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="252" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="274" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">shiga-sw-01</text>
-  <text x="860" y="290" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<g>
-  <rect x="560" y="340" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="362" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">kyoto-rt-01</text>
-  <text x="654" y="378" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="340" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="362" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">kyoto-sw-01</text>
-  <text x="860" y="378" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<g>
-  <rect x="560" y="428" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="450" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">osaka-rt-01</text>
-  <text x="654" y="466" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="428" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="450" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">osaka-sw-01</text>
-  <text x="860" y="466" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<g>
-  <rect x="560" y="516" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="538" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">hyogo-rt-01</text>
-  <text x="654" y="554" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="516" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="538" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">hyogo-sw-01</text>
-  <text x="860" y="554" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<g>
-  <rect x="560" y="604" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="626" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">nara-rt-01</text>
-  <text x="654" y="642" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="604" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="626" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">nara-sw-01</text>
-  <text x="860" y="642" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<g>
-  <rect x="560" y="692" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="654" y="714" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">wakayama-rt-01</text>
-  <text x="654" y="730" text-anchor="middle" font-size="10" fill="#5a5a5a">IX2215</text>
-</g>
-<g>
-  <rect x="766" y="692" width="188" height="50" rx="2" fill="#ffffff" stroke="#2a2a2a" stroke-width="1.5"/>
-  <text x="860" y="714" text-anchor="middle" font-size="13" font-weight="700" fill="#1a1a1a">wakayama-sw-01</text>
-  <text x="860" y="730" text-anchor="middle" font-size="10" fill="#5a5a5a">QX-S5528P</text>
-</g>
-<text x="40" y="828" font-size="11" fill="#4a4a4a">上段が上位。冗長は同じ高さに横並び。配下拠点は右の列（下に置くと上り回線を横切る）。線は箱の辺から縦横。ポート名はその機器の外。</text>
-<text x="40" y="846" font-size="11" fill="#4a4a4a">手置き。製品の自動配置ではない。</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 640" width="1120" height="640">
+  <style>
+    text { font-family: 'WenQuanYi Micro Hei', 'Droid Sans Fallback', 'Yu Gothic', sans-serif; fill: #2c2a26; }
+    .title { font-size: 18px; font-weight: 700; }
+    .sub { font-size: 11px; fill: #6a655c; }
+    .box { fill: #f6f1e8; stroke: #2c2a26; stroke-width: 1.7; }
+    .core { fill: #e7eef6; }
+    .fw { fill: #f3e6e2; }
+    .wan { fill: #eeeae3; }
+    .office { fill: #eef3ea; }
+    .name { font-size: 13px; font-weight: 600; }
+    .host { font-size: 10px; fill: #5c574e; }
+    .port { font-size: 9px; fill: #3d6b8c; }
+    .wire { fill: none; stroke: #3a5a40; stroke-width: 1.7; }
+    .uplink { stroke: #2f4d6a; }
+    .layer { font-size: 10px; fill: #8a8478; letter-spacing: 0.08em; }
+    .legend { font-size: 11px; fill: #5c574e; }
+  </style>
+
+  <rect x="0" y="0" width="1120" height="640" fill="#fbfaf7"/>
+  <text class="title" x="40" y="36">良い図（紙の資料として読める構成図）</text>
+  <text class="sub" x="40" y="56">物理ケーブルのみ。論理は別紙。手置き。製品の出力ではない。</text>
+
+  <text class="layer" x="40" y="96">WAN / 境界</text>
+  <rect class="box wan" x="468" y="72" width="184" height="40" rx="4"/>
+  <text class="name" x="560" y="90" text-anchor="middle">インターネット</text>
+  <text class="host" x="560" y="104" text-anchor="middle">回線</text>
+
+  <rect class="box fw" x="476" y="132" width="168" height="50" rx="4"/>
+  <text class="name" x="560" y="152" text-anchor="middle">本社 FW</text>
+  <text class="host" x="560" y="168" text-anchor="middle">hq-fw-01</text>
+
+  <text class="layer" x="40" y="214">コア（冗長は同じ段）</text>
+  <rect class="box core" x="360" y="208" width="156" height="54" rx="4"/>
+  <text class="name" x="438" y="230" text-anchor="middle">本社コア A</text>
+  <text class="host" x="438" y="246" text-anchor="middle">hq-core-rt-01</text>
+  <rect class="box core" x="604" y="208" width="156" height="54" rx="4"/>
+  <text class="name" x="682" y="230" text-anchor="middle">本社コア B</text>
+  <text class="host" x="682" y="246" text-anchor="middle">hq-core-rt-02</text>
+
+  <text class="layer" x="40" y="348">自拠点（見る対象）</text>
+  <rect class="box" x="476" y="328" width="168" height="54" rx="4"/>
+  <text class="name" x="560" y="350" text-anchor="middle">関西支社 RT</text>
+  <text class="host" x="560" y="366" text-anchor="middle">ksi-br-rt-01</text>
+  <rect class="box" x="476" y="434" width="168" height="54" rx="4"/>
+  <text class="name" x="560" y="456" text-anchor="middle">関西支社 SW</text>
+  <text class="host" x="560" y="472" text-anchor="middle">ksi-br-sw-01</text>
+
+  <text class="layer" x="860" y="268">配下拠点（右の列）</text>
+  <rect class="box office" x="860" y="280" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="300" text-anchor="middle">京都営業所 RT</text>
+  <text class="host" x="948" y="316" text-anchor="middle">kyo-rt-01</text>
+  <rect class="box office" x="860" y="368" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="388" text-anchor="middle">奈良営業所 RT</text>
+  <text class="host" x="948" y="404" text-anchor="middle">nara-rt-01</text>
+  <rect class="box office" x="860" y="456" width="176" height="48" rx="4"/>
+  <text class="name" x="948" y="476" text-anchor="middle">神戸営業所 RT</text>
+  <text class="host" x="948" y="492" text-anchor="middle">kobe-rt-01</text>
+
+  <path class="wire uplink" d="M560,112 L560,132"/>
+  <path class="wire uplink" d="M560,182 L560,196 L438,196 L438,208"/>
+  <path class="wire uplink" d="M560,182 L560,196 L682,196 L682,208"/>
+  <path class="wire uplink" d="M516,235 L604,235"/>
+  <path class="wire uplink" d="M438,262 L438,300 L560,300 L560,328"/>
+  <path class="wire uplink" d="M682,262 L682,300 L560,300 L560,328"/>
+  <path class="wire" d="M560,382 L560,434"/>
+  <path class="wire" d="M644,348 L790,348 L790,304 L860,304"/>
+  <path class="wire" d="M644,355 L776,355 L776,392 L860,392"/>
+  <path class="wire" d="M644,362 L762,362 L762,480 L860,480"/>
+
+  <text class="port" x="548" y="126" text-anchor="end">Gi0/0</text>
+  <text class="port" x="548" y="194" text-anchor="end">Gi0/1</text>
+  <text class="port" x="450" y="202">Te1/0/1</text>
+  <text class="port" x="690" y="202">Te1/0/1</text>
+  <text class="port" x="520" y="228">Gi0/0</text>
+  <text class="port" x="578" y="228">Gi0/0</text>
+  <text class="port" x="450" y="276">Gi0/1</text>
+  <text class="port" x="690" y="276">Gi0/1</text>
+  <text class="port" x="572" y="322">Gi0/0</text>
+  <text class="port" x="572" y="396">Gi0/2</text>
+  <text class="port" x="572" y="430">Gi1/0/1</text>
+  <text class="port" x="650" y="342">Gi0/1/1</text>
+  <text class="port" x="650" y="368">Gi0/1/2</text>
+  <text class="port" x="650" y="394">Gi0/1/3</text>
+  <text class="port" x="854" y="300" text-anchor="end">Gi0/0</text>
+  <text class="port" x="854" y="388" text-anchor="end">Gi0/0</text>
+  <text class="port" x="854" y="476" text-anchor="end">Gi0/0</text>
+
+  <rect x="40" y="530" width="520" height="86" rx="6" fill="#fff" stroke="#d9d3c8"/>
+  <text class="legend" x="56" y="554">この図が守っていること（並べ方の百科ではない）</text>
+  <text class="legend" x="56" y="574">1. 段で上下が読める。冗長は横並び（縦に積むと片系に見える）</text>
+  <text class="legend" x="56" y="592">2. 配下は右の列。下に置くと上り回線を横切る</text>
+  <text class="legend" x="56" y="610">3. 線は直角。束は等間隔。ポート名は、その箱の折れ曲がり</text>
 </svg>
