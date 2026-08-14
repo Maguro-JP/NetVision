@@ -67,3 +67,24 @@ def test_optimal_branch_puts_uplink_above_and_offices_in_a_right_column():
     assert ys[2] - ys[1] > 40
     # 営業所を自拠点の真下に置かない（上り線を横切る）
     assert min(office.y for office in offices) < sw.y + 80
+
+
+def test_redundant_cores_sit_side_by_side_not_stacked():
+    """冗長のコア2台は同じ段に横並び。親子に積まない。"""
+    cores = [node(1, "core-a-rt"), node(2, "core-b-rt")]
+    branches = [node(10 + i, f"br-{i}-rt") for i in range(3)]
+    nodes = [*cores, *branches]
+    edges = [
+        edge(1, 1, 2),
+        edge(2, 1, 10),
+        edge(3, 1, 11),
+        edge(4, 1, 12),
+        edge(5, 2, 10),
+        edge(6, 2, 11),
+        edge(7, 2, 12),
+    ]
+    _compact(nodes, edges)
+    assert abs(cores[0].y - cores[1].y) < 1
+    assert abs(cores[0].x - cores[1].x) >= 200
+    for branch in branches:
+        assert branch.y > cores[0].y + 80

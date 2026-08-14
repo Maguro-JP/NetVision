@@ -7,7 +7,7 @@
 - 本命は拠点で絞った物理図。形は「拠点ツリー＋対向の列」
 - 上（または左）が上位。センターは真上。配下の拠点は下ではなく右の列
 - 段は結線のホップで決める。種別だけで横一列にしない。空の Core/Dist 段も作らない
-- 同じ段は揃える。冗長の2台は同じ段に横並び（Dual Tree）
+- 同じ段は揃える。冗長の2台は同じ段に横並び（Dual Tree）。ホップの木に積まない
 - 線は縦横だけ。箱の辺から出し、束は等間隔。交差は段内の並びとポート順で潰す
 - 放射状・力学モデル・フルメッシュの描画は使わない
 - 物理と論理は別の図（レイヤ）
@@ -564,6 +564,38 @@ def _rank_from_adjacency(adjacency: dict[int, set[int]]) -> dict[int, int]:
     return ranks
 
 
+def _align_redundant_pairs(
+    rank: dict[int, int], neighbours: dict[int, list[int]]
+) -> dict[int, int]:
+    """冗長の対を同じ段にする。
+
+    網の中心からのホップだと、2台のコアの片方だけが中心になり、
+    もう一台が一段下に落ちる。両方に同じ配下が2つ以上ある対は、同じ段。
+    """
+    adjusted = dict(rank)
+    seen: set[tuple[int, int]] = set()
+    for device_id, nbs in neighbours.items():
+        nb_set = set(nbs)
+        for other in nbs:
+            if other == device_id:
+                continue
+            pair = (device_id, other) if device_id < other else (other, device_id)
+            if pair in seen:
+                continue
+            seen.add(pair)
+            if abs(adjusted.get(device_id, 0) - adjusted.get(other, 0)) > 1:
+                continue
+            common = nb_set & set(neighbours.get(other, []))
+            common.discard(device_id)
+            common.discard(other)
+            if len(common) < 2:
+                continue
+            layer = min(adjusted.get(device_id, 0), adjusted.get(other, 0))
+            adjusted[device_id] = layer
+            adjusted[other] = layer
+    return adjusted
+
+
 def _compact(
     nodes: list[TopologyNodeView],
     edges: list[TopologyEdgeView] | None = None,
@@ -573,9 +605,10 @@ def _compact(
     orientation: str = "vertical",
     polish: bool = False,
 ) -> None:
-    """結線の上下関係で木に並べる。
+    """結線の上下で段を決め、同じ段は横に並べる。
 
     初期配置（`polish=False`）は、未配置だけをポート順の木に置く。
+    冗長の2台は同じ段。BFS の親子に積まない。
     人が動かした位置は意思なので、見るだけでは触らない。
 
     人が動かした配置の整頓は `_polish_layout` の仕事。こちらで木を組み直すと
@@ -598,52 +631,78 @@ def _compact(
         rank = hierarchy_rank(graph)
 
     neighbours = _adjacency(graph)
+    rank = _align_redundant_pairs(rank, neighbours)
     port_between: dict[tuple[int, int], str] = {}
     for edge in graph.edges:
         port_between[(edge.source, edge.target)] = edge.source_interface
         port_between[(edge.target, edge.source)] = edge.target_interface
 
     horizontal = orientation == "horizontal"
-    order = sorted(
-        by_id,
-        key=lambda device_id: (
-            rank.get(device_id, 0),
-            _tier_of(by_id[device_id]),
-            by_id[device_id].hostname,
-        ),
-    )
 
+    # 段はホップ（rank）。BFS の木の深さだと、同じ段の冗長対が親子になる
     depth: dict[int, int] = {}
+    linked = [device_id for device_id in by_id if neighbours.get(device_id)]
+    if linked:
+        base = min(rank.get(device_id, 0) for device_id in linked)
+        for device_id in by_id:
+            if neighbours.get(device_id):
+                depth[device_id] = rank.get(device_id, base) - base
+            else:
+                depth[device_id] = _tier_of(by_id[device_id])
+    else:
+        for device_id in by_id:
+            depth[device_id] = _tier_of(by_id[device_id])
+
+    def downstream(device_id: int) -> list[int]:
+        return [
+            other
+            for other in neighbours.get(device_id, [])
+            if other in by_id and depth.get(other, 0) > depth[device_id]
+        ]
+
     children: dict[int, list[int]] = {}
-    seen: set[int] = set()
-    roots: list[int] = []
-    for start in order:
-        if start in seen:
-            continue
-        roots.append(start)
-        seen.add(start)
-        # 繋がっていない機器は、種別の段に置く。全部 depth 0 だと
-        # ルータもスイッチも横一列になり、初期配置として正しくない
-        depth[start] = 0 if neighbours.get(start) else _tier_of(by_id[start])
-        queue = [start]
-        while queue:
-            current = queue.pop(0)
-            ordered = _child_order(
-                current,
-                [i for i in neighbours.get(current, []) if i not in seen],
-                by_id,
-                port_between,
-                horizontal=horizontal,
-                polish=polish,
+    parents_of: dict[int, list[int]] = defaultdict(list)
+    for device_id in by_id:
+        ordered = _child_order(
+            device_id,
+            downstream(device_id),
+            by_id,
+            port_between,
+            horizontal=horizontal,
+            polish=polish,
+        )
+        children[device_id] = ordered
+        for kid in ordered:
+            parents_of[kid].append(device_id)
+
+    exclusive: dict[int, list[int]] = {device_id: [] for device_id in by_id}
+    for kid, parents in parents_of.items():
+        parents.sort(
+            key=lambda parent: (
+                depth[parent],
+                by_id[parent].hostname,
+                port_key(port_between.get((parent, kid), "")),
             )
-            # まだ見ていない相手だけ子にする。seen は下で足す
-            for neighbour in ordered:
-                if neighbour in seen:
-                    continue
-                seen.add(neighbour)
-                depth[neighbour] = depth[current] + 1
-                children.setdefault(current, []).append(neighbour)
-                queue.append(neighbour)
+        )
+        exclusive[parents[0]].append(kid)
+    for parent, kids in exclusive.items():
+        exclusive[parent] = _child_order(
+            parent,
+            kids,
+            by_id,
+            port_between,
+            horizontal=horizontal,
+            polish=polish,
+        )
+
+    roots = [
+        device_id
+        for device_id in sorted(by_id, key=lambda i: (depth[i], by_id[i].hostname))
+        if not any(
+            other in by_id and depth[other] < depth[device_id]
+            for other in neighbours.get(device_id, [])
+        )
+    ]
 
     # 葉から順に横位置を決め、親は子の中央に置く。これで線が交差しない
     slot = 0.0
@@ -651,7 +710,7 @@ def _compact(
 
     def place(device_id: int) -> float:
         nonlocal slot
-        kids = children.get(device_id, [])
+        kids = exclusive.get(device_id, [])
         if not kids:
             across[device_id] = slot
             slot += 1.0
@@ -663,6 +722,27 @@ def _compact(
     for root in roots:
         place(root)
         slot += 1.0  # 島の間を1つ空ける
+
+    for device_id in by_id:
+        if device_id not in across:
+            across[device_id] = slot
+            slot += 1.0
+
+    # 冗長の対は、配下の中央へ寄せて同じ段に並べる
+    for device_id, kids in children.items():
+        spots = [across[kid] for kid in kids if kid in across]
+        if spots:
+            across[device_id] = sum(spots) / len(spots)
+    by_depth: dict[int, list[int]] = defaultdict(list)
+    for device_id, level in depth.items():
+        by_depth[level].append(device_id)
+    for group in by_depth.values():
+        group.sort(key=lambda device_id: (across.get(device_id, 0.0), by_id[device_id].hostname))
+        for index in range(1, len(group)):
+            prev = group[index - 1]
+            current = group[index]
+            if across[current] - across[prev] < 1.0:
+                across[current] = across[prev] + 1.0
 
     move = {node.device_id for node in owned if polish or not node.placed}
     for device_id, node in by_id.items():
