@@ -15,7 +15,7 @@ jobs:
       - uses: actions/github-script@v7
         with:
           script: |
-            const MAINLINE = 'claude/youthful-heisenberg-p3gv5m';
+            const MAINLINE = 'main';
             const pr = context.payload.pull_request;
             const base = pr.base.ref;
             const head = pr.head.ref;

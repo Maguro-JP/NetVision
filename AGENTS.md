@@ -6,11 +6,7 @@
 
 ## 本線
 
-機能の PR の base は、次の枝だけです。
-
-- `claude/youthful-heisenberg-p3gv5m`
-
-`main` へ向けるのはプレビュー用の #1 だけです。触らないでください。
+機能の PR の base は `main` だけです。
 `cursor/` で始まる枝を base にした積み上げ PR は禁止です。
 
 ## PR は本線向けに、未マージが無いときだけ1本
