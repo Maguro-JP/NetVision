@@ -616,5 +616,7 @@ export const api = {
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>
     request<Site>("/sites", { method: "POST", body: JSON.stringify(body) }),
+  updateSite: (id: number, body: Partial<Site>) =>
+    request<Site>(`/sites/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
   deleteSite: (id: number) => request<void>(`/sites/${id}`, { method: "DELETE" }),
 };

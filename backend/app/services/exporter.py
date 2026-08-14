@@ -80,6 +80,7 @@ def build_row(device: Device, include_status: bool = True) -> list[object]:
 
     values: dict[str, object] = {
         "device_id": device.id,
+        "code": device.code,
         "hostname": device.hostname,
         "vendor": device.vendor,
         "model": device.model,
@@ -90,6 +91,7 @@ def build_row(device: Device, include_status: bool = True) -> list[object]:
         "os_version": device.os_version,
         "firmware_version": device.firmware_version,
         "site": device.site.name if device.site else None,
+        "site_code": device.site.code if device.site else None,
         "rack": device.rack,
         "rack_unit": device.rack_unit,
         "mgmt_ip": device.mgmt_ip,

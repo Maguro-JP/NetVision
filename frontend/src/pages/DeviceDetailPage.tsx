@@ -155,6 +155,10 @@ export default function DeviceDetailPage() {
           </span>
         </div>
         <div>
+          <span className="k">管理ID</span>
+          <span className="mono">{device.code ?? "—"}</span>
+        </div>
+        <div>
           <span className="k">種別 / 状態</span>
           <span>
             {DEVICE_TYPE_LABEL[device.device_type]} / {DEVICE_STATUS_LABEL[device.status]}

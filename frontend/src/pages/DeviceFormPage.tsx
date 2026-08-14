@@ -11,6 +11,7 @@ type FormState = Record<string, string>;
 
 const EMPTY: FormState = {
   hostname: "",
+  code: "",
   vendor: "",
   model: "",
   serial_number: "",
@@ -20,6 +21,7 @@ const EMPTY: FormState = {
   os_version: "",
   firmware_version: "",
   site_name: "",
+  site_code: "",
   rack: "",
   rack_unit: "",
   mgmt_ip: "",
@@ -32,6 +34,7 @@ const EMPTY: FormState = {
 function toForm(device: Device): FormState {
   const form: FormState = { ...EMPTY };
   for (const key of Object.keys(EMPTY)) {
+    if (key === "site_code") continue;
     const value = (device as unknown as Record<string, unknown>)[key];
     form[key] = value === null || value === undefined ? "" : String(value);
   }
@@ -39,12 +42,14 @@ function toForm(device: Device): FormState {
 }
 
 /** 空文字は「未入力」= null として送る。API 側の日付・数値型に合わせる。 */
-function toPayload(form: FormState): Partial<Device> {
+function toPayload(form: FormState): Partial<Device> & { site_code?: string | null } {
   const payload: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(form)) {
-    if (key === "site_name") {
+    if (key === "site_name" || key === "site_code") {
       // 空は「未設定に戻す」。null ではなく空文字で送る（未指定と区別する）
       payload[key] = value;
+    } else if (key === "code") {
+      payload[key] = value.trim() === "" ? null : value.trim();
     } else {
       payload[key] = value === "" ? null : value;
     }
@@ -53,7 +58,7 @@ function toPayload(form: FormState): Partial<Device> {
   for (const key of ["hostname", "vendor", "model", "device_type", "status"]) {
     if (payload[key] === null) delete payload[key];
   }
-  return payload as Partial<Device>;
+  return payload as Partial<Device> & { site_code?: string | null };
 }
 
 export default function DeviceFormPage() {
@@ -76,16 +81,19 @@ export default function DeviceFormPage() {
   useEffect(() => {
     if (device) {
       const next = toForm(device);
+      const matched = (sites ?? []).find((s) => s.id === device.site_id);
+      if (matched?.code) next.site_code = matched.code;
       setForm(next);
       setBaseline(next);
     }
-  }, [device]);
+  }, [device, sites]);
 
   const save = useMutation({
-    mutationFn: (payload: Partial<Device>) =>
+    mutationFn: (payload: Partial<Device> & { site_code?: string | null }) =>
       isEdit ? api.updateDevice(Number(id), payload) : api.createDevice(payload),
     onSuccess: (saved) => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
+      queryClient.invalidateQueries({ queryKey: ["sites"] });
       queryClient.invalidateQueries({ queryKey: ["summary"] });
       queryClient.invalidateQueries({ queryKey: ["device", String(saved.id)] });
       navigate(`/devices/${saved.id}`);
@@ -133,6 +141,16 @@ export default function DeviceFormPage() {
       >
         <div className="form-grid">
           {text("hostname", "ホスト名 *", "text", { required: true, autoFocus: true })}
+          <div className="field">
+            <label htmlFor="code">管理ID</label>
+            <input
+              id="code"
+              value={form.code}
+              onChange={set("code")}
+              placeholder="社内台帳の番号など（任意・一意）"
+              title="プロジェクトで使っている機器の番号。空でも登録できます"
+            />
+          </div>
           {text("vendor", "ベンダー *", "text", { required: true })}
           {text("model", "型番 *", "text", { required: true })}
           {text("serial_number", "シリアル番号")}
@@ -163,7 +181,38 @@ export default function DeviceFormPage() {
           {text("firmware_version", "ファームウェアバージョン")}
 
           <div className="field">
-            <label htmlFor="site_name">拠点</label>
+            <label htmlFor="site_code">拠点ID</label>
+            <input
+              id="site_code"
+              list="site-code-candidates"
+              value={form.site_code}
+              onChange={(e) => {
+                const code = e.target.value;
+                const matched = (sites ?? []).find((s) => s.code === code);
+                setForm((prev) => ({
+                  ...prev,
+                  site_code: code,
+                  site_name: matched ? matched.name : prev.site_name,
+                }));
+              }}
+              placeholder="拠点台帳の拠点ID（任意）"
+              title="先に拠点台帳へ登録した拠点ID。あれば名前よりこちらを使います"
+              autoComplete="off"
+            />
+            <datalist id="site-code-candidates">
+              {(sites ?? [])
+                .filter((s) => s.code)
+                .slice(0, 50)
+                .map((s) => (
+                  <option key={s.id} value={s.code!}>
+                    {s.name}
+                  </option>
+                ))}
+            </datalist>
+          </div>
+
+          <div className="field">
+            <label htmlFor="site_name">拠点名</label>
             {/* 選ぶだけでなく打てるようにする。台帳に無い名前ならその場で作る
                 （拠点を先に登録しないと機器を登録できないのでは手が止まる）。
                 打つと部分一致で候補が出る */}
@@ -171,7 +220,17 @@ export default function DeviceFormPage() {
               id="site_name"
               list="site-candidates"
               value={form.site_name}
-              onChange={set("site_name")}
+              onChange={(e) => {
+                const name = e.target.value;
+                const matched = (sites ?? []).find(
+                  (s) => s.name.toLowerCase() === name.toLowerCase(),
+                );
+                setForm((prev) => ({
+                  ...prev,
+                  site_name: name,
+                  site_code: matched?.code ?? "",
+                }));
+              }}
               placeholder="拠点名（打つと候補が出ます。無い名前はそのまま作ります）"
               autoComplete="off"
             />
@@ -179,12 +238,15 @@ export default function DeviceFormPage() {
               {(sites ?? [])
                 .filter((s) =>
                   form.site_name.trim()
-                    ? s.name.toLowerCase().includes(form.site_name.trim().toLowerCase())
+                    ? s.name.toLowerCase().includes(form.site_name.trim().toLowerCase()) ||
+                      (s.code ?? "").toLowerCase().includes(form.site_name.trim().toLowerCase())
                     : true,
                 )
                 .slice(0, 50)
                 .map((s) => (
-                  <option key={s.id} value={s.name} />
+                  <option key={s.id} value={s.name}>
+                    {s.code ? `${s.code} — ${s.name}` : s.name}
+                  </option>
                 ))}
             </datalist>
           </div>

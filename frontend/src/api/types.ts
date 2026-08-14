@@ -31,6 +31,8 @@ export interface LifecycleStatus {
 export interface Device {
   id: number;
   hostname: string;
+  /** 人が決める管理ID。社内台帳の番号など */
+  code: string | null;
   vendor: string;
   model: string;
   serial_number: string | null;
@@ -74,6 +76,8 @@ export interface DeviceDetail extends Device {
 
 export interface Site {
   id: number;
+  /** 人が決める拠点ID */
+  code: string | null;
   name: string;
   address: string | null;
   notes: string | null;

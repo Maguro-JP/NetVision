@@ -153,9 +153,11 @@ def test_export_xlsx(client):
     assert sheet.freeze_panes == "A2"
 
     headers = [c.value for c in sheet[1]]
-    # 先頭は機器ID。書き出して直して戻すとき、この列で同じ機器だと分かる
-    assert headers[0] == "機器ID"
-    assert headers[1] == "ホスト名"
+    # 先頭は内部ID。書き出して直して戻すとき、この列で同じ機器だと分かる
+    assert headers[0] == "内部ID"
+    assert headers[1] == "管理ID"
+    assert "拠点ID" in headers
+    assert "ホスト名" in headers
 
     values = dict(zip(headers, [c.value for c in sheet[2]], strict=False))
     assert values["ホスト名"] == "core-sw-01"
@@ -166,6 +168,8 @@ def test_export_xlsx(client):
 def test_export_empty_database_returns_headers_only(client):
     headers, rows = read_csv(client.get(f"{API}/export/devices.csv").text)
     assert rows == []
-    # 先頭は機器ID。書き出して直して戻すとき、この列で同じ機器だと分かる
-    assert headers[0] == "機器ID"
-    assert headers[1] == "ホスト名"
+    # 先頭は内部ID。書き出して直して戻すとき、この列で同じ機器だと分かる
+    assert headers[0] == "内部ID"
+    assert headers[1] == "管理ID"
+    assert "拠点ID" in headers
+    assert "ホスト名" in headers

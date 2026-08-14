@@ -119,6 +119,11 @@ export default function DeviceTable({
             </td>
             <td className="nowrap">
               <Link to={`/devices/${d.id}`}>{d.hostname}</Link>
+              {d.code && (
+                <div className="muted mono" title="管理ID">
+                  {d.code}
+                </div>
+              )}
               {isNew(d) && <span className="badge new">New</span>}
             </td>
             <td>{DEVICE_TYPE_LABEL[d.device_type]}</td>

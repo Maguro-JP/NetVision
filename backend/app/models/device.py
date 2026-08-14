@@ -37,6 +37,8 @@ class Device(Base):
 
     # 識別情報
     hostname: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    #: 人が決める管理ID。社内台帳の番号など。空は未設定
+    code: Mapped[str | None] = mapped_column(String(80), unique=True, default=None, index=True)
     vendor: Mapped[str] = mapped_column(String(80), index=True)
     model: Mapped[str] = mapped_column(String(120), index=True)
     serial_number: Mapped[str | None] = mapped_column(String(120), unique=True, default=None)
