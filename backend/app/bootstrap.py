@@ -56,6 +56,9 @@ def ensure_ready() -> None:
         _ready = True
     except Exception:
         logger.exception("起動時のスキーマ適用に失敗しました")
+        # デモ（Vercel プレビュー）は画面が真っ白になる方が困るので落とさない。
+        if settings.demo_mode:
+            return
         raise
 
 

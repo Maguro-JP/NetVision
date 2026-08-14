@@ -14,6 +14,7 @@ export default function SchemaGate() {
   const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["schema"],
     queryFn: api.schemaStatus,
+    retry: false,
   });
 
   if (isLoading) {
