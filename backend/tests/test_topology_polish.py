@@ -1,13 +1,35 @@
 """配置の整頓。ツリーを組み直さず、マス目・揃い・近すぎる重なりだけ触る。"""
 
 from app.models.device import DeviceStatus, DeviceType
+from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.topology import (
     LAYOUT_GRID,
+    TopologyEdgeView,
     TopologyNodeView,
     _polish_layout,
     _snap_to_grid,
 )
+
+
+def edge(
+    edge_id: int,
+    source: int,
+    target: int,
+    source_interface: str,
+    target_interface: str = "GigabitEthernet0/0",
+) -> TopologyEdgeView:
+    return TopologyEdgeView(
+        id=edge_id,
+        source=source,
+        target=target,
+        source_interface=source_interface,
+        target_interface=target_interface,
+        origin=LinkOrigin.MANUAL,
+        protocol=None,
+        label=None,
+        confirmed_both_ways=True,
+    )
 
 
 def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
@@ -146,3 +168,22 @@ def test_stacked_nodes_are_separated_in_one_polish():
     _polish_layout(nodes)
     second = [(n.device_id, n.x, n.y) for n in nodes]
     assert first == second
+
+
+def test_polish_reorders_a_column_to_match_port_order():
+    """同じ列の相手を、ハブのポート順に入れ替えて交差を減らす。"""
+    hub = node(1, "hub", 0, 200)
+    # ポートは 1,2,3 なのに、縦の並びが逆になっている
+    a = node(2, "a", 400, 400)
+    b = node(3, "b", 400, 200)
+    c = node(4, "c", 400, 0)
+    nodes = [hub, a, b, c]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 3, "GigabitEthernet0/2"),
+        edge(3, 1, 4, "GigabitEthernet0/3"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3, 4})
+    by_id = {n.device_id: n for n in nodes}
+    assert by_id[2].y < by_id[3].y < by_id[4].y
+    assert len({n.x for n in (a, b, c)}) == 1

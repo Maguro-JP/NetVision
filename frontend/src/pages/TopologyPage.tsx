@@ -170,6 +170,7 @@ export function assignAnchors(graph: TopologyGraph): {
   anchors: Map<number, { source: string; target: string }>;
   busiest: Map<number, number>;
   lanes: Map<number, number>;
+  laneRank: Map<number, { rank: number; count: number }>;
 } {
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
   const out = new Map<number, { source: string; target: string }>();
@@ -243,6 +244,7 @@ export function assignAnchors(graph: TopologyGraph): {
   // 引き出し口と同じ順（相手の並び）で振らないと交差する。
   // 「近い相手から」だと、ハブが列の途中にいるときに順が入れ替わる。
   const lanes = new Map<number, number>();
+  const laneRank = new Map<number, { rank: number; count: number }>();
   const bundles = [...groups.values()]
     .filter((members) => members.length >= 2)
     .sort((a, b) => b.length - a.length);
@@ -273,11 +275,14 @@ export function assignAnchors(graph: TopologyGraph): {
     [...members]
       .sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge)
       .forEach((end, index) => {
-        if (!lanes.has(end.edge)) lanes.set(end.edge, index * gap);
+        if (!lanes.has(end.edge)) {
+          lanes.set(end.edge, index * gap);
+          laneRank.set(end.edge, { rank: index, count: members.length });
+        }
       });
   }
 
-  return { anchors: out, busiest, lanes };
+  return { anchors: out, busiest, lanes, laneRank };
 }
 
 /** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
@@ -345,7 +350,7 @@ function toFlow(
   nodes: Node<DeviceNodeData>[];
   edges: Edge[];
 } {
-  const { anchors, busiest, lanes } = assignAnchors(graph);
+  const { anchors, busiest, lanes, laneRank } = assignAnchors(graph);
 
   const nodes = graph.nodes.map((node) => {
     const width = widthFor(busiest.get(node.device_id) ?? 0);
@@ -401,6 +406,8 @@ function toFlow(
       hideLabels: false,
       // 同じところから出る線を、1本ずつ別の通り道へずらす
       lane: lanes.get(edge.id) ?? 0,
+      laneRank: laneRank.get(edge.id)?.rank ?? 0,
+      laneCount: laneRank.get(edge.id)?.count ?? 1,
       warning: simple ? null : warningOf(edge),
     } satisfies PortEdgeData,
   }));

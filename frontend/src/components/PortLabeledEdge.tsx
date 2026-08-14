@@ -14,6 +14,9 @@ export interface PortEdgeData extends Record<string, unknown> {
   hideLabels: boolean;
   /** 線を通す道のずらし幅。同じところから出る線が重ならないようにする */
   lane?: number;
+  /** 束の中の順。0 が相手の並びに先頭 */
+  laneRank?: number;
+  laneCount?: number;
   warning: string | null;
 }
 
@@ -21,6 +24,75 @@ export interface PortEdgeData extends Record<string, unknown> {
 const GAP = 14;
 /** 線に重ならないよう、線と垂直な向きへずらす幅。 */
 const SIDE = 9;
+
+/**
+ * 縦横だけの通り道。構成図の定石どおり、箱の間で束ねてから相手の高さで抜く。
+ * 曲がった SmoothStep は、束の順が崩れると交差して見える。
+ */
+export function orthogonalBusPath(input: {
+  sourceX: number;
+  sourceY: number;
+  targetX: number;
+  targetY: number;
+  sourceFace: "top" | "bottom" | "left" | "right";
+  targetFace: "top" | "bottom" | "left" | "right";
+  rank: number;
+  count: number;
+  gap?: number;
+}): { path: string; labelX: number; labelY: number } | null {
+  const gap = input.gap ?? 16;
+  const inset = 28;
+  const rank = Math.max(0, input.rank);
+  const steps = Math.max(0, input.count - 1);
+  if (input.sourceFace === "right" && input.targetFace === "left" && input.targetX - input.sourceX > 40) {
+    const usable = Math.max(0, input.targetX - input.sourceX - inset * 2);
+    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
+    const busX = input.targetX - inset - rank * pitch;
+    return {
+      path: `M ${input.sourceX},${input.sourceY} L ${busX},${input.sourceY} L ${busX},${input.targetY} L ${input.targetX},${input.targetY}`,
+      labelX: busX,
+      labelY: (input.sourceY + input.targetY) / 2,
+    };
+  }
+  if (input.sourceFace === "left" && input.targetFace === "right" && input.sourceX - input.targetX > 40) {
+    const usable = Math.max(0, input.sourceX - input.targetX - inset * 2);
+    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
+    const busX = input.targetX + inset + rank * pitch;
+    return {
+      path: `M ${input.sourceX},${input.sourceY} L ${busX},${input.sourceY} L ${busX},${input.targetY} L ${input.targetX},${input.targetY}`,
+      labelX: busX,
+      labelY: (input.sourceY + input.targetY) / 2,
+    };
+  }
+  if (input.sourceFace === "bottom" && input.targetFace === "top" && input.targetY - input.sourceY > 40) {
+    const usable = Math.max(0, input.targetY - input.sourceY - inset * 2);
+    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
+    const busY = input.targetY - inset - rank * pitch;
+    return {
+      path: `M ${input.sourceX},${input.sourceY} L ${input.sourceX},${busY} L ${input.targetX},${busY} L ${input.targetX},${input.targetY}`,
+      labelX: (input.sourceX + input.targetX) / 2,
+      labelY: busY,
+    };
+  }
+  if (input.sourceFace === "top" && input.targetFace === "bottom" && input.sourceY - input.targetY > 40) {
+    const usable = Math.max(0, input.sourceY - input.targetY - inset * 2);
+    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
+    const busY = input.targetY + inset + rank * pitch;
+    return {
+      path: `M ${input.sourceX},${input.sourceY} L ${input.sourceX},${busY} L ${input.targetX},${busY} L ${input.targetX},${input.targetY}`,
+      labelX: (input.sourceX + input.targetX) / 2,
+      labelY: busY,
+    };
+  }
+  return null;
+}
+
+const FACE_OF: Record<Position, "top" | "bottom" | "left" | "right"> = {
+  [Position.Top]: "top",
+  [Position.Bottom]: "bottom",
+  [Position.Left]: "left",
+  [Position.Right]: "right",
+};
 
 const DIRECTION: Record<Position, [number, number]> = {
   [Position.Top]: [0, -1],
@@ -49,11 +121,19 @@ export default function PortLabeledEdge({
   data,
 }: EdgeProps) {
   const info = (data ?? {}) as Partial<PortEdgeData>;
-  // 同じところから何本も出るときは、線ごとに通り道をずらす。
-  // 基板の配線と同じで、重ねずに沿わせて引くと本数が読める
+  const bus = orthogonalBusPath({
+    sourceX,
+    sourceY,
+    targetX,
+    targetY,
+    sourceFace: FACE_OF[sourcePosition],
+    targetFace: FACE_OF[targetPosition],
+    rank: info.laneRank ?? 0,
+    count: info.laneCount ?? 1,
+  });
   const lane = info.lane ?? 0;
   const vertical = sourcePosition === Position.Top || sourcePosition === Position.Bottom;
-  const [path, labelX, labelY] = getSmoothStepPath({
+  const smooth = getSmoothStepPath({
     sourceX,
     sourceY,
     targetX,
@@ -66,6 +146,9 @@ export default function PortLabeledEdge({
         : { centerX: (sourceX + targetX) / 2 + (sourceX < targetX ? -lane : lane) }
       : {}),
   });
+  const path = bus?.path ?? smooth[0];
+  const labelX = bus?.labelX ?? smooth[1];
+  const labelY = bus?.labelY ?? smooth[2];
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
 
   return (

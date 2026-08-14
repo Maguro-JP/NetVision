@@ -2,11 +2,19 @@
 
 自動推定した結線を土台に、人が配置を直して図を仕上げる前提で作っている。
 
-- 初期の自動配置は、結線の上下関係とポート順で木を組む。種別の段だけに
-  並べると、同じ種別の上位・下位が横一列になり、図として正しくない
-- 人が動かして保存した位置は意思として残す。見るだけで戻したりしない
-- 「最適化」は、その左右の並び（意思）を読み取って段と間隔を整える。
-  消して作り直すのではない
+見やすい構成図の定石（Cisco の階層モデルと、階層グラフの Sugiyama 配置）:
+
+- 段に分ける。上（または左）が上位。Edge / FW → Core → Distribution → Access
+- 同じ段の機器は同じ高さ（または同じ列）に揃える。ばらけると階層が読めない
+- 線は縦横だけ（直交）。箱の辺から出し、箱を貫通させない
+- 交差は段の中の並びで潰す。相手の平均位置（barycenter）とポート番号順
+- 同じ辺から出る線は、等間隔の平行な通り道。束ねてから相手の高さで抜く
+- 物理と論理は別の図にする（この製品ではレイヤがそれに当たる）
+
+自動配置は結線の上下とポート順で木を組む。種別の段だけに並べると、
+同じ種別の上位・下位が横一列になり、図として正しくない。
+人が動かして保存した位置は意思として残す。見るだけで戻したりしない。
+「配置を整える」はマス目・揃い・交差の削減。消して初期配置に戻すのはリセット。
 """
 
 from __future__ import annotations
@@ -1182,7 +1190,12 @@ def _unstick_along(
     return forced
 
 
-def _polish_layout(nodes: list[TopologyNodeView]) -> None:
+def _polish_layout(
+    nodes: list[TopologyNodeView],
+    *,
+    edges: list[TopologyEdgeView] | None = None,
+    owned: set[int] | None = None,
+) -> None:
     """人が置いた配置を、マス目・揃い・近すぎる重なりだけ整える。
 
     ツリーを組み直さない。初期配置へ戻すのはリセットの仕事。
@@ -1213,6 +1226,79 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
             node.y = oy + _clamp_move(node.y - oy)
         node.x = _snap_to_grid(node.x)
         node.y = _snap_to_grid(node.y)
+
+    if edges:
+        _uncross_fans(nodes, edges, owned=owned or {node.device_id for node in nodes})
+        for node in nodes:
+            node.x = _snap_to_grid(node.x)
+            node.y = _snap_to_grid(node.y)
+
+
+def _uncross_fans(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView],
+    *,
+    owned: set[int],
+) -> None:
+    """同じ列・段に並んだ相手を、ハブのポート順に入れ替えて交差を減らす。
+
+    位置の集合はそのまま。誰がどのスロットにいるかだけ入れ替える
+    （2層グラフの交差削減）。owned の機器だけ動かす。
+    """
+    if len(nodes) < 2 or not edges:
+        return
+    by_id = {node.device_id: node for node in nodes}
+
+    def port_from(hub: int, other: int) -> str:
+        for edge in edges:
+            if edge.source == hub and edge.target == other:
+                return edge.source_interface
+            if edge.target == hub and edge.source == other:
+                return edge.target_interface
+        return ""
+
+    for hub in nodes:
+        rights: list[TopologyNodeView] = []
+        lefts: list[TopologyNodeView] = []
+        belows: list[TopologyNodeView] = []
+        aboves: list[TopologyNodeView] = []
+        for edge in edges:
+            other_id = (
+                edge.target
+                if edge.source == hub.device_id
+                else edge.source
+                if edge.target == hub.device_id
+                else None
+            )
+            if other_id is None:
+                continue
+            other = by_id.get(other_id)
+            if other is None:
+                continue
+            dx = other.x - hub.x
+            dy = other.y - hub.y
+            if abs(dx) >= abs(dy) and dx > 80:
+                rights.append(other)
+            elif abs(dx) >= abs(dy) and dx < -80:
+                lefts.append(other)
+            elif dy > 80:
+                belows.append(other)
+            elif dy < -80:
+                aboves.append(other)
+        for group, along in ((rights, "y"), (lefts, "y"), (belows, "x"), (aboves, "x")):
+            movable = [node for node in group if node.device_id in owned]
+            if len(movable) < 2:
+                continue
+            slots = sorted(getattr(node, along) for node in movable)
+            ordered = sorted(
+                movable,
+                key=lambda node: (
+                    port_key(port_from(hub.device_id, node.device_id)),
+                    node.hostname,
+                ),
+            )
+            for node, slot in zip(ordered, slots, strict=True):
+                setattr(node, along, slot)
 
 
 def arrange_positions(
@@ -1248,7 +1334,7 @@ def arrange_positions(
     if not owned:
         return 0
     targets = [node for node in graph.nodes if node.device_id in owned]
-    _polish_layout(targets)
+    _polish_layout(targets, edges=graph.edges, owned=owned)
 
     placed = [(n.device_id, n.x, n.y) for n in targets]
     if not placed:

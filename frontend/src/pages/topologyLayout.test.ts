@@ -19,6 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
+import { orthogonalBusPath } from "../components/PortLabeledEdge";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
@@ -185,6 +186,54 @@ describe("引き出し口と通り道", () => {
       ...graph.nodes.filter((n) => n.device_id >= 10).map((office) => office.x - hub.x),
     );
     expect(widest).toBeLessThan(nearestX / 2);
+  });
+});
+
+describe("直交の通り道", () => {
+  it("右から左へは縦横だけ通し、束の順で交差しない", () => {
+    const a = orthogonalBusPath({
+      sourceX: 0,
+      sourceY: 0,
+      targetX: 400,
+      targetY: 80,
+      sourceFace: "right",
+      targetFace: "left",
+      rank: 0,
+      count: 3,
+    });
+    const b = orthogonalBusPath({
+      sourceX: 0,
+      sourceY: 40,
+      targetX: 400,
+      targetY: 200,
+      sourceFace: "right",
+      targetFace: "left",
+      rank: 1,
+      count: 3,
+    });
+    expect(a).not.toBeNull();
+    expect(b).not.toBeNull();
+    expect(a!.path).toMatch(/^M .+ L .+ L .+ L .+$/);
+    expect(a!.path.includes("C ")).toBe(false);
+    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
+    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
+    // 先頭の線ほど相手に近い縦の通り道を使うので、後続の横線を横切らない
+    expect(busA).toBeGreaterThan(busB);
+  });
+
+  it("上下が近いときは直交バスにしない", () => {
+    expect(
+      orthogonalBusPath({
+        sourceX: 0,
+        sourceY: 0,
+        targetX: 20,
+        targetY: 10,
+        sourceFace: "right",
+        targetFace: "left",
+        rank: 0,
+        count: 1,
+      }),
+    ).toBeNull();
   });
 });
 
