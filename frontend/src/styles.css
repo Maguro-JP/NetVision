@@ -455,6 +455,39 @@ button:disabled {
   border: 1px solid var(--border);
   border-radius: 8px;
   overflow: hidden;
+  position: relative;
+}
+
+/* 選んだ線の操作。図の外のカードではなく、見ている図の上に出す */
+.topo-selection-panel {
+  margin: 10px;
+  max-width: min(560px, calc(100% - 24px));
+  pointer-events: none;
+}
+.topo-selection-panel-body {
+  pointer-events: auto;
+  background: var(--panel-2);
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  padding: 10px 12px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 45%);
+}
+.topo-selection-panel-title {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  margin-bottom: 8px;
+}
+.topo-selection-panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.topo-selection-panel-hint {
+  margin: 0 0 8px;
+  font-size: 12px;
 }
 
 .topo-node {

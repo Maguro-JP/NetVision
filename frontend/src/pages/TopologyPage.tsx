@@ -3,6 +3,7 @@ import {
   BackgroundVariant,
   Controls,
   MiniMap,
+  Panel,
   ReactFlow,
   ReactFlowProvider,
   addEdge,
@@ -966,7 +967,7 @@ function TopologyEditor() {
             <strong>編集中です。</strong>
             機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
-            線を選んで Delete / Backspace、または下の「この結線を削除」で消せます。
+            線を選ぶと、図の上に削除などの操作が出ます（Delete / Backspace でも消えます）。
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
             機器の追加・削除は機器台帳で行います。
           </>
@@ -1318,6 +1319,72 @@ function TopologyEditor() {
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
+            {selectedEdge && selectedEdgeData && (
+              <Panel position="top-center" className="topo-selection-panel">
+                <div className="topo-selection-panel-body">
+                  <div className="topo-selection-panel-title">
+                    <strong>
+                      {nodeName(graph, selectedEdgeData.source)}
+                      {selectedEdgeData.source_interface
+                        ? ` ${selectedEdgeData.source_interface}`
+                        : ""}
+                      {" — "}
+                      {nodeName(graph, selectedEdgeData.target)}
+                      {selectedEdgeData.target_interface
+                        ? ` ${selectedEdgeData.target_interface}`
+                        : ""}
+                    </strong>
+                    <span className="muted">線を選んでいます</span>
+                  </div>
+                  {editable ? (
+                    <>
+                      <div className="topo-selection-panel-actions">
+                        <button
+                          className="danger"
+                          onClick={() => removeLink.mutate(Number(selectedEdge.id))}
+                          disabled={removeLink.isPending}
+                          title="選択中の結線を消します（Delete / Backspace でも可）"
+                        >
+                          この結線を削除
+                        </button>
+                        <button type="button" onClick={() => setSelectedEdge(null)}>
+                          選択を解除
+                        </button>
+                      </div>
+                      <p className="muted topo-selection-panel-hint">
+                        削除は Delete / Backspace でもできます。線の端をつまむとつなぎ替え、下の選択肢で出す辺を変えられます。
+                      </p>
+                      <div className="toolbar" style={{ marginBottom: 0 }}>
+                        <SidePicker
+                          label={nodeName(graph, selectedEdgeData.source)}
+                          value={selectedEdgeData.source_side}
+                          onChange={(side) =>
+                            updateSide.mutate({
+                              id: selectedEdgeData.id,
+                              body: { a_side: side },
+                            })
+                          }
+                        />
+                        <SidePicker
+                          label={nodeName(graph, selectedEdgeData.target)}
+                          value={selectedEdgeData.target_side}
+                          onChange={(side) =>
+                            updateSide.mutate({
+                              id: selectedEdgeData.id,
+                              body: { b_side: side },
+                            })
+                          }
+                        />
+                      </div>
+                    </>
+                  ) : (
+                    <p className="muted topo-selection-panel-hint">
+                      消す・つなぎ替えるときは「編集する」を押してください。
+                    </p>
+                  )}
+                </div>
+              </Panel>
+            )}
           </ReactFlow>
         )}
       </div>
@@ -1427,58 +1494,6 @@ function TopologyEditor() {
           </span>
         )}
       </div>
-
-      {selectedEdge && (
-        <div className="card" style={{ marginTop: 12 }}>
-          <div>
-            選択中の結線:{" "}
-            <strong>
-              {selectedEdgeData
-                ? `${nodeName(graph, selectedEdgeData.source)} ${
-                    selectedEdgeData.source_interface
-                  } — ${nodeName(graph, selectedEdgeData.target)} ${
-                    selectedEdgeData.target_interface
-                  }`
-                : ""}
-            </strong>
-          </div>
-
-          {editable && selectedEdgeData && (
-            <>
-              <p className="muted" style={{ margin: "8px 0 4px" }}>
-                線を出す位置を変えられます。既定は位置関係から自動で決めています。
-                <br />
-                つなぎ替えは、図の上で<strong>線の端をつまんで別の機器へ</strong>持っていきます。
-              </p>
-              <div className="toolbar" style={{ marginBottom: 0 }}>
-                <SidePicker
-                  label={nodeName(graph, selectedEdgeData.source)}
-                  value={selectedEdgeData.source_side}
-                  onChange={(side) =>
-                    updateSide.mutate({ id: selectedEdgeData.id, body: { a_side: side } })
-                  }
-                />
-                <SidePicker
-                  label={nodeName(graph, selectedEdgeData.target)}
-                  value={selectedEdgeData.target_side}
-                  onChange={(side) =>
-                    updateSide.mutate({ id: selectedEdgeData.id, body: { b_side: side } })
-                  }
-                />
-              </div>
-            </>
-          )}
-
-          <div className="actions">
-            {editable && (
-              <button className="danger" onClick={() => removeLink.mutate(Number(selectedEdge.id))}>
-                この結線を削除
-              </button>
-            )}
-            <button onClick={() => setSelectedEdge(null)}>選択を解除</button>
-          </div>
-        </div>
-      )}
 
       {stats && stats.isolated_count > 0 && (
         <>
