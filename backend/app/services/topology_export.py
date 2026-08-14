@@ -108,7 +108,7 @@ def render_svg(
             edges=[e for e in graph.edges if e.source in keep and e.target in keep],
         )
     if not nodes:
-        return _empty_svg(title)
+        return _empty_svg(title, layer=graph.layer)
 
     min_x = min([n.x for n in nodes] + [p.x for p in peers])
     min_y = min([n.y for n in nodes] + [p.y for p in peers])
@@ -817,7 +817,7 @@ def _legend(x: float, y: float, width: float, media: set[Media] | None = None) -
     return "\n".join(parts)
 
 
-def _empty_svg(title: str) -> str:
+def _empty_svg(title: str, *, layer: str = "physical") -> str:
     return (
         f'<svg xmlns="http://www.w3.org/2000/svg" width="520" height="120" '
         f'viewBox="0 0 520 120" font-family="{FONT}">'
@@ -825,6 +825,7 @@ def _empty_svg(title: str) -> str:
         f'<text x="24" y="42" font-size="16" font-weight="700">{_esc(title)}</text>'
         '<text x="24" y="70" font-size="12" fill="#6b6b6b">'
         "表示できる機器がありません。Config を取り込むと結線が推定されます。</text>"
+        f'<text x="24" y="94" font-size="11" fill="#6b6b6b">レイヤ: {_esc(layer)}</text>'
         "</svg>"
     )
 
