@@ -64,3 +64,14 @@ def test_polish_stays_near_the_manual_position():
     assert abs(nodes[0].x - 103) <= LAYOUT_GRID * 2 + 1
     assert abs(nodes[0].y - 97) <= LAYOUT_GRID * 2 + 1
     assert abs(nodes[1].y - 410) <= LAYOUT_GRID * 2 + 1
+
+
+def test_max_move_does_not_split_an_aligned_row():
+    """横に空けても、揃えた段を縮めて別の段へ落とさない。"""
+    nodes = [
+        node(1, "a", 0, 0),
+        node(2, "b", 15, 18),
+        node(3, "c", 30, 34),
+    ]
+    _polish_layout(nodes)
+    assert len({n.y for n in nodes}) == 1

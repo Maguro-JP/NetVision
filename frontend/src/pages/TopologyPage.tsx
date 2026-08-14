@@ -50,7 +50,7 @@ const WIDE_LIMIT = 40;
 /** 配置のマス目。整頓・ドラッグの吸着と揃える。 */
 const LAYOUT_GRID = 40;
 
-function snapToGrid(value: number): number {
+export function snapToGrid(value: number): number {
   return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;
 }
 
@@ -272,8 +272,25 @@ const DEFAULT_WIDTH = 190;
  * 見た目だけの調整なので、保存するときは足し戻して元の値に返す。
  * そうしないと、保存するたびに機器が少しずつ左へ寄っていく。
  */
-function shiftFor(width: number | undefined): number {
+export function shiftFor(width: number | undefined): number {
   return width ? (width - DEFAULT_WIDTH) / 2 : 0;
+}
+
+/**
+ * 画面の座標を、保存する左上へ戻す。
+ *
+ * ドラッグは見た目（ずらしたあとの箱）をマス目へ吸着する。ずれはマス目の
+ * 整数倍ではないので、足してから丸めると保存値が別のマスへ飛び、読み込み
+ * で箱がずれる。先に見た目をマス目へ乗せ、そのあとずれを足す。
+ */
+export function storedFromDisplay(
+  display: { x: number; y: number },
+  shift: number,
+): { x: number; y: number } {
+  return {
+    x: snapToGrid(display.x) + shift,
+    y: snapToGrid(display.y),
+  };
 }
 
 function toFlow(
@@ -626,12 +643,14 @@ function TopologyEditor() {
         nodes
           .filter((n) => movedIds.current.has(n.id))
           .filter((n) => byId.get(n.id)?.outside !== true)
-          .map((n) => ({
-            device_id: Number(n.id),
-            // 見た目のために左へずらした分は足し戻す（shiftFor を参照）
-            x: snapToGrid(n.position.x + (n.data.shift ?? 0)),
-            y: snapToGrid(n.position.y),
-          })),
+          .map((n) => {
+            const stored = storedFromDisplay(n.position, n.data.shift ?? 0);
+            return {
+              device_id: Number(n.id),
+              x: stored.x,
+              y: stored.y,
+            };
+          }),
       );
     },
     onSuccess: async () => {

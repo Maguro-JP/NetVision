@@ -20,7 +20,13 @@
 import { describe, expect, it } from "vitest";
 
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
-import { assignAnchors, keepLocalPositions, sideToward } from "./TopologyPage";
+import {
+  assignAnchors,
+  keepLocalPositions,
+  shiftFor,
+  sideToward,
+  storedFromDisplay,
+} from "./TopologyPage";
 
 function node(
   id: number,
@@ -164,6 +170,25 @@ describe("引き出し口と通り道", () => {
         .map((office) => office.y - 0),
     );
     expect(widest).toBeLessThan(nearest / 2);
+  });
+});
+
+describe("保存する座標", () => {
+  it("広げた箱のずれはマス目の外でも、見た目の位置へ戻る", () => {
+    const shift = shiftFor(245);
+    expect(shift).toBe(27.5);
+    const display = { x: 80, y: 120 };
+    const stored = storedFromDisplay(display, shift);
+    expect(stored).toEqual({ x: 107.5, y: 120 });
+    expect({ x: stored.x - shift, y: stored.y }).toEqual(display);
+  });
+
+  it("ずれを足してから丸めると、読み込みで箱がマス目から外れる", () => {
+    const shift = shiftFor(245);
+    const display = { x: 80, y: 120 };
+    const wrong = Math.round((display.x + shift) / 40) * 40;
+    expect(wrong - shift).not.toBe(display.x);
+    expect(storedFromDisplay(display, shift).x - shift).toBe(display.x);
   });
 });
 

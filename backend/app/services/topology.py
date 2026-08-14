@@ -1040,7 +1040,7 @@ def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) ->
 LAYOUT_GRID = 40.0
 #: この距離以内なら同じ段・同じ列とみなして揃える（マス目1つ弱）
 _ALIGN_WITHIN = 36.0
-#: 整頓で動かしてよい上限。これを超えると「作り直し」に見える
+#: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
 #: 箱（190）＋マス目1つ分。これより近いと重なって見える
 _MIN_GAP_X = 230.0
@@ -1050,6 +1050,14 @@ _MIN_GAP_Y = 120.0
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:
     return round(value / grid) * grid
+
+
+def _clamp_move(delta: float, limit: float = _POLISH_MAX_MOVE) -> float:
+    if delta > limit:
+        return limit
+    if delta < -limit:
+        return -limit
+    return delta
 
 
 def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int, float]:
@@ -1118,7 +1126,7 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
     """人が置いた配置を、マス目・揃い・間隔だけ整える。
 
     木を組み直さない。初期配置へ戻すのはリセットの仕事。
-    動かす量はマス目2つ分までに抑える。それを超えると「作り直し」に見える。
+    動かす量は軸ごとにマス目2つ分までに抑える。それを超えると「作り直し」に見える。
     """
     if len(nodes) < 2:
         if nodes:
@@ -1142,13 +1150,9 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
 
     for node in nodes:
         ox, oy = origin[node.device_id]
-        dx = node.x - ox
-        dy = node.y - oy
-        distance = (dx * dx + dy * dy) ** 0.5
-        if distance > _POLISH_MAX_MOVE and distance > 0:
-            scale = _POLISH_MAX_MOVE / distance
-            node.x = ox + dx * scale
-            node.y = oy + dy * scale
+        # 軸ごとに切る。距離で両方を縮めると、横に空けたときに揃えた段まで戻る
+        node.x = ox + _clamp_move(node.x - ox)
+        node.y = oy + _clamp_move(node.y - oy)
         node.x = _snap_to_grid(node.x)
         node.y = _snap_to_grid(node.y)
 
