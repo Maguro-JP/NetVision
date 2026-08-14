@@ -1099,9 +1099,7 @@ def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int
     return aligned
 
 
-def _unstick_along(
-    nodes: list[TopologyNodeView], *, axis: str, min_gap: float
-) -> set[int]:
+def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> set[int]:
     """重なっている（または近すぎる）機器だけ、軸方向に空ける。
 
     一気に空けられるときだけ動かす。足りない押しを何度も繰り返すと、
