@@ -1836,9 +1836,7 @@ def arrange_positions(
     保存するのはいま見ている拠点の図。対向もこの図の座標として残す。
     相手の拠点の図は site_id が違う行なので、上書きしない。
     """
-    graph = load_diagram(
-        db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation
-    )
+    graph = load_diagram(db, layer, site_id=site_id, q=q, scope=scope, orientation=orientation)
     if positions:
         by_id = {node.device_id: node for node in graph.nodes}
         for device_id, x, y in positions:
