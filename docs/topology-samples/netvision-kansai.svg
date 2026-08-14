@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="798" height="688" viewBox="0 0 798 688" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">関西支社 物理構成</text>
-<text x="750" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-14 16:02 JST 時点 / 4台 3本</text>
+<text x="750" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-14 17:10 JST 時点 / 4台 3本</text>
 <polyline points="143,282 143,188 143,188 143,160" fill="none" stroke="#4a5364" stroke-width="1.6"/>
 <text class="port-label" x="150.0" y="269.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="26.0" y="167.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>

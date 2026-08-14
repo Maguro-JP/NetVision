@@ -35,8 +35,16 @@ def upgrade() -> None:
     op.create_table(
         "topology_group_members",
         sa.Column("id", sa.Integer(), primary_key=True),
-        sa.Column("group_id", sa.Integer(), sa.ForeignKey("topology_groups.id", ondelete="CASCADE")),
-        sa.Column("device_id", sa.Integer(), sa.ForeignKey("devices.id", ondelete="CASCADE")),
+        sa.Column(
+            "group_id",
+            sa.Integer(),
+            sa.ForeignKey("topology_groups.id", ondelete="CASCADE"),
+        ),
+        sa.Column(
+            "device_id",
+            sa.Integer(),
+            sa.ForeignKey("devices.id", ondelete="CASCADE"),
+        ),
         sa.UniqueConstraint("group_id", "device_id", name="uq_topology_group_member"),
     )
     op.create_index("ix_topology_group_members_group_id", "topology_group_members", ["group_id"])

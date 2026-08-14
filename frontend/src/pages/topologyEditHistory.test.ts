@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  absorbPositions,
   applyPositions,
   canRedo,
   canUndo,
@@ -65,6 +66,24 @@ describe("配置の編集過程", () => {
     expect(applyPositions(nodes, { "1": { x: 9, y: 8 } })).toEqual([
       { id: "1", position: { x: 9, y: 8 }, label: "a" },
       { id: "2", position: { x: 3, y: 4 }, label: "b" },
+    ]);
+  });
+
+  it("途中で増えた機器も、あとから戻せる", () => {
+    let history = startHistory({ "1": { x: 0, y: 0 } });
+    history = pushStep(history, { "1": { x: 40, y: 0 } });
+    history = absorbPositions(history, { "1": { x: 40, y: 0 }, "2": { x: 10, y: 20 } });
+    history = pushStep(history, { "1": { x: 40, y: 0 }, "2": { x: 80, y: 20 } });
+    const back = undo(history)!;
+    expect(applyPositions(
+      [
+        { id: "1", position: { x: 0, y: 0 } },
+        { id: "2", position: { x: 80, y: 20 } },
+      ],
+      back.stack[back.index],
+    )).toEqual([
+      { id: "1", position: { x: 40, y: 0 } },
+      { id: "2", position: { x: 10, y: 20 } },
     ]);
   });
 });

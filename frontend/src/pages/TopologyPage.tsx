@@ -43,6 +43,7 @@ import {
 } from "../lib/topologyColors";
 import { confirmLeave, useUnsavedWarning } from "../lib/unsaved";
 import {
+  absorbPositions,
   applyPositions,
   canRedo,
   canUndo,
@@ -696,6 +697,8 @@ function TopologyEditor() {
     if (!keepLocal) {
       historyRef.current = startHistory(capturePositions(nextNodes));
       setHistoryTick((value) => value + 1);
+    } else if (historyRef.current) {
+      historyRef.current = absorbPositions(historyRef.current, capturePositions(nextNodes));
     }
     setEdges(flow.edges);
     // 未保存の移動は消さない。以前はここで dirty を落としていたため、
@@ -850,16 +853,31 @@ function TopologyEditor() {
         status: "active",
         ...(input.site_id != null ? { site_id: input.site_id } : {}),
       });
-      await api.savePositions(layer, [{ device_id: device.id, x: input.x, y: input.y }]);
-      return device;
+      try {
+        await api.savePositions(layer, [{ device_id: device.id, x: input.x, y: input.y }]);
+        return { device, placed: true };
+      } catch {
+        return { device, placed: false };
+      }
     },
-    onSuccess: async (device) => {
+    onSuccess: async ({ device, placed }) => {
       setPlaceHostname("");
-      setNotice(
-        `${device.hostname} を図に置きました。箱のハンドルをドラッグすると線を引けます`,
-      );
+      if (appliedSearch.trim() && !device.hostname.toLowerCase().includes(appliedSearch.trim().toLowerCase())) {
+        setSearch("");
+        setAppliedSearch("");
+      }
       queryClient.invalidateQueries({ queryKey: ["devices"] });
       await refresh({ takeLayout: false });
+      setNotice(
+        placed
+          ? `${device.hostname} を図に置きました。箱のハンドルをドラッグすると線を引けます`
+          : `${device.hostname} は台帳に残しました。位置の保存に失敗したので、図を取り直しています`,
+      );
+    },
+    onError: async () => {
+      queryClient.invalidateQueries({ queryKey: ["devices"] });
+      await refresh({ takeLayout: false });
+      setNotice("機器を置けませんでした。同じ名前が既にあるときは別名にしてください");
     },
   });
 
@@ -1606,7 +1624,8 @@ function TopologyEditor() {
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onBeforeDelete={async ({ nodes: deletingNodes }) => {
-              // 機器の削除は台帳側。ノード選択中の Delete で、ぶら下がる線まで消さない
+              // 機器も枠も Delete では消さない。機器は台帳、枠は「枠を外す」。
+              // ノードが選ばれているときにぶら下がる線まで消さない。
               if (deletingNodes.length > 0) return false;
               return true;
             }}

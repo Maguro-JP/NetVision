@@ -187,3 +187,50 @@ def test_polish_reorders_a_column_to_match_port_order():
     by_id = {n.device_id: n for n in nodes}
     assert by_id[2].y < by_id[3].y < by_id[4].y
     assert len({n.x for n in (a, b, c)}) == 1
+
+
+def test_wobbly_column_is_not_flattened_into_a_row():
+    """手置きで列が数pxずれていても、1段に潰して横へ飛ばさない。"""
+    nodes = [
+        node(1, "a", 800, 0),
+        node(2, "b", 808, 20),
+        node(3, "c", 796, 40),
+        node(4, "d", 804, 60),
+        node(5, "e", 802, 80),
+    ]
+    _polish_layout(nodes)
+    xs = {n.x for n in nodes}
+    ys = {n.y for n in nodes}
+    assert len(xs) == 1
+    assert len(ys) >= 3
+    assert max(n.x for n in nodes) - min(n.x for n in nodes) < 80
+
+
+def test_parallel_links_do_not_stack_neighbors():
+    """同じ相手への線が2本あっても、整頓で箱を重ねない。"""
+    hub = node(1, "hub", 0, 200)
+    a = node(2, "a", 400, 80)
+    b = node(3, "b", 400, 320)
+    nodes = [hub, a, b]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 2, "GigabitEthernet0/2"),
+        edge(3, 1, 3, "GigabitEthernet0/3"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3})
+    assert {a.x, a.y} != {b.x, b.y}
+
+
+def test_uncross_does_not_pull_unaligned_neighbors():
+    """同じ列にいない相手まで入れ替えて、揃えた行を崩さない。"""
+    hub = node(1, "hub", 0, 200)
+    row = node(2, "row", 400, 200)
+    below = node(3, "below", 80, 480)
+    nodes = [hub, row, below]
+    edges = [
+        edge(1, 1, 2, "GigabitEthernet0/1"),
+        edge(2, 1, 3, "GigabitEthernet0/2"),
+    ]
+    _polish_layout(nodes, edges=edges, owned={1, 2, 3})
+    assert abs(row.y - 200) <= LAYOUT_GRID * 2
+    assert below.y >= 400

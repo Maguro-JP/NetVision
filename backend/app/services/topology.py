@@ -1450,32 +1450,6 @@ def _clamp_move(delta: float, limit: float = _POLISH_MAX_MOVE) -> float:
     return delta
 
 
-def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int, float]:
-    """近い値を同じ段・列にまとめる。中央値をマス目に乗せる。
-
-    隣どうしが近いだけで数珠つなぎにすると、縦に並んだ列が1段に潰れる。
-    グループの端から端は threshold までに抑える。
-    """
-    if not items:
-        return {}
-    ordered = sorted(items, key=lambda item: (item[1], item[0]))
-    groups: list[list[tuple[int, float]]] = [[ordered[0]]]
-    for item in ordered[1:]:
-        start = groups[-1][0][1]
-        prev = groups[-1][-1][1]
-        if item[1] - prev <= threshold and item[1] - start <= threshold:
-            groups[-1].append(item)
-        else:
-            groups.append([item])
-    aligned: dict[int, float] = {}
-    for group in groups:
-        mid = sorted(value for _, value in group)[len(group) // 2]
-        target = _snap_to_grid(mid)
-        for device_id, _ in group:
-            aligned[device_id] = target
-    return aligned
-
-
 def _align_axis(nodes: list[TopologyNodeView], *, axis: str, threshold: float) -> None:
     """近い段・列を揃える。同じ列の機器を同じ段へ潰して横に飛ばさない。"""
     if len(nodes) < 2:
@@ -1490,7 +1464,9 @@ def _align_axis(nodes: list[TopologyNodeView], *, axis: str, threshold: float) -
         value = getattr(node, axis)
         if value - prev <= threshold and value - start <= threshold:
             other_v = getattr(node, other)
-            stacked = any(abs(getattr(member, other) - other_v) < 1.0 for member in group)
+            stacked = any(
+                abs(getattr(member, other) - other_v) <= 12.0 for member in group
+            )
             if stacked:
                 groups.append([node])
                 continue
@@ -1532,7 +1508,7 @@ def _unstick_along(
         if axis == "x" and origins:
             xs = [origins[node.device_id][0] for node in group]
             ys = [origins[node.device_id][1] for node in group]
-            if max(xs) - min(xs) < 1.0 and max(ys) - min(ys) > 1.0:
+            if max(xs) - min(xs) <= 12.0 and max(ys) - min(ys) > max(xs) - min(xs):
                 # もともと同じ列。同じ段に潰れてても横へ飛ばさない。
                 continue
         for index in range(1, len(group)):
@@ -1625,6 +1601,7 @@ def _uncross_fans(
         lefts: list[TopologyNodeView] = []
         belows: list[TopologyNodeView] = []
         aboves: list[TopologyNodeView] = []
+        seen: set[int] = set()
         for edge in edges:
             other_id = (
                 edge.target
@@ -1633,11 +1610,12 @@ def _uncross_fans(
                 if edge.target == hub.device_id
                 else None
             )
-            if other_id is None:
+            if other_id is None or other_id in seen:
                 continue
             other = by_id.get(other_id)
             if other is None:
                 continue
+            seen.add(other_id)
             dx = other.x - hub.x
             dy = other.y - hub.y
             if abs(dx) >= abs(dy) and dx > 80:
@@ -1651,6 +1629,13 @@ def _uncross_fans(
         for group, along in ((rights, "y"), (lefts, "y"), (belows, "x"), (aboves, "x")):
             movable = [node for node in group if node.device_id in owned]
             if len(movable) < 2:
+                continue
+            across = "x" if along == "y" else "y"
+            span = max(getattr(node, across) for node in movable) - min(
+                getattr(node, across) for node in movable
+            )
+            # 同じ列・段にいない相手まで入れ替えると、揃えた行が崩れる
+            if span > LAYOUT_GRID:
                 continue
             slots = sorted(getattr(node, along) for node in movable)
             ordered = sorted(

@@ -35,6 +35,22 @@ export function startHistory(positions: PositionMap): EditHistory {
   return { baseline: snapshot, stack: [cloneMap(snapshot)], index: 0 };
 }
 
+/** 編集の途中で箱が増えたとき、過程の全部に今の位置を足す。足さないと戻せない。 */
+export function absorbPositions(history: EditHistory, positions: PositionMap): EditHistory {
+  const baseline = cloneMap(history.baseline);
+  const stack = history.stack.map(cloneMap);
+  let changed = false;
+  for (const [id, position] of Object.entries(positions)) {
+    if (id in baseline) continue;
+    changed = true;
+    baseline[id] = { ...position };
+    for (const frame of stack) {
+      if (!(id in frame)) frame[id] = { ...position };
+    }
+  }
+  return changed ? { ...history, baseline, stack } : history;
+}
+
 /** いまの配置を過程に足す。同じ内容なら何もしない。やり直し側は捨てる。 */
 export function pushStep(history: EditHistory, positions: PositionMap): EditHistory {
   const current = history.stack[history.index];
