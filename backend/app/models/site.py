@@ -14,6 +14,8 @@ class Site(Base):
     __tablename__ = "sites"
 
     id: Mapped[int] = mapped_column(primary_key=True)
+    #: 人が決める拠点ID。プロジェクト既定の番号をそのまま使える。空は未設定
+    code: Mapped[str | None] = mapped_column(String(80), unique=True, default=None, index=True)
     name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
     address: Mapped[str | None] = mapped_column(String(255), default=None)
     notes: Mapped[str | None] = mapped_column(String(1000), default=None)

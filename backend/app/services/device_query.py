@@ -171,6 +171,7 @@ def build_query(filters: DeviceFilters, *, today: date | None = None) -> Select:
         like = _like(filters.q)
         text_hits = [
             Device.hostname.ilike(like),
+            Device.code.ilike(like),
             Device.vendor.ilike(like),
             Device.model.ilike(like),
             Device.serial_number.ilike(like),
@@ -182,6 +183,7 @@ def build_query(filters: DeviceFilters, *, today: date | None = None) -> Select:
             Device.mgmt_ip.ilike(like),
             Device.notes.ilike(like),
             Site.name.ilike(like),
+            Site.code.ilike(like),
             Site.address.ilike(like),
             cast(Device.install_date, String).ilike(like),
             cast(Device.eos_date, String).ilike(like),

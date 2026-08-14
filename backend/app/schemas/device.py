@@ -1,6 +1,6 @@
 from datetime import date, datetime
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.models.device import DeviceStatus, DeviceType
 from app.schemas.maintenance import MaintenanceContractRead
@@ -9,6 +9,8 @@ from app.services.lifecycle import Severity
 
 class DeviceBase(BaseModel):
     hostname: str = Field(min_length=1, max_length=120)
+    #: 人が決める管理ID。社内台帳の番号など。空は未設定
+    code: str | None = Field(default=None, max_length=80)
     vendor: str = Field(min_length=1, max_length=80)
     model: str = Field(min_length=1, max_length=120)
     serial_number: str | None = None
@@ -29,6 +31,14 @@ class DeviceBase(BaseModel):
     eol_date: date | None = None
     notes: str | None = None
 
+    @field_validator("code", mode="before")
+    @classmethod
+    def _normalize_code(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
+
     @model_validator(mode="after")
     def _check_lifecycle_order(self):
         if self.eos_date and self.eol_date and self.eol_date < self.eos_date:
@@ -42,6 +52,8 @@ class DeviceCreate(DeviceBase):
     #: 拠点を名前で指定する。台帳に無い名前ならその場で拠点を作る。
     #: 拠点を先に登録しないと機器を登録できないのでは、試験や仮の入力で手が止まる
     site_name: str | None = Field(default=None, max_length=120)
+    #: 拠点ID（人が決めた code）で指定する。名前よりこちらを優先する
+    site_code: str | None = Field(default=None, max_length=80)
 
 
 class DeviceUpdate(BaseModel):
@@ -50,11 +62,13 @@ class DeviceUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     hostname: str | None = Field(default=None, min_length=1, max_length=120)
+    code: str | None = Field(default=None, max_length=80)
     vendor: str | None = Field(default=None, min_length=1, max_length=80)
     model: str | None = Field(default=None, min_length=1, max_length=120)
     serial_number: str | None = None
     #: 拠点を名前で指定する（DeviceCreate と同じ扱い）
     site_name: str | None = Field(default=None, max_length=120)
+    site_code: str | None = Field(default=None, max_length=80)
     device_type: DeviceType | None = None
     status: DeviceStatus | None = None
 
@@ -71,6 +85,14 @@ class DeviceUpdate(BaseModel):
     eos_date: date | None = None
     eol_date: date | None = None
     notes: str | None = None
+
+    @field_validator("code", mode="before")
+    @classmethod
+    def _normalize_code(cls, value: object) -> str | None:
+        if value is None:
+            return None
+        cleaned = str(value).strip()
+        return cleaned or None
 
 
 class LifecycleStatusRead(BaseModel):

@@ -29,6 +29,7 @@ from app.services.configparse import normalize_hostname
 # ---------------------------------------------------------------------------
 
 DEVICE_FIELDS = (
+    "code",
     "hostname",
     "vendor",
     "model",
@@ -39,6 +40,7 @@ DEVICE_FIELDS = (
     "os_version",
     "firmware_version",
     "site",
+    "site_code",
     "rack",
     "rack_unit",
     "mgmt_ip",
@@ -68,7 +70,8 @@ DATE_FIELDS = frozenset(
 )
 
 FIELD_LABELS: dict[str, str] = {
-    "device_id": "機器ID",
+    "device_id": "内部ID",
+    "code": "管理ID",
     "hostname": "ホスト名",
     "vendor": "ベンダー",
     "model": "型番",
@@ -79,6 +82,7 @@ FIELD_LABELS: dict[str, str] = {
     "os_version": "OSバージョン",
     "firmware_version": "ファームウェアバージョン",
     "site": "拠点",
+    "site_code": "拠点ID",
     "rack": "ラック",
     "rack_unit": "搭載U",
     "mgmt_ip": "管理IP",
@@ -97,12 +101,26 @@ FIELD_LABELS: dict[str, str] = {
 # 列名の別名。正規化（小文字化・空白と記号の除去）した文字列で突き合わせる。
 FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "device_id": (
+        "内部id",
+        "内部ID",
         "機器id",
         "機器ID",
         "id",
         "device_id",
         "deviceid",
         "台帳id",
+    ),
+    "code": (
+        "code",
+        "管理id",
+        "管理ID",
+        "管理番号",
+        "資産id",
+        "資産ID",
+        "資産番号",
+        "managementid",
+        "assetid",
+        "assettag",
     ),
     "hostname": (
         "hostname",
@@ -162,6 +180,15 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "事業所",
         "ロケーション",
         "建屋",
+    ),
+    "site_code": (
+        "sitecode",
+        "site_code",
+        "siteid",
+        "拠点id",
+        "拠点ID",
+        "拠点コード",
+        "拠点番号",
     ),
     "rack": ("rack", "rackname", "ラック", "ラック番号", "ラック名"),
     "rack_unit": ("rackunit", "unit", "u", "搭載u", "ユニット", "u位置", "搭載位置"),
@@ -600,6 +627,9 @@ def _run_import(
     ]
 
     site_cache = {s.name: s for s in db.scalars(select(Site))}
+    for site in list(site_cache.values()):
+        if site.code:
+            site_cache[site.code] = site
 
     # ファイルに出てくる鍵の分だけ、既存機器を先にまとめて引いておく。
     # 1行ずつ問い合わせると行数分の往復になり、取り込みが終わらなくなる
@@ -907,14 +937,40 @@ def _apply_values(
 ) -> None:
     """値が入っている項目だけ反映する（台帳の空欄で既存値を消さないため）。"""
     for name in DEVICE_FIELDS:
-        if name == "site":
+        if name in {"site", "site_code"}:
             continue
         value = values.get(name)
         if value is not None:
-            setattr(device, name, value)
+            if name == "code":
+                text = str(value).strip()
+                setattr(device, name, text or None)
+            else:
+                setattr(device, name, value)
 
+    site_code = values.get("site_code")
     site_name = values.get("site")
-    if site_name:
+    if site_code:
+        key = str(site_code).strip()
+        site = site_cache.get(key)
+        if site is None:
+            # 拠点IDは人が決めるものなので、無いときは名前なしで起こさずエラーにする
+            # （呼び出し側の issues に載せるのは難しいので、ここでは名前列があれば併用）
+            if site_name:
+                site = site_cache.get(str(site_name))
+                if site is None:
+                    site = Site(name=str(site_name), code=key)
+                    db.add(site)
+                    site_cache[str(site_name)] = site
+                    site_cache[key] = site
+                elif not site.code:
+                    site.code = key
+                    site_cache[key] = site
+            else:
+                site = Site(name=key, code=key)
+                db.add(site)
+                site_cache[key] = site
+        device.site = site
+    elif site_name:
         site = site_cache.get(str(site_name))
         if site is None:
             site = Site(name=str(site_name))

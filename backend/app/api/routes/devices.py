@@ -31,6 +31,20 @@ def _validate_site(db: Session, site_id: int | None) -> None:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"site {site_id} が存在しません")
 
 
+def _resolve_site_code(db: Session, code: str | None) -> int | None:
+    """拠点ID（人が決めた code）で拠点を特定する。無ければ作らない（IDは人が決めるもの）。"""
+    wanted = (code or "").strip()
+    if not wanted:
+        return None
+    site = db.scalar(select(Site).where(Site.code == wanted))
+    if site is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"拠点ID '{wanted}' の拠点がありません。先に拠点台帳へ登録してください",
+        )
+    return site.id
+
+
 def _resolve_site_name(db: Session, name: str | None) -> int | None:
     """拠点を名前で受け取る。台帳に無い名前ならその場で作る。
 
@@ -38,11 +52,15 @@ def _resolve_site_name(db: Session, name: str | None) -> int | None:
     止まる。作業の順番を道具の都合で決めさせないための入口。
 
     表記ゆれで拠点が二重にできないよう、前後の空白を落として大文字小文字を
-    無視して突き合わせる。
+    無視して突き合わせる。名前が拠点IDと一致する既存拠点があれば、そちらを使う。
     """
     wanted = (name or "").strip()
     if not wanted:
         return None
+
+    by_code = db.scalar(select(Site).where(Site.code == wanted))
+    if by_code is not None:
+        return by_code.id
 
     for site in db.scalars(select(Site)):
         if site.name.strip().casefold() == wanted.casefold():
@@ -52,6 +70,18 @@ def _resolve_site_name(db: Session, name: str | None) -> int | None:
     db.add(site)
     db.flush()
     return site.id
+
+
+def _ensure_unique_device_code(
+    db: Session, code: str | None, *, exclude_id: int | None = None
+) -> None:
+    if not code:
+        return
+    stmt = select(Device).where(Device.code == code)
+    if exclude_id is not None:
+        stmt = stmt.where(Device.id != exclude_id)
+    if db.scalar(stmt):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"管理ID '{code}' は登録済みです")
 
 
 @router.get("", response_model=list[DeviceRead])
@@ -118,10 +148,15 @@ def create_device(payload: DeviceCreate, db: DbSession) -> DeviceDetail:
         raise HTTPException(
             status.HTTP_409_CONFLICT, f"hostname '{payload.hostname}' は登録済みです"
         )
+    _ensure_unique_device_code(db, payload.code)
 
     values = payload.model_dump()
+    site_code = values.pop("site_code", None)
     site_name = values.pop("site_name", None)
-    if site_name:
+    # 拠点IDがあればそれを優先。名前は従来どおりその場で拠点を起こせる
+    if site_code:
+        values["site_id"] = _resolve_site_code(db, site_code)
+    elif site_name:
         values["site_id"] = _resolve_site_name(db, site_name)
 
     device = Device(**values)
@@ -150,8 +185,11 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
     device = _load(db, device_id)
     changes = payload.model_dump(exclude_unset=True)
 
+    site_code = changes.pop("site_code", None)
     site_name = changes.pop("site_name", None)
-    if site_name is not None:
+    if site_code is not None:
+        changes["site_id"] = _resolve_site_code(db, site_code) if site_code else None
+    elif site_name is not None:
         changes["site_id"] = _resolve_site_name(db, site_name)
 
     if "site_id" in changes:
@@ -162,6 +200,8 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
             raise HTTPException(
                 status.HTTP_409_CONFLICT, f"hostname '{changes['hostname']}' は登録済みです"
             )
+    if "code" in changes:
+        _ensure_unique_device_code(db, changes["code"], exclude_id=device_id)
 
     for key, value in changes.items():
         setattr(device, key, value)
