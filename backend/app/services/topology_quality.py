@@ -60,18 +60,18 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
     for members in by_site.values():
         if len(members) < 2:
             continue
-        ys = sorted(n.y for n in members)
-        xs = sorted(n.x for n in members)
-        # 同じ拠点の2台が縦に積まれ、横に開いていない
-        if ys[-1] - ys[0] > 80 and xs[-1] - xs[0] < 80:
-            # 自拠点のルータとスイッチは縦の背骨。冗長対の縦積みだけを落とす
-            if any(n.outside for n in members) or len({n.device_type for n in members}) == 1:
+        for index, left in enumerate(members):
+            for right in members[index + 1 :]:
+                if abs(left.y - right.y) <= 80 or abs(left.x - right.x) >= 80:
+                    continue
+                if not _should_sit_abreast(left, right, graph):
+                    continue
                 stacked = True
                 findings.append(
                     Finding(
                         False,
                         "redundant_stacked",
-                        f"{members[0].hostname} と {members[-1].hostname} が縦に積まれている",
+                        f"{left.hostname} と {right.hostname} が縦に積まれている",
                     )
                 )
     if not stacked:
@@ -151,6 +151,23 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
 
 def is_acceptable(findings: list[Finding]) -> bool:
     return bool(findings) and all(item.ok for item in findings)
+
+
+def _should_sit_abreast(left, right, graph: TopologyGraph) -> bool:
+    """冗長の対だけ横並びが要る。縦の背骨（出口→ファイアウォール→コア）は対象外。"""
+    neighbours: dict[int, set[int]] = defaultdict(set)
+    bundle = 0
+    for edge in graph.edges:
+        pair = {edge.source, edge.target}
+        if pair == {left.device_id, right.device_id}:
+            bundle += 1
+            continue
+        neighbours[edge.source].add(edge.target)
+        neighbours[edge.target].add(edge.source)
+    common = neighbours[left.device_id] & neighbours[right.device_id]
+    if len(common) >= 2:
+        return True
+    return bundle >= 2 and left.site_id == right.site_id
 
 
 @dataclass(frozen=True)
