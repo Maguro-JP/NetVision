@@ -62,16 +62,16 @@ const VIEW_KEY = "netvision.topology.view";
 // 描くだけで重い。拠点を選ぶか、名前で探してもらう
 const WIDE_LIMIT = 40;
 
-/** 配置のマス目。整頓・ドラッグの吸着と揃える。 */
+/** 配置のマス目。画面の線・自動配置・整頓で使う。手で置くときは吸着しない。 */
 const LAYOUT_GRID = 40;
 
 export function snapToGrid(value: number): number {
   return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;
 }
 
-/** 図をクリックした位置を、箱の左上としてマス目に乗せる。 */
+/** 図をクリックした位置を、箱の左上にする。手置きはマス目に吸着しない。 */
 export function placementFromClick(x: number, y: number): { x: number; y: number } {
-  return { x: snapToGrid(x), y: snapToGrid(y) };
+  return { x, y };
 }
 
 /** 線を通す道の間隔。狭いと線が重なって、広いと図が間延びする */
@@ -309,17 +309,16 @@ export function shiftFor(width: number | undefined): number {
 /**
  * 画面の座標を、保存する左上へ戻す。
  *
- * ドラッグは見た目（ずらしたあとの箱）をマス目へ吸着する。ずれはマス目の
- * 整数倍ではないので、足してから丸めると保存値が別のマスへ飛び、読み込み
- * で箱がずれる。先に見た目をマス目へ乗せ、そのあとずれを足す。
+ * 見た目は箱を広げたぶん左へずらしている。保存は左上の値なので、ずれを足す。
+ * 手置きはマス目に載せない。丸めると希望の位置からずれる。
  */
 export function storedFromDisplay(
   display: { x: number; y: number },
   shift: number,
 ): { x: number; y: number } {
   return {
-    x: snapToGrid(display.x) + shift,
-    y: snapToGrid(display.y),
+    x: display.x + shift,
+    y: display.y,
   };
 }
 
@@ -1064,7 +1063,7 @@ function TopologyEditor() {
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
           </>
         ) : (
-          <>図は動かせません。並べ替えたいときは「編集する」を押してください。マス目に合わせて置けます。</>
+          <>図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。</>
         )}
         <br />
         {LAYERS.find((item) => item.value === layer)?.hint}
@@ -1430,8 +1429,6 @@ function TopologyEditor() {
             nodesConnectable={editable && layer !== "logical"}
             elementsSelectable
             deleteKeyCode={editable && layer !== "logical" ? ["Backspace", "Delete"] : null}
-            snapToGrid={editable}
-            snapGrid={[LAYOUT_GRID, LAYOUT_GRID]}
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onBeforeDelete={async ({ nodes: deletingNodes }) => {

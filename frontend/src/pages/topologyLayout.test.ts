@@ -189,21 +189,20 @@ describe("引き出し口と通り道", () => {
 });
 
 describe("保存する座標", () => {
-  it("広げた箱のずれはマス目の外でも、見た目の位置へ戻る", () => {
+  it("広げた箱のずれは、見た目の位置へ戻る", () => {
     const shift = shiftFor(245);
     expect(shift).toBe(27.5);
-    const display = { x: 80, y: 120 };
+    const display = { x: 83, y: 117 };
     const stored = storedFromDisplay(display, shift);
-    expect(stored).toEqual({ x: 107.5, y: 120 });
+    expect(stored).toEqual({ x: 110.5, y: 117 });
     expect({ x: stored.x - shift, y: stored.y }).toEqual(display);
   });
 
-  it("ずれを足してから丸めると、読み込みで箱がマス目から外れる", () => {
+  it("保存でマス目に丸めない", () => {
     const shift = shiftFor(245);
-    const display = { x: 80, y: 120 };
-    const wrong = Math.round((display.x + shift) / 40) * 40;
-    expect(wrong - shift).not.toBe(display.x);
+    const display = { x: 83, y: 117 };
     expect(storedFromDisplay(display, shift).x - shift).toBe(display.x);
+    expect(storedFromDisplay(display, shift).y).toBe(display.y);
   });
 
   it("保存は画面にある機器を全部送る（差分や対向だけ落とさない）", () => {
@@ -263,8 +262,8 @@ describe("動かした位置を表示の切り替えで消さない", () => {
 });
 
 describe("図をクリックして機器を置く位置", () => {
-  it("マス目に乗せる", () => {
-    expect(placementFromClick(23, 61)).toEqual({ x: 40, y: 80 });
+  it("クリックした位置をそのまま使う", () => {
+    expect(placementFromClick(23, 61)).toEqual({ x: 23, y: 61 });
     expect(placementFromClick(0, 0)).toEqual({ x: 0, y: 0 });
   });
 });
