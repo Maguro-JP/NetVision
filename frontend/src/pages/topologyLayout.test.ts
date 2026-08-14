@@ -211,6 +211,23 @@ describe("動かした位置を表示の切り替えで消さない", () => {
     expect(keepLocalPositions(incoming, current, true)).toEqual(incoming);
   });
 
+  it("台数が増えても、残っている機器の未保存位置は保つ", () => {
+    const incoming = [
+      { id: "1", position: { x: 0, y: 0 } },
+      { id: "2", position: { x: 100, y: 0 } },
+      { id: "3", position: { x: 200, y: 0 } },
+    ];
+    const current = [
+      { id: "1", position: { x: 40, y: 80 } },
+      { id: "2", position: { x: 100, y: 0 } },
+    ];
+    expect(keepLocalPositions(incoming, current, true)).toEqual([
+      { id: "1", position: { x: 40, y: 80 } },
+      { id: "2", position: { x: 100, y: 0 } },
+      { id: "3", position: { x: 200, y: 0 } },
+    ]);
+  });
+
   it("保存・リセットのあとは、サーバの配置をそのまま使う", () => {
     const incoming = [{ id: "1", position: { x: 0, y: 0 } }];
     const current = [{ id: "1", position: { x: 40, y: 80 } }];

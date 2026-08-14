@@ -1063,6 +1063,14 @@ def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:
     return round(value / grid) * grid
 
 
+def _snap_at_least(value: float, floor: float, grid: float = LAYOUT_GRID) -> float:
+    """マス目に乗せつつ、floor 未満にならない位置へ切り上げる。"""
+    snapped = _snap_to_grid(value, grid)
+    if snapped + 1e-9 >= floor:
+        return snapped
+    return ceil(floor / grid - 1e-12) * grid
+
+
 def _clamp_move(delta: float, limit: float = _POLISH_MAX_MOVE) -> float:
     if delta > limit:
         return limit
@@ -1091,13 +1099,19 @@ def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int
     return aligned
 
 
-def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
+def _unstick_along(
+    nodes: list[TopologyNodeView], *, axis: str, min_gap: float
+) -> set[int]:
     """重なっている（または近すぎる）機器だけ、軸方向に空ける。
 
     一気に空けられるときだけ動かす。足りない押しを何度も繰り返すと、
     押すたびに図が変わるので、足りないときは触らない。
-    同じマスに完全に重なっているときだけ、マス目1つ分ずらす。
+
+    同じマスに積み重なっている（gap < LAYOUT_GRID）ときは、前の点から
+    min_gap まで一気に離す。返り値はその強制移動をした device_id。
+    呼び出し側で移動上限の clamp を外さないと、また同じマスに潰れる。
     """
+    forced: set[int] = set()
     buckets: dict[float, list[TopologyNodeView]] = {}
     other = "y" if axis == "x" else "x"
     for node in nodes:
@@ -1113,12 +1127,15 @@ def _unstick_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) 
             if gap >= min_gap:
                 continue
             needed = min_gap - gap
-            if needed <= _POLISH_MAX_MOVE:
-                setattr(group[index], axis, prev + min_gap)
+            if gap < LAYOUT_GRID:
+                target = prev + min_gap
+                setattr(group[index], axis, _snap_at_least(target, prev + min_gap))
+                forced.add(group[index].device_id)
                 continue
-            # 同じマスへの完全な重なりだけは、1マスずらす（上限内）
-            if gap < LAYOUT_GRID and (LAYOUT_GRID - gap) <= _POLISH_MAX_MOVE:
-                setattr(group[index], axis, prev + LAYOUT_GRID)
+            if needed <= _POLISH_MAX_MOVE:
+                target = prev + min_gap
+                setattr(group[index], axis, _snap_at_least(target, prev + min_gap))
+    return forced
 
 
 def _polish_layout(nodes: list[TopologyNodeView]) -> None:
@@ -1127,6 +1144,7 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
     ツリーを組み直さない。初期配置へ戻すのはリセットの仕事。
     動かす量は軸ごとにマス目2つ分まで。足りない押しを何度も繰り返さない
     （同じ図で二度押しても、位置が変わらないこと）。
+    積み重なりをほどいた機器だけは、ほどいた間隔を clamp で潰さない。
     """
     if len(nodes) < 2:
         if nodes:
@@ -1143,14 +1161,16 @@ def _polish_layout(nodes: list[TopologyNodeView]) -> None:
     for node in nodes:
         node.x = aligned_x[node.device_id]
 
-    _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X)
-    _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
+    forced_x = _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X)
+    forced_y = _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
 
     for node in nodes:
         ox, oy = origin[node.device_id]
         # 軸ごとに切る。距離で両方を縮めると、揃えた段まで戻る
-        node.x = ox + _clamp_move(node.x - ox)
-        node.y = oy + _clamp_move(node.y - oy)
+        if node.device_id not in forced_x:
+            node.x = ox + _clamp_move(node.x - ox)
+        if node.device_id not in forced_y:
+            node.y = oy + _clamp_move(node.y - oy)
         node.x = _snap_to_grid(node.x)
         node.y = _snap_to_grid(node.y)
 

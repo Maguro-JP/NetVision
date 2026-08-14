@@ -112,3 +112,20 @@ def test_near_overlap_within_budget_is_cleared():
     ]
     _polish_layout(nodes)
     assert nodes[1].x - nodes[0].x >= 230
+
+
+def test_stacked_nodes_are_separated_in_one_polish():
+    """同じ座標に積み重なった機器は、一回で読める間隔まで離す。"""
+    nodes = [
+        node(1, "a", 0, 0),
+        node(2, "b", 0, 0),
+        node(3, "c", 0, 0),
+    ]
+    _polish_layout(nodes)
+    xs = sorted(n.x for n in nodes)
+    assert xs[1] - xs[0] >= 230
+    assert xs[2] - xs[1] >= 230
+    first = [(n.device_id, n.x, n.y) for n in nodes]
+    _polish_layout(nodes)
+    second = [(n.device_id, n.x, n.y) for n in nodes]
+    assert first == second

@@ -392,10 +392,8 @@ export function keepLocalPositions<T extends { id: string; position: { x: number
   keep: boolean,
 ): T[] {
   if (!keep || current.length === 0) return incoming;
-  const seen = new Set(current.map((n) => n.id));
-  if (incoming.length !== current.length || incoming.some((n) => !seen.has(n.id))) {
-    return incoming;
-  }
+  // 台数が変わっても、残っている機器の未保存位置は捨てない。
+  // 結線削除で L2/L3 の顔ぶれが変わったとき、配置までリセットされないようにする。
   const prev = new Map(current.map((n) => [n.id, n.position]));
   return incoming.map((n) => {
     const position = prev.get(n.id);
@@ -820,18 +818,26 @@ function TopologyEditor() {
   const handleNodesChange = useCallback(
     (changes: NodeChange<Node<DeviceNodeData>>[]) => {
       onNodesChange(changes);
+      if (applyingHistory.current) return;
+      // ドラッグ中の途中座標は残さない
+      if (changes.some((change) => change.type === "position" && change.dragging === true)) {
+        return;
+      }
+      // ドラッグ終了・矢印キーなど、確定した移動（dragging: false）
+      const settled = changes.some(
+        (change) => change.type === "position" && change.dragging === false,
+      );
+      if (!settled) return;
+      requestAnimationFrame(() => {
+        if (applyingHistory.current) return;
+        const current = instance.current?.getNodes() ?? [];
+        if (current.length === 0) return;
+        const history = historyRef.current ?? startHistory(capturePositions(current));
+        rememberHistory(pushStep(history, capturePositions(current)));
+      });
     },
-    [onNodesChange],
+    [onNodesChange, rememberHistory],
   );
-
-  /** ドラッグが終わったタイミングで、その配置を編集過程に残す */
-  const onNodeDragStop = useCallback(() => {
-    if (applyingHistory.current) return;
-    const current = instance.current?.getNodes() ?? [];
-    if (current.length === 0) return;
-    const history = historyRef.current ?? startHistory(capturePositions(current));
-    rememberHistory(pushStep(history, capturePositions(current)));
-  }, [rememberHistory]);
 
   // 入力欄にいるときはショートカットを奪わない
   useEffect(() => {
@@ -910,12 +916,18 @@ function TopologyEditor() {
   const onEdgesDelete = useCallback(
     (deleted: Edge[]) => {
       if (!editable) return;
+      // 論理図の線はトンネルID。物理の結線APIに渡すと別の線を消す
+      if (layer === "logical") {
+        setNotice("論理構成の線はトンネルです。ここでは消せません");
+        void refresh({ takeLayout: false });
+        return;
+      }
       for (const edge of deleted) {
         const id = Number(edge.id);
         if (Number.isFinite(id)) removeLink.mutate(id);
       }
     },
-    [editable, removeLink],
+    [editable, layer, refresh, removeLink],
   );
 
   /** 選択中のものは常に出す。消えると外せなくなるため。 */
@@ -1281,16 +1293,15 @@ function TopologyEditor() {
             nodesDraggable={editable}
             nodesConnectable={editable && layer !== "logical"}
             elementsSelectable
-            deleteKeyCode={editable ? ["Backspace", "Delete"] : null}
+            deleteKeyCode={editable && layer !== "logical" ? ["Backspace", "Delete"] : null}
             snapToGrid={editable}
             snapGrid={[LAYOUT_GRID, LAYOUT_GRID]}
             onNodesChange={handleNodesChange}
-            onNodeDragStop={onNodeDragStop}
             onEdgesChange={onEdgesChange}
-            onBeforeDelete={async ({ nodes: deletingNodes, edges: deletingEdges }) => {
-              // 機器の削除は台帳側。図上の Delete は結線だけ
-              if (deletingNodes.length === 0) return true;
-              return { nodes: [], edges: deletingEdges };
+            onBeforeDelete={async ({ nodes: deletingNodes }) => {
+              // 機器の削除は台帳側。ノード選択中の Delete で、ぶら下がる線まで消さない
+              if (deletingNodes.length > 0) return false;
+              return true;
             }}
             onEdgesDelete={onEdgesDelete}
             onConnect={onConnect}
@@ -1334,7 +1345,7 @@ function TopologyEditor() {
                         ? ` ${selectedEdgeData.target_interface}`
                         : ""}
                     </span>
-                    {editable ? (
+                    {editable && layer !== "logical" ? (
                       <>
                         <button
                           className="danger"
@@ -1365,6 +1376,8 @@ function TopologyEditor() {
                           }
                         />
                       </>
+                    ) : editable ? (
+                      <span className="muted">論理構成の線はここでは消せません</span>
                     ) : (
                       <span className="muted">消すときは編集する</span>
                     )}
