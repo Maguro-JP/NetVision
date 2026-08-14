@@ -30,8 +30,8 @@ class Settings(BaseSettings):
     # サーバの時計が UTC でも、資料に載る「◯◯時点」は使う人の時刻でなければ意味が無い。
     display_timezone: str = "Asia/Tokyo"
 
-    # 起動時にテーブルが無ければ作る。ノートPCの1台運用（SQLite）向け。
-    # チームで Postgres を使う場合は alembic でマイグレーションするので false のまま。
+    # 互換のため残している。空の DB は起動時に表を作る。
+    # 中身のある DB の差分は、専用ページで控えを取ってから当てる。
     auto_create_schema: bool = False
 
     # プレビュー用のデモ運用。有効にするとスキーマ作成に加えてデモデータも入れる。
@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     # API と同じプロセスから画面も配信する（1台完結モード）。
     # ビルド済みの frontend/dist を指す。
     serve_frontend: str | None = None
+
+    # 表を更新する前の控えの置き場所。空なら DB または資料フォルダの隣の backups/
+    backup_path: str | None = None
 
 
 settings = Settings()

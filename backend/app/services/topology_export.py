@@ -978,7 +978,7 @@ def export_svg(
     orientation: str = "vertical",
 ) -> str:
     return render_svg(
-        attach_groups(db, get_graph(db, layer, orientation=orientation)),
+        attach_groups(db, get_graph(db, layer, orientation=orientation, site_id=site_id)),
         title=title,
         vlan=vlan,
         vrf=vrf,

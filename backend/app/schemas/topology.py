@@ -217,6 +217,8 @@ class NodePosition(BaseModel):
 
 class SavePositions(BaseModel):
     layer: str = "physical"
+    # どの拠点の図として残すか。空は全体図
+    site_id: int | None = None
     positions: list[NodePosition]
 
 

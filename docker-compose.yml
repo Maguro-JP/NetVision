@@ -20,14 +20,17 @@ services:
       NETVISION_DATABASE_URL: postgresql+psycopg://netvision:netvision@db:5432/netvision
       NETVISION_CORS_ORIGINS: '["http://localhost:5173","http://localhost:8080"]'
       NETVISION_DOCUMENT_STORAGE_PATH: /var/lib/netvision/documents
+      NETVISION_BACKUP_PATH: /var/lib/netvision/backups
     volumes:
       # マニュアル等の実体。DB とは別領域なので、バックアップは2系統必要
       - documents:/var/lib/netvision/documents
+      # 表を更新する前の控え。確認するまで残す
+      - backups:/var/lib/netvision/backups
     depends_on:
       db:
         condition: service_healthy
-    # 起動時にマイグレーションを適用してから API を立ち上げる
-    command: sh -c "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    # 差分があるときはアプリが専用ページを出す。ここで alembic を先に当てない
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
     ports:
       # 認証がまだ無いため、既定では自分の端末からのみ
       - "127.0.0.1:8000:8000"
@@ -42,3 +45,4 @@ services:
 volumes:
   pgdata:
   documents:
+  backups:

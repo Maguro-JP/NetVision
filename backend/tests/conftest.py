@@ -1,4 +1,13 @@
-import pytest
+"""試験用の共通準備。
+
+起動時 Alembic は通さない。メモリ上の SQLite にモデルから表を作る。
+"""
+
+import os
+
+os.environ.setdefault("NETVISION_SKIP_SCHEMA", "true")
+
+import pytest  # noqa: E402
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker

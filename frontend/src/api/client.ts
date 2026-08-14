@@ -36,6 +36,7 @@ import type {
   ScenarioDetail,
   ScenarioItem,
   ScenarioSummary,
+  SchemaStatus,
   Site,
   TopologyEdge,
   TopologyGraph,
@@ -399,10 +400,14 @@ export const api = {
       device_count: number;
       unresolved: { device: string; name: string; destination: string | null; kind: string | null }[];
     }>("/topology/tunnels"),
-  savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>
+  savePositions: (
+    layer: string,
+    positions: { device_id: number; x: number; y: number }[],
+    siteId?: number,
+  ) =>
     request<{ saved: number }>("/topology/positions", {
       method: "PUT",
-      body: JSON.stringify({ layer, positions }),
+      body: JSON.stringify({ layer, site_id: siteId ?? null, positions }),
     }),
   createTopologyGroup: (body: {
     layer: string;
@@ -661,6 +666,9 @@ export const api = {
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
 
   meta: () => request<AppMeta>("/meta"),
+  schemaStatus: () => request<SchemaStatus>("/schema"),
+  applySchema: () => request<SchemaStatus>("/schema/apply", { method: "POST" }),
+  confirmSchema: () => request<SchemaStatus>("/schema/confirm", { method: "POST" }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>

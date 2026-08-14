@@ -50,8 +50,8 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def get_db() -> Iterator[Session]:
-    # デモモードのときだけ、初回アクセスでスキーマとデモデータを用意する。
-    # サーバレスでは startup イベントが走る保証が無いため、ここで面倒を見る。
+    # 起動時に Alembic で表を最新にする。サーバレスでは lifespan が
+    # 走る保証が無いため、最初の DB 利用でも同じ処理を見る。
     from app.bootstrap import ensure_ready
 
     ensure_ready()

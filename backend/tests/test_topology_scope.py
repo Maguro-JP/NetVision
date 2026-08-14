@@ -248,10 +248,11 @@ def test_a_saved_layout_is_not_rearranged(db_session):
 
 
 def test_a_placed_peer_does_not_block_rearranging_the_site(db_session):
-    """対向が保存済みでも、自拠点の並べ直しは止まらないこと。
+    """対向がこの拠点の図で保存済みでも、自拠点の並べ直しは止まらないこと。
 
     対向の位置まで「保存済み」と見なすと、拠点を見ているときの最適化も
-    リセットも効かなくなる。対向は脇へ寄せる対象なので、内側は並べ直す。
+    リセットも効かなくなる。対向はこの図の脇へ寄せる対象なので、内側は並べ直す。
+    この図で置いた対向は残す。
     """
     ids = build(db_session)
     graph = topology.get_graph(db_session)
@@ -263,7 +264,8 @@ def test_a_placed_peer_does_not_block_rearranging_the_site(db_session):
     scoped = topology.scope_graph(graph, site_id=ids["osaka"])
     kept = {n.hostname: n for n in scoped.nodes}
 
-    assert kept["east-core-rt-01"].placed is True  # 対向の位置は残る
+    assert kept["east-core-rt-01"].placed is True
+    assert (kept["east-core-rt-01"].x, kept["east-core-rt-01"].y) == (9999.0, 9999.0)
     assert (kept["osaka-rt-01"].x, kept["osaka-rt-01"].y) != (50.0, 800.0)
     assert kept["osaka-rt-01"].y < kept["osaka-sw-01"].y
 
@@ -317,6 +319,67 @@ def test_many_peers_are_spread_out_instead_of_overlapping(db_session):
     assert all(b - a >= 200 for a, b in zip(row, row[1:], strict=False))
     # 上位は配下の中央に来る
     assert row[0] < placed["ksi-br-rt-01"][0] < row[-1]
+
+
+def test_peers_clear_a_wide_hub_box(db_session):
+    """結線が多い箱の右端より右に、対向を置くこと。線が箱の下に隠れない。"""
+    from app.services.topology import _box_width, _visual_right
+
+    site = Site(name="拠点", address="")
+    db_session.add(site)
+    db_session.flush()
+    hub = Device(
+        hostname="hub-rt",
+        vendor="Cisco",
+        model="ISR4451-X",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id,
+    )
+    db_session.add(hub)
+    db_session.flush()
+    peer = Device(
+        hostname="peer-rt",
+        vendor="NEC",
+        model="IX2215",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id + 999,
+    )
+    db_session.add(peer)
+    db_session.flush()
+    for index in range(8):
+        leaf = Device(
+            hostname=f"leaf-{index:02d}",
+            vendor="NEC",
+            model="IX2215",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db_session.add(leaf)
+        db_session.flush()
+        db_session.add(
+            Link(
+                a_device_id=hub.id,
+                a_interface=f"Gi0/1/{index}",
+                b_device_id=leaf.id,
+                b_interface="Gi0/0",
+            )
+        )
+    db_session.add(
+        Link(
+            a_device_id=hub.id,
+            a_interface="Gi0/2/0",
+            b_device_id=peer.id,
+            b_interface="Gi0/0",
+        )
+    )
+    db_session.commit()
+
+    graph = topology.scope_graph(topology.get_graph(db_session), site_id=site.id)
+    hub_node = next(n for n in graph.nodes if n.hostname == "hub-rt")
+    peer_node = next(n for n in graph.nodes if n.hostname == "peer-rt")
+    box_right = _visual_right(hub_node.x, 9)
+    assert peer_node.x > box_right + 100
+    assert _box_width(9) > _box_width(3)
 
 
 def test_horizontal_orientation_puts_the_upper_device_on_the_left(db_session):

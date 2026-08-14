@@ -10,6 +10,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -20,16 +21,27 @@ from sqlalchemy import create_engine, inspect, text
 BACKEND = Path(__file__).resolve().parent.parent
 
 
-def _upgrade(database_url: str) -> None:
+def _run_backend(database_url: str, code: str) -> None:
+    env = os.environ.copy()
+    env.pop("PYTEST_CURRENT_TEST", None)
+    env["NETVISION_DATABASE_URL"] = database_url
+    env["NETVISION_SKIP_SCHEMA"] = "0"
+    existing = env.get("PYTHONPATH", "")
+    env["PYTHONPATH"] = str(BACKEND) if not existing else f"{BACKEND}{os.pathsep}{existing}"
     result = subprocess.run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        cwd=BACKEND,
-        env={"PATH": "/usr/bin:/bin", "NETVISION_DATABASE_URL": database_url, "HOME": "/tmp"},
+        [sys.executable, "-c", code],
+        # backend/ を cwd にすると、同名の alembic/ がライブラリを隠す
+        cwd=BACKEND.parent,
+        env=env,
         capture_output=True,
         text=True,
     )
     if result.returncode != 0:
-        pytest.fail(f"alembic upgrade に失敗しました:\n{result.stdout}\n{result.stderr}")
+        pytest.fail(f"スキーマ適用に失敗しました:\n{result.stdout}\n{result.stderr}")
+
+
+def _upgrade(database_url: str) -> None:
+    _run_backend(database_url, "from app.bootstrap import apply_schema; apply_schema()")
 
 
 @pytest.fixture
@@ -113,3 +125,98 @@ def test_schema_matches_the_models(migrated: str):
                 missing.append(f"{table.name}.{column.name}")
 
     assert not missing, "マイグレーションに入っていない項目があります: " + ", ".join(missing)
+
+
+def _site_id_and_revision(url: str) -> tuple[bool, str | None]:
+    engine = create_engine(url)
+    inspector = inspect(engine)
+    columns = {c["name"] for c in inspector.get_columns("topology_nodes")}
+    with engine.connect() as conn:
+        revision = conn.execute(text("select version_num from alembic_version")).scalar()
+    return "site_id" in columns, revision
+
+
+def test_apply_schema_is_safe_to_run_twice(tmp_path: Path):
+    url = f"sqlite:///{tmp_path / 'twice.db'}"
+    _upgrade(url)
+    _upgrade(url)
+    has_site, revision = _site_id_and_revision(url)
+    assert has_site
+    assert revision
+
+
+def test_create_all_db_without_alembic_version_gets_stamped(tmp_path: Path):
+    """以前の1台完結は create_all だったので、版の記録が無い。
+
+    列はモデルどおりにある。stamp してから差分を当てれば、手で SQL を書く必要は無い。
+    """
+    url = f"sqlite:///{tmp_path / 'create_all.db'}"
+    _run_backend(
+        url,
+        "import app.models; from app.db import Base, engine; Base.metadata.create_all(engine)",
+    )
+    engine = create_engine(url)
+    assert "alembic_version" not in inspect(engine).get_table_names()
+
+    _upgrade(url)
+    has_site, revision = _site_id_and_revision(url)
+    assert has_site
+    assert revision
+
+
+def test_old_sqlite_without_site_id_gains_the_column(tmp_path: Path):
+    """site_id を足す前の試用 DB を起動したとき、列が自動で付くこと。"""
+    url = f"sqlite:///{tmp_path / 'old.db'}"
+    _run_backend(
+        url,
+        "from alembic import command; from app.bootstrap import _alembic_config; "
+        "command.upgrade(_alembic_config(), 'b7e4d12c90aa')",
+    )
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        conn.execute(text("drop table alembic_version"))
+    columns = {c["name"] for c in inspect(engine).get_columns("topology_nodes")}
+    assert "site_id" not in columns
+
+    _upgrade(url)
+    has_site, revision = _site_id_and_revision(url)
+    assert has_site
+    assert revision == "c9f1a2b3d4e5"
+
+
+def test_existing_rows_stay_as_global_layout(tmp_path: Path):
+    """既存の座標は全体図（site_id 空）のまま残る。人が移し替える作業は無い。"""
+    url = f"sqlite:///{tmp_path / 'rows.db'}"
+    _run_backend(
+        url,
+        "from alembic import command; from app.bootstrap import _alembic_config; "
+        "command.upgrade(_alembic_config(), 'b7e4d12c90aa')",
+    )
+    engine = create_engine(url)
+    with engine.begin() as conn:
+        conn.execute(text("INSERT INTO sites (name) VALUES ('本社')"))
+        conn.execute(
+            text(
+                "INSERT INTO devices (hostname, vendor, model, device_type, status) "
+                "VALUES ('core-sw-01', 'Cisco', 'C9500', 'switch', 'active')"
+            )
+        )
+        device_id = conn.execute(text("SELECT id FROM devices")).scalar_one()
+        conn.execute(
+            text(
+                "INSERT INTO topology_nodes (device_id, layer, x, y, pinned) "
+                "VALUES (:d, 'physical', 120, 80, 1)"
+            ),
+            {"d": device_id},
+        )
+        conn.execute(text("drop table alembic_version"))
+
+    _upgrade(url)
+    with engine.connect() as conn:
+        row = conn.execute(
+            text("SELECT site_id, x, y FROM topology_nodes WHERE device_id = :d"),
+            {"d": device_id},
+        ).one()
+    assert row[0] is None
+    assert row[1] == 120
+    assert row[2] == 80

@@ -862,6 +862,37 @@ export interface AppMeta {
   demo_mode: boolean;
   warning_days: number;
   critical_days: number;
+  version?: string;
+  schema_revision?: string | null;
+  schema_phase?: SchemaPhase;
+}
+
+export type SchemaPhase = "ready" | "needs_apply" | "needs_confirm";
+
+export interface SchemaStep {
+  revision: string;
+  summary: string;
+}
+
+export interface SchemaBackup {
+  id: string;
+  path: string;
+  created_at: string;
+  from_revision: string | null;
+  to_revision: string | null;
+  bytes: number;
+  documents_bytes: number;
+  kind: string;
+  confirmed_at: string | null;
+}
+
+export interface SchemaStatus {
+  phase: SchemaPhase;
+  current_revision: string | null;
+  head_revision: string;
+  pending: SchemaStep[];
+  counts: { devices: number; sites: number } | null;
+  unconfirmed: SchemaBackup[];
 }
 
 /** 結線表の取り込み結果。 */
