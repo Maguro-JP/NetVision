@@ -558,8 +558,8 @@ def _compact(
     初期配置（`polish=False`）は、未配置だけをポート順の木に置く。
     人が動かした位置は意思なので、見るだけでは触らない。
 
-    最適化（`polish=True`）は、いまの左右の並びを意思として読み、
-    段（上位が上）と間隔を整えて完成形にする。消して作り直すのではない。
+    人が動かした配置の整頓は `_polish_layout` の仕事。こちらで木を組み直すと
+    「初期配置が正解」になってしまう。
     """
     if not nodes:
         return
@@ -1036,6 +1036,127 @@ def reset_positions(db: Session, layer: str, *, only: set[int] | None = None) ->
     return len(nodes)
 
 
+#: 人が図を揃えるときのマス目。画面のグリッド・ドラッグの吸着と同じ値。
+LAYOUT_GRID = 40.0
+#: この距離以内なら同じ段・同じ列とみなして揃える（マス目1つ弱）
+_ALIGN_WITHIN = 36.0
+#: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
+_POLISH_MAX_MOVE = 80.0
+#: 箱（190）＋マス目1つ分。これより近いと重なって見える
+_MIN_GAP_X = 230.0
+#: 箱の高さ（約78）＋マス目1つ分
+_MIN_GAP_Y = 120.0
+
+
+def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:
+    return round(value / grid) * grid
+
+
+def _clamp_move(delta: float, limit: float = _POLISH_MAX_MOVE) -> float:
+    if delta > limit:
+        return limit
+    if delta < -limit:
+        return -limit
+    return delta
+
+
+def _cluster_align(items: list[tuple[int, float]], threshold: float) -> dict[int, float]:
+    """近い値を同じ段・列にまとめる。中央値をマス目に乗せる。"""
+    if not items:
+        return {}
+    ordered = sorted(items, key=lambda item: (item[1], item[0]))
+    groups: list[list[tuple[int, float]]] = [[ordered[0]]]
+    for item in ordered[1:]:
+        if item[1] - groups[-1][-1][1] <= threshold:
+            groups[-1].append(item)
+        else:
+            groups.append([item])
+    aligned: dict[int, float] = {}
+    for group in groups:
+        mid = sorted(value for _, value in group)[len(group) // 2]
+        target = _snap_to_grid(mid)
+        for device_id, _ in group:
+            aligned[device_id] = target
+    return aligned
+
+
+def _spread_along(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
+    """同じ段（または列）の機器が重ならないよう、軸方向に少しだけ空ける。"""
+    buckets: dict[float, list[TopologyNodeView]] = {}
+    other = "y" if axis == "x" else "x"
+    for node in nodes:
+        buckets.setdefault(getattr(node, other), []).append(node)
+    for group in buckets.values():
+        if len(group) < 2:
+            continue
+        group.sort(key=lambda node: (getattr(node, axis), node.device_id))
+        for index in range(1, len(group)):
+            prev = getattr(group[index - 1], axis)
+            current = getattr(group[index], axis)
+            if current - prev < min_gap:
+                setattr(group[index], axis, prev + min_gap)
+
+
+def _even_if_regular(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
+    """ほぼ等間隔なら、完全に揃える。大きく空いた塊は分けたままにする。"""
+    buckets: dict[float, list[TopologyNodeView]] = {}
+    other = "y" if axis == "x" else "x"
+    for node in nodes:
+        buckets.setdefault(getattr(node, other), []).append(node)
+    for group in buckets.values():
+        if len(group) < 3:
+            continue
+        group.sort(key=lambda node: (getattr(node, axis), node.device_id))
+        gaps = [
+            getattr(group[index], axis) - getattr(group[index - 1], axis)
+            for index in range(1, len(group))
+        ]
+        smallest = min(gaps)
+        if smallest <= 0:
+            continue
+        if max(gaps) / smallest > 1.4:
+            continue
+        step = max(min_gap, _snap_to_grid(sum(gaps) / len(gaps)))
+        start = getattr(group[0], axis)
+        for index, node in enumerate(group):
+            setattr(node, axis, start + index * step)
+
+
+def _polish_layout(nodes: list[TopologyNodeView]) -> None:
+    """人が置いた配置を、マス目・揃い・間隔だけ整える。
+
+    木を組み直さない。初期配置へ戻すのはリセットの仕事。
+    動かす量は軸ごとにマス目2つ分までに抑える。それを超えると「作り直し」に見える。
+    """
+    if len(nodes) < 2:
+        if nodes:
+            nodes[0].x = _snap_to_grid(nodes[0].x)
+            nodes[0].y = _snap_to_grid(nodes[0].y)
+        return
+
+    origin = {node.device_id: (node.x, node.y) for node in nodes}
+
+    aligned_y = _cluster_align([(n.device_id, n.y) for n in nodes], _ALIGN_WITHIN)
+    for node in nodes:
+        node.y = aligned_y[node.device_id]
+    aligned_x = _cluster_align([(n.device_id, n.x) for n in nodes], _ALIGN_WITHIN)
+    for node in nodes:
+        node.x = aligned_x[node.device_id]
+
+    _even_if_regular(nodes, axis="x", min_gap=_MIN_GAP_X)
+    _even_if_regular(nodes, axis="y", min_gap=_MIN_GAP_Y)
+    _spread_along(nodes, axis="x", min_gap=_MIN_GAP_X)
+    _spread_along(nodes, axis="y", min_gap=_MIN_GAP_Y)
+
+    for node in nodes:
+        ox, oy = origin[node.device_id]
+        # 軸ごとに切る。距離で両方を縮めると、横に空けたときに揃えた段まで戻る
+        node.x = ox + _clamp_move(node.x - ox)
+        node.y = oy + _clamp_move(node.y - oy)
+        node.x = _snap_to_grid(node.x)
+        node.y = _snap_to_grid(node.y)
+
+
 def arrange_positions(
     db: Session,
     layer: str,
@@ -1045,10 +1166,10 @@ def arrange_positions(
     scope: str = SCOPE_PEERS,
     orientation: str = "vertical",
 ) -> int:
-    """いま見えている範囲を、人の意思を残して完成形に整える。
+    """いま見えている範囲を、人が置いた位置を起点に整える。
 
-    人が置いた左右の並びは意思として残す。そのうえで上位を上に揃え、
-    間隔を均等にする。消して自動配置に戻すのはリセットの仕事。
+    マス目に乗せ、近い段・列を揃え、重なりを少し空ける。木を組み直して
+    初期配置へ戻すのではない。消して自動配置に戻すのはリセットの仕事。
 
     保存するのは絞り込みの内側だけ。対向として出しているだけの機器は
     その拠点の図の都合で置いているので、相手側の図の配置を上書きしない。
@@ -1068,28 +1189,13 @@ def arrange_positions(
     owned = inside if inside is not None else {n.device_id for n in graph.nodes if not n.outside}
     if not owned:
         return 0
-    _compact(
-        graph.nodes,
-        graph.edges,
-        rank=network_rank(db) if draw is not None else hierarchy_rank(graph),
-        inside=owned,
-        orientation=orientation,
-        polish=True,
-    )
+    targets = [node for node in graph.nodes if node.device_id in owned]
+    _polish_layout(targets)
 
-    already = {
-        node.device_id: node.pinned
-        for node in db.scalars(
-            select(TopologyNode).where(
-                TopologyNode.layer == layer, TopologyNode.device_id.in_(owned)
-            )
-        )
-    }
-    placed = [(n.device_id, n.x, n.y) for n in graph.nodes if n.device_id in owned]
+    placed = [(n.device_id, n.x, n.y) for n in targets]
     if not placed:
         return 0
-    flags = {device_id: already.get(device_id, False) for device_id, _, _ in placed}
-    return save_positions(db, layer, placed, pinned=flags)
+    return save_positions(db, layer, placed, pinned=True)
 
 
 @dataclass
