@@ -515,10 +515,24 @@ def _sample_rows(results: list[RowResult], limit: int | None = _ROW_SAMPLE) -> l
 
 
 class KeyField(enum.StrEnum):
-    """既存機器を突き止めるためのキー列。"""
+    """既存機器を突き止めるためのキー列。
 
+    社内台帳では管理IDで突合するのが一番やりやすい。ホスト名は変わりうるし、
+    シリアルは空のことが多い。内部ID（書き出しの先頭列）がある行は、
+    キーよりそちらを優先する。
+    """
+
+    CODE = "code"
     HOSTNAME = "hostname"
     SERIAL_NUMBER = "serial_number"
+
+
+#: キー列に対応する Device のカラム
+_KEY_COLUMNS = {
+    KeyField.CODE: Device.code,
+    KeyField.HOSTNAME: Device.hostname,
+    KeyField.SERIAL_NUMBER: Device.serial_number,
+}
 
 
 def _sample_text(value: object) -> str:
@@ -553,7 +567,7 @@ def run_import(
     table_rows: list[dict[str, object]],
     *,
     mapping_override: dict[str, str] | None = None,
-    key_field: KeyField = KeyField.HOSTNAME,
+    key_field: KeyField = KeyField.CODE,
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
@@ -584,7 +598,7 @@ def _run_import(
     table_rows: list[dict[str, object]],
     *,
     mapping_override: dict[str, str] | None = None,
-    key_field: KeyField = KeyField.HOSTNAME,
+    key_field: KeyField = KeyField.CODE,
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
@@ -905,7 +919,7 @@ def _flush_renames(db: Session, devices: list[Device]) -> None:
 
 
 def _find_existing(db: Session, key_field: KeyField, key_value: str) -> Device | None:
-    column = Device.hostname if key_field is KeyField.HOSTNAME else Device.serial_number
+    column = _KEY_COLUMNS[key_field]
     return db.scalar(select(Device).where(column == key_value))
 
 
@@ -920,7 +934,7 @@ def _existing_by_key(db: Session, key_field: KeyField, keys: list[str]) -> dict[
     ほど時間が伸びる。取り込みが終わらないという症状の主因がこれだった。
     ファイルに出てくる鍵は先に分かるので、まとめて引いて表に載せておく。
     """
-    column = Device.hostname if key_field is KeyField.HOSTNAME else Device.serial_number
+    column = _KEY_COLUMNS[key_field]
     found: dict[str, Device] = {}
     unique = [key for key in dict.fromkeys(keys) if key]
     for start in range(0, len(unique), _LOOKUP_CHUNK):

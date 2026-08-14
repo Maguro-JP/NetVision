@@ -49,37 +49,44 @@ def list_importable_fields() -> list[ImportFieldInfo]:
 
 @router.get("/template.csv")
 def download_template() -> StreamingResponse:
-    """記入用のテンプレートCSV。Excel でそのまま開けるよう BOM 付き UTF-8 で返す。"""
+    """記入用のテンプレートCSV。Excel でそのまま開けるよう BOM 付き UTF-8 で返す。
+
+    列の並びは IMPORTABLE_FIELDS と同じ。管理IDを入れておけば、次から
+    ホスト名を変えても同じ機器として更新できる。
+    """
     buffer = io.StringIO()
     writer = csv.writer(buffer)
     writer.writerow([importer.FIELD_LABELS[f] for f in importer.IMPORTABLE_FIELDS])
-    writer.writerow(
-        [
-            "core-sw-01",
-            "Cisco",
-            "C9500-40X",
-            "FOC2401A001",
-            "スイッチ",
-            "稼働中",
-            "IOS-XE",
-            "17.09.04a",
-            "",
-            "本社データセンター",
-            "A-01",
-            "U40-41",
-            "10.0.0.11",
-            "2021/04/01",
-            "2027/01/31",
-            "2030/01/31",
-            "",
-            "ネットワンシステムズ",
-            "MC-2024-0011",
-            "24x365 4時間駆付",
-            "2024/04/01",
-            "2027/03/31",
-            "480000",
-        ]
+    # 列と値の位置をずらさない。内部IDは新規では空、管理IDはサンプルを入れる
+    sample = {name: "" for name in importer.IMPORTABLE_FIELDS}
+    sample.update(
+        {
+            "code": "ASSET-1001",
+            "hostname": "core-sw-01",
+            "vendor": "Cisco",
+            "model": "C9500-40X",
+            "serial_number": "FOC2401A001",
+            "device_type": "スイッチ",
+            "status": "稼働中",
+            "os_name": "IOS-XE",
+            "os_version": "17.09.04a",
+            "site": "本社データセンター",
+            "site_code": "TOK-DC1",
+            "rack": "A-01",
+            "rack_unit": "U40-41",
+            "mgmt_ip": "10.0.0.11",
+            "install_date": "2021/04/01",
+            "eos_date": "2027/01/31",
+            "eol_date": "2030/01/31",
+            "contract_provider": "ネットワンシステムズ",
+            "contract_number": "MC-2024-0011",
+            "contract_service_level": "24x365 4時間駆付",
+            "contract_start_date": "2024/04/01",
+            "contract_end_date": "2027/03/31",
+            "contract_annual_cost": "480000",
+        }
     )
+    writer.writerow([sample[name] for name in importer.IMPORTABLE_FIELDS])
     data = "﻿" + buffer.getvalue()
     return StreamingResponse(
         io.BytesIO(data.encode("utf-8")),
@@ -134,7 +141,7 @@ async def _run(
     except ValueError as exc:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
-            "key_field は hostname または serial_number を指定してください",
+            "key_field は code / hostname / serial_number を指定してください",
         ) from exc
 
     outcome = importer.run_import(

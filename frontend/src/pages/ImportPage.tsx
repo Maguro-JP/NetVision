@@ -1,9 +1,8 @@
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { Link } from "react-router-dom";
 
-import { api } from "../api/client";
+import { api, type ImportKeyField } from "../api/client";
 import LinkSheetImport from "../components/LinkSheetImport";
 import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
@@ -22,10 +21,35 @@ const ACTION_COLOR: Record<ImportRowAction, string> = {
   error: "var(--sev-expired)",
 };
 
+const KEY_OPTIONS: { value: ImportKeyField; label: string; hint: string }[] = [
+  {
+    value: "code",
+    label: "管理ID（推奨）",
+    hint: "社内台帳の番号で突合します。ホスト名を変えても同じ機器として更新できます",
+  },
+  {
+    value: "hostname",
+    label: "ホスト名",
+    hint: "管理IDが無い台帳向け。ホスト名を変えると別機器として増えます",
+  },
+  {
+    value: "serial_number",
+    label: "シリアル番号",
+    hint: "シリアルが入っている行だけ突合できます。空の行はエラーになります",
+  },
+];
+
+/**
+ * 機器台帳の取り込み。
+ *
+ * 既定の突合キーは管理ID。プロジェクトで使っている番号があれば、それを
+ * キーにする方がホスト名より安全で分かりやすい。書き出したファイルに
+ * 「内部ID」列がある場合は、キーよりそちらが優先される。
+ */
 export default function ImportPage() {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
-  const [keyField, setKeyField] = useState<"hostname" | "serial_number">("hostname");
+  const [keyField, setKeyField] = useState<ImportKeyField>("code");
   const [updateExisting, setUpdateExisting] = useState(true);
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
@@ -71,9 +95,20 @@ export default function ImportPage() {
     setResult(null);
   };
 
+  /** キーや更新方針を変えたら、前の確認結果は使えない */
+  const changeKeyField = (next: ImportKeyField) => {
+    setKeyField(next);
+    setResult(null);
+  };
+  const changeUpdateExisting = (next: boolean) => {
+    setUpdateExisting(next);
+    setResult(null);
+  };
+
   // プレビュー結果に載っている列（マッピング済み + 未対応）が対応付けの編集対象
   const columns = result ? [...Object.keys(result.mapping), ...result.unmapped_columns] : [];
   const blocked = !result || result.errors > 0 || result.missing_required_fields.length > 0;
+  const keyHint = KEY_OPTIONS.find((o) => o.value === keyField)?.hint;
 
   return (
     <>
@@ -81,6 +116,9 @@ export default function ImportPage() {
       <p className="subtitle">
         既存の Excel / CSV 台帳をそのまま読み込みます。列名は自動で対応付け、
         合っていない列は下の「列の対応付け」で選び直せます。取り込み前に必ず内容を確認できます。
+        <br />
+        既存機器との突合は、まず「管理ID」を使うのがおすすめです。書き出したファイルに
+        「内部ID」列がある場合は、それがいちばん確実です。
         <br />
         <Link to="/devices">機器一覧</Link>
         から書き出したファイルは、そのまま編集して取り込み直せます。
@@ -101,18 +139,26 @@ export default function ImportPage() {
           <select
             id="key"
             value={keyField}
-            onChange={(e) => setKeyField(e.target.value as "hostname" | "serial_number")}
+            onChange={(e) => changeKeyField(e.target.value as ImportKeyField)}
           >
-            <option value="hostname">ホスト名</option>
-            <option value="serial_number">シリアル番号</option>
+            {KEY_OPTIONS.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
           </select>
+          {keyHint && (
+            <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+              {keyHint}
+            </p>
+          )}
         </div>
         <div className="field">
           <label htmlFor="update">既存機器の扱い</label>
           <select
             id="update"
             value={updateExisting ? "update" : "skip"}
-            onChange={(e) => setUpdateExisting(e.target.value === "update")}
+            onChange={(e) => changeUpdateExisting(e.target.value === "update")}
           >
             <option value="update">値が入っている列だけ更新する</option>
             <option value="skip">スキップする（新規のみ取り込む）</option>
@@ -121,6 +167,9 @@ export default function ImportPage() {
         <div className="field">
           <label>テンプレート</label>
           <a href={api.importTemplateUrl}>記入用CSVをダウンロード</a>
+          <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+            管理ID列付きです。社内の番号を入れてから取り込むと、あとから直しやすいです。
+          </p>
         </div>
       </div>
 
@@ -154,6 +203,13 @@ export default function ImportPage() {
                 .map((f) => fields?.find((x) => x.name === f)?.label ?? f)
                 .join(" / ")}
               。下の「列の対応付け」で指定するか、ヘッダ行を確認してください。
+              {result.missing_required_fields.includes(keyField) && (
+                <>
+                  {" "}
+                  判定キーに「{KEY_OPTIONS.find((o) => o.value === keyField)?.label}」を選んでいるので、
+                  その列も必要です。
+                </>
+              )}
             </div>
           ) : result.errors > 0 ? (
             <div className="error" style={{ marginTop: 16 }}>
@@ -221,6 +277,7 @@ export default function ImportPage() {
           <h2>列の対応付け</h2>
           <p className="muted" style={{ marginTop: -6 }}>
             自動判別を変えたい列はここで指定してください。「（取り込まない）」を選ぶとその列は無視します。
+            変えたあとは「対応付けを反映して再確認」を押してください。
           </p>
           <table>
             <thead>
@@ -246,7 +303,7 @@ export default function ImportPage() {
                       {(fields ?? []).map((f) => (
                         <option key={f.name} value={f.name}>
                           {f.label}
-                          {f.required ? " *" : ""}
+                          {f.required || f.name === keyField ? " *" : ""}
                         </option>
                       ))}
                     </select>
