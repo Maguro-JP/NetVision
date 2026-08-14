@@ -825,7 +825,7 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_DOCUMENT_STORAGE_PATH` | `./data/documents` | 資料ファイルの保管先（DB とは別にバックアップが必要） |
 | `NETVISION_MAX_DOCUMENT_BYTES` | `209715200`（200MB） | 1ファイルあたりの上限 |
 | `NETVISION_MAX_IMPORT_BYTES` | `536870912`（512MB） | 台帳取り込み（CSV / Excel）1ファイルの上限 |
-| `NETVISION_AUTO_CREATE_SCHEMA` | `false` | 起動時にテーブルが無ければ作る（1台完結モード用） |
+| `NETVISION_AUTO_CREATE_SCHEMA` | `false` | 互換のため残置。起動時の表の更新は常に Alembic が行う |
 | `NETVISION_SERVE_FRONTEND` | なし | ビルド済み画面の配信元。同一プロセスで画面も返す |
 | `NETVISION_DEMO_MODE` | `false` | プレビュー用。起動時にスキーマ作成とデモデータ投入を行う（本番では使わない） |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |

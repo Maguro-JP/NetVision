@@ -44,7 +44,6 @@ def main(argv: list[str] | None = None) -> int:
     db_path = data_dir / "netvision.db"
 
     os.environ.setdefault("NETVISION_DATABASE_URL", f"sqlite:///{db_path}")
-    os.environ["NETVISION_AUTO_CREATE_SCHEMA"] = "true"
     os.environ.setdefault("NETVISION_DOCUMENT_STORAGE_PATH", str(data_dir / "documents"))
     if args.demo:
         os.environ["NETVISION_DEMO_MODE"] = "true"

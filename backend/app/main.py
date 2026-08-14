@@ -1,3 +1,5 @@
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -23,10 +25,20 @@ from app.api.routes import (
 from app.config import settings
 from app.services import audit  # noqa: F401  変更履歴のフック登録
 
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    from app.bootstrap import ensure_ready
+
+    ensure_ready()
+    yield
+
+
 app = FastAPI(
     title="NetVision API",
     version="0.1.0",
     description="ネットワーク機器のインベントリ・保守期限・ライフサイクル管理",
+    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -93,7 +105,6 @@ def _schema_revision() -> str | None:
         with engine.connect() as connection:
             return connection.execute(text("select version_num from alembic_version")).scalar()
     except Exception:
-        # 1台完結モードは Alembic を通さずに表を作るので、この表は無い
         return None
 
 

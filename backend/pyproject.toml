@@ -39,5 +39,9 @@ select = ["E", "F", "I", "UP", "B"]
 # B008: FastAPI の Depends() / Query() を引数デフォルトに置くのは規定の書き方
 ignore = ["B008"]
 
+[tool.ruff.lint.per-file-ignores]
+# SKIP_SCHEMA を Settings 読み込みより前に置く必要がある
+"tests/conftest.py" = ["E402"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

@@ -15,7 +15,8 @@ def test_meta_reports_the_version(client):
 def test_meta_reports_the_schema_revision_key(client):
     """スキーマの世代は、無い場合も鍵ごと消さずに null で返す。
 
-    1台完結モードは Alembic を通さずに表を作るので、この値は入らない。
+    1台完結モードも Alembic を通すので、起動後は番号が入る。
+    試験のメモリ DB にはこの表が無いので null になる。
     鍵ごと無くすと、画面側が「古い版」と「使っていない」を見分けられない。
     """
     body = client.get(f"{API}/meta").json()
