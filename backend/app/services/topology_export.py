@@ -292,14 +292,31 @@ def render_svg(
             target = at[edge.target]
             sx, sy = source[0] + NODE_W / 2, source[1] + NODE_H / 2
             tx, ty = target[0] + NODE_W / 2, target[1] + NODE_H / 2
+            hop = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
             parts.append(
                 _port_label(
-                    sx, sy, x1, y1, edge.source_interface, port_style, along_line, placement
+                    sx,
+                    sy,
+                    x1,
+                    y1,
+                    edge.source_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    hop=hop,
                 )
             )
             parts.append(
                 _port_label(
-                    tx, ty, x2, y2, edge.target_interface, port_style, along_line, placement
+                    tx,
+                    ty,
+                    x2,
+                    y2,
+                    edge.target_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    hop=hop,
                 )
             )
             for name in (edge.source_interface, edge.target_interface):
@@ -943,6 +960,7 @@ def _port_label(
     style: str,
     along_line: bool,
     placement: svglayout.Placement,
+    hop: float | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -987,7 +1005,9 @@ def _port_label(
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(base, limit)
+        for step, offset, side in _candidate_offsets(
+            base, limit, short=hop is not None and hop < 56
+        )
     ]
 
     # 置けないときは文字を短くする。重ねるくらいなら略した方がまし。
@@ -1021,15 +1041,25 @@ def _port_label(
     )
 
 
-def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, float]]:
+def _candidate_offsets(
+    base: float, limit: float, *, short: bool = False
+) -> list[tuple[float, float, float]]:
     """ラベルを置く候補を（線に沿う距離, 線から離す量, 左右）で並べる。
 
     近いほど良いので、2つのずらし量の合計が小さい順にする。1本の線に何本も
     束ねている構成（LAG など）では同じ場所に何個も置くことになるため、
     線に沿う方向と垂直な方向の両方に逃がせないと必ずどこかで被る。
+
+    箱の間が狭い線は、隙間に並べず箱の直上・直下へ先に逃がす。
     """
-    steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
-    offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
+    if short:
+        steps = [0.0, 8.0]
+        offsets = [34.0, 46.0, 58.0, 22.0, 72.0, 88.0, _SIDE_OFFSET]
+        offset_weight = 0.4
+    else:
+        steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
+        offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
+        offset_weight = 1.2
 
     out: list[tuple[float, float, float, float]] = []
     for step_index, step in enumerate(steps):
@@ -1038,7 +1068,7 @@ def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, fl
             break
         for offset_index, offset in enumerate(offsets):
             for side in (1.0, -1.0):
-                rank = step_index + offset_index * 1.2
+                rank = step_index + offset_index * offset_weight
                 out.append((rank, step, offset, side))
 
     out.sort(key=lambda item: item[0])

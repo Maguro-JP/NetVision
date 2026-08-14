@@ -3,7 +3,13 @@
 from app.models.device import DeviceStatus, DeviceType
 from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
-from app.services.topology import TopologyEdgeView, TopologyGraph, TopologyNodeView, _compact
+from app.services.topology import (
+    TopologyEdgeView,
+    TopologyGraph,
+    TopologyNodeView,
+    _compact,
+    _visual_right,
+)
 
 
 def node(device_id: int, hostname: str, *, outside: bool = False) -> TopologyNodeView:
@@ -62,6 +68,8 @@ def test_optimal_branch_puts_uplink_above_and_offices_in_a_right_column():
     xs = {office.x for office in offices}
     assert len(xs) == 1
     assert offices[0].x > hub.x + 100
+    hub_links = sum(1 for item in edges if item.source == 2 or item.target == 2)
+    assert offices[0].x - _visual_right(hub.x, hub_links) < 200
     ys = sorted(office.y for office in offices)
     assert ys[1] - ys[0] > 40
     assert ys[2] - ys[1] > 40

@@ -10,7 +10,7 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 
-from app.services.topology import TopologyGraph
+from app.services.topology import TopologyGraph, _visual_right
 
 
 @dataclass(frozen=True)
@@ -151,6 +151,171 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
 
 def is_acceptable(findings: list[Finding]) -> bool:
     return bool(findings) and all(item.ok for item in findings)
+
+
+@dataclass(frozen=True)
+class Score:
+    total: float
+    parts: dict[str, float]
+
+
+def score_diagram(graph: TopologyGraph, svg: str | None = None) -> Score:
+    """資料としての点数。合格は100を超えること。超えてからも上げられる。
+
+    最適化は、正解の段と列を崩さず、中心・間隔・交差・余白を詰めること。
+    初期配置へ組み直すことではない。
+    """
+    parts: dict[str, float] = {}
+    findings = evaluate_site_diagram(graph)
+    if svg:
+        findings = findings + evaluate_svg(svg, graph)
+    failed = sum(1 for item in findings if not item.ok)
+    passed = sum(1 for item in findings if item.ok)
+    parts["readable"] = max(0.0, passed * 8 - failed * 20)
+
+    inside = [n for n in graph.nodes if not n.outside]
+    outside = [n for n in graph.nodes if n.outside]
+    above = [n for n in outside if (n.peer_kind or "") == "up"]
+    if inside and above:
+        hub = min(inside, key=lambda n: (n.y, n.x))
+        hub_c = hub.x + 95
+        above_c = sum(n.x + 95 for n in above) / len(above)
+        err = abs(hub_c - above_c)
+        parts["center"] = max(0.0, 20.0 * (1.0 - err / 120.0))
+    else:
+        parts["center"] = 8.0
+
+    parts["even"] = _even_score(graph)
+    parts["tight"] = _tight_score(graph)
+    parts["corridor"] = _corridor_score(graph)
+    if svg:
+        parts["wires"] = _wire_score(svg)
+        parts["labels"] = _label_score(svg)
+    else:
+        parts["wires"] = 5.0
+        parts["labels"] = 4.0
+
+    total = round(sum(parts.values()), 1)
+    return Score(total=total, parts=parts)
+
+
+def _even_score(graph: TopologyGraph) -> float:
+    rows: dict[tuple[str, int], list[float]] = defaultdict(list)
+    cols: dict[tuple[str, int], list[float]] = defaultdict(list)
+    for node in graph.nodes:
+        side = "out" if node.outside else "in"
+        rows[(side, round(node.y / 10))].append(node.x)
+        cols[(side, round(node.x / 10))].append(node.y)
+    penalties = 0.0
+    counted = 0
+    for values in list(rows.values()) + list(cols.values()):
+        if len(values) < 3:
+            continue
+        ordered = sorted(values)
+        gaps = [b - a for a, b in zip(ordered, ordered[1:], strict=False)]
+        mean = sum(gaps) / len(gaps)
+        if mean <= 0:
+            continue
+        counted += 1
+        var = sum((g - mean) ** 2 for g in gaps) / len(gaps)
+        penalties += min(1.0, (var**0.5) / mean)
+    if not counted:
+        return 12.0
+    return max(0.0, 15.0 * (1.0 - penalties / counted))
+
+
+def _corridor_score(graph: TopologyGraph) -> float:
+    """自拠点と配下の列の間。通り道より広い空白は減点。"""
+    inside = [n for n in graph.nodes if not n.outside]
+    down = [n for n in graph.nodes if n.outside and (n.peer_kind or "") == "down"]
+    if not inside or not down:
+        return 8.0
+    links: dict[int, int] = defaultdict(int)
+    for edge in graph.edges:
+        links[edge.source] += 1
+        links[edge.target] += 1
+    right = max(_visual_right(n.x, links[n.device_id]) for n in inside)
+    left = min(n.x for n in down)
+    gap = left - right
+    if gap < 80:
+        return 3.0
+    if gap <= 180:
+        return 12.0
+    return max(0.0, 12.0 * (1.0 - (gap - 180.0) / 220.0))
+
+
+def _label_score(svg: str) -> float:
+    """ポート名どうしが近すぎないこと。箱の隙間に並べると読めない。"""
+    labels: list[tuple[float, float]] = []
+    for match in re.finditer(r'<text class="port-label" x="([-\d.]+)" y="([-\d.]+)"', svg):
+        labels.append((float(match.group(1)), float(match.group(2))))
+    if len(labels) < 2:
+        return 8.0
+    hits = 0
+    for i, a in enumerate(labels):
+        for b in labels[i + 1 :]:
+            if abs(a[0] - b[0]) < 36 and abs(a[1] - b[1]) < 12:
+                hits += 1
+    if hits == 0:
+        return 10.0
+    if hits <= 2:
+        return 6.0
+    return 2.0
+
+
+def _tight_score(graph: TopologyGraph) -> float:
+    if len(graph.nodes) < 2:
+        return 5.0
+    width = max(n.x for n in graph.nodes) - min(n.x for n in graph.nodes) + 190
+    height = max(n.y for n in graph.nodes) - min(n.y for n in graph.nodes) + 78
+    area = max(width * height, 1.0)
+    boxes = len(graph.nodes) * 190 * 78
+    ratio = boxes / area
+    return max(0.0, min(12.0, 12.0 * ratio / 0.22))
+
+
+def _wire_score(svg: str) -> float:
+    wires = _svg_polylines(svg)
+    if _has_diagonal(svg):
+        return 0.0
+    crosses = 0
+    segs = [(a, b) for wire in wires for a, b in zip(wire, wire[1:], strict=False)]
+    for i, (a1, a2) in enumerate(segs):
+        for b1, b2 in segs[i + 1 :]:
+            if _score_cross(a1, a2, b1, b2):
+                crosses += 1
+    if crosses == 0:
+        return 18.0
+    if crosses <= 2:
+        return 12.0
+    if crosses <= 5:
+        return 6.0
+    return 2.0
+
+
+def _score_cross(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+) -> bool:
+    ah = abs(a1[1] - a2[1]) <= 0.5
+    av = abs(a1[0] - a2[0]) <= 0.5
+    bh = abs(b1[1] - b2[1]) <= 0.5
+    bv = abs(b1[0] - b2[0]) <= 0.5
+    if ah and bv:
+        x, y = b1[0], a1[1]
+        return (
+            min(a1[0], a2[0]) + 3 < x < max(a1[0], a2[0]) - 3
+            and min(b1[1], b2[1]) + 3 < y < max(b1[1], b2[1]) - 3
+        )
+    if av and bh:
+        x, y = a1[0], b1[1]
+        return (
+            min(b1[0], b2[0]) + 3 < x < max(b1[0], b2[0]) - 3
+            and min(a1[1], a2[1]) + 3 < y < max(a1[1], a2[1]) - 3
+        )
+    return False
 
 
 def _has_diagonal(svg: str) -> bool:

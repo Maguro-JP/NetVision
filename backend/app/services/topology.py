@@ -1176,6 +1176,11 @@ _BOX_WIDTH = 190.0
 _BOX_GROW = 55.0
 _BOX_MAX = 620.0
 _LANE_GAP = 16.0
+# ハブ側で重ねる位置・相手側で扇に開く位置。画面の orthogonalBusPath と同じ
+_BUS_STACK = 36.0
+_BUS_INSET = 28.0
+# 対向の列は、箱の右端からこの距離以上。通り道より広く空けない
+_PEER_CLEAR_MIN = 120.0
 
 
 def _box_width(links: int) -> float:
@@ -1204,6 +1209,16 @@ def _lane_room(links: int) -> float:
     if links <= 0:
         return 0.0
     return links * _LANE_GAP
+
+
+def _peer_clearance(links: int) -> float:
+    """自拠点の右端から配下の列までの空き。
+
+    箱の間隔（_X_SPACING）を足したうえで通り道を重ねると、線の分だけ
+    空白のレーンがもう一本できる。バスが通る幅だけ空ければ足りる。
+    """
+    needed = _BUS_STACK + _lane_room(max(links, 1)) + _BUS_INSET
+    return max(_PEER_CLEAR_MIN, needed)
 
 
 def _peer_kind(
@@ -1333,9 +1348,11 @@ def _place_peers(
     for index, node in enumerate(flat_above):
         offset = (index - (len(flat_above) - 1) / 2) * _X_SPACING
         node.x, node.y = middle + offset, top - _Y_SPACING
+    _shift_centers_to(flat_above, middle, links_of)
 
     for index, node in enumerate(beside):
-        node.x, node.y = right + (index + 1) * _X_SPACING, top
+        node.x = right + _peer_clearance(len(beside)) + index * _X_SPACING
+        node.y = top
 
     # 配下は右へ、拠点ごとに1行。同じ拠点の2台は横並び（冗長）。
     below_rows = rows_of(below)
@@ -1346,16 +1363,56 @@ def _place_peers(
             peer_links += 1
         elif edge.target in inside and edge.source in below_ids:
             peer_links += 1
-    column = right + _X_SPACING + _lane_room(max(peer_links, len(below_rows)))
+    column = right + _peer_clearance(max(peer_links, len(below_rows)))
     for index, members in enumerate(below_rows):
         y = top + index * (_Y_SPACING * 0.7)
         for col, node in enumerate(members):
             node.x = column + col * _X_SPACING
             node.y = y
+    _even_gaps(flat_above, axis="x", min_gap=_X_SPACING)
+    heads = [row[0] for row in below_rows]
+    _even_gaps(heads, axis="y", min_gap=_Y_SPACING * 0.7)
+    for row in below_rows:
+        if not row:
+            continue
+        for node in row[1:]:
+            node.y = row[0].y
 
     if horizontal:
         for node in above + beside + below:
             node.x, node.y = node.y, node.x
+
+
+def _shift_centers_to(
+    nodes: list[TopologyNodeView],
+    target: float,
+    links_of,
+) -> None:
+    """箱の中心の平均を、目標の中心に合わせる。左上座標の平均だと対が右へずれる。"""
+    if not nodes:
+        return
+    mean = sum(node.x + _box_width(links_of(node)) / 2 for node in nodes) / len(nodes)
+    shift = target - mean
+    if abs(shift) < 0.5:
+        return
+    for node in nodes:
+        node.x += shift
+
+
+def _even_gaps(nodes: list[TopologyNodeView], *, axis: str, min_gap: float) -> None:
+    """同じ段・列の間隔を均等にする。順番は変えない。"""
+    if len(nodes) < 3:
+        return
+    ordered = sorted(nodes, key=lambda node: getattr(node, axis))
+    first = getattr(ordered[0], axis)
+    last = getattr(ordered[-1], axis)
+    span = last - first
+    needed = min_gap * (len(ordered) - 1)
+    if span + 1 < needed:
+        last = first + needed
+    step = (last - first) / (len(ordered) - 1)
+    for index, node in enumerate(ordered):
+        setattr(node, axis, first + step * index)
 
 
 def port_key(name: str) -> tuple:
@@ -1745,6 +1802,7 @@ def _polish_layout(
 
     if edges:
         _uncross_fans(nodes, edges, owned=owned or {node.device_id for node in nodes})
+        _nudge_centers(nodes, edges, owned=owned or {node.device_id for node in nodes})
         for node in nodes:
             node.x = _snap_to_grid(node.x)
             node.y = _snap_to_grid(node.y)
@@ -1824,6 +1882,30 @@ def _uncross_fans(
             )
             for node, slot in zip(ordered, slots, strict=True):
                 setattr(node, along, slot)
+
+
+def _nudge_centers(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView],
+    *,
+    owned: set[int],
+) -> None:
+    """上位の対の中心の下へ、自拠点の縦の並びを少し寄せる。初期配置へは戻さない。"""
+    inside = [node for node in nodes if node.device_id in owned]
+    if not inside:
+        return
+    top = min(inside, key=lambda node: (node.y, node.x))
+    above = [node for node in nodes if node.y < top.y - 40]
+    if not above:
+        return
+    target = sum(node.x + _BOX_WIDTH / 2 for node in above) / len(above)
+    current = top.x + _BOX_WIDTH / 2
+    delta = _clamp_move(target - current)
+    if abs(delta) < 1:
+        return
+    for node in inside:
+        if abs(node.x - top.x) <= 12:
+            node.x += delta
 
 
 def arrange_positions(

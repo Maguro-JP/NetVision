@@ -1689,7 +1689,7 @@ function TopologyEditor() {
             )}
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
-            <Controls showInteractive={false} />
+            {!simple && <Controls showInteractive={false} />}
             {!simple && <MiniMap pannable zoomable className="topo-minimap" />}
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">

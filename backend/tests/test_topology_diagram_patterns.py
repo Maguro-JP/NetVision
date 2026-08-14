@@ -9,9 +9,14 @@ from pathlib import Path
 from app.models.device import Device, DeviceType
 from app.models.site import Site
 from app.models.topology import Link
-from app.services.topology import get_graph, load_diagram, scope_graph
+from app.services.topology import _visual_right, get_graph, load_diagram, scope_graph
 from app.services.topology_export import render_svg
-from app.services.topology_quality import evaluate_site_diagram, evaluate_svg, is_acceptable
+from app.services.topology_quality import (
+    evaluate_site_diagram,
+    evaluate_svg,
+    is_acceptable,
+    score_diagram,
+)
 from tests.test_topology_layers import _device, _link, _port
 from tests.test_topology_scope import build, build_center
 
@@ -31,7 +36,13 @@ def _ok(graph, title: str, filename: str) -> None:
     svg_findings = evaluate_svg(svg, graph)
     failed_svg = [item.detail for item in svg_findings if not item.ok]
     assert is_acceptable(svg_findings), f"{title} SVG: {failed_svg}"
+    scored = score_diagram(graph, svg)
+    assert scored.total > 100, f"{title} {scored.total}点 {scored.parts}"
     _write(filename, svg)
+    lines = [f"{title}\t{scored.total}"]
+    lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
+    _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
+    return scored
 
 
 def test_branch_with_redundant_cores_and_offices(db_session):
@@ -204,6 +215,9 @@ def test_many_offices_stay_in_a_right_column(db_session):
     assert len(offices) == 6
     xs = {round(n.x) for n in offices}
     assert len(xs) == 1
+    hub = next(n for n in graph.nodes if n.hostname == "ksi-br-rt-01")
+    hub_links = sum(1 for edge in graph.edges if hub.device_id in (edge.source, edge.target))
+    assert min(n.x for n in offices) - _visual_right(hub.x, hub_links) < 200
 
 
 def test_horizontal_orientation_is_still_readable(db_session):

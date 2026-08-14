@@ -4,7 +4,12 @@ from pathlib import Path
 
 from app.services.topology import get_graph, load_diagram, scope_graph
 from app.services.topology_export import export_svg, render_svg
-from app.services.topology_quality import evaluate_site_diagram, evaluate_svg, is_acceptable
+from app.services.topology_quality import (
+    evaluate_site_diagram,
+    evaluate_svg,
+    is_acceptable,
+    score_diagram,
+)
 from tests.test_topology_scope import build_center
 
 SAMPLES = Path(__file__).resolve().parents[2] / "docs" / "topology-samples"
@@ -29,6 +34,8 @@ def test_kansai_branch_diagram_is_readable(db_session):
     assert abs(placed["west-core-rt-02"].y - placed["west-core-rt-01"].y) < 1
     assert placed["west-core-rt-01"].y < placed["ksi-br-rt-01"].y
     assert placed["kyoto-rt-01"].x > placed["ksi-br-rt-01"].x + 80
+    scored = score_diagram(graph, svg)
+    assert scored.total > 100, f"{scored.total}点 {scored.parts}"
 
     exported = export_svg(
         db_session, "physical", site_id=ids["branch"], title="関西支社 物理構成", style="simple"
