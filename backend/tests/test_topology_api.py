@@ -122,6 +122,20 @@ def test_manual_link_can_be_drawn_and_removed(client, device_payload):
     assert graph(client)["edges"] == []
 
 
+def test_manual_link_stays_visible_on_l2_without_ports(client, device_payload):
+    """手で引いた線は、ポート無しでも L2 の図から消えない。"""
+    ids = seed_fleet(client, device_payload)
+    res = client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": ids["core"], "b_device_id": ids["acc"]},
+    )
+    assert res.status_code == 201
+    link_id = res.json()["id"]
+
+    l2 = client.get(f"{API}/topology", params={"layer": "l2"}).json()
+    assert any(edge["id"] == link_id for edge in l2["edges"])
+
+
 def test_duplicate_manual_link_is_rejected(client, device_payload):
     ids = seed_fleet(client, device_payload)
     payload = {"a_device_id": ids["core"], "b_device_id": ids["acc"]}

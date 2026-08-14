@@ -313,11 +313,17 @@ def _as_l2(graph: TopologyGraph) -> TopologyGraph:
 
     物理図の WAN 線（ルータ同士で VLAN が無い）は出さない。スイッチ間の
     トランクやアクセスが残るので、「どこまで同じ VLAN が伸びているか」が読める。
+
+    人が手で引いた線（manual）は、VLAN がまだ付いていなくても残す。
+    図の上で追加した直後に消えると、反映されていないように見える。
     """
     edges = [
         edge
         for edge in graph.edges
-        if edge.vlans or edge.vlan_mismatch or edge.native_vlan is not None
+        if edge.origin is LinkOrigin.MANUAL
+        or edge.vlans
+        or edge.vlan_mismatch
+        or edge.native_vlan is not None
     ]
     return _shrink_to(graph, edges)
 
@@ -328,12 +334,17 @@ def _as_l3(graph: TopologyGraph, ports: dict[tuple[int, str], Interface]) -> Top
     - ルータ / FW / LB どうしの物理結線
     - 両端のポートに IP が付いている結線（点対点のルート）
     - VRF が付いている結線
+    - 人が手で引いた線（manual）
 
     スイッチ間の VLAN トランクは L2 側。混ぜると何の図か分からなくなる。
+    手引きの線は、追加した直後に消えないよう残す。
     """
     by_id = {n.device_id: n for n in graph.nodes}
     edges: list[TopologyEdgeView] = []
     for edge in graph.edges:
+        if edge.origin is LinkOrigin.MANUAL:
+            edges.append(edge)
+            continue
         a = by_id.get(edge.source)
         b = by_id.get(edge.target)
         if a is None or b is None:
