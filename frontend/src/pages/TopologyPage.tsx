@@ -35,6 +35,7 @@ import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlab
 import {
   DEFAULT_TYPE_COLOR,
   PLANE_LABEL,
+  asHexColor,
   defaultColors,
   loadColors,
   saveColors,
@@ -921,6 +922,22 @@ function TopologyEditor() {
     },
   });
 
+  const enclosePlanes = useMutation({
+    mutationFn: () =>
+      api.groupsFromPlanes(
+        layer,
+        (graph?.nodes ?? []).map((node) => node.device_id),
+      ),
+    onSuccess: async (created) => {
+      setNotice(
+        created.length
+          ? `コア／メトロ／アクセスの枠を ${created.length} 個作りました`
+          : "新しく囲む段はありません（既にある枠は触っていません）",
+      );
+      await refresh({ takeLayout: false });
+    },
+  });
+
   const patchGroup = useMutation({
     mutationFn: (body: { name?: string; plane?: string; color?: string }) =>
       api.updateTopologyGroup(selectedGroupId!, body),
@@ -987,6 +1004,10 @@ function TopologyEditor() {
       if (applyingHistory.current) return;
       // ドラッグ中の途中座標は残さない
       if (changes.some((change) => change.type === "position" && change.dragging === true)) {
+        requestAnimationFrame(() => {
+          if (applyingHistory.current) return;
+          setNodes((current) => updateGroupBounds(current));
+        });
         return;
       }
       // ドラッグ終了・矢印キーなど、確定した移動（dragging: false）
@@ -1139,6 +1160,14 @@ function TopologyEditor() {
     return keyword ? matched : matched.slice(0, 60);
   }, [vlans, vlanFilter, selectedVlans]);
 
+  const usedPlanes = useMemo(() => {
+    const found = new Set<string>();
+    for (const node of graph?.nodes ?? []) {
+      if (node.plane) found.add(node.plane);
+    }
+    return (["backbone", "metro", "access"] as const).filter((plane) => found.has(plane));
+  }, [graph]);
+
   const usedTypes = useMemo(() => {
     const found = new Set<DeviceType>();
     for (const node of graph?.nodes ?? []) found.add(node.device_type);
@@ -1173,7 +1202,7 @@ function TopologyEditor() {
 
   return (
     <>
-      <h1>トポロジ図</h1>
+      <h1>トポロジー図</h1>
       <p className="subtitle">
         Config の LLDP / CDP から結線を推定して描きます。
         {editable ? (
@@ -1184,7 +1213,7 @@ function TopologyEditor() {
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
             線を選ぶと、図の左上に削除などの短い操作が出ます（Delete でも消えます）。
             途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
-            機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
+            Shift を押しながら機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
           </>
         ) : (
           <>図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。</>
@@ -1369,6 +1398,13 @@ function TopologyEditor() {
               title="見えている機器を拠点ごとに枠へ入れます。既にある枠は触りません"
             >
               拠点ごとに枠
+            </button>
+            <button
+              onClick={() => enclosePlanes.mutate()}
+              disabled={!graph?.nodes.length || enclosePlanes.isPending}
+              title="見えている機器をコア網／メトロ／アクセスの段ごとに枠へ入れます。既にある枠は触りません"
+            >
+              段ごとに枠
             </button>
           </>
         )}
@@ -1641,7 +1677,7 @@ function TopologyEditor() {
                     </select>
                     <input
                       type="color"
-                      value={selectedGroup.color}
+                      value={asHexColor(selectedGroup.color)}
                       onChange={(event) => patchGroup.mutate({ color: event.target.value })}
                       title="枠の色"
                     />
@@ -1847,6 +1883,16 @@ function TopologyEditor() {
                 />
                 <strong style={{ color: colors.media[media] }}>{MEDIA_LABEL[media]}</strong>
               </label>
+            ))}
+          </span>
+        )}
+        {usedPlanes.length > 0 && (
+          <span className="topo-legend" title="結線のホップから付けたキャリア網の段">
+            網の段:{" "}
+            {usedPlanes.map((plane) => (
+              <strong key={plane} style={{ marginLeft: 8 }}>
+                {PLANE_LABEL[plane]}
+              </strong>
             ))}
           </span>
         )}

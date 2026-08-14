@@ -1,4 +1,4 @@
-"""トポロジ図の組み立て。
+"""トポロジー図の組み立て。
 
 自動推定した結線を土台に、人が配置を直して図を仕上げる前提で作っている。
 
@@ -597,6 +597,12 @@ PLANE_COLORS = {
     PLANE_ACCESS: "#8a6a3a",
     "custom": "#5a7a9a",
 }
+PLANE_NAMES = {
+    PLANE_BACKBONE: "コア網",
+    PLANE_METRO: "メトロ／集約",
+    PLANE_ACCESS: "アクセス",
+    "custom": "任意",
+}
 
 
 def plane_of(rank: int, deepest: int) -> str:
@@ -730,6 +736,20 @@ def delete_group(db: Session, group_id: int) -> bool:
     return True
 
 
+def _grouped_device_ids(db: Session, layer: str) -> set[int]:
+    rows = list(
+        db.scalars(
+            select(TopologyGroup)
+            .options(selectinload(TopologyGroup.members))
+            .where(TopologyGroup.layer == layer)
+        )
+    )
+    taken: set[int] = set()
+    for row in rows:
+        taken.update(member.device_id for member in row.members)
+    return taken
+
+
 def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[TopologyGroupView]:
     """見えている機器を拠点ごとに枠へ入れる。既にある枠は触らない。"""
     if not device_ids:
@@ -737,16 +757,7 @@ def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[To
     devices = list(
         db.scalars(select(Device).where(Device.id.in_(device_ids)).options(selectinload(Device.site)))
     )
-    taken: set[int] = set()
-    existing = list(
-        db.scalars(
-            select(TopologyGroup)
-            .options(selectinload(TopologyGroup.members))
-            .where(TopologyGroup.layer == layer)
-        )
-    )
-    for row in existing:
-        taken.update(member.device_id for member in row.members)
+    taken = _grouped_device_ids(db, layer)
     by_site: dict[int | None, list[Device]] = {}
     for device in devices:
         if device.id in taken:
@@ -765,6 +776,35 @@ def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[To
                 [device.id for device in members],
                 plane="custom",
                 color=PLANE_COLORS["custom"],
+            )
+        )
+    return created
+
+
+def groups_from_planes(db: Session, layer: str, device_ids: list[int]) -> list[TopologyGroupView]:
+    """見えている機器をコア／メトロ／アクセスの段ごとに枠へ入れる。既にある枠は触らない。"""
+    if not device_ids:
+        return []
+    graph = get_graph(db, layer, only=set(device_ids))
+    wanted = set(device_ids)
+    taken = _grouped_device_ids(db, layer)
+    by_plane: dict[str, list[int]] = {}
+    for node in graph.nodes:
+        if node.device_id not in wanted or node.device_id in taken:
+            continue
+        by_plane.setdefault(node.plane or PLANE_ACCESS, []).append(node.device_id)
+    created: list[TopologyGroupView] = []
+    for plane, ids in by_plane.items():
+        if not ids:
+            continue
+        created.append(
+            create_group(
+                db,
+                layer,
+                PLANE_NAMES.get(plane, plane),
+                ids,
+                plane=plane,
+                color=PLANE_COLORS.get(plane, PLANE_COLORS["custom"]),
             )
         )
     return created

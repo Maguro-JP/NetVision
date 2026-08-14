@@ -120,6 +120,9 @@ export default function DeviceNode({
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
         <span className="topo-hostname">{data.hostname}</span>
       </div>
+      {data.planeLabel && !data.outside && (
+        <div className="muted topo-plane">{data.planeLabel}</div>
+      )}
       {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
           ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}
       {/* 対向は簡易表示。見たいのは絞り込んだ側で、相手は「どこへ出ているか」が
@@ -152,7 +155,6 @@ export default function DeviceNode({
             </div>
             <div className="muted">
               {DEVICE_TYPE_LABEL[data.deviceType]}
-              {data.planeLabel ? ` / ${data.planeLabel}` : ""}
               {data.siteName ? ` / ${data.siteName}` : ""}
             </div>
             {data.mgmtIp && <div className="muted">{data.mgmtIp}</div>}

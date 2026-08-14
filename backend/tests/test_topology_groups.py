@@ -135,3 +135,50 @@ def test_groups_from_sites_skips_devices_already_in_a_frame(db_session, client):
     )
     assert again.status_code == 200
     assert again.json() == []
+
+
+def test_groups_from_planes_follows_carrier_ranks(db_session, client):
+    site = Site(name="本社")
+    db_session.add(site)
+    db_session.flush()
+    core = Device(
+        hostname="hq-core-01",
+        vendor="Cisco",
+        model="X",
+        device_type=DeviceType.ROUTER,
+        site_id=site.id,
+    )
+    edge = Device(
+        hostname="hq-acc-01",
+        vendor="Cisco",
+        model="X",
+        device_type=DeviceType.SWITCH,
+        site_id=site.id,
+    )
+    db_session.add_all([core, edge])
+    db_session.flush()
+    db_session.add(
+        Link(
+            a_device_id=core.id,
+            a_interface="Gi0/1",
+            b_device_id=edge.id,
+            b_interface="Gi1/0/1",
+        )
+    )
+    db_session.commit()
+
+    created = client.post(
+        f"{API}/topology/groups/from-planes",
+        params={"layer": "physical", "device_ids": f"{core.id},{edge.id}"},
+    )
+    assert created.status_code == 200, created.text
+    names = {item["name"] for item in created.json()}
+    assert names
+    assert names <= {"コア網", "メトロ／集約", "アクセス"}
+    assert {item["plane"] for item in created.json()} <= {"backbone", "metro", "access"}
+
+    svg = client.get(f"{API}/topology/export.svg")
+    assert svg.status_code == 200
+    body = svg.text
+    assert any(name in body for name in names)
+    assert "stroke-dasharray" in body

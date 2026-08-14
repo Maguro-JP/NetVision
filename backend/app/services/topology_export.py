@@ -1,4 +1,4 @@
-"""トポロジ図をファイルに書き出す。
+"""トポロジー図をファイルに書き出す。
 
 設計書・報告書・稟議資料に貼るための出力。スクリーンショットで済ませると
 
@@ -15,7 +15,7 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from math import atan2, cos, degrees, sin
 from xml.sax.saxutils import escape
 
@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
-from app.services.topology import TopologyGraph, attach_groups, get_graph
+from app.services.topology import PLANE_NAMES, TopologyGraph, attach_groups, get_graph
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
 SEVERITY_COLOR: dict[str, str] = {
@@ -102,10 +102,16 @@ def render_svg(
         # 絞り込みの外に出た相手を、簡易表示で残す。
         # 線ごと消すと、上位への接続が「無い」ように見えてしまう
         peers = _boundary_peers(everything, keep) if show_peers else []
+        groups = []
+        for group in everything.groups:
+            ids = [device_id for device_id in group.device_ids if device_id in keep]
+            if ids:
+                groups.append(replace(group, device_ids=ids))
         graph = TopologyGraph(
             layer=graph.layer,
             nodes=nodes,
             edges=[e for e in graph.edges if e.source in keep and e.target in keep],
+            groups=groups,
         )
     if not nodes:
         return _empty_svg(title, layer=graph.layer)
@@ -187,12 +193,15 @@ def render_svg(
         gy = min(y for _, y in members) - 26
         gw = max(x + NODE_W for x, _ in members) - gx + 18
         gh = max(y + NODE_H for _, y in members) - gy + 18
+        label = group.name
+        if group.plane and group.plane != "custom":
+            label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
         parts.append(
             f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gw:.0f}" height="{gh:.0f}" rx="10" '
             f'fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" stroke-width="1.6" '
             f'stroke-dasharray="6 4"/>'
             f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" fill="{_esc(group.color)}">'
-            f"{_esc(group.name)}</text>"
+            f"{_esc(label)}</text>"
         )
 
     # 同じ機器同士を何本も結んでいる場合（LAG など）に、線を平行にずらすための番号。

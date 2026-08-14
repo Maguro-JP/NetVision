@@ -122,6 +122,20 @@ def groups_from_sites(
     ]
 
 
+@router.post("/groups/from-planes", response_model=list[TopologyGroupRead])
+def groups_from_planes(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    device_ids: str = Query(default="", description="カンマ区切りの機器ID"),
+) -> list[TopologyGroupRead]:
+    """見えている機器をキャリア網の段ごとの枠にする。"""
+    ids = [int(part) for part in device_ids.split(",") if part.strip().isdigit()]
+    return [
+        TopologyGroupRead.model_validate(item, from_attributes=True)
+        for item in service.groups_from_planes(db, layer, ids)
+    ]
+
+
 @router.patch("/groups/{group_id}", response_model=TopologyGroupRead)
 def update_group(group_id: int, body: GroupUpdate, db: DbSession) -> TopologyGroupRead:
     group = service.update_group(

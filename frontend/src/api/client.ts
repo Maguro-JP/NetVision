@@ -430,6 +430,11 @@ export const api = {
       `/topology/groups/from-sites${query({ layer, device_ids: deviceIds.join(",") })}`,
       { method: "POST" },
     ),
+  groupsFromPlanes: (layer: string, deviceIds: number[]) =>
+    request<TopologyGroup[]>(
+      `/topology/groups/from-planes${query({ layer, device_ids: deviceIds.join(",") })}`,
+      { method: "POST" },
+    ),
   /** 配置を自動レイアウトに戻す。拠点や検索で絞っていればその範囲だけ。 */
   resetPositions: (layer: string, scope: { site_id?: number; q?: string } = {}) =>
     request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {

@@ -53,3 +53,9 @@ export function loadColors(): TopologyColors {
 export function saveColors(colors: TopologyColors): void {
   localStorage.setItem(COLOR_KEY, JSON.stringify(colors));
 }
+
+/** <input type="color"> は #rrggbb だけ受け付ける。 */
+export function asHexColor(value: string, fallback = "#5a7a9a"): string {
+  const match = /^#([0-9a-fA-F]{6})/.exec(value.trim());
+  return match ? `#${match[1]}` : fallback;
+}
