@@ -67,7 +67,9 @@ Cisco のキャンパス図をそのまま真似するのが最適ではあり�
 | `tree-radial.png` | 放射状ツリー | **反例** |
 | `network-topologies.svg` / `textbook-topologies.png` | バス・リング・スター一覧 | 教科書。運用図ではない |
 
-## 実装の前に描いた図
+## 公開図の評価
+
+判定の詳細は `EVALUATION.md`。NetVision が出した図は `netvision-kansai.svg`。
 
 `proposed-optimal.png`（同じ内容の SVG は `proposed-optimal.svg`）が、製品に載せる前の見本です。
 関西支社を見る物理図。これが読めないなら、コードの話はまだ早いです。

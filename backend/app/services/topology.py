@@ -458,12 +458,10 @@ def scope_graph(
     _compact(
         nodes,
         [e for e in graph.edges if e.source in keep and e.target in keep],
-        # 上下は網全体で見る。渡されていなければ手元のぶんで求めるが、
-        # 絞り込んだあとのグラフで求めると、その範囲でたまたま真ん中にいる
-        # 機器が最上位になってしまう
         rank=rank if rank is not None else hierarchy_rank(graph),
         inside=inside,
         orientation=orientation,
+        world=graph,
     )
     for node in nodes:
         # 対向として足しただけの機器は、図の上で区別できるようにする
@@ -604,6 +602,7 @@ def _compact(
     inside: set[int] | None = None,
     orientation: str = "vertical",
     polish: bool = False,
+    world: TopologyGraph | None = None,
 ) -> None:
     """結線の上下で段を決め、同じ段は横に並べる。
 
@@ -759,6 +758,7 @@ def _compact(
             inside,
             rank,
             horizontal=horizontal,
+            world=world,
         )
 
 
@@ -833,6 +833,36 @@ def _room_for(links: int) -> float:
     return (grown - _BOX_WIDTH) + links * _LANE_GAP
 
 
+def _peer_kind(
+    peer_id: int,
+    inside: set[int],
+    rank: dict[int, int],
+    own_rank: int,
+    world_adj: dict[int, list[int]],
+    world_by_id: dict[int, TopologyNodeView],
+) -> str:
+    """対向を上・横・下のどれに置くか。
+
+    ホップだけだと、見ている支社が網の中心になり、センターまで配下に落ちる。
+    向こうの拠点で機器どうしが繋がっている対向はセンター側（上）と見る。
+    """
+    level = rank.get(peer_id, own_rank)
+    if level < own_rank:
+        return "up"
+    peer = world_by_id.get(peer_id)
+    peer_site = peer.site_id if peer is not None else None
+    if peer_site is not None:
+        for nb in world_adj.get(peer_id, []):
+            if nb in inside:
+                continue
+            other = world_by_id.get(nb)
+            if other is not None and other.site_id == peer_site:
+                return "up"
+    if level > own_rank:
+        return "down"
+    return "down"
+
+
 def _place_peers(
     by_id: dict[int, TopologyNodeView],
     graph: TopologyGraph,
@@ -840,6 +870,7 @@ def _place_peers(
     rank: dict[int, int],
     *,
     horizontal: bool,
+    world: TopologyGraph | None = None,
 ) -> None:
     """対向（絞り込みの外）を、自拠点から見た向きに置き直す。
 
@@ -860,6 +891,9 @@ def _place_peers(
     top = min(node.y for node in own)
     middle = (left + right) / 2
     own_rank = min(rank.get(node.device_id, 0) for node in own)
+    world_graph = world or graph
+    world_adj = _adjacency(world_graph)
+    world_by_id = {node.device_id: node for node in world_graph.nodes}
 
     # 対向がどの内側の機器につながっているか
     attached: dict[int, int] = {}
@@ -878,13 +912,13 @@ def _place_peers(
         if node.placed:
             # 対向の保存済み位置は、相手の拠点の意思。こちらで動かさない
             continue
-        level = rank.get(device_id, own_rank)
-        if level < own_rank:
+        kind = _peer_kind(device_id, inside, rank, own_rank, world_adj, world_by_id)
+        if kind == "up":
             above.append(node)
-        elif level > own_rank:
-            below.append(node)
-        else:
+        elif kind == "side":
             beside.append(node)
+        else:
+            below.append(node)
 
     for group in (above, beside, below):
         group.sort(key=lambda node: node.hostname)
