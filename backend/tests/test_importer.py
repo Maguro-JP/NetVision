@@ -168,9 +168,7 @@ def test_reimport_with_contracts_does_not_query_per_row(db_session):
         ]
 
     n = 400
-    first = run_import(
-        db_session, headers, rows(n), key_field=KeyField.CODE, commit=True
-    )
+    first = run_import(db_session, headers, rows(n), key_field=KeyField.CODE, commit=True)
     assert first.created == n
     assert first.contracts_added == n
 
