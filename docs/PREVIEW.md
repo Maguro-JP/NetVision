@@ -44,10 +44,16 @@ NETVISION_DATABASE_URL="postgresql+psycopg://..." .venv/bin/alembic upgrade head
 ## PR ごとのプレビュー
 
 Vercel にリポジトリを接続すると、PR を作るたびに固有の URL でプレビューが作られます。
-`main` へマージすると本番相当の URL が更新されます。
+本番相当の URL は、**Production の Branch Tracking が指す枝**（このリポジトリでは `main`）へ
+push / マージしたときに更新されます。
+
+Branch Tracking を変えただけでは、いま Current になっているデプロイは変わりません。
+変えたあとに `main` へ何か push するか、Deployments から `main` のデプロイを
+Promote / Redeploy してください。
 
 ```
 PR を作る → Vercel が自動でビルド → PR にプレビュー URL が付く → 画面で確認
+→ Merge して main に入る → 本番 URL が更新される
 ```
 
 ## 最初のデプロイで確認すること
