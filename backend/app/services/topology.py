@@ -159,8 +159,9 @@ def matching_device_ids(
 ) -> set[int] | None:
     """絞り込みに当たる機器だけを返す。対向は含めない。
 
-    配置のリセットや最適化は、見ている範囲の機器だけに効かせる。
-    対向まで消すと、相手の拠点で直した配置まで巻き添えになる。
+    図の主役（自拠点）と、線の先の簡易表示（対向）を分けるために使う。
+    配置の保存先は topology_nodes.site_id なので、対向を図に出しても
+    相手の拠点の行は触らない。
 
     絞り込みが無いときは None を返す（＝全部）。
     """
@@ -1121,14 +1122,6 @@ def _lane_room(links: int) -> float:
     return links * _LANE_GAP
 
 
-def _room_for(links: int) -> float:
-    """配下を何台ぶら下げるかから、右へ余分に空ける幅を出す。"""
-    if links <= 0:
-        return 0.0
-    grown = min(_BOX_MAX, _BOX_WIDTH + max(0, links - 3) * _BOX_GROW)
-    return (grown - _BOX_WIDTH) + links * _LANE_GAP
-
-
 def _peer_kind(
     peer_id: int,
     inside: set[int],
@@ -1741,7 +1734,6 @@ def arrange_positions(
     保存するのはいま見ている拠点の図。対向もこの図の座標として残す。
     相手の拠点の図は site_id が違う行なので、上書きしない。
     """
-    inside = matching_device_ids(db, site_id=site_id, q=q)
     draw = scoped_device_ids(db, site_id=site_id, q=q)
     graph = get_graph(db, layer, orientation=orientation, only=draw, site_id=site_id)
     graph = scope_graph(
@@ -1753,14 +1745,11 @@ def arrange_positions(
         rank=network_rank(db) if draw is not None else None,
     )
 
-    owned = inside if inside is not None else {n.device_id for n in graph.nodes if not n.outside}
+    owned = {n.device_id for n in graph.nodes}
     if not owned:
         return 0
-    targets = [node for node in graph.nodes if node.device_id in owned]
-    _polish_layout(targets, edges=graph.edges, owned=owned)
+    _polish_layout(list(graph.nodes), edges=graph.edges, owned=owned)
 
-    # 対向の自動配置も、この拠点の図として残す。残さないと次に開いたとき
-    # また自動配置になり、人が動かした対向が戻ってしまう
     placed = [(n.device_id, n.x, n.y) for n in graph.nodes]
     if not placed:
         return 0
