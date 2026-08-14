@@ -2,8 +2,8 @@
 
 from pathlib import Path
 
-from app.services.topology import get_graph, scope_graph
-from app.services.topology_export import render_svg
+from app.services.topology import get_graph, load_diagram, scope_graph
+from app.services.topology_export import export_svg, render_svg
 from app.services.topology_quality import evaluate_site_diagram, is_acceptable
 from tests.test_topology_scope import build_center
 
@@ -28,6 +28,15 @@ def test_kansai_branch_diagram_is_readable(db_session):
     placed = {n.hostname: n for n in graph.nodes}
     assert placed["west-core-rt-01"].y < placed["ksi-br-rt-01"].y
     assert placed["kyoto-rt-01"].x > placed["ksi-br-rt-01"].x + 80
+
+    exported = export_svg(
+        db_session, "physical", site_id=ids["branch"], title="関西支社 物理構成", style="simple"
+    )
+    assert not _has_diagonal(exported), "書き出した図の線が斜め"
+    for hostname in placed:
+        assert hostname in exported
+    screen = load_diagram(db_session, "physical", site_id=ids["branch"])
+    assert {n.hostname for n in screen.nodes} == {n.hostname for n in graph.nodes}
 
 
 def _has_diagonal(svg: str) -> bool:

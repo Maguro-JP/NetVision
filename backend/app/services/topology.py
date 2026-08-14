@@ -660,6 +660,43 @@ def apply_planes(nodes: list[TopologyNodeView], rank: dict[int, int]) -> None:
         node.plane = plane_of(rank.get(node.device_id, deepest), deepest)
 
 
+def load_diagram(
+    db: Session,
+    layer: str = DEFAULT_LAYER,
+    *,
+    site_id: int | None = None,
+    q: str | None = None,
+    scope: str = SCOPE_PEERS,
+    orientation: str = "vertical",
+    include_retired: bool = False,
+) -> TopologyGraph:
+    """画面に出す図と同じグラフを組む。書き出しもこれを使う。
+
+    全台を置いてから拠点だけ残すと、箱が網全体の座標のまま千切れる。
+    資料に貼る SVG が数千ピクセルの空白と斜め線になるのは、それが原因。
+    """
+    only = scoped_device_ids(db, site_id=site_id, q=q)
+    graph = get_graph(
+        db,
+        layer,
+        include_retired=include_retired,
+        orientation=orientation,
+        only=only,
+        site_id=site_id,
+    )
+    if layer == "logical":
+        return attach_groups(db, graph)
+    graph = scope_graph(
+        graph,
+        site_id=site_id,
+        q=q,
+        scope=scope,
+        orientation=orientation,
+        rank=network_rank(db) if only is not None else None,
+    )
+    return attach_groups(db, graph)
+
+
 def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
     """今見えている機器が属する枠だけを図に載せる。"""
     visible = {node.device_id for node in graph.nodes}

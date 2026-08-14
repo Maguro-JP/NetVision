@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
-from app.services.topology import PLANE_NAMES, TopologyGraph, attach_groups, get_graph
+from app.services.topology import PLANE_NAMES, TopologyGraph, load_diagram
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
 SEVERITY_COLOR: dict[str, str] = {
@@ -74,26 +74,30 @@ def render_svg(
     along_line: bool = False,
     show_peers: bool = True,
 ) -> str:
-    """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
+    """トポロジを SVG にする。位置は渡されたグラフのまま使う。
 
-    `vlan` / `vrf` / `site_id` を指定すると、それに載っている機器だけを描く。
-    セグメント単位・VRF 単位・拠点単位で資料を作るときに使う。
+    拠点の図は、画面と同じ Dual Tree（自拠点＋対向）をそのまま描く。
+    ここで自拠点だけ残して対向を置き直すと、箱が千切れ、斜め線が出る。
+
+    `vlan` / `vrf` でさらに切ったときだけ、外に出た相手を簡易表示で残す。
+    未整理の全台グラフに `site_id` だけ渡された場合も、同じ簡易表示に落とす。
 
     `style="simple"` は機器名と結線だけの図。型番・IP・保守状態・VLAN を
     一切載せない。作業手順書や現場での指差し確認では、余計な情報が入っている方が
     読み違いのもとになるため、用途で図を分けられるようにしてある。
-
-    絞り込んだ場合、外に出た対向機器は `show_peers` で簡易表示として残す。
-    線ごと消すと、拠点の図で上位への接続が「無い」ように見えてしまうため。
     """
     simple = style == "simple"
     everything = graph
     nodes = graph.nodes
+    # 画面が組んだ拠点図（対向に outside が付いている）は、切らずに描く
+    already_site_diagram = any(n.outside for n in graph.nodes)
     if vlan is not None:
         nodes = [n for n in nodes if vlan in n.vlans]
     if vrf is not None:
         nodes = [n for n in nodes if vrf in n.vrfs]
-    if site_id is not None:
+    if already_site_diagram and not show_peers:
+        nodes = [n for n in nodes if not n.outside]
+    elif site_id is not None and not already_site_diagram:
         nodes = [n for n in nodes if n.site_id == site_id]
 
     peers: list[_Peer] = []
@@ -163,7 +167,9 @@ def render_svg(
     scope = f"{f' / VLAN {vlan}' if vlan is not None else ''}"
     scope += f"{f' / VRF {vrf}' if vrf else ''}"
     if site_id is not None:
-        site_name = next((n.site_name for n in nodes if n.site_name), None)
+        site_name = next((n.site_name for n in nodes if not n.outside and n.site_name), None)
+        if not site_name:
+            site_name = next((n.site_name for n in nodes if n.site_name), None)
         scope += f" / {site_name}" if site_name else ""
     # 対象外へ出ていく線も本数に入れる。描いてある線が数に入っていないと、
     # 図と見出しが食い違って見える
@@ -303,7 +309,6 @@ def render_svg(
             continue
         px, py = peer.x + dx, peer.y + dy
         ax, ay = anchor[0] + NODE_W / 2, anchor[1] + NODE_H / 2
-        cx, cy = px + PEER_W / 2, py + PEER_H / 2
 
         obstacles = [
             rect.grow(2.0) for device_id, rect in boxes.items() if device_id != peer.anchor
@@ -312,7 +317,11 @@ def render_svg(
             for q in peers
             if q is not peer
         ]
-        points = _route((ax, ay), (cx, cy), obstacles)
+        src_box = (anchor[0], anchor[1], NODE_W, NODE_H)
+        dst_box = (px, py, PEER_W, PEER_H)
+        src_side = _side_toward(src_box, dst_box)
+        dst_side = _side_toward(dst_box, src_box)
+        points = _wire_path(src_box, dst_box, src_side, dst_side, 0, 1, obstacles)
         parts.append(
             f'<polyline points="{_path_points(points)}" fill="none" '
             f'stroke="#8a94a6" stroke-width="1.6"'
@@ -321,8 +330,9 @@ def render_svg(
         )
         parts.append(_peer_box(px, py, peer, simple))
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
+        label_to = points[1] if len(points) > 1 else points[0]
         parts.append(
-            _port_label(ax, ay, *points[1], peer.local_interface, port_style, along_line, placement)
+            _port_label(ax, ay, *label_to, peer.local_interface, port_style, along_line, placement)
         )
         if peer.local_interface:
             used_media.add(portlabel.media_of(peer.local_interface))
@@ -332,13 +342,20 @@ def render_svg(
         x, y = at[node.device_id]
         if simple:
             # 名前だけ。枠は輪郭が分かる程度の細さに留める
+            subtitle = ""
+            if node.outside and node.site_name:
+                subtitle = (
+                    f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 18:.0f}" font-size="10" '
+                    f'fill="#6b6b6b" text-anchor="middle">{_esc(_clip(node.site_name, 22))}</text>'
+                )
+            name_y = y + NODE_H / 2 + (0 if subtitle else 5)
             parts.append(
                 f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
                 f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
                 f'stroke-width="1.6"/>'
-                f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 5:.0f}" font-size="14" '
+                f'<text x="{x + NODE_W / 2:.0f}" y="{name_y:.0f}" font-size="14" '
                 f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
-                f"{_esc(_clip(node.hostname, 22))}</text></g>"
+                f"{_esc(_clip(node.hostname, 22))}</text>{subtitle}</g>"
             )
             continue
 
@@ -561,7 +578,55 @@ def _wire_path(
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
     if bus and _residual(bus, obstacles) == 0:
         return bus
-    return _route(start, end, obstacles)
+    manhattan = _manhattan(start, end, src_side, dst_side)
+    if _residual(manhattan, obstacles) == 0:
+        return manhattan
+    routed = _route(start, end, obstacles)
+    if _is_orthogonal(routed):
+        return routed
+    return manhattan
+
+
+def _manhattan(
+    source: tuple[float, float],
+    target: tuple[float, float],
+    source_face: str,
+    target_face: str,
+) -> list[tuple[float, float]]:
+    """バスが使えないときも縦横だけ。画面側の manhattanRoute と同じ形。"""
+    out = 16.0
+    sx, sy = source
+    tx, ty = target
+    ox = sx + (out if source_face == "right" else -out if source_face == "left" else 0.0)
+    oy = sy + (out if source_face == "bottom" else -out if source_face == "top" else 0.0)
+    ix = tx + (out if target_face == "right" else -out if target_face == "left" else 0.0)
+    iy = ty + (out if target_face == "bottom" else -out if target_face == "top" else 0.0)
+    horizontal_first = source_face in ("left", "right")
+    mid = (ox, iy) if horizontal_first else (ix, oy)
+    points = [source, (ox, oy), mid, (ix, iy), target]
+    out_pts = [points[0]]
+    for point in points[1:]:
+        if abs(point[0] - out_pts[-1][0]) > 0.5 or abs(point[1] - out_pts[-1][1]) > 0.5:
+            out_pts.append(point)
+    return out_pts if len(out_pts) > 1 else [source, target]
+
+
+def _ell(
+    p1: tuple[float, float], p2: tuple[float, float], horizontal_first: bool
+) -> list[tuple[float, float]]:
+    mid = (p2[0], p1[1]) if horizontal_first else (p1[0], p2[1])
+    if abs(mid[0] - p1[0]) < 0.5 and abs(mid[1] - p1[1]) < 0.5:
+        return [p1, p2]
+    if abs(mid[0] - p2[0]) < 0.5 and abs(mid[1] - p2[1]) < 0.5:
+        return [p1, p2]
+    return [p1, mid, p2]
+
+
+def _is_orthogonal(points: list[tuple[float, float]]) -> bool:
+    return all(
+        abs(a[0] - b[0]) <= 0.5 or abs(a[1] - b[1]) <= 0.5
+        for a, b in zip(points, points[1:], strict=False)
+    )
 
 
 def _route(
@@ -570,20 +635,38 @@ def _route(
     obstacles: list[svglayout.Rect],
     depth: int = 0,
 ) -> list[tuple[float, float]]:
-    """関係の無い機器の箱を避けて通る折れ線を返す。
+    """関係の無い機器の箱を避けて通る折れ線を返す。斜めは出さない。
 
     直線で結ぶと、間にある機器の上を通ってしまうことがある。図の上では
     「通過」と「接続」を見分けられないので、その機器にも繋がっていると
     読まれてしまう。専用線が FW を貫いて見えるのがこれ。
 
     迂回は上下左右の4方向を試し、他の箱にも当たらず、遠回りの少ないものを採る。
-    どうしても避けられない場合は直線のまま出す。線を消す方が誤解を招くため。
+    どうしても避けられない場合も縦横の折れ線のまま出す。
     """
-    blockers = [rect for rect in obstacles if svglayout.segment_hits(rect, p1, p2)]
-    if not blockers:
-        return [p1, p2]
+    aligned = abs(p1[0] - p2[0]) <= 0.5 or abs(p1[1] - p2[1]) <= 0.5
+    if aligned:
+        blockers = [rect for rect in obstacles if svglayout.segment_hits(rect, p1, p2)]
+        if not blockers:
+            return [p1, p2]
+    else:
+        options = [_ell(p1, p2, True), _ell(p1, p2, False)]
+        clear = [route for route in options if _residual(route, obstacles) == 0]
+        if clear:
+            return min(clear, key=_length)
+        blockers = [
+            rect
+            for rect in obstacles
+            for route in options
+            for a, b in zip(route, route[1:], strict=False)
+            if svglayout.segment_hits(rect, a, b)
+        ]
+        if not blockers:
+            return options[0]
+
     if depth >= 3:
-        return [p1, p2]
+        options = [_ell(p1, p2, True), _ell(p1, p2, False)]
+        return min(options, key=lambda route: (_residual(route, obstacles), _length(route)))
 
     # 邪魔をしている箱をまとめて1つの塊として避ける。1個ずつ避けると、
     # 避けた先にまた次の箱がいて、堂々巡りになる
@@ -596,16 +679,12 @@ def _route(
     mid_x, mid_y = (hit.x1 + hit.x2) / 2, (hit.y1 + hit.y2) / 2
     left, right = hit.x1 - _ROUTE_CLEAR, hit.x2 + _ROUTE_CLEAR
     top, bottom = hit.y1 - _ROUTE_CLEAR, hit.y2 + _ROUTE_CLEAR
-    # 辺の外側と、角の外側。斜めの線は角を回る方が短く済む
+    # 辺の外側。角は斜めになるので使わない
     candidates = [
         (mid_x, top),
         (mid_x, bottom),
         (left, mid_y),
         (right, mid_y),
-        (left, top),
-        (right, top),
-        (left, bottom),
-        (right, bottom),
     ]
     # 候補ごとに実際に両側を引き直してから選ぶ。
     # 「この方向なら空いている」を1手だけ見て決めると、避けた先にまた箱がいる
@@ -621,14 +700,14 @@ def _route(
         if cost[0] == 0 and depth > 0:
             break  # 奥の階層では、通れる道が見つかった時点で十分
 
-    points = best or [p1, p2]
+    points = best or _ell(p1, p2, True)
 
     # 同じ点が続くと、そこだけ向きが決まらない。折れ線から落とす
     out = [points[0]]
     for point in points[1:]:
         if abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
             out.append(point)
-    return out if len(out) > 1 else [p1, p2]
+    return out if len(out) > 1 else _ell(p1, p2, True)
 
 
 def _residual(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]) -> int:
@@ -978,7 +1057,7 @@ def export_svg(
     orientation: str = "vertical",
 ) -> str:
     return render_svg(
-        attach_groups(db, get_graph(db, layer, orientation=orientation, site_id=site_id)),
+        load_diagram(db, layer, site_id=site_id, orientation=orientation),
         title=title,
         vlan=vlan,
         vrf=vrf,

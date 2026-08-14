@@ -70,29 +70,15 @@ def get_topology(
             status.HTTP_400_BAD_REQUEST,
             "機器が多すぎて全体図は出せません。拠点か機器名で絞ってください",
         )
-    graph = service.get_graph(
+    graph = service.load_diagram(
         db,
         layer,
         include_retired=include_retired,
         orientation=orientation,
-        only=only,
-        site_id=site_id,
-    )
-    if layer == "logical":
-        # 論理は get_graph 側で対向（only）まで残してある。
-        # site_id で再度切ると本社ビューが空になるので、ここでは触らない。
-        graph = service.attach_groups(db, graph)
-        return TopologyGraphRead.model_validate(graph, from_attributes=True)
-    graph = service.scope_graph(
-        graph,
         site_id=site_id,
         q=q,
         scope=scope,
-        orientation=orientation,
-        # 上下は網全体で見る。絞ったあとのグラフで求めると順番が狂う
-        rank=service.network_rank(db) if only is not None else None,
     )
-    graph = service.attach_groups(db, graph)
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
