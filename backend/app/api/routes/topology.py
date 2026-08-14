@@ -56,7 +56,13 @@ def get_topology(
     # 絞り込みが決まっているなら、必要な機器だけ読む。全部読んでから
     # 捨てる作りだと、全国規模では図を1つ出すのに何分もかかる
     only = service.scoped_device_ids(db, site_id=site_id, q=q)
-    if only is None and service.unscoped_graph_too_wide(db, include_retired=include_retired):
+    # 物理の全体図だけ止める。L2 / L3 / 論理は中身が絞られるので、
+    # 台帳全体の台数では判断しない（論理は全国のトンネルを一度に見たい）
+    if (
+        only is None
+        and layer == service.DEFAULT_LAYER
+        and service.unscoped_graph_too_wide(db, include_retired=include_retired)
+    ):
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             "機器が多すぎて全体図は出せません。拠点か機器名で絞ってください",
@@ -64,6 +70,10 @@ def get_topology(
     graph = service.get_graph(
         db, layer, include_retired=include_retired, orientation=orientation, only=only
     )
+    if layer == "logical":
+        # 論理は get_graph 側で対向（only）まで残してある。
+        # site_id で再度切ると本社ビューが空になるので、ここでは触らない。
+        return TopologyGraphRead.model_validate(graph, from_attributes=True)
     graph = service.scope_graph(
         graph,
         site_id=site_id,

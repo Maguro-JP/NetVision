@@ -73,10 +73,26 @@ function loadView(): ViewSettings {
 }
 
 const LAYERS = [
-  { value: "physical", label: "物理構成" },
-  { value: "l2", label: "L2 (VLAN)" },
-  { value: "l3", label: "L3 (セグメント)" },
-  { value: "logical", label: "論理構成" },
+  {
+    value: "physical",
+    label: "物理構成",
+    hint: "ケーブル・LLDP の結線。機器がどう繋がっているか",
+  },
+  {
+    value: "logical",
+    label: "論理構成",
+    hint: "IPsec / GRE などのトンネル。物理とは別の通り道",
+  },
+  {
+    value: "l2",
+    label: "L2 (VLAN)",
+    hint: "VLAN が載っている結線だけ。同じ VLAN がどこまで伸びているか",
+  },
+  {
+    value: "l3",
+    label: "L3 (セグメント)",
+    hint: "ルータ同士や IP 付きの結線。ルーティングの段",
+  },
 ];
 
 /** API のグラフを React Flow の形に変換する。
@@ -448,8 +464,8 @@ function TopologyEditor() {
     queryFn: () => api.getTopologyStats(layer),
   });
   // 全体図は台数が増えると読めないし、描くだけで重い。
-  // 絞っていないときは、小さい構成のときだけ自動で出す
-  const tooWide = !scoped && (stats?.device_count ?? 0) > WIDE_LIMIT;
+  // 絞っていないときは、物理だけ自動で止める（L2/L3/論理は中身が絞られる）
+  const tooWide = !scoped && layer === "physical" && (stats?.device_count ?? 0) > WIDE_LIMIT;
 
   const { data: graph, isLoading } = useQuery({
     queryKey: ["topology", layer, orientation, selectedSite, appliedSearch, scope],
@@ -461,6 +477,11 @@ function TopologyEditor() {
       }),
     enabled: !tooWide,
   });
+  const { data: tunnelInfo } = useQuery({
+    queryKey: ["topologyTunnels"],
+    queryFn: () => api.getTopologyTunnels(),
+    enabled: layer === "logical",
+  });
   const { data: vlans } = useQuery({
     queryKey: ["topologyVlans"],
     queryFn: () => api.listTopologyVlans(),
@@ -470,6 +491,18 @@ function TopologyEditor() {
     queryFn: () => api.listTopologyVrfs(),
   });
   const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
+
+  // 物理の全体図が出せない規模なら、最初から本社を選ぶ。
+  // 「表示できる機器がありません」だけのデモにはしない。
+  useEffect(() => {
+    if (selectedSite !== "") return;
+    if (params.get("site")) return;
+    if (layer !== "physical") return;
+    if (!sites?.length || !stats) return;
+    if (stats.device_count <= WIDE_LIMIT) return;
+    const hq = sites.find((site) => site.name.includes("本社")) ?? sites[0];
+    setSelectedSite(hq.id);
+  }, [sites, stats, selectedSite, layer, params]);
 
   useEffect(() => {
     if (!graph) return;
@@ -780,6 +813,8 @@ function TopologyEditor() {
         ) : (
           <>図は動かせません。並べ替えたいときは「編集する」を押してください。</>
         )}
+        <br />
+        {LAYERS.find((item) => item.value === layer)?.hint}
       </p>
 
       <div className="toolbar">
@@ -796,6 +831,7 @@ function TopologyEditor() {
         </button>
         <select
           value={layer}
+          title={LAYERS.find((item) => item.value === layer)?.hint}
           onChange={(e) => {
             if (!confirmLeave(dirty)) return;
             setDirty(false);
@@ -803,7 +839,7 @@ function TopologyEditor() {
           }}
         >
           {LAYERS.map((item) => (
-            <option key={item.value} value={item.value}>
+            <option key={item.value} value={item.value} title={item.hint}>
               {item.label}
             </option>
           ))}
@@ -1002,6 +1038,9 @@ function TopologyEditor() {
               <strong>拠点を選ぶ</strong>か<strong>拠点名・機器名で探して</strong>ください。
             </p>
             <p className="muted">選んだ拠点の対向（直接つながっている上位）までは自動で出ます。</p>
+            <p className="muted">
+              L2 / L3 / 論理構成は、中身が絞られるので全体のままでも開けます。
+            </p>
           </div>
         ) : isLoading ? (
           <p className="muted" style={{ padding: 20 }}>
@@ -1009,7 +1048,37 @@ function TopologyEditor() {
           </p>
         ) : nodes.length === 0 ? (
           <div className="empty" style={{ margin: 40 }}>
-            表示できる機器がありません。台帳に機器を登録してください。
+            {layer === "l2" ? (
+              <>
+                <p>VLAN が載っている結線がありません。</p>
+                <p className="muted">
+                  ポートに VLAN / トランク設定が入ると、ここに L2 の図が出ます。物理構成とは別です。
+                </p>
+              </>
+            ) : layer === "l3" ? (
+              <>
+                <p>L3 の結線がありません。</p>
+                <p className="muted">
+                  ルータ同士の結線や、両端に IP が付いたポートがあるとここに出ます。
+                </p>
+              </>
+            ) : layer === "logical" ? (
+              <>
+                <p>論理構成に出せるトンネルがありません。</p>
+                <p className="muted">
+                  Config から IPsec / GRE などを取り込むと、物理とは別の通り道として出ます。
+                  {tunnelInfo && tunnelInfo.unresolved.length > 0 && (
+                    <>
+                      {" "}
+                      相手が台帳に無いトンネルが {tunnelInfo.unresolved.length}{" "}
+                      件あります（黙って消してはいません）。
+                    </>
+                  )}
+                </p>
+              </>
+            ) : (
+              <>表示できる機器がありません。台帳に機器を登録してください。</>
+            )}
           </div>
         ) : (
           <ReactFlow

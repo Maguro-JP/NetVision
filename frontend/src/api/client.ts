@@ -391,6 +391,13 @@ export const api = {
       })}`,
     ),
   getTopologyStats: (layer: string) => request<TopologyStats>(`/topology/stats${query({ layer })}`),
+  /** 論理構成の材料。相手が特定できなかったトンネルも件数で返す。 */
+  getTopologyTunnels: () =>
+    request<{
+      tunnel_count: number;
+      device_count: number;
+      unresolved: { device: string; name: string; destination: string | null; kind: string | null }[];
+    }>("/topology/tunnels"),
   savePositions: (layer: string, positions: { device_id: number; x: number; y: number }[]) =>
     request<{ saved: number }>("/topology/positions", {
       method: "PUT",

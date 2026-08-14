@@ -188,7 +188,19 @@ def get_graph(
         graph = topology_logical.build(
             db, include_retired=include_retired, orientation=orientation
         ).graph
-        return _apply_saved_positions(db, graph, orientation=orientation)
+        graph = _apply_saved_positions(db, graph, orientation=orientation)
+        # 拠点で絞ったときは、その拠点の機器に加え、scoped_device_ids が
+        # 拾った対向（センター等）に張られたトンネルも残す。
+        # ここを拠点の site_id だけで切ると、本社を選んだときに論理が空になる。
+        if only is not None:
+            edges = [e for e in graph.edges if e.source in only or e.target in only]
+            graph = _shrink_to(graph, edges)
+            if graph.nodes:
+                _compact(
+                    graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation
+                )
+                graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
+        return graph
 
     device_query = select(Device).options(selectinload(Device.contracts), selectinload(Device.site))
     if only is not None:
@@ -259,11 +271,81 @@ def get_graph(
         edges=edges,
         unplaced_count=sum(1 for n in nodes if not n.placed),
     )
+
+    # L2 / L3 は物理の結線を土台に、見る内容だけを差し替える。
+    # 配置はレイヤ別に残るので、同じ線でも並べ方は別にできる。
+    if layer == "l2":
+        graph = _as_l2(graph)
+    elif layer == "l3":
+        graph = _as_l3(graph, ports)
+
     # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
-    if nodes:
+    if graph.nodes:
         _compact(graph.nodes, graph.edges, rank=hierarchy_rank(graph), orientation=orientation)
         graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
+
+
+#: L3 図に出す機器の種別。スイッチ同士のトランクは L2 側の話。
+_L3_TYPES = frozenset(
+    {
+        str(DeviceType.ROUTER),
+        str(DeviceType.FIREWALL),
+        str(DeviceType.LOAD_BALANCER),
+    }
+)
+
+
+def _shrink_to(graph: TopologyGraph, edges: list[TopologyEdgeView]) -> TopologyGraph:
+    """残した線に載っている機器だけを残す。線の無い箱は図を読めなくする。"""
+    involved = {e.source for e in edges} | {e.target for e in edges}
+    nodes = [n for n in graph.nodes if n.device_id in involved]
+    return TopologyGraph(
+        layer=graph.layer,
+        nodes=nodes,
+        edges=edges,
+        unplaced_count=sum(1 for n in nodes if not n.placed),
+    )
+
+
+def _as_l2(graph: TopologyGraph) -> TopologyGraph:
+    """VLAN が載っている結線だけを残す。
+
+    物理図の WAN 線（ルータ同士で VLAN が無い）は出さない。スイッチ間の
+    トランクやアクセスが残るので、「どこまで同じ VLAN が伸びているか」が読める。
+    """
+    edges = [
+        edge
+        for edge in graph.edges
+        if edge.vlans or edge.vlan_mismatch or edge.native_vlan is not None
+    ]
+    return _shrink_to(graph, edges)
+
+
+def _as_l3(graph: TopologyGraph, ports: dict[tuple[int, str], Interface]) -> TopologyGraph:
+    """セグメント（L3）の結線だけを残す。
+
+    - ルータ / FW / LB どうしの物理結線
+    - 両端のポートに IP が付いている結線（点対点のルート）
+    - VRF が付いている結線
+
+    スイッチ間の VLAN トランクは L2 側。混ぜると何の図か分からなくなる。
+    """
+    by_id = {n.device_id: n for n in graph.nodes}
+    edges: list[TopologyEdgeView] = []
+    for edge in graph.edges:
+        a = by_id.get(edge.source)
+        b = by_id.get(edge.target)
+        if a is None or b is None:
+            continue
+        a_port = ports.get((edge.source, normalize(edge.source_interface)))
+        b_port = ports.get((edge.target, normalize(edge.target_interface)))
+        a_ip = bool(a_port and a_port.ip_address)
+        b_ip = bool(b_port and b_port.ip_address)
+        routed = a.device_type in _L3_TYPES and b.device_type in _L3_TYPES
+        if routed or (a_ip and b_ip) or edge.vrf:
+            edges.append(edge)
+    return _shrink_to(graph, edges)
 
 
 def _apply_saved_positions(

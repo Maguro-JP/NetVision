@@ -171,17 +171,20 @@ def test_positions_can_be_reset(client, device_payload):
 
 
 def test_layers_have_independent_positions(client, device_payload):
+    """レイヤごとに配置を持てること。中身が違うレイヤ同士でも独立している。"""
     ids = seed_fleet(client, device_payload)
+    upload(client, "core-sw-01", "edge-rt-01", "acc-sw-osaka-01")
+
     client.put(
         f"{API}/topology/positions",
-        json={"layer": "l3", "positions": [{"device_id": ids["core"], "x": 50, "y": 60}]},
+        json={"layer": "l2", "positions": [{"device_id": ids["core"], "x": 50, "y": 60}]},
     )
 
-    l3 = next(n for n in graph(client, layer="l3")["nodes"] if n["device_id"] == ids["core"])
+    l2 = next(n for n in graph(client, layer="l2")["nodes"] if n["device_id"] == ids["core"])
     physical = next(
         n for n in graph(client, layer="physical")["nodes"] if n["device_id"] == ids["core"]
     )
-    assert (l3["x"], l3["y"]) == (50, 60)
+    assert (l2["x"], l2["y"]) == (50, 60)
     assert physical["placed"] is False
 
 

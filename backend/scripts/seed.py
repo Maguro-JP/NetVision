@@ -116,7 +116,7 @@ def _seed(force: bool) -> None:
                 os_name="FortiOS",
                 os_version="7.2.8",
                 site_id=branch.id,
-                mgmt_ip="10.1.0.1",
+                mgmt_ip="10.0.0.2",
                 install_date=date(2022, 6, 15),
                 eol_date=_d(900),
             ),
@@ -302,13 +302,18 @@ def _seed(force: bool) -> None:
         # acc-sw-01 側だけ VLAN 20 を許可していない状態にしてあり、
         # 「片側だけ許可漏れ」が図の上でどう出るかを試せるようにしてある
         ports = [
-            ("core-sw-01", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
-            ("core-sw-02", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40"),
-            ("core-sw-01", "GigabitEthernet1/0/1", "trunk", None, 999, "10,20,30"),
-            ("acc-sw-01", "GigabitEthernet0/1", "trunk", None, 999, "10,30"),
-            ("acc-sw-01", "GigabitEthernet0/10", "access", 10, None, None),
-            ("core-sw-02", "GigabitEthernet1/0/10", "trunk", None, 1, "30,40"),
-            ("wlc-01", "GigabitEthernet1", "trunk", None, 999, "30,40"),
+            ("core-sw-01", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40", None),
+            ("core-sw-02", "TenGigabitEthernet1/1/1", "trunk", None, 999, "10,20,30,40", None),
+            ("core-sw-01", "GigabitEthernet1/0/1", "trunk", None, 999, "10,20,30", None),
+            ("acc-sw-01", "GigabitEthernet0/1", "trunk", None, 999, "10,30", None),
+            ("acc-sw-01", "GigabitEthernet0/10", "access", 10, None, None, None),
+            ("core-sw-02", "GigabitEthernet1/0/10", "trunk", None, 1, "30,40", None),
+            ("wlc-01", "GigabitEthernet1", "trunk", None, 999, "30,40", None),
+            # L3 図用。ルータ〜FW の点対点に IP を付けておく
+            ("edge-rt-01", "ge-0/0/0", None, None, None, None, "10.255.0.1/30"),
+            ("fw-01", "port1", None, None, None, None, "10.255.0.2/30"),
+            ("fw-01", "port2", None, None, None, None, "10.255.0.5/30"),
+            ("core-sw-01", "GigabitEthernet1/0/24", None, None, None, None, "10.255.0.6/30"),
         ]
         db.add_all(
             [
@@ -320,8 +325,9 @@ def _seed(force: bool) -> None:
                     vlan=access,
                     native_vlan=native,
                     trunk_vlans=trunk,
+                    ip_address=ip,
                 )
-                for host, name, mode, access, native, trunk in ports
+                for host, name, mode, access, native, trunk, ip in ports
             ]
         )
 
