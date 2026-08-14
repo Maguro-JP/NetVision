@@ -755,7 +755,9 @@ def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[To
     if not device_ids:
         return []
     devices = list(
-        db.scalars(select(Device).where(Device.id.in_(device_ids)).options(selectinload(Device.site)))
+        db.scalars(
+            select(Device).where(Device.id.in_(device_ids)).options(selectinload(Device.site))
+        )
     )
     taken = _grouped_device_ids(db, layer)
     by_site: dict[int | None, list[Device]] = {}
@@ -1464,9 +1466,7 @@ def _align_axis(nodes: list[TopologyNodeView], *, axis: str, threshold: float) -
         value = getattr(node, axis)
         if value - prev <= threshold and value - start <= threshold:
             other_v = getattr(node, other)
-            stacked = any(
-                abs(getattr(member, other) - other_v) <= 12.0 for member in group
-            )
+            stacked = any(abs(getattr(member, other) - other_v) <= 12.0 for member in group)
             if stacked:
                 groups.append([node])
                 continue
