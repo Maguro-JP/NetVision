@@ -236,13 +236,48 @@ export function assignAnchors(graph: TopologyGraph): {
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(end);
   }
 
-  /** 引き出し口のちょうど真ん中。SLOTS は 0.5 を含む奇数個で持つこと。 */
-  const CENTER = (SLOTS.length - 1) / 2;
+  /** 相手の位置を辺へ射影した比率。接続点は辺の上で動かせる。 */
+  const idealT = (end: (typeof ends)[number]): number => {
+    const here = nodes.get(end.device);
+    const other = nodes.get(end.other);
+    if (!here || !other) return 0.5;
+    if (end.side === "left" || end.side === "right") {
+      const height = 78;
+      return Math.min(0.92, Math.max(0.08, (other.y + height / 2 - here.y) / height));
+    }
+    // 保存左上＋既定幅/2 が中心（広げても中心は動かす）。広げた幅で割ると中央がずれる。
+    return Math.min(
+      0.92,
+      Math.max(0.08, (other.x + DEFAULT_WIDTH / 2 - here.x) / DEFAULT_WIDTH),
+    );
+  };
 
-  const slotFor = (index: number, count: number): number => {
-    if (count <= 1) return CENTER; // 1本なら中央から出す
-    // 相手が左にいるものから順に、左の引き出し口へ
-    return Math.min(SLOTS.length - 1, Math.round((index / (count - 1)) * (SLOTS.length - 1)));
+  const spaceTs = (ideals: number[]): number[] => {
+    if (ideals.length === 0) return [];
+    const ordered = ideals.map((t, origin) => ({ origin, t })).sort((a, b) => a.t - b.t);
+    const spaced = ordered.map((item) => item.t);
+    const minimum = 0.06;
+    for (let index = 1; index < spaced.length; index += 1) {
+      if (spaced[index] - spaced[index - 1] < minimum) {
+        spaced[index] = spaced[index - 1] + minimum;
+      }
+    }
+    if (spaced[spaced.length - 1] > 0.92) {
+      const shift = spaced[spaced.length - 1] - 0.92;
+      for (let index = 0; index < spaced.length; index += 1) {
+        spaced[index] = Math.max(0.08, spaced[index] - shift);
+      }
+      for (let index = 1; index < spaced.length; index += 1) {
+        if (spaced[index] - spaced[index - 1] < minimum) {
+          spaced[index] = spaced[index - 1] + minimum;
+        }
+      }
+    }
+    const result = ideals.map(() => 0.5);
+    ordered.forEach((item, index) => {
+      result[item.origin] = spaced[index];
+    });
+    return result;
   };
 
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
@@ -254,8 +289,17 @@ export function assignAnchors(graph: TopologyGraph): {
       return side === "top" || side === "bottom" ? node.x : node.y;
     };
     members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
+    const spaced = spaceTs(members.map((end) => idealT(end)));
+    const used = new Set<number>();
     members.forEach((end, index) => {
-      assigned.set(`${end.edge}:${end.device}`, anchorId(end.side, slotFor(index, members.length)));
+      const t = spaced[index];
+      const scored = SLOTS.map((ratio, slot) => ({
+        slot,
+        dist: Math.abs(ratio - t),
+      })).sort((a, b) => a.dist - b.dist || a.slot - b.slot);
+      const pick = scored.find((item) => !used.has(item.slot)) ?? scored[0];
+      used.add(pick.slot);
+      assigned.set(`${end.edge}:${end.device}`, anchorId(end.side, pick.slot));
     });
   }
 

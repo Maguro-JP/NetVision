@@ -229,12 +229,15 @@ def render_svg(
 
     sides: dict[int, tuple[str, str]] = {}
     groups: dict[tuple[int, str], list[tuple[float, int]]] = {}
+    boxes_by_id = {
+        n.device_id: (at[n.device_id][0], at[n.device_id][1], NODE_W, NODE_H) for n in nodes
+    }
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
             continue
-        src_box = (source[0], source[1], NODE_W, NODE_H)
-        dst_box = (target[0], target[1], NODE_W, NODE_H)
+        src_box = boxes_by_id[edge.source]
+        dst_box = boxes_by_id[edge.target]
         src_side = edge.source_side or _side_toward(src_box, dst_box)
         dst_side = edge.target_side or _side_toward(dst_box, src_box)
         sides[edge.id] = (src_side, dst_side)
@@ -243,10 +246,21 @@ def render_svg(
         groups.setdefault((edge.source, src_side), []).append((src_along, edge.id))
         groups.setdefault((edge.target, dst_side), []).append((dst_along, edge.id))
     lane_rank: dict[int, tuple[int, int]] = {}
-    for members in groups.values():
+    face_t: dict[tuple[int, str, int], float] = {}
+    edge_by_id = {edge.id: edge for edge in graph.edges}
+    for (device_id, side), members in groups.items():
         members.sort()
+        box = boxes_by_id[device_id]
+        ideals: list[float] = []
+        for _, edge_id in members:
+            edge = edge_by_id[edge_id]
+            other_id = edge.target if edge.source == device_id else edge.source
+            ideals.append(_face_t(box, side, boxes_by_id[other_id]))
         for index, (_, edge_id) in enumerate(members):
-            lane_rank.setdefault(edge_id, (index, len(members)))
+            lane_rank[edge_id] = (index, len(members))
+        spaced = _space_face_ts(ideals)
+        for (_, edge_id), t in zip(members, spaced, strict=False):
+            face_t[(device_id, side, edge_id)] = t
 
     # --- 結線（ノードより先に描いて背面に回す） ---
     pending: list[tuple[list[tuple[float, float]], object]] = []
@@ -254,8 +268,8 @@ def render_svg(
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
             continue
-        src_box = (source[0], source[1], NODE_W, NODE_H)
-        dst_box = (target[0], target[1], NODE_W, NODE_H)
+        src_box = boxes_by_id[edge.source]
+        dst_box = boxes_by_id[edge.target]
         src_side, dst_side = sides.get(edge.id, ("right", "left"))
         rank_i, rank_n = lane_rank.get(edge.id, (0, 1))
         obstacles = [
@@ -263,7 +277,17 @@ def render_svg(
             for device_id, rect in boxes.items()
             if device_id not in (edge.source, edge.target)
         ] + [rect.grow(2.0) for rect in peer_boxes]
-        points = _wire_path(src_box, dst_box, src_side, dst_side, rank_i, rank_n, obstacles)
+        points = _wire_path(
+            src_box,
+            dst_box,
+            src_side,
+            dst_side,
+            rank_i,
+            rank_n,
+            obstacles,
+            src_t=face_t.get((edge.source, src_side, edge.id)),
+            dst_t=face_t.get((edge.target, dst_side, edge.id)),
+        )
         x1, y1 = points[0]
         x2, y2 = points[-1]
         shift = parallel.get(edge.id, 0.0)
@@ -546,10 +570,9 @@ def _orthogonal_bus(
     rank: int,
     count: int,
 ) -> list[tuple[float, float]] | None:
-    """縦横だけの通り道。ハブ側で重ねてから、相手の高さで扇に開く。"""
+    """縦横だけの通り道。出口から相手の高さへ直角に扇を開く。"""
     gap = 16.0
     inset = 28.0
-    stack = 36.0
     rank = max(0, rank)
     steps = max(0, count - 1)
     sx, sy = source
@@ -558,35 +581,58 @@ def _orthogonal_bus(
         usable = max(0.0, tx - sx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx - inset - rank * pitch
-        stack_x = sx + stack
-        if bus_x - stack_x > 8:
-            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "left" and target_face == "right" and sx - tx > 40:
         usable = max(0.0, sx - tx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx + inset + rank * pitch
-        stack_x = sx - stack
-        if stack_x - bus_x > 8:
-            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "bottom" and target_face == "top" and ty - sy > 40:
         usable = max(0.0, ty - sy - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty - inset - rank * pitch
-        stack_y = sy + stack
-        if bus_y - stack_y > 8:
-            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "bottom" and sy - ty > 40:
         usable = max(0.0, sy - ty - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty + inset + rank * pitch
-        stack_y = sy - stack
-        if stack_y - bus_y > 8:
-            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
+
+
+def _face_t(
+    box: tuple[float, float, float, float],
+    side: str,
+    other: tuple[float, float, float, float],
+) -> float:
+    """相手の中心を辺へ射影した比率。接続点は辺の上で動かせる。"""
+    x, y, w, h = box
+    ox, oy, ow, oh = other
+    if side in ("left", "right"):
+        return min(0.85, max(0.15, ((oy + oh / 2) - y) / max(h, 1.0)))
+    return min(0.85, max(0.15, ((ox + ow / 2) - x) / max(w, 1.0)))
+
+
+def _space_face_ts(ideals: list[float]) -> list[float]:
+    """同じ辺の接続点を、重ならないよう最低間隔で広げる。"""
+    if not ideals:
+        return []
+    ordered = sorted(enumerate(ideals), key=lambda item: item[1])
+    spaced = [t for _, t in ordered]
+    minimum = 0.08
+    for index in range(1, len(spaced)):
+        if spaced[index] - spaced[index - 1] < minimum:
+            spaced[index] = spaced[index - 1] + minimum
+    if spaced[-1] > 0.85:
+        shift = spaced[-1] - 0.85
+        spaced = [max(0.15, t - shift) for t in spaced]
+        for index in range(1, len(spaced)):
+            if spaced[index] - spaced[index - 1] < minimum:
+                spaced[index] = spaced[index - 1] + minimum
+    result = [0.5] * len(ideals)
+    for (origin, _), value in zip(ordered, spaced, strict=False):
+        result[origin] = value
+    return result
 
 
 def _wire_path(
@@ -597,12 +643,21 @@ def _wire_path(
     rank: int,
     count: int,
     obstacles: list[svglayout.Rect],
+    *,
+    src_t: float | None = None,
+    dst_t: float | None = None,
 ) -> list[tuple[float, float]]:
-    t = 0.5 if count <= 1 else 0.25 + 0.5 * (rank / max(count - 1, 1))
-    start = _anchor(src_box, src_side, t)
-    end = _anchor(dst_box, dst_side, t)
+    if src_t is None:
+        src_t = 0.5 if count <= 1 else 0.25 + 0.5 * (rank / max(count - 1, 1))
+    if dst_t is None:
+        dst_t = _face_t(dst_box, dst_side, src_box)
+    start = _anchor(src_box, src_side, src_t)
+    end = _anchor(dst_box, dst_side, dst_t)
     candidates: list[list[tuple[float, float]]] = []
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
+    if bus and _residual(bus, obstacles) == 0:
+        # 通れる扇ならそれを採る。直角の短い折れに負けて箱の縁を走るのを防ぐ。
+        return bus
     if bus:
         candidates.append(bus)
     manhattan = _manhattan(start, end, src_side, dst_side)
@@ -610,8 +665,12 @@ def _wire_path(
     routed = _route(start, end, obstacles)
     if _is_orthogonal(routed):
         candidates.append(routed)
-    # 箱を貫く線より、遠回りでも空いている縦横を採る
-    return min(candidates, key=lambda route: (_residual(route, obstacles), _length(route)))
+    # 箱を貫く線より、遠回りでも空いている縦横を採る。
+    # 同じ通れるなら、折れが少ない方を採る（対向のずれで遠回りしない）。
+    return min(
+        candidates,
+        key=lambda route: (_residual(route, obstacles), len(route), _length(route)),
+    )
 
 
 def _manhattan(

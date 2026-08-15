@@ -127,11 +127,11 @@ describe("引き出し口と通り道", () => {
   it("1本しか出ていない辺は、真ん中から出す", () => {
     // 端に寄ると、真下の相手へ引いた線が斜めに折れる
     const { anchors } = assignAnchors(branchOffice(6));
-    expect(anchors.get(2)?.source).toBe("bottom-3");
-    expect(anchors.get(2)?.target).toBe("top-3");
+    expect(anchors.get(2)?.source).toBe("bottom-7");
+    expect(anchors.get(2)?.target).toBe("top-7");
     // センターから支社へは、センターの下から出て支社の上へ入る
-    expect(anchors.get(1)?.source).toBe("bottom-3");
-    expect(anchors.get(1)?.target).toBe("top-3");
+    expect(anchors.get(1)?.source).toBe("bottom-7");
+    expect(anchors.get(1)?.target).toBe("top-7");
   });
 
   it("上にいる相手ほど、上の引き出し口から出る", () => {
@@ -194,7 +194,7 @@ describe("引き出し口と通り道", () => {
 });
 
 describe("直交の通り道", () => {
-  it("右から左へはハブ側で重ねてから扇に開き、縦横だけ通す", () => {
+  it("右から左へは出口から扇に開き、縦横だけ通す", () => {
     const a = orthogonalBusPath({
       sourceX: 0,
       sourceY: 0,
@@ -218,13 +218,13 @@ describe("直交の通り道", () => {
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(a!.path.includes("C ")).toBe(false);
-    const stackA = Number(a!.path.split(" ")[3].split(",")[0]);
-    const stackB = Number(b!.path.split(" ")[3].split(",")[0]);
-    expect(stackA).toBe(stackB);
-    const peelA = Number(a!.path.split(" ")[5].split(",")[1]);
-    const peelB = Number(b!.path.split(" ")[5].split(",")[1]);
-    expect(peelA).toBe(80);
-    expect(peelB).toBe(200);
+    // M sx,sy L bus,sy L bus,ty L tx,ty
+    expect(a!.path.startsWith("M 0,0 L ")).toBe(true);
+    expect(a!.path.endsWith(" L 400,80")).toBe(true);
+    expect(b!.path.endsWith(" L 400,200")).toBe(true);
+    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
+    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
+    expect(busA).toBeGreaterThan(busB);
   });
 
   it("上下が近いときは直交バスにしない", () => {

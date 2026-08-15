@@ -76,25 +76,18 @@ export function orthogonalBusPath(input: {
 }): { path: string; labelX: number; labelY: number } | null {
   const gap = input.gap ?? 16;
   const inset = 28;
-  const stack = 36;
   const rank = Math.max(0, input.rank);
   const steps = Math.max(0, input.count - 1);
   const sx = input.sourceX;
   const sy = input.sourceY;
   const tx = input.targetX;
   const ty = input.targetY;
+  // 接続点が相手の高さに寄っている前提。ハブ側で一度重ねると折れが増えるだけなので、
+  // 出口から相手の高さへ直角に扇を開く（紙の構成図と同じ）。
   if (input.sourceFace === "right" && input.targetFace === "left" && tx - sx > 40) {
     const usable = Math.max(0, tx - sx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busX = tx - inset - rank * pitch;
-    const stackX = sx + stack;
-    if (busX - stackX > 8) {
-      return {
-        path: `M ${sx},${sy} L ${stackX},${sy} L ${stackX},${ty} L ${busX},${ty} L ${tx},${ty}`,
-        labelX: stackX,
-        labelY: sy,
-      };
-    }
     return {
       path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
       labelX: busX,
@@ -105,14 +98,6 @@ export function orthogonalBusPath(input: {
     const usable = Math.max(0, sx - tx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busX = tx + inset + rank * pitch;
-    const stackX = sx - stack;
-    if (stackX - busX > 8) {
-      return {
-        path: `M ${sx},${sy} L ${stackX},${sy} L ${stackX},${ty} L ${busX},${ty} L ${tx},${ty}`,
-        labelX: stackX,
-        labelY: sy,
-      };
-    }
     return {
       path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
       labelX: busX,
@@ -123,14 +108,6 @@ export function orthogonalBusPath(input: {
     const usable = Math.max(0, ty - sy - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busY = ty - inset - rank * pitch;
-    const stackY = sy + stack;
-    if (busY - stackY > 8) {
-      return {
-        path: `M ${sx},${sy} L ${sx},${stackY} L ${tx},${stackY} L ${tx},${busY} L ${tx},${ty}`,
-        labelX: sx,
-        labelY: stackY,
-      };
-    }
     return {
       path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
       labelX: (sx + tx) / 2,
@@ -141,14 +118,6 @@ export function orthogonalBusPath(input: {
     const usable = Math.max(0, sy - ty - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busY = ty + inset + rank * pitch;
-    const stackY = sy - stack;
-    if (stackY - busY > 8) {
-      return {
-        path: `M ${sx},${sy} L ${sx},${stackY} L ${tx},${stackY} L ${tx},${busY} L ${tx},${ty}`,
-        labelX: sx,
-        labelY: stackY,
-      };
-    }
     return {
       path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
       labelX: (sx + tx) / 2,

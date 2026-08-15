@@ -36,9 +36,11 @@ export interface DeviceNodeData extends Record<string, unknown> {
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
 export const SIDES = ["top", "bottom", "left", "right"] as const;
 export type Side = (typeof SIDES)[number];
-/* 各辺の引き出し口。線が増えても重ならないよう、辺あたり7か所置く。
-   足りなくなったら箱の幅を広げて間隔を確保する（幅は data.width で渡す）。 */
-export const SLOTS = [0.12, 0.25, 0.38, 0.5, 0.62, 0.75, 0.88];
+/* 各辺の引き出し口。接続点は辺の上で自由に近い位置を取る。
+   本数が多いときも相手の高さへ寄せられるよう、細かく置く。 */
+export const SLOTS = [
+  0.08, 0.14, 0.2, 0.26, 0.32, 0.38, 0.44, 0.5, 0.56, 0.62, 0.68, 0.74, 0.8, 0.86, 0.92,
+];
 
 const POSITION_OF: Record<Side, Position> = {
   top: Position.Top,
@@ -94,9 +96,9 @@ export default function DeviceNode({
         (selected ? "selected" : "")
       }
     >
-      {/* 上下左右の各辺に3か所ずつ引き出し口を置く。
+      {/* 上下左右の各辺に引き出し口を置く。
           下の中央からしか出せないと、横に並べた機器の線が遠回りになる。
-          同じ辺に何本も来るときは、3か所に散らして重なりを避ける */}
+          相手の位置へ寄せて口を選び、線の折れと交差を減らす */}
       {ANCHORS.map((anchor) => (
         <Fragment key={anchor.id}>
           <Handle
