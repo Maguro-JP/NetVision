@@ -2,27 +2,39 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 
-import { api } from "../api/client";
+import { api, type DeviceFilters } from "../api/client";
 import QueryError from "../components/QueryError";
+import { DEVICE_TYPE_LABEL, formatDate } from "../lib/format";
 
 /**
- * 構成図の出力をまとめて選ぶ画面。
+ * 出力をまとめて選ぶ画面。
  *
- * 図の画面に出力のボタンを並べると、押す前に何が出るのか分からないまま
- * ファイルが落ちてくる。ここで中身を見てから選べるようにして、図の画面の
+ * 画面ごとに出力のボタンを並べると、押す前に何が出るのか分からないまま
+ * ファイルが落ちてくる。ここで中身を見てから選べるようにして、元の画面の
  * ボタンは「出力」1つに減らす。
  *
  * 絞り込み（拠点・検索・範囲）と見せ方（シンプル・ポート名・向き）は、
- * 図の画面から URL で受け取る。出すものと画面が食い違わないようにするため。
+ * 元の画面から URL で受け取る。出すものと画面が食い違わないようにするため。
  */
 
-type Kind = "svg" | "workbook" | "links" | "ports";
+type Kind = "svg" | "workbook" | "links" | "ports" | "devices";
 
 const KIND_LABEL: Record<Kind, string> = {
   svg: "図（SVG）",
   workbook: "Excel（図＋表）",
   links: "結線表",
   ports: "ポート一覧",
+  devices: "機器一覧",
+};
+
+/** 機器一覧の形。CSV は取り込み直せるので、文字コードまで選べるようにする */
+type DeviceFormat = "xlsx" | "csv" | "csv-sjis" | "import";
+
+const DEVICE_FORMAT_LABEL: Record<DeviceFormat, string> = {
+  xlsx: "Excel",
+  csv: "CSV（UTF-8）",
+  "csv-sjis": "CSV（Shift_JIS）",
+  import: "取り込み用 CSV",
 };
 
 /** 保存したときのファイルの種類。押す前に何が落ちてくるか分かるようにする */
@@ -31,6 +43,7 @@ const KIND_FILE: Record<Kind, string> = {
   workbook: "Excel ファイル",
   links: "Excel ファイル",
   ports: "Excel ファイル",
+  devices: "Excel ファイル",
 };
 
 const KIND_NOTE: Record<Kind, string> = {
@@ -41,11 +54,14 @@ const KIND_NOTE: Record<Kind, string> = {
     "結線を1行ずつ並べた表。作業指示・工事依頼・検収の突合など、図ではなく並べ替えと絞り込みが要る場面向けです。",
   ports:
     "機器から見たポートの割付。何ポートあって、上位のどこへ上がっていて、下に何がぶら下がっていて、どこが空いているか。増設の検討に使います。",
+  devices:
+    "台帳の機器一覧。保守期限や EoL の残りも入ります。取り込み用 CSV は算出した列を外してあるので、直して取り込み直せます。",
 };
 
-export default function TopologyExportPage() {
+export default function ExportPage() {
   const [params] = useSearchParams();
-  const [kind, setKind] = useState<Kind>("svg");
+  const [kind, setKind] = useState<Kind>((params.get("kind") as Kind) || "svg");
+  const [deviceFormat, setDeviceFormat] = useState<DeviceFormat>("xlsx");
 
   const layer = params.get("layer") ?? "physical";
   const siteId = params.get("site") ? Number(params.get("site")) : undefined;
@@ -67,16 +83,40 @@ export default function TopologyExportPage() {
     along_line: alongLine ? "true" : undefined,
     orientation,
   });
+  // 機器一覧の絞り込み。機器一覧の画面から開いたときは、その絞り込みで出す
+  const deviceFilters: DeviceFilters = {};
+  for (const key of DEVICE_FILTER_KEYS) {
+    const value = params.get(key);
+    if (!value) continue;
+    (deviceFilters as Record<string, string | number>)[key] =
+      key === "site_id" ? Number(value) : value;
+  }
+  if (siteId && deviceFilters.site_id === undefined) deviceFilters.site_id = siteId;
+
+  const deviceUrl =
+    deviceFormat === "xlsx"
+      ? api.exportUrl("xlsx", deviceFilters)
+      : deviceFormat === "import"
+        ? api.exportUrl("csv", deviceFilters, { includeStatus: false })
+        : api.exportUrl("csv", deviceFilters, {
+            encoding: deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8",
+          });
+
   const url: Record<Kind, string> = {
     svg: svgUrl,
     workbook: api.workbookUrl(layer, { site_id: siteId, scope }),
     links: api.linkTableUrl(layer, "xlsx", { site_id: siteId }),
     ports: api.portMapUrl({ site_id: siteId }),
+    devices: deviceUrl,
   };
 
-  // 図の中身。結線表の下見にも使う（出すものと同じ絞り込みで取る）
+  // 図の中身。結線表の下見にも使う（出すものと同じ絞り込みで取る）。
+  // 機器一覧やポート一覧を見ているときは要らない。全体図は台数の上限で
+  // 断られることがあり、関係のないタブでその断りだけが出てしまう
+  const needsGraph = kind === "svg" || kind === "workbook" || kind === "links";
   const graph = useQuery({
     queryKey: ["topology-export", layer, siteId, search, scope, orientation],
+    enabled: needsGraph,
     queryFn: () =>
       api.getTopology(layer, false, orientation ?? "vertical", {
         site_id: siteId,
@@ -89,10 +129,9 @@ export default function TopologyExportPage() {
     <div className="export-window">
       <header className="export-head">
         <div className="export-head-text">
-          <strong>構成図を出す</strong>
+          <strong>出力する</strong>
           <span className="muted">
-            {siteId ? "拠点で絞った" : "いま図に出ている"}範囲です。
-            中身を見てから、必要なものだけ保存してください。
+            いま画面で絞り込んでいる範囲です。中身を見てから、必要なものだけ保存してください。
           </span>
         </div>
         {/* 保存は、押す前に何が落ちてくるか分かるように種類まで書く */}
@@ -102,7 +141,13 @@ export default function TopologyExportPage() {
           </span>
           <span>
             {KIND_LABEL[kind]}を保存
-            <span className="export-save-file">{KIND_FILE[kind]}</span>
+            <span className="export-save-file">
+              {kind === "devices"
+                ? DEVICE_FORMAT_LABEL[deviceFormat].includes("CSV")
+                  ? "CSV ファイル"
+                  : "Excel ファイル"
+                : KIND_FILE[kind]}
+            </span>
           </span>
         </a>
       </header>
@@ -123,7 +168,21 @@ export default function TopologyExportPage() {
 
       <p className="muted export-note">{KIND_NOTE[kind]}</p>
 
-      {graph.isError && <QueryError error={graph.error} />}
+      {kind === "devices" && (
+        <div className="export-kinds">
+          {(Object.keys(DEVICE_FORMAT_LABEL) as DeviceFormat[]).map((value) => (
+            <button
+              key={value}
+              className={deviceFormat === value ? "primary" : ""}
+              onClick={() => setDeviceFormat(value)}
+            >
+              {DEVICE_FORMAT_LABEL[value]}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {needsGraph && graph.isError && <QueryError error={graph.error} />}
 
       {kind === "svg" && <SvgPreview url={svgUrl} />}
       {kind === "workbook" && (
@@ -135,6 +194,7 @@ export default function TopologyExportPage() {
       )}
       {kind === "links" && <LinkPreview graph={graph.data} />}
       {kind === "ports" && <PortsNote />}
+      {kind === "devices" && <DevicePreview filters={deviceFilters} />}
     </div>
   );
 }
@@ -282,3 +342,65 @@ function PortsNote() {
 
 /** 下見に出す行数。全部出すと保存する前にここで読み終えてしまう */
 const PREVIEW_ROWS = 30;
+
+
+/** 機器一覧の下見。出す表と同じ絞り込みで、頭の分だけ見せる。 */
+function DevicePreview({ filters }: { filters: DeviceFilters }) {
+  const devices = useQuery({
+    queryKey: ["export-devices", filters],
+    queryFn: () => api.listDevicePage({ ...filters, limit: PREVIEW_ROWS }),
+  });
+
+  if (devices.isError) return <QueryError error={devices.error} />;
+  if (!devices.data) return <div className="muted">読み込んでいます…</div>;
+
+  const { items, total } = devices.data;
+  return (
+    <>
+      <div className="export-rows">
+        <table>
+          <thead>
+            <tr>
+              <th>機器名</th>
+              <th>種別</th>
+              <th>拠点</th>
+              <th>メーカー / 型番</th>
+              <th>保守期限</th>
+            </tr>
+          </thead>
+          <tbody>
+            {items.map((device) => (
+              <tr key={device.id}>
+                <td>{device.hostname}</td>
+                <td className="muted">{DEVICE_TYPE_LABEL[device.device_type]}</td>
+                <td className="muted">{device.site_name ?? "—"}</td>
+                <td className="muted">
+                  {`${device.vendor} ${device.model}`.trim() || "—"}
+                </td>
+                <td className="mono">{formatDate(device.lifecycle.maintenance_end)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted">
+        全 {total.toLocaleString()} 台のうち {items.length} 台を出しています。保存すると全部入ります。
+      </p>
+    </>
+  );
+}
+
+/** 機器一覧の絞り込みとして URL から受け取るもの */
+const DEVICE_FILTER_KEYS = [
+  "q",
+  "hostname",
+  "product",
+  "os_version",
+  "maintenance",
+  "eol",
+  "device_type",
+  "status",
+  "severity",
+  "site_id",
+  "incomplete",
+] as const;

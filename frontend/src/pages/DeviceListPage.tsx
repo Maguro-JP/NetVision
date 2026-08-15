@@ -6,6 +6,7 @@ import { api } from "../api/client";
 import { ColumnChoiceFilter, ColumnTextFilter } from "../components/ColumnFilter";
 import DeviceTable, { type DeviceColumn } from "../components/DeviceTable";
 import QueryError from "../components/QueryError";
+import WindowLink from "../components/WindowLink";
 import { SEARCH_DELAY_MS, useDebouncedValue } from "../lib/debounce";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 
@@ -69,6 +70,15 @@ export default function DeviceListPage() {
     site_id: params.get("site_id") ? Number(params.get("site_id")) : undefined,
     incomplete: onlyIncomplete || undefined,
   };
+
+  // 出力の窓へ、いまの絞り込みをそのまま渡す。画面と出したものを揃える
+  const exportQuery = (() => {
+    const next = new URLSearchParams({ kind: "devices" });
+    for (const [key, value] of Object.entries(filters)) {
+      if (value !== undefined && value !== "") next.set(key, String(value));
+    }
+    return `?${next.toString()}`;
+  })();
 
   const { data: sites } = useQuery({
     queryKey: ["sites"],
@@ -273,24 +283,18 @@ export default function DeviceListPage() {
       )}
 
       <div className="toolbar">
-        <span className="muted" style={{ alignSelf: "center" }}>
-          絞り込んだ {total.toLocaleString()} 件を書き出す:
-        </span>
-        <a href={api.exportUrl("xlsx", filters)}>
-          <button>Excel (.xlsx)</button>
-        </a>
-        <a href={api.exportUrl("csv", filters, { encoding: "utf-8" })}>
-          <button>CSV (UTF-8)</button>
-        </a>
-        <a href={api.exportUrl("csv", filters, { encoding: "shift_jis" })}>
-          <button>CSV (Shift_JIS)</button>
-        </a>
-        <a
-          href={api.exportUrl("csv", filters, { includeStatus: false })}
-          title="算出列を除いた、取り込み用の列だけのCSVです。編集して取り込み直せます。"
+        {/* 出力は1つにまとめる。Excel か CSV か、文字コードをどうするかは
+            別ウィンドウで中身を見ながら選ぶ */}
+        <WindowLink
+          className="button"
+          to={`/export${exportQuery}`}
+          name="netvision-export"
+          width={1200}
+          height={900}
+          title="絞り込んだ機器を、中身を見てから Excel / CSV で保存します"
         >
-          <button>取り込み用CSV</button>
-        </a>
+          絞り込んだ {total.toLocaleString()} 件を出力する
+        </WindowLink>
       </div>
     </>
   );

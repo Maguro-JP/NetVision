@@ -27,7 +27,7 @@ import ReplacementPage from "./pages/ReplacementPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import SettingsPage from "./pages/SettingsPage";
 import SpacePage from "./pages/SpacePage";
-import TopologyExportPage from "./pages/TopologyExportPage";
+import ExportPage from "./pages/ExportPage";
 import TopologyPage from "./pages/TopologyPage";
 import VlansPage from "./pages/VlansPage";
 import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
@@ -53,8 +53,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route path="/migration" element={<MigrationPage />} />
           <Route element={<SchemaGate />}>
-            {/* 出力は印刷プレビューのような窓。メニューを出さず、図に幅を使う */}
-            <Route path="/topology/export" element={<TopologyExportPage />} />
+            {/* 出力は印刷プレビューのような窓。メニューを出さず、中身に幅を使う */}
+            <Route path="/export" element={<ExportPage />} />
             <Route path="/" element={<App />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />

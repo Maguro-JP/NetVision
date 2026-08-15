@@ -1873,7 +1873,7 @@ function TopologyEditor() {
             のを避けるため、別ウィンドウで中身を見てから選ぶ */}
         <WindowLink
           className="button"
-          to={`/topology/export${exportQuery}`}
+          to={`/export${exportQuery}`}
           name="netvision-export"
           width={1200}
           height={900}
