@@ -28,7 +28,7 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
-import WindowLink, { DEVICE_WINDOW, openInWindow } from "../components/WindowLink";
+import WindowLink, { deviceWindow, openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
   type PortEdgeData,
   type WireBox,
@@ -1052,7 +1052,7 @@ function TopologyEditor() {
       // 図の拡大（ダブルクリックで寄る）と取り合いになるので、ここで止める
       event.preventDefault();
       event.stopPropagation();
-      openInWindow(`/devices/${deviceId}`, DEVICE_WINDOW, 1100, 900);
+      openInWindow(`/devices/${deviceId}`, deviceWindow(deviceId), 1100, 900);
     };
     // 取るのは capture 段階。図の拡大が先に受け取って伝播を止めてしまう
     box.addEventListener("dblclick", onDouble, true);
@@ -2069,7 +2069,7 @@ function TopologyEditor() {
                   <div className="topo-selection-panel-row">
                     <WindowLink
                       to={`/devices/${selectedDevice.device_id}`}
-                      name={DEVICE_WINDOW}
+                      name={deviceWindow(selectedDevice.device_id)}
                       width={1100}
                       height={900}
                       title="図はそのままに、別ウィンドウで機器情報を開きます（機器をダブルクリックでも開きます）"

@@ -79,5 +79,5 @@ export default function SettingsPage() {
 const OPEN_TARGET_NOTE: Record<OpenTarget, string> = {
   same: "いまの画面を機器情報に切り替えます",
   tab: "元の画面はタブに残ります",
-  window: "窓を並べて見比べられます。同じ窓を使い回すので増えません",
+  window: "機器ごとに窓が開くので、並べて見比べられます",
 };

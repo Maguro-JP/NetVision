@@ -14,8 +14,15 @@ import { readPrefs, usePrefs, type OpenTarget } from "../lib/prefs";
  * 窓には名前を付けてあるので、何度押しても増えない。
  * href は残してあるので、中クリックや Ctrl+クリックはブラウザに任せる。
  */
-/** 機器情報を出すウィンドウの名前。どこから開いても同じ窓を使い回す */
-export const DEVICE_WINDOW = "netvision-device";
+/**
+ * 機器情報を出すウィンドウの名前。機器ごとに別の窓にする。
+ *
+ * 名前を1つにすると2台目で1台目が置き換わり、並べて見比べられない。
+ * 機器ごとに分ければ、同じ機器をもう一度押したときだけ、その窓が前に出る。
+ */
+export function deviceWindow(deviceId: number | string): string {
+  return `netvision-device-${deviceId}`;
+}
 
 export interface WindowLinkProps {
   /** 開く先。アプリ内のパス */
