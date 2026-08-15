@@ -565,4 +565,47 @@ describe("箱幅・高さとポート名の画面座標", () => {
     const simple = assignAnchors(graph, { simple: true });
     expect(simple.heights.get(1)).toBe(DEFAULT_HEIGHT);
   });
+  it("同じ相手への束は、辺の端へ分かれず近くに並ぶ", () => {
+    const left = node(1, "sw-a", 0, 200);
+    const right = node(2, "sw-b", 400, 200);
+    const graph = {
+      layer: "physical",
+      nodes: [left, right],
+      // ブリッジのように、同じ相手へ2本
+      edges: [link(10, 1, 2), link(11, 1, 2)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    const height = heights.get(1)!;
+    const ts = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "right")
+      .map((h) => h.t)
+      .sort((a, b) => a - b);
+    expect(ts).toHaveLength(2);
+    // 中央付近にまとまっていて、辺の上下端まで開かない
+    expect(ts[0]).toBeGreaterThan(0.25);
+    expect(ts[1]).toBeLessThan(0.75);
+    // ポート名が重ならないだけの間隔は空ける
+    expect((ts[1] - ts[0]) * height).toBeGreaterThanOrEqual(11);
+  });
+
+  it("相手がばらばらの扇は、辺全体を使って順番に読ませる", () => {
+    const hub = node(1, "hub", 300, 0);
+    const peers = [2, 3, 4].map((id, index) => node(id, `leaf-${id}`, index * 200 + 100, 400));
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...peers],
+      edges: [link(10, 1, 2), link(11, 1, 3), link(12, 1, 4)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles } = assignAnchors(graph, { simple: false });
+    const ts = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "bottom")
+      .map((h) => h.t)
+      .sort((a, b) => a - b);
+    expect(ts).toHaveLength(3);
+    expect(ts[2] - ts[0]).toBeGreaterThan(0.5);
+  });
 });

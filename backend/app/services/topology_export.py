@@ -55,6 +55,12 @@ NODE_W = 190.0
 NODE_H = 78.0
 MARGIN = 48.0
 LEGEND_H = 62.0
+# 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
+MAX_BENDS = 2
+# 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
+# 上下の辺は名前を横書きするので幅、左右の辺は行の高さで決まる
+_BUNDLE_LABEL_W = 56.0
+_BUNDLE_LABEL_H = 12.0
 
 # 日本語が入るので、環境にありそうなものを順に並べる
 FONT = "'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif"
@@ -326,6 +332,27 @@ def render_svg(
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
         groups.setdefault((edge.source, src_side), []).append((src_along, edge.id))
         groups.setdefault((edge.target, dst_side), []).append((dst_along, edge.id))
+
+    # 図の外の対向へ出る線も、同じ辺の口を分け合う。辺の中央に固定したままだと、
+    # 同じ辺から出ている結線と重なり、線どうしが交差する。
+    # 結線の id と混ざらないよう、対向には負の番号を振る
+    peer_boxes_by_key: dict[int, tuple[float, float, float, float]] = {}
+    peer_key_of: dict[int, int] = {}
+    peer_sides: dict[int, str] = {}
+    for index, peer in enumerate(peers):
+        anchor = at.get(peer.anchor)
+        if anchor is None:
+            continue
+        key = -(index + 1)
+        peer_key_of[index] = key
+        anchor_box = boxes_by_id[peer.anchor]
+        peer_box = (peer.x + dx, peer.y + dy, PEER_W, PEER_H)
+        peer_boxes_by_key[key] = peer_box
+        side = _side_toward(anchor_box, peer_box)
+        peer_sides[key] = side
+        along = peer_box[1] if side in ("left", "right") else peer_box[0]
+        groups.setdefault((peer.anchor, side), []).append((along, key))
+
     lane_rank: dict[int, tuple[int, int]] = {}
     face_t: dict[tuple[int, str, int], float] = {}
     edge_by_id = {edge.id: edge for edge in graph.edges}
@@ -333,21 +360,33 @@ def render_svg(
         members.sort()
         box = boxes_by_id[device_id]
         ideals: list[float] = []
+        # 同じ相手行きの束を詰めて置くため、辺ごとの相手を控える
+        opposite: list[int] = []
         for _, edge_id in members:
+            if edge_id < 0:
+                ideals.append(_face_t(box, side, peer_boxes_by_key[edge_id]))
+                opposite.append(edge_id)
+                continue
             edge = edge_by_id[edge_id]
             other_id = edge.target if edge.source == device_id else edge.source
             ideals.append(_face_t(box, side, boxes_by_id[other_id]))
+            opposite.append(other_id)
         for index, (_, edge_id) in enumerate(members):
             lane_rank[edge_id] = (index, len(members))
+        vertical_face = side in ("left", "right")
         spaced = _space_face_ts(
             ideals,
-            box[3] if side in ("left", "right") else box[2],
+            box[3] if vertical_face else box[2],
+            opposite,
+            horizontal=not vertical_face,
         )
         for (_, edge_id), t in zip(members, spaced, strict=False):
             face_t[(device_id, side, edge_id)] = t
 
     # --- 結線（ノードより先に描いて背面に回す） ---
     pending: list[tuple[list[tuple[float, float]], object]] = []
+    # 引き直し用に、その結線を引いたときの条件を控える
+    drawn_with: list[dict] = []
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
@@ -371,6 +410,7 @@ def render_svg(
             obstacles,
             src_t=face_t.get((edge.source, src_side, edge.id)),
             dst_t=face_t.get((edge.target, dst_side, edge.id)),
+            avoid=[route for route, _ in pending],
         )
         x1, y1 = points[0]
         x2, y2 = points[-1]
@@ -384,7 +424,25 @@ def render_svg(
             shifted = [(x + offset_x, y + offset_y) for x, y in points]
             if _residual(shifted, obstacles) <= _residual(points, obstacles):
                 points = shifted
+        drawn_with.append(
+            {
+                "args": (src_box, dst_box, src_side, dst_side, rank_i, rank_n, obstacles),
+                "src_t": face_t.get((edge.source, src_side, edge.id)),
+                "dst_t": face_t.get((edge.target, dst_side, edge.id)),
+            }
+        )
         pending.append((points, edge))
+
+    # 引き直し。1本目を引いた時点では、あとから来る線はまだ無い。
+    # 全部引き終えてから、交差している線だけ、ほかの線を避けてもう一度引く
+    for index, (points, _) in enumerate(pending):
+        others = [route for position, (route, _) in enumerate(pending) if position != index]
+        if _route_cross_count(points, others) == 0:
+            continue
+        how = drawn_with[index]
+        again = _wire_path(*how["args"], src_t=how["src_t"], dst_t=how["dst_t"], avoid=others)
+        if _route_cross_count(again, others) < _route_cross_count(points, others):
+            pending[index] = (again, pending[index][1])
 
     # 同じ辺回りは箱の下を通る。キャンバスを箱だけだと線が凡例や外枠へ食い込む。
     wire_ys = [y for points, _ in pending for _, y in points]
@@ -476,7 +534,7 @@ def render_svg(
                     used_media.add(portlabel.media_of(name))
 
     # --- 絞り込みの外にいる対向（簡易表示） ---
-    for peer in peers:
+    for peer_index, peer in enumerate(peers):
         anchor = at.get(peer.anchor)
         if anchor is None:
             continue
@@ -493,9 +551,22 @@ def render_svg(
         ]
         src_box = (anchor[0], anchor[1], aw, ah)
         dst_box = (px, py, PEER_W, PEER_H)
-        src_side = _side_toward(src_box, dst_box)
+        key = peer_key_of.get(peer_index)
+        src_side = peer_sides.get(key, "") if key is not None else ""
+        if not src_side:
+            src_side = _side_toward(src_box, dst_box)
         dst_side = _side_toward(dst_box, src_box)
-        points = _wire_path(src_box, dst_box, src_side, dst_side, 0, 1, obstacles)
+        points = _wire_path(
+            src_box,
+            dst_box,
+            src_side,
+            dst_side,
+            0,
+            1,
+            obstacles,
+            src_t=face_t.get((peer.anchor, src_side, key)) if key is not None else None,
+            avoid=[route for route, _ in pending],
+        )
         parts.append(
             f'<polyline points="{_path_points(points)}" fill="none" '
             f'stroke="#8a94a6" stroke-width="1.6"'
@@ -867,11 +938,21 @@ def _face_t(
     return ((ox + ow / 2) - x) / max(w, 1.0)
 
 
-def _space_face_ts(ideals: list[float], face_px: float) -> list[float]:
-    """同じ辺の接続点を、重ならないよう広げる。
+def _space_face_ts(
+    ideals: list[float],
+    face_px: float,
+    peers: list[int] | None = None,
+    *,
+    horizontal: bool = False,
+) -> list[float]:
+    """同じ辺の接続点を並べる（画面の spaceTs と同じ規則）。
 
-    対向が箱の外にいると射影が端に潰れる。そのときは辺全体へ均等に振る。
-    ポート名が被らないよう、最低でも約 16px 相当の間隔を取る。
+    相手の方角へ寄せた位置を軸に、ポート名が被らないだけの間隔を空ける。
+    辺いっぱいに散らすと、真っ直ぐ引ける線まで箱の端へ寄って折れができる。
+    必要な幅だけ使い、残りは中央へ寄せる。
+
+    同じ相手へ何本も張っている束（ブリッジやポートチャネル）は、間隔を詰めて
+    隣どうしに置く。1本ずつ等間隔に離すと、どれが同じ相手行きか分からない。
     """
     if not ideals:
         return []
@@ -879,31 +960,66 @@ def _space_face_ts(ideals: list[float], face_px: float) -> list[float]:
     n = len(ideals)
     if n == 1:
         return [min(hi, max(lo, ideals[0]))]
+    peer_of = peers if peers is not None else list(range(n))
     ordered = sorted(
-        ((origin, min(hi, max(lo, t))) for origin, t in enumerate(ideals)),
+        ((origin, min(hi, max(lo, t)), peer_of[origin]) for origin, t in enumerate(ideals)),
         key=lambda item: (item[1], item[0]),
     )
     minimum = max(0.06, 16.0 / max(face_px, 1.0))
+    # 束を詰める間隔。上下の辺はポート名を横書きするので、名前の幅がいる。
+    # 左右の辺は行の高さで足りるので、ここまで詰められる
+    bundle = (
+        max(minimum, _BUNDLE_LABEL_W / max(face_px, 1.0))
+        if horizontal
+        else max(0.035, _BUNDLE_LABEL_H / max(face_px, 1.0))
+    )
+    gaps = [
+        bundle if ordered[index][2] == ordered[index - 1][2] else minimum for index in range(1, n)
+    ]
     ideal_span = ordered[-1][1] - ordered[0][1]
-    need = minimum * (n - 1)
-    if ideal_span < need * 0.85:
-        even = [lo + i * (hi - lo) / (n - 1) for i in range(n)]
-        result = [0.5] * n
-        for (origin, _), value in zip(ordered, even, strict=False):
-            result[origin] = value
+    need = sum(gaps)
+    result = [0.5] * n
+
+    # 同じ相手へ何本も張っている束（ブリッジやポートチャネル）は、必要な幅だけ
+    # 使って射影のまん中に固める。辺いっぱいに散らすと、真っ直ぐ引ける線まで
+    # 箱の端へ寄り、束のうちどれが同じ相手行きなのかも分からなくなる。
+    # 相手がばらばらの扇は従来どおり辺全体を使う（ポート名を読む幅が要る）
+    single_peer = all(item[2] == ordered[0][2] for item in ordered)
+    if single_peer:
+        if need >= hi - lo:
+            # どう詰めても収まらない。せめて等間隔にして被りを最小にする
+            for index, (origin, _, _) in enumerate(ordered):
+                result[origin] = lo + index * (hi - lo) / (n - 1)
+            return result
+        wanted = sum(t for _, t, _ in ordered) / n
+        center = min(hi - need / 2, max(lo + need / 2, wanted))
+        at = center - need / 2
+        for index, (origin, _, _) in enumerate(ordered):
+            if index:
+                at += gaps[index - 1]
+            result[origin] = at
         return result
-    spaced = [t for _, t in ordered]
+
+    # 相手がばらばらなのに射影が端に潰れている（対向がみな箱の外）。
+    # どれがどこ行きかは辺の上の順で読むしかないので、辺全体へ均等に振る
+    if ideal_span < need * 0.85:
+        for index, (origin, _, _) in enumerate(ordered):
+            result[origin] = lo + index * (hi - lo) / (n - 1)
+        return result
+
+    spaced = [t for _, t, _ in ordered]
     for index in range(1, len(spaced)):
-        if spaced[index] - spaced[index - 1] < minimum:
-            spaced[index] = spaced[index - 1] + minimum
+        room = gaps[index - 1]
+        if spaced[index] - spaced[index - 1] < room:
+            spaced[index] = spaced[index - 1] + room
     if spaced[-1] > hi:
         shift = spaced[-1] - hi
         spaced = [max(lo, t - shift) for t in spaced]
         for index in range(1, len(spaced)):
-            if spaced[index] - spaced[index - 1] < minimum:
-                spaced[index] = spaced[index - 1] + minimum
-    result = [0.5] * len(ideals)
-    for (origin, _), value in zip(ordered, spaced, strict=False):
+            room = gaps[index - 1]
+            if spaced[index] - spaced[index - 1] < room:
+                spaced[index] = spaced[index - 1] + room
+    for (origin, _, _), value in zip(ordered, spaced, strict=False):
         result[origin] = value
     return result
 
@@ -989,6 +1105,45 @@ def _route_pierce_count(
         for a, b in zip(route, route[1:], strict=False)
         for box in boxes
         if _segment_pierces_box(box, a, b)
+    )
+
+
+def _crosses_at_right_angle(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+) -> bool:
+    """縦の線と横の線が、互いの内側で交わっているか。端どうしの接触は数えない。"""
+    if abs(a1[0] - a2[0]) < 0.5 and abs(b1[1] - b2[1]) < 0.5:
+        vertical, horizontal = (a1, a2), (b1, b2)
+    elif abs(a1[1] - a2[1]) < 0.5 and abs(b1[0] - b2[0]) < 0.5:
+        vertical, horizontal = (b1, b2), (a1, a2)
+    else:
+        return False
+    x = vertical[0][0]
+    y = horizontal[0][1]
+    lo_x, hi_x = sorted((horizontal[0][0], horizontal[1][0]))
+    lo_y, hi_y = sorted((vertical[0][1], vertical[1][1]))
+    return lo_x + 0.5 < x < hi_x - 0.5 and lo_y + 0.5 < y < hi_y - 0.5
+
+
+def _route_cross_count(
+    route: list[tuple[float, float]], drawn: list[list[tuple[float, float]]]
+) -> int:
+    """先に引いた線と直角に交わる回数。
+
+    交差した線は、どちらがどこへ行っているのか目で追えなくなる。
+    箱を避けるだけでは足りないので、線どうしの交差も経路の選び方に入れる。
+    """
+    if not drawn:
+        return 0
+    return sum(
+        1
+        for a, b in zip(route, route[1:], strict=False)
+        for other in drawn
+        for c, d in zip(other, other[1:], strict=False)
+        if _crosses_at_right_angle(a, b, c, d)
     )
 
 
@@ -1108,6 +1263,7 @@ def _wire_path(
     *,
     src_t: float | None = None,
     dst_t: float | None = None,
+    avoid: list[list[tuple[float, float]]] | None = None,
 ) -> list[tuple[float, float]]:
     if src_t is None:
         src_t = 0.5 if count <= 1 else 0.25 + 0.5 * (rank / max(count - 1, 1))
@@ -1129,6 +1285,8 @@ def _wire_path(
         if _is_orthogonal(fixed):
             candidates.append((face_s, face_t, fixed))
 
+    drawn = avoid or []
+
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count, pierce_boxes)
     if bus:
         bus = _collapse_collinear(_ensure_outward(bus, src_side))
@@ -1136,6 +1294,7 @@ def _wire_path(
             _route_pierce_count(bus, pierce_boxes) == 0
             and _exits_outward(bus, src_side)
             and _arrives_from_outside(bus, dst_side)
+            and _route_cross_count(bus, drawn) == 0
         ):
             return bus
     consider(src_side, dst_side, bus)
@@ -1157,6 +1316,11 @@ def _wire_path(
             _route_pierce_count(route, pierce_boxes),
             0 if _exits_outward(route, face_s) else 1,
             0 if _arrives_from_outside(route, face_t) else 1,
+            # 折れは Visio の定石どおり2つまで。ここを崩してまで交差は避けない
+            0 if bends <= MAX_BENDS else 1,
+            # そのうえで、先に引いた線と交わらない経路を採る。
+            # 交差した線は、どちらがどこへ行っているのか目で追えなくなる
+            _route_cross_count(route, drawn),
             bends,
             _length(route),
         )

@@ -167,12 +167,38 @@ const COLUMN = 400;
 export const DEFAULT_WIDTH = 190;
 /** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
+/* 詳細表示の箱の中身。1行あたりの高さ（styles.css の指定と合わせること）。
+   高さは接続点の分母でもあるので、機器ごとに変えると同じ辺の口が機器ごとに
+   ずれる。いちばん行数の多い機器に合わせて、全部同じ高さで設計する。 */
+/** .topo-node の上下パディング */
+const PAD_Y = 16;
+/** 機器名の行（margin-bottom 込み） */
+const HEAD_ROW = 22;
+/** キャリア網の段（コア網 / メトロ / アクセス） */
+const PLANE_ROW = 14;
+/** ポートの種類の行 */
+const PORTS_ROW = 15;
+/** 型番 / 種別・拠点 / 管理IP の各行（line-height 1.3） */
+const BODY_ROW = 16;
+/** 保守状態の行 */
+const FOOT_ROW = 18;
+/** 詳細表示で出る本文の最大行数（型番・種別と拠点・管理IP） */
+const BODY_ROWS = 3;
+
 /**
- * 詳細表示の箱の高さ。中身（型番・IP・ポート種・保守）で伸びる分を見込む。
- * ここを 78 のままにすると、接続点の計算だけ低い箱の話になり、画面では
- * 中央付近から階段状に折れる。
+ * 詳細表示の箱の高さ。
+ *
+ * 中身が入りきらないと、下の行（保守状態やポート種）が枠から切れる。
+ * 出る可能性のある行を全部足した高さにしておけば、どの機器でも切れない。
+ * 行数を保証するために、styles.css 側で各行の折り返しを止めてある。
  */
-export const DETAIL_HEIGHT = 132;
+/* 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
+   上下の辺は名前を横書きするので幅、左右の辺は行の高さで決まる */
+const BUNDLE_LABEL_W = 56;
+const BUNDLE_LABEL_H = 12;
+
+export const DETAIL_HEIGHT =
+  PAD_Y + HEAD_ROW + PLANE_ROW + PORTS_ROW + BODY_ROW * BODY_ROWS + FOOT_ROW;
 
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
@@ -345,51 +371,97 @@ export function assignAnchors(
   };
 
   /**
-   * 同じ辺の接続点を広げる。
-   * 対向が箱の外にいると射影が端に潰れるので、そのときは辺全体へ均等に振る。
-   * ポート名が被らないよう、最低でも約 16px 相当の間隔を取る。
+   * 同じ辺の接続点を並べる。
+   *
+   * 相手の方角へ寄せた位置（射影）を軸に、ポート名が被らないだけの間隔を
+   * 空けて並べる。辺いっぱいに散らすと、真っ直ぐ引けるはずの線まで箱の端へ
+   * 寄り、要らない折れができる。必要な幅だけ使い、残りは中央へ寄せる。
+   *
+   * 同じ相手へ何本も張っている束（ブリッジやポートチャネル）は、間隔を詰めて
+   * 隣どうしに置く。1本ずつ等間隔に離すと、どれが同じ相手行きか分からない。
    */
-  const spaceTs = (ideals: number[], facePx: number): number[] => {
+  const spaceTs = (
+    ideals: number[],
+    peers: number[],
+    facePx: number,
+    horizontal: boolean,
+  ): number[] => {
     if (ideals.length === 0) return [];
     const lo = 0.08;
     const hi = 0.92;
     const n = ideals.length;
-    if (n === 1) {
-      return [Math.min(hi, Math.max(lo, ideals[0]))];
-    }
+    const clamp = (t: number) => Math.min(hi, Math.max(lo, t));
+    if (n === 1) return [clamp(ideals[0])];
+
     const ordered = ideals
-      .map((t, origin) => ({ origin, t: Math.min(hi, Math.max(lo, t)) }))
+      .map((t, origin) => ({ origin, t: clamp(t), peer: peers[origin] }))
       .sort((a, b) => a.t - b.t || a.origin - b.origin);
+    // ポート名が被らない間隔
     const minimum = Math.max(0.06, 16 / Math.max(facePx, 1));
-    const idealSpan = ordered[ordered.length - 1].t - ordered[0].t;
-    const need = minimum * (n - 1);
-    // 射影が端に潰れている（対向がみな箱の外）→ 辺をフルに使う。折れの元を消す。
-    if (idealSpan < need * 0.85) {
-      const even = ordered.map((_, index) => lo + (index * (hi - lo)) / (n - 1));
-      const result = ideals.map(() => 0.5);
+    // 束を詰める間隔。上下の辺はポート名を横書きするので名前の幅がいる。
+    // 左右の辺は行の高さで足りるので、ここまで詰められる
+    const bundle = horizontal
+      ? Math.max(minimum, BUNDLE_LABEL_W / Math.max(facePx, 1))
+      : Math.max(0.035, BUNDLE_LABEL_H / Math.max(facePx, 1));
+    const gapAt = (index: number) =>
+      ordered[index].peer === ordered[index - 1].peer ? bundle : minimum;
+
+    const gaps: number[] = [];
+    for (let index = 1; index < n; index += 1) gaps.push(gapAt(index));
+    const need = gaps.reduce((sum, gap) => sum + gap, 0);
+    const idealSpan = ordered[n - 1].t - ordered[0].t;
+    const result = ideals.map(() => 0.5);
+
+    // 同じ相手へ何本も張っている束は、必要な幅だけ使って射影のまん中に固める。
+    // 辺いっぱいに散らすと、真っ直ぐ引ける線まで箱の端へ寄り、束のうちどれが
+    // 同じ相手行きなのかも分からなくなる
+    if (ordered.every((item) => item.peer === ordered[0].peer)) {
+      if (need >= hi - lo) {
+        // どう詰めても収まらない。せめて等間隔にして被りを最小にする
+        ordered.forEach((item, index) => {
+          result[item.origin] = lo + (index * (hi - lo)) / (n - 1);
+        });
+        return result;
+      }
+      const wanted = ordered.reduce((sum, item) => sum + item.t, 0) / n;
+      const center = Math.min(hi - need / 2, Math.max(lo + need / 2, wanted));
+      let at = center - need / 2;
       ordered.forEach((item, index) => {
-        result[item.origin] = even[index];
+        if (index) at += gaps[index - 1];
+        result[item.origin] = at;
       });
       return result;
     }
+
+    // 相手がばらばらなのに射影が端に潰れている（対向がみな箱の外）。
+    // どれがどこ行きかは辺の上の順で読むしかないので、辺全体へ均等に振る
+    if (idealSpan < need * 0.85) {
+      ordered.forEach((item, index) => {
+        result[item.origin] = lo + (index * (hi - lo)) / (n - 1);
+      });
+      return result;
+    }
+
+    // 射影の順を保ったまま、足りない間隔だけ押し広げる
     const spaced = ordered.map((item) => item.t);
-    for (let index = 1; index < spaced.length; index += 1) {
-      if (spaced[index] - spaced[index - 1] < minimum) {
-        spaced[index] = spaced[index - 1] + minimum;
+    for (let index = 1; index < n; index += 1) {
+      const room = gaps[index - 1];
+      if (spaced[index] - spaced[index - 1] < room) {
+        spaced[index] = spaced[index - 1] + room;
       }
     }
-    if (spaced[spaced.length - 1] > hi) {
-      const shift = spaced[spaced.length - 1] - hi;
-      for (let index = 0; index < spaced.length; index += 1) {
-        spaced[index] = Math.max(lo, spaced[index] - shift);
+    if (spaced[n - 1] > hi) {
+      const back = spaced[n - 1] - hi;
+      for (let index = 0; index < n; index += 1) {
+        spaced[index] = Math.max(lo, spaced[index] - back);
       }
-      for (let index = 1; index < spaced.length; index += 1) {
-        if (spaced[index] - spaced[index - 1] < minimum) {
-          spaced[index] = spaced[index - 1] + minimum;
+      for (let index = 1; index < n; index += 1) {
+        const room = gaps[index - 1];
+        if (spaced[index] - spaced[index - 1] < room) {
+          spaced[index] = spaced[index - 1] + room;
         }
       }
     }
-    const result = ideals.map(() => 0.5);
     ordered.forEach((item, index) => {
       result[item.origin] = spaced[index];
     });
@@ -411,7 +483,9 @@ export function assignAnchors(
       side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
     const spaced = spaceTs(
       members.map((end) => idealT(end)),
+      members.map((end) => end.other),
       facePx,
+      side === "top" || side === "bottom",
     );
     const list = faceHandles.get(device) ?? [];
     members.forEach((end, index) => {
