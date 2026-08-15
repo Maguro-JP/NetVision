@@ -28,7 +28,7 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
-import WindowLink, { openInWindow } from "../components/WindowLink";
+import WindowLink, { DEVICE_WINDOW, openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
   type PortEdgeData,
   type WireBox,
@@ -63,9 +63,6 @@ import {
 import { groupBox, updateGroupBounds } from "./topologyGroups";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
-
-/** 機器情報を出すウィンドウの名前。図の窓とは別に、1つを使い回す */
-const DEVICE_WINDOW = "netvision-device";
 const EDGE_TYPES = { port: PortLabeledEdge };
 
 const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
-import WindowLink from "./WindowLink";
+import WindowLink, { DEVICE_WINDOW } from "./WindowLink";
 import type { Device } from "../api/types";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, formatDate, formatRemaining } from "../lib/format";
 import SeverityBadge from "./SeverityBadge";
@@ -119,7 +119,15 @@ export default function DeviceTable({
               )}
             </td>
             <td className="nowrap">
-              <Link to={`/devices/${d.id}`}>{d.hostname}</Link>
+              <WindowLink
+                to={`/devices/${d.id}`}
+                name={DEVICE_WINDOW}
+                width={1100}
+                height={900}
+                title="機器情報を開きます（開き方は設定で変えられます）"
+              >
+                {d.hostname}
+              </WindowLink>
               {d.code && (
                 <div className="muted mono" title="管理ID">
                   {d.code}
@@ -134,13 +142,9 @@ export default function DeviceTable({
             </td>
             <td className="muted">
               {d.site_id ? (
-                <WindowLink
-                  to={`/topology?site=${d.site_id}`}
-                  name="netvision-topology"
-                  title="この拠点だけの構成図を、別ウィンドウで開きます"
-                >
+                <Link to={`/topology?site=${d.site_id}`} title="この拠点だけの構成図を開きます">
                   {d.site_name ?? "—"}
-                </WindowLink>
+                </Link>
               ) : (
                 <Blank label="拠点" />
               )}

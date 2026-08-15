@@ -4,7 +4,6 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import QueryError from "../components/QueryError";
 import { formatTimestamp } from "../lib/format";
-import WindowLink from "../components/WindowLink";
 
 function formatBytes(value: number): string {
   if (value < 1024) return `${value}バイト`;
@@ -130,7 +129,7 @@ export default function MigrationPage() {
               <Link to="/devices">機器一覧</Link>で台数を見る
             </li>
             <li>
-              <WindowLink to="/topology" name="netvision-topology">トポロジー図</WindowLink>で拠点を選んで図が出るか見る
+              <Link to="/topology">トポロジー図</Link>で拠点を選んで図が出るか見る
             </li>
             <li>
               <Link to="/configs">Configの取り込み</Link>で履歴が残っているか見る

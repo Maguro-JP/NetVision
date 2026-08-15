@@ -6,7 +6,6 @@ import { api } from "../api/client";
 import type { IngestResult } from "../api/types";
 import QueryError from "../components/QueryError";
 import { formatTimestamp } from "../lib/format";
-import WindowLink from "../components/WindowLink";
 
 /** 取り込み1ファイル分の結果。読み取れたものと、台帳との差分を見せる。 */
 function ResultCard({ result }: { result: IngestResult }) {
@@ -149,11 +148,7 @@ export default function ConfigsPage() {
       <h1>Config の取り込み</h1>
       <p className="subtitle">
         running-config や show 出力を読み込んで、機器情報・インターフェース・VLAN・隣接情報を抽出します。
-        隣接情報（LLDP / CDP）からは{" "}
-        <WindowLink to="/topology" name="netvision-topology">
-          トポロジー図
-        </WindowLink>{" "}
-        の結線を自動で組み立てます。
+        隣接情報（LLDP / CDP）からは <Link to="/topology">トポロジー図</Link> の結線を自動で組み立てます。
       </p>
 
       <div className="form-grid">
@@ -256,9 +251,9 @@ export default function ConfigsPage() {
             <ResultCard key={`${result.filename}-${result.snapshot_id}`} result={result} />
           ))}
           <div className="actions">
-            <WindowLink to="/topology" name="netvision-topology">
+            <Link to="/topology">
               <button className="primary">トポロジー図で確認する →</button>
-            </WindowLink>
+            </Link>
           </div>
         </>
       )}

@@ -1,15 +1,22 @@
 import type { MouseEvent, ReactNode } from "react";
+import { Link } from "react-router-dom";
+
+import { readPrefs, usePrefs, type OpenTarget } from "../lib/prefs";
 
 /**
- * 別ウィンドウで開くリンク。
+ * 機器などを開くリンク。開き方は設定に従う。
  *
- * トポロジー図のように「開いたまま置いておきたい」画面へは、いまのページを
- * 動かさずに別ウィンドウを出す。台帳を見ながら図を確かめる、という見方が
- * 一度きりの移動で途切れないようにする。
+ * 図や一覧を見ながら1台ずつ確かめるとき、開くたびに元の画面が消えると、
+ * 絞り込みや図の配置をやり直すことになる。別ウィンドウ（または別タブ）で
+ * 開けば、元の画面はそのまま残る。
  *
- * 同じ名前のウィンドウを使い回すので、押すたびに増えない。
+ * どれが良いかは人と作業による（設定 → 機器を開くとき）ので、選べるようにする。
+ * 窓には名前を付けてあるので、何度押しても増えない。
  * href は残してあるので、中クリックや Ctrl+クリックはブラウザに任せる。
  */
+/** 機器情報を出すウィンドウの名前。どこから開いても同じ窓を使い回す */
+export const DEVICE_WINDOW = "netvision-device";
+
 export interface WindowLinkProps {
   /** 開く先。アプリ内のパス */
   to: string;
@@ -22,7 +29,17 @@ export interface WindowLinkProps {
   children: ReactNode;
 }
 
+/** 設定に従って開く。図の中のダブルクリックなど、リンク以外からも使う。 */
 export function openInWindow(to: string, name: string, width = 1400, height = 900): void {
+  const target: OpenTarget = readPrefs().openTarget;
+  if (target === "same") {
+    window.location.assign(to);
+    return;
+  }
+  if (target === "tab") {
+    window.open(to, "_blank", "noopener,noreferrer");
+    return;
+  }
   const w = Math.min(width, window.screen.availWidth);
   const h = Math.min(height, window.screen.availHeight);
   // 同じ名前のウィンドウがあればそれを使う。押すたびに窓が増えない
@@ -44,6 +61,17 @@ export default function WindowLink({
   height,
   children,
 }: WindowLinkProps) {
+  const [prefs] = usePrefs();
+
+  // このページで開く設定なら、ふつうの画面遷移（読み込み直さない）
+  if (prefs.openTarget === "same") {
+    return (
+      <Link to={to} title={title} className={className}>
+        {children}
+      </Link>
+    );
+  }
+
   const onClick = (event: MouseEvent<HTMLAnchorElement>) => {
     // 修飾キー・中クリックはブラウザの流儀に任せる
     if (event.defaultPrevented) return;

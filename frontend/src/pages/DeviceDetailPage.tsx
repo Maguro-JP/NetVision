@@ -9,7 +9,6 @@ import ChangeLogTable from "../components/ChangeLogTable";
 import QueryError from "../components/QueryError";
 import { DOC_TYPE_LABEL, versionRange } from "../lib/docs";
 import SeverityBadge from "../components/SeverityBadge";
-import WindowLink from "../components/WindowLink";
 import {
   DEVICE_STATUS_LABEL,
   DEVICE_TYPE_LABEL,
@@ -183,13 +182,9 @@ export default function DeviceDetailPage() {
           <span className="k">設置場所</span>
           <span>
             {device.site_id ? (
-              <WindowLink
-                to={`/topology?site=${device.site_id}`}
-                name="netvision-topology"
-                title="この拠点の構成図を、別ウィンドウで開きます"
-              >
+              <Link to={`/topology?site=${device.site_id}`} title="この拠点の構成図を開きます">
                 {device.site_name ?? "—"}
-              </WindowLink>
+              </Link>
             ) : (
               (device.site_name ?? "—")
             )}

@@ -5,7 +5,6 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { ReplacementTarget } from "../api/types";
 import { formatDate } from "../lib/format";
-import WindowLink from "../components/WindowLink";
 
 const YEN = new Intl.NumberFormat("ja-JP", {
   style: "currency",
@@ -213,9 +212,9 @@ export default function ReplacementPage() {
             </div>
           </div>
           <div className="actions">
-            <WindowLink className="button" to="/topology" name="netvision-topology">
+            <Link className="button" to="/topology">
               トポロジー図で見る
-            </WindowLink>
+            </Link>
             <button onClick={() => setImpactFor(null)}>閉じる</button>
           </div>
         </>

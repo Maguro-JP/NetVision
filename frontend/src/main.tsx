@@ -25,6 +25,7 @@ import ReferencePage from "./pages/ReferencePage";
 import RemediationPage from "./pages/RemediationPage";
 import ReplacementPage from "./pages/ReplacementPage";
 import ScenariosPage from "./pages/ScenariosPage";
+import SettingsPage from "./pages/SettingsPage";
 import SpacePage from "./pages/SpacePage";
 import TopologyPage from "./pages/TopologyPage";
 import VlansPage from "./pages/VlansPage";
@@ -76,6 +77,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="exposures" element={<ExposuresPage />} />
             <Route path="scenarios" element={<ScenariosPage />} />
             <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
+            <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
         </Routes>

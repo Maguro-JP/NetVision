@@ -1201,3 +1201,32 @@ button:disabled {
 .migration-page .error {
   margin-top: 16px;
 }
+
+/* 設定。選ぶものが少ないので、1つずつ説明を添えて縦に並べる */
+.settings-card {
+  max-width: 720px;
+  margin-bottom: 16px;
+}
+.settings-card h2 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+.settings-choices {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.settings-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  cursor: pointer;
+}
+.settings-choice input {
+  grid-row: span 2;
+}
+.settings-choice .muted {
+  font-size: 12px;
+  grid-column: 2;
+}
