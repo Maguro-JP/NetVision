@@ -160,6 +160,18 @@ const TIER = 100;
  */
 const COLUMN = 400;
 
+/** 箱の既定の幅（styles.css の .device-node と合わせること）。 */
+export const DEFAULT_WIDTH = 190;
+
+/** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
+ *
+ * 引き出し口が詰まるとポート名も重なって読めなくなるので、
+ * 4本を超えたら1本あたり 55px 見込んで箱を広げる。 */
+export function widthFor(count: number): number | undefined {
+  if (count <= 3) return undefined;
+  return Math.min(620, DEFAULT_WIDTH + (count - 3) * 55);
+}
+
 /**
  * 機器の箱のどの辺から線を出すか。
  *
@@ -260,6 +272,15 @@ export function assignAnchors(graph: TopologyGraph): {
     busiest.set(device, Math.max(busiest.get(device) ?? 0, members.length));
   }
 
+  const visualLeft = (node: TopologyNode) => {
+    const width = widthFor(busiest.get(node.device_id) ?? 0);
+    return node.x - shiftFor(width);
+  };
+  const visualRight = (node: TopologyNode) => {
+    const width = widthFor(busiest.get(node.device_id) ?? 0) ?? DEFAULT_WIDTH;
+    return visualLeft(node) + width;
+  };
+
   // 同じところから何本も出るときの通り道。基板の配線と同じで、
   // 線を1本ずつ別の高さ（または横位置）に通すと重ならない。
   // 引き出し口と同じ順（相手の並び）で振らないと交差する。
@@ -278,11 +299,15 @@ export function assignAnchors(graph: TopologyGraph): {
       return vertical ? node.x : node.y;
     };
     // 通り道は辺と垂直な隙間に置く。左右から出すなら箱の間の横幅。
+    // 保存左上の差ではなく、広げたあとの見た目の端どうしを使う。
     const separation = (end: (typeof members)[number]) => {
       const here = nodes.get(end.device);
       const there = nodes.get(end.other);
       if (!here || !there) return 0;
-      return vertical ? Math.abs(there.y - here.y) : Math.abs(there.x - here.x);
+      if (vertical) return Math.abs(there.y - here.y);
+      if (side === "right") return visualLeft(there) - visualRight(here);
+      if (side === "left") return visualLeft(here) - visualRight(there);
+      return Math.abs(there.x - here.x);
     };
     // 通り道は折れ点をずらして作るので、相手までの半分までしか使えない。
     // はみ出すと線がいったん行き過ぎてから戻り、その戻りが交差に見える。
@@ -305,18 +330,6 @@ export function assignAnchors(graph: TopologyGraph): {
 
   return { anchors: out, busiest, lanes, laneRank };
 }
-
-/** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
- *
- * 引き出し口が詰まるとポート名も重なって読めなくなるので、
- * 4本を超えたら1本あたり 55px 見込んで箱を広げる。 */
-function widthFor(count: number): number | undefined {
-  if (count <= 3) return undefined;
-  return Math.min(620, DEFAULT_WIDTH + (count - 3) * 55);
-}
-
-/** 箱の既定の幅（styles.css の .device-node と合わせること）。 */
-const DEFAULT_WIDTH = 190;
 
 /**
  * 広げた箱を、広げる前の中心に置き直すためのずれ。

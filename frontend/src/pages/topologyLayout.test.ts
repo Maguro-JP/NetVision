@@ -19,7 +19,8 @@
 
 import { describe, expect, it } from "vitest";
 
-import { orthogonalBusPath, manhattanRoute } from "../components/PortLabeledEdge";
+import { orthogonalBusPath, manhattanRoute, portLabelPlacement } from "../components/PortLabeledEdge";
+import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
@@ -30,6 +31,8 @@ import {
   storedFromDisplay,
   placementFromClick,
   positionsToSave,
+  widthFor,
+  DEFAULT_WIDTH,
 } from "./TopologyPage";
 
 function node(
@@ -347,5 +350,42 @@ describe("シンプル表示の拠点名", () => {
     );
     expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, true)).toBeNull();
     expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, false)).toBe("関西支社");
+  });
+});
+
+describe("箱幅とポート名の画面座標", () => {
+  it("広げた箱の中心は保存左上 + 既定幅/2 に留まる", () => {
+    const width = widthFor(8)!;
+    const shift = shiftFor(width);
+    const stored = 0;
+    const displayLeft = stored - shift;
+    const center = displayLeft + width / 2;
+    expect(center).toBe(stored + DEFAULT_WIDTH / 2);
+  });
+
+  it("右辺のポート名は中央寄せせず、箱の外側基準で置く", () => {
+    const placed = portLabelPlacement(100, 40, Position.Right);
+    expect(placed.anchor).toBe("0%, -50%");
+    expect(placed.x).toBeGreaterThan(100);
+  });
+
+  it("通り道の余白は、広げたあとの見た目のすき間で測る", () => {
+    // 右列（COLUMN=400）に多本数。最大幅だと見た目の右端が 405 で相手左へ食い込む
+    const hub = node(1, "hub", 0, 200);
+    const peers = Array.from({ length: 12 }, (_, i) =>
+      node(10 + i, `p${i}`, 400, i * 60),
+    );
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...peers],
+      edges: peers.map((p, i) => link(100 + i, 1, p.device_id)),
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { busiest, lanes } = assignAnchors(graph);
+    expect(busiest.get(1)).toBe(12);
+    const width = widthFor(12)!;
+    const hubRight = 0 - shiftFor(width) + width;
+    expect(hubRight).toBeGreaterThan(400);
+    expect(Math.max(0, ...lanes.values())).toBe(0);
   });
 });

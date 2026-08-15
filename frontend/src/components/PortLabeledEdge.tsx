@@ -21,9 +21,43 @@ export interface PortEdgeData extends Record<string, unknown> {
 }
 
 /** ノード枠から、その先どのくらい離してラベルを置くか。 */
-const GAP = 14;
+export const PORT_LABEL_GAP = 18;
 /** 線に重ならないよう、線と垂直な向きへずらす幅。 */
-const SIDE = 9;
+export const PORT_LABEL_SIDE = 9;
+
+const DIRECTION: Record<Position, [number, number]> = {
+  [Position.Top]: [0, -1],
+  [Position.Bottom]: [0, 1],
+  [Position.Left]: [-1, 0],
+  [Position.Right]: [1, 0],
+};
+
+/**
+ * ポート名ラベルの位置と、箱から見て外側への基準点（transform の原点）。
+ *
+ * translate(-50%,-50%) で中央寄せすると、文字の半分が自分の箱へ戻って隠れる。
+ * 引き出し方向の手前側を基準にして、箱の外側にだけ伸ばす。
+ */
+export function portLabelPlacement(
+  x: number,
+  y: number,
+  position: Position,
+  gap: number = PORT_LABEL_GAP,
+  side: number = PORT_LABEL_SIDE,
+): { x: number; y: number; anchor: string } {
+  const [dx, dy] = DIRECTION[position] ?? [0, 0];
+  const px = x + dx * gap - dy * side;
+  const py = y + dy * gap + dx * side;
+  const anchor =
+    position === Position.Right
+      ? "0%, -50%"
+      : position === Position.Left
+        ? "-100%, -50%"
+        : position === Position.Bottom
+          ? "-50%, 0%"
+          : "-50%, -100%";
+  return { x: px, y: py, anchor };
+}
 
 /**
  * 縦横だけの通り道。構成図の定石どおり、箱の間で束ねてから相手の高さで抜く。
@@ -165,13 +199,6 @@ const FACE_OF: Record<Position, "top" | "bottom" | "left" | "right"> = {
   [Position.Right]: "right",
 };
 
-const DIRECTION: Record<Position, [number, number]> = {
-  [Position.Top]: [0, -1],
-  [Position.Bottom]: [0, 1],
-  [Position.Left]: [-1, 0],
-  [Position.Right]: [1, 0],
-};
-
 /**
  * 結線1本。ポート名をそれぞれの機器側に置く。
  *
@@ -290,12 +317,7 @@ function PortLabel({
 }) {
   if (!name) return null;
 
-  // ハンドルから線が出る向き。その延長線上に置けば、必ず自分のポートの隣になる
-  const [dx, dy] = DIRECTION[position] ?? [0, 0];
-  // 線と垂直な向き（進行方向から見た左）へずらして、線に重ねない
-  const px = x + dx * GAP - dy * SIDE;
-  const py = y + dy * GAP + dx * SIDE;
-
+  const placed = portLabelPlacement(x, y, position);
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;
   // 上下逆さまの文字は読めないので、半回転させて向きを揃える
@@ -305,7 +327,7 @@ function PortLabel({
     <div
       className="topo-edge-label port"
       style={{
-        transform: `translate(-50%, -50%) translate(${px}px, ${py}px) rotate(${rotation}deg)`,
+        transform: `translate(${placed.anchor}) translate(${placed.x}px, ${placed.y}px) rotate(${rotation}deg)`,
         color: color ?? MEDIA_COLOR[mediaOf(name)],
         ...(opacity ? { opacity } : {}),
       }}
