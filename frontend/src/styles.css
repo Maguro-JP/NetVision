@@ -1230,3 +1230,27 @@ button:disabled {
   font-size: 12px;
   grid-column: 2;
 }
+
+/* 出力の窓。中身を見てから保存するので、下見に幅を使う */
+.export-window .export-kinds {
+  align-items: center;
+}
+.export-window .export-save {
+  margin-left: auto;
+}
+.export-preview {
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+  max-height: 60vh;
+}
+.export-preview img {
+  display: block;
+  max-width: 100%;
+}
+.export-sheets {
+  max-width: 520px;
+  margin-bottom: 12px;
+}

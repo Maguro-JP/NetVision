@@ -1561,6 +1561,23 @@ function TopologyEditor() {
     [],
   );
 
+  // 出力の画面へ、いまの絞り込みと見せ方をそのまま渡す。
+  // 画面と出したものが 食い違わないようにする
+  const exportQuery = (() => {
+    const next = new URLSearchParams();
+    next.set("layer", layer);
+    if (selectedSite !== "") next.set("site", String(selectedSite));
+    if (appliedSearch.trim()) next.set("q", appliedSearch.trim());
+    if (scope) next.set("scope", scope);
+    if (simple) next.set("style", "simple");
+    if (portStyle) next.set("port_style", portStyle);
+    if (alongLine) next.set("along_line", "true");
+    if (orientation) next.set("orientation", orientation);
+    if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
+    if (selectedVrf) next.set("vrf", selectedVrf);
+    return `?${next.toString()}`;
+  })();
+
   const selectedGroup = graph?.groups?.find((group) => group.id === selectedGroupId);
   // 1台だけ選んでいるときは、その機器の要点を図の上に出す。
   // 台帳を開きに行かなくても、いま見ている図の中で確かめられるようにする
@@ -1852,32 +1869,18 @@ function TopologyEditor() {
           />{" "}
           線に沿わせる
         </label>
-        <a
+        {/* 出力は1つにまとめる。何が出るのか分からないままファイルが落ちてくる
+            のを避けるため、別ウィンドウで中身を見てから選ぶ */}
+        <WindowLink
           className="button"
-          href={api.topologyExportUrl(layer, {
-            vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
-            vrf: selectedVrf || undefined,
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            style: simple ? "simple" : undefined,
-            port_style: portStyle,
-            along_line: alongLine ? "true" : undefined,
-            orientation,
-          })}
-          title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
+          to={`/topology/export${exportQuery}`}
+          name="netvision-export"
+          width={1200}
+          height={900}
+          title="図・Excel・結線表・ポート一覧を、中身を見てから選んで保存します"
         >
-          図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
-        </a>
-        {/* Excel はまとめて1つ。ボタンを分けるより、開けば全部入っている方が配りやすい */}
-        <a
-          className="button"
-          href={api.workbookUrl(layer, {
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            scope,
-          })}
-          title="構成図（セルの罫線で描いた図）・結線表・ポート一覧を1つの Excel で出します。図は手元で直せます"
-        >
-          Excel で出す（図＋表）
-        </a>
+          出力する
+        </WindowLink>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>
         </RouterLink>

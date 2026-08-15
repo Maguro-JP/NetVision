@@ -27,6 +27,7 @@ import ReplacementPage from "./pages/ReplacementPage";
 import ScenariosPage from "./pages/ScenariosPage";
 import SettingsPage from "./pages/SettingsPage";
 import SpacePage from "./pages/SpacePage";
+import TopologyExportPage from "./pages/TopologyExportPage";
 import TopologyPage from "./pages/TopologyPage";
 import VlansPage from "./pages/VlansPage";
 import VulnerabilitiesPage from "./pages/VulnerabilitiesPage";
@@ -62,6 +63,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="sites" element={<SitesPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="topology" element={<TopologyPage />} />
+            <Route path="topology/export" element={<TopologyExportPage />} />
             <Route path="space" element={<SpacePage />} />
             <Route path="vlans" element={<VlansPage />} />
             <Route path="configs" element={<ConfigsPage />} />
