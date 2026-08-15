@@ -168,6 +168,20 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
     else:
         findings.append(Finding(True, "bend_ok", "線の折れは許容内"))
 
+    # 直角交差は隙間切りで切れ端になりやすい。通せるなら交差させない。
+    segs = [(a, b) for wire in wires for a, b in zip(wire, wire[1:], strict=False)]
+    crossed = False
+    for i, (a1, a2) in enumerate(segs):
+        for b1, b2 in segs[i + 1 :]:
+            if _score_cross(a1, a2, b1, b2):
+                crossed = True
+                findings.append(Finding(False, "wire_cross", "線どうしが直角に交差している"))
+                break
+        if crossed:
+            break
+    if not crossed:
+        findings.append(Finding(True, "no_wire_cross", "線どうしが交差していない"))
+
     for node in graph.nodes:
         if node.hostname not in svg:
             findings.append(Finding(False, "missing_node", f"{node.hostname} が図に無い"))
