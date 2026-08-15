@@ -1231,26 +1231,86 @@ button:disabled {
   grid-column: 2;
 }
 
-/* 出力の窓。中身を見てから保存するので、下見に幅を使う */
-.export-window .export-kinds {
+/* 出力の窓。印刷プレビューのような画面なので、メニューを出さず図に幅を使う */
+.export-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 12px 16px 16px;
+  gap: 10px;
+}
+.export-head {
+  display: flex;
   align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
 }
-.export-window .export-save {
+.export-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.export-head-text strong {
+  font-size: 16px;
+}
+.export-head-text .muted {
+  font-size: 12px;
+}
+/* 保存は迷わせない。何が落ちてくるかを書いて、いちばん目立たせる */
+.export-save {
   margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 18px;
+  font-size: 15px;
+  font-weight: 700;
 }
+.export-save:hover {
+  text-decoration: none;
+  filter: brightness(1.08);
+}
+.export-save-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.export-save-file {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+.export-kinds {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.export-note {
+  margin: 0;
+  font-size: 12px;
+}
+/* 下見は残りの高さを全部使う。図は大きく見たい */
 .export-preview {
+  flex: 1;
+  min-height: 240px;
   background: #ffffff;
   border: 1px solid var(--border);
   border-radius: 8px;
   padding: 8px;
   overflow: auto;
-  max-height: 60vh;
 }
 .export-preview img {
   display: block;
-  max-width: 100%;
+  width: 100%;
+  height: auto;
 }
 .export-sheets {
   max-width: 520px;
-  margin-bottom: 12px;
+  flex: none;
+}
+/* 結線表の下見も、窓の高さいっぱいまで使って多く見せる */
+.export-window .export-rows {
+  flex: 1;
+  overflow: auto;
 }

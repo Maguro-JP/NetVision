@@ -25,6 +25,14 @@ const KIND_LABEL: Record<Kind, string> = {
   ports: "ポート一覧",
 };
 
+/** 保存したときのファイルの種類。押す前に何が落ちてくるか分かるようにする */
+const KIND_FILE: Record<Kind, string> = {
+  svg: "SVG ファイル",
+  workbook: "Excel ファイル",
+  links: "Excel ファイル",
+  ports: "Excel ファイル",
+};
+
 const KIND_NOTE: Record<Kind, string> = {
   svg: "設計書や報告書に貼るベクタ形式。Word / PowerPoint にそのまま挿入でき、拡大しても潰れません。",
   workbook:
@@ -79,34 +87,51 @@ export default function TopologyExportPage() {
 
   return (
     <div className="export-window">
-      <h1>構成図を出す</h1>
-      <p className="subtitle">
-        {siteId ? "拠点で絞った" : "いま図に出ている"}範囲を出します。
-        中身を見てから、必要なものだけ保存してください。
-      </p>
+      <header className="export-head">
+        <div className="export-head-text">
+          <strong>構成図を出す</strong>
+          <span className="muted">
+            {siteId ? "拠点で絞った" : "いま図に出ている"}範囲です。
+            中身を見てから、必要なものだけ保存してください。
+          </span>
+        </div>
+        {/* 保存は、押す前に何が落ちてくるか分かるように種類まで書く */}
+        <a className="button primary export-save" href={url[kind]} download>
+          <span className="export-save-icon" aria-hidden="true">
+            ⤓
+          </span>
+          <span>
+            {KIND_LABEL[kind]}を保存
+            <span className="export-save-file">{KIND_FILE[kind]}</span>
+          </span>
+        </a>
+      </header>
 
-      <div className="toolbar export-kinds">
+      <div className="export-kinds" role="tablist">
         {(Object.keys(KIND_LABEL) as Kind[]).map((value) => (
           <button
             key={value}
+            role="tab"
+            aria-selected={kind === value}
             className={kind === value ? "primary" : ""}
             onClick={() => setKind(value)}
           >
             {KIND_LABEL[value]}
           </button>
         ))}
-        <a className="button primary export-save" href={url[kind]}>
-          この形で保存する
-        </a>
       </div>
 
-      <p className="muted">{KIND_NOTE[kind]}</p>
+      <p className="muted export-note">{KIND_NOTE[kind]}</p>
 
       {graph.isError && <QueryError error={graph.error} />}
 
       {kind === "svg" && <SvgPreview url={svgUrl} />}
       {kind === "workbook" && (
-        <WorkbookPreview url={svgUrl} devices={graph.data?.nodes.length} links={graph.data?.edges.length} />
+        <WorkbookPreview
+          url={svgUrl}
+          devices={graph.data?.nodes.length}
+          links={graph.data?.edges.length}
+        />
       )}
       {kind === "links" && <LinkPreview graph={graph.data} />}
       {kind === "ports" && <PortsNote />}
@@ -187,7 +212,8 @@ function WorkbookPreview({
         </tbody>
       </table>
       <p className="muted">
-        図のシートは、下の絵と同じ構成をセルに描き直したものです（線の形は Excel の都合で変わります）。
+        図のシートは、下の絵と同じ構成をセルに描き直したものです（線の形は Excel
+        の都合で変わります）。
       </p>
       <SvgPreview url={url} />
     </>
@@ -195,7 +221,11 @@ function WorkbookPreview({
 }
 
 /** 結線表の下見。出す表と同じ並びで、頭の分だけ見せる。 */
-function LinkPreview({ graph }: { graph?: { nodes: { device_id: number; hostname: string }[]; edges: unknown[] } }) {
+function LinkPreview({
+  graph,
+}: {
+  graph?: { nodes: { device_id: number; hostname: string }[]; edges: unknown[] };
+}) {
   if (!graph) return <div className="muted">読み込んでいます…</div>;
   const name = new Map(graph.nodes.map((node) => [node.device_id, node.hostname]));
   const rows = graph.edges as {
@@ -210,28 +240,30 @@ function LinkPreview({ graph }: { graph?: { nodes: { device_id: number; hostname
 
   return (
     <>
-      <table>
-        <thead>
-          <tr>
-            <th>機器</th>
-            <th>ポート</th>
-            <th>対向</th>
-            <th>対向ポート</th>
-            <th>確認</th>
-          </tr>
-        </thead>
-        <tbody>
-          {head.map((row) => (
-            <tr key={row.id}>
-              <td>{name.get(row.source) ?? row.source}</td>
-              <td className="mono">{row.source_interface ?? "—"}</td>
-              <td>{name.get(row.target) ?? row.target}</td>
-              <td className="mono">{row.target_interface ?? "—"}</td>
-              <td className="muted">{row.confirmed_both_ways ? "両側" : "片側"}</td>
+      <div className="export-rows">
+        <table>
+          <thead>
+            <tr>
+              <th>機器</th>
+              <th>ポート</th>
+              <th>対向</th>
+              <th>対向ポート</th>
+              <th>確認</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {head.map((row) => (
+              <tr key={row.id}>
+                <td>{name.get(row.source) ?? row.source}</td>
+                <td className="mono">{row.source_interface ?? "—"}</td>
+                <td>{name.get(row.target) ?? row.target}</td>
+                <td className="mono">{row.target_interface ?? "—"}</td>
+                <td className="muted">{row.confirmed_both_ways ? "両側" : "片側"}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       <p className="muted">
         全 {rows.length} 本のうち {head.length} 本を出しています。保存すると全部入ります。
       </p>

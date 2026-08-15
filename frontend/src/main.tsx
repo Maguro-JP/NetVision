@@ -53,6 +53,8 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
         <Routes>
           <Route path="/migration" element={<MigrationPage />} />
           <Route element={<SchemaGate />}>
+            {/* 出力は印刷プレビューのような窓。メニューを出さず、図に幅を使う */}
+            <Route path="/topology/export" element={<TopologyExportPage />} />
             <Route path="/" element={<App />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard" element={<DashboardPage />} />
@@ -63,7 +65,6 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="sites" element={<SitesPage />} />
             <Route path="import" element={<ImportPage />} />
             <Route path="topology" element={<TopologyPage />} />
-            <Route path="topology/export" element={<TopologyExportPage />} />
             <Route path="space" element={<SpacePage />} />
             <Route path="vlans" element={<VlansPage />} />
             <Route path="configs" element={<ConfigsPage />} />
