@@ -33,7 +33,7 @@ import PortLabeledEdge, {
   type WireBox,
   facesForEdge,
 } from "../components/PortLabeledEdge";
-import { DEVICE_TYPE_LABEL } from "../lib/format";
+import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 import {
   DEFAULT_TYPE_COLOR,
@@ -901,6 +901,7 @@ function TopologyEditor() {
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData | GroupFrameData>> | null>(null);
+  const canvas = useRef<HTMLDivElement | null>(null);
   // ドラッグの過程。保存は基準から動いた機器だけ送る
   const historyRef = useRef<EditHistory | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
@@ -1033,6 +1034,30 @@ function TopologyEditor() {
     setEdges,
   ]);
 
+  // 機器をダブルクリックしたら、その機器の台帳を別タブで開く。
+  // 図から離れずに詳しく見たいので、いまの画面（配置・絞り込み）は残す。
+  // React Flow の onNodeDoubleClick は選択のたびに要素が作り直されて
+  // 取りこぼすため、図の入れ物で直接受ける
+  useEffect(() => {
+    const box = canvas.current;
+    if (!box) return;
+    const onDouble = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const node = target?.closest?.(".react-flow__node") as HTMLElement | null;
+      const id = node?.dataset.id;
+      if (!id || id.startsWith("g-")) return;
+      const deviceId = Number(id);
+      if (!Number.isFinite(deviceId)) return;
+      // 図の拡大（ダブルクリックで寄る）と取り合いになるので、ここで止める
+      event.preventDefault();
+      event.stopPropagation();
+      window.open(`/devices/${deviceId}`, "_blank", "noopener,noreferrer");
+    };
+    // 取るのは capture 段階。図の拡大が先に受け取って伝播を止めてしまう
+    box.addEventListener("dblclick", onDouble, true);
+    return () => box.removeEventListener("dblclick", onDouble, true);
+  }, []);
+
   useEffect(() => {
     shouldFit.current = true;
   }, [layer, selectedSite, appliedSearch, orientation, scope]);
@@ -1056,8 +1081,11 @@ function TopologyEditor() {
     if (appliedSearch.trim()) next.set("q", appliedSearch.trim());
     if (selectedVrf) next.set("vrf", selectedVrf);
     if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
+    // 中身が同じなら書かない。書くたびに location が変わり、その変化で
+    // この効果がまた走って、描き直しが止まらなくなる
+    if (next.toString() === params.toString()) return;
     setParams(next, { replace: true });
-  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, setParams]);
+  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, params, setParams]);
 
   const refresh = async ({ takeLayout = true }: { takeLayout?: boolean } = {}) => {
     // 取り直してから画面を作り直す。以前はキャッシュの古いグラフで
@@ -1517,7 +1545,28 @@ function TopologyEditor() {
     return (Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).filter((type) => found.has(type));
   }, [graph]);
 
+  // 選択が変わったときの処理は、毎回作り直すと React Flow の中で
+  // 効果が回り続け、図全体の描き直しが止まらなくなる（操作も取りこぼす）
+  const handleSelectionChange = useCallback(
+    ({ nodes: picked }: { nodes: Node<DeviceNodeData | GroupFrameData>[] }) => {
+      const devices = picked.filter((node) => node.type !== "group");
+      const frame = picked.find((node) => node.type === "group");
+      setSelectedDeviceIds(
+        devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
+      );
+      setSelectedGroupId(frame ? ((frame.data as GroupFrameData).groupId ?? null) : null);
+      if (picked.length > 0) setSelectedEdge(null);
+    },
+    [],
+  );
+
   const selectedGroup = graph?.groups?.find((group) => group.id === selectedGroupId);
+  // 1台だけ選んでいるときは、その機器の要点を図の上に出す。
+  // 台帳を開きに行かなくても、いま見ている図の中で確かめられるようにする
+  const selectedDevice =
+    selectedDeviceIds.length === 1
+      ? graph?.nodes.find((node) => node.device_id === selectedDeviceIds[0])
+      : undefined;
 
   const usedMedia = useMemo(() => {
     const found = new Set<Media>();
@@ -1881,7 +1930,7 @@ function TopologyEditor() {
         </div>
       )}
 
-      <div className={`topo-canvas${placing ? " placing" : ""}`}>
+      <div className={`topo-canvas${placing ? " placing" : ""}`} ref={canvas}>
         {tooWide ? (
           // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
           // それでも見たい人のために、出す手段は残しておく
@@ -1960,17 +2009,7 @@ function TopologyEditor() {
             edgesReconnectable={editable}
             onEdgeClick={(_, edge) => setSelectedEdge(edge)}
             onPaneClick={onPaneClick}
-            onSelectionChange={({ nodes: picked }) => {
-              const devices = picked.filter((node) => node.type !== "group");
-              const frame = picked.find((node) => node.type === "group");
-              setSelectedDeviceIds(
-                devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
-              );
-              setSelectedGroupId(
-                frame ? ((frame.data as GroupFrameData).groupId ?? null) : null,
-              );
-              if (picked.length > 0) setSelectedEdge(null);
-            }}
+            onSelectionChange={handleSelectionChange}
             onInit={(flow) => {
               instance.current = flow;
               if (shouldFit.current) {
@@ -1992,6 +2031,56 @@ function TopologyEditor() {
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
+            {selectedDevice && !selectedGroup && !selectedEdge && (
+              <Panel position="top-right" className="topo-selection-panel">
+                <div className="topo-selection-panel-body">
+                  <div className="topo-selection-panel-row">
+                    <span className="topo-selection-panel-label" title="選択中の機器">
+                      {selectedDevice.hostname}
+                    </span>
+                    <button
+                      type="button"
+                      className="topo-selection-panel-close"
+                      onClick={() => setSelectedDeviceIds([])}
+                      title="選択を解除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <dl className="topo-device-facts">
+                    <dt>種別</dt>
+                    <dd>{DEVICE_TYPE_LABEL[selectedDevice.device_type]}</dd>
+                    <dt>拠点</dt>
+                    <dd>{selectedDevice.site_name ?? "未登録"}</dd>
+                    <dt>型番</dt>
+                    <dd>
+                      {`${selectedDevice.vendor} ${selectedDevice.model}`.trim() || "未登録"}
+                    </dd>
+                    <dt>管理IP</dt>
+                    <dd>{selectedDevice.mgmt_ip ?? "未登録"}</dd>
+                    <dt>保守</dt>
+                    <dd className={`sev-text-${selectedDevice.severity}`}>
+                      {SEVERITY_LABEL[selectedDevice.severity]}
+                    </dd>
+                    <dt>ポート</dt>
+                    <dd>{selectedDevice.interface_count}</dd>
+                  </dl>
+                  <div className="topo-selection-panel-row">
+                    <RouterLink to={`/devices/${selectedDevice.device_id}`}>
+                      機器情報を開く
+                    </RouterLink>
+                    <a
+                      href={`/devices/${selectedDevice.device_id}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      title="図を開いたまま、別のタブで見ます（機器をダブルクリックでも開きます）"
+                    >
+                      別タブで開く
+                    </a>
+                  </div>
+                </div>
+              </Panel>
+            )}
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
@@ -2062,6 +2151,12 @@ function TopologyEditor() {
                         ? ` ${selectedEdgeData.target_interface}`
                         : ""}
                     </span>
+                    {/* 図の上は印だけのことがあるので、中身はここで読む */}
+                    {warningOf(selectedEdgeData) && (
+                      <span className="sev-text-critical">
+                        ⚠ {warningOf(selectedEdgeData)}
+                      </span>
+                    )}
                     {editable && layer !== "logical" ? (
                       <>
                         <button

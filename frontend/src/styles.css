@@ -497,6 +497,23 @@ button:disabled {
 .topo-selection-panel .toolbar {
   gap: 6px;
 }
+.topo-device-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.topo-device-facts dt {
+  color: var(--muted);
+}
+.topo-device-facts dd {
+  margin: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topo-selection-panel select {
   max-width: 120px;
 }
@@ -681,8 +698,7 @@ button:disabled {
 .topo-edge-label.warning {
   color: var(--sev-critical);
   font-weight: 700;
-  /* ポート名と重ならないよう、線の中央から少し下げる */
-  margin-top: 16px;
+  /* 逃がす向きは線ごとに違うので、位置は PortLabeledEdge が決める */
 }
 /* 引き出し口は編集中だけ見せる。常に出ていると図が点だらけになる */
 .react-flow__handle {

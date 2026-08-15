@@ -35,6 +35,10 @@ export interface PortEdgeData extends Record<string, unknown> {
 export const PORT_LABEL_GAP = 14;
 /** 線に重ならないよう、線と垂直な向きへずらす幅。束の本数でさらに開く。 */
 export const PORT_LABEL_SIDE = 12;
+/** 警告（VLAN の食い違いなど）を線の反対側へ出す量。ポート名と別の帯にする。 */
+export const WARNING_SIDE = 30;
+/** この長さを超える警告は、線の脇には印だけ出す（中身はパネルと title で読む） */
+export const WARNING_INLINE_MAX = 8;
 
 const DIRECTION: Record<Position, [number, number]> = {
   [Position.Top]: [0, -1],
@@ -704,6 +708,14 @@ export default function PortLabeledEdge({
   const labelX = routed.labelX;
   const labelY = routed.labelY;
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
+  // 警告はポート名と別の帯へ出す。ポート名の側（portLabelPlacement）と符号が逆。
+  // 縦の線では、警告の文字を中央寄せにすると左右へ伸びてポート名に乗るので、
+  // 線の横に置いて外側へ伸ばす
+  const span = Math.hypot(targetX - sourceX, targetY - sourceY) || 1;
+  const upright = Math.abs(targetY - sourceY) >= Math.abs(targetX - sourceX);
+  const warnDx = ((targetY - sourceY) / span) * WARNING_SIDE;
+  const warnDy = (-(targetX - sourceX) / span) * WARNING_SIDE;
+  const warnAnchor = upright ? (warnDx >= 0 ? "0%, -50%" : "-100%, -50%") : "-50%, -50%";
 
   return (
     <>
@@ -753,11 +765,18 @@ export default function PortLabeledEdge({
             <div
               className="topo-edge-label warning"
               style={{
-                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                // ポート名は線の片側に並べてある。警告は反対側へ出す。
+                // 線に沿って下へずらすだけだと、隣の線のポート名に乗る
+                transform:
+                  `translate(${warnAnchor}) ` +
+                  `translate(${labelX + warnDx}px, ${labelY + warnDy}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
+              title={info.warning}
             >
-              ⚠ {info.warning}
+              {/* 長い警告を線の脇に広げると、必ずどこかのポート名に乗る。
+                  印だけ出し、中身は線を選んだときのパネルとここの title で読む */}
+              {info.warning.length > WARNING_INLINE_MAX ? "⚠" : `⚠ ${info.warning}`}
             </div>
           )}
         </EdgeLabelRenderer>
