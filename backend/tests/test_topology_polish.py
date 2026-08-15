@@ -9,7 +9,6 @@ from app.services.topology import (
     TopologyNodeView,
     _box_width,
     _busiest_side_links,
-    _min_stored_gap_x,
     _polish_layout,
     _shift_centers_to,
     _snap_to_grid,
