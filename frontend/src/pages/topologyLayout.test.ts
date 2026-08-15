@@ -333,7 +333,7 @@ describe("直交の通り道", () => {
         return { x, y };
       });
     expect(Math.max(0, points.length - 2)).toBeLessThanOrEqual(2);
-    // 配下箱の下まで押し出す（口のすぐ下 332+28 では交差する）
+    // 配下箱の下まで押し出す（口のすぐ下では配下への縦線と交差する）
     expect(points.some((p) => p.y >= down.y2 + 24)).toBe(true);
   });
 
