@@ -234,7 +234,6 @@ export default function PortLabeledEdge({
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
                 color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                tight={_shortHop(sourceX, sourceY, targetX, targetY, sourcePosition)}
               />
               <PortLabel
                 name={info.targetInterface ?? ""}
@@ -248,7 +247,6 @@ export default function PortLabeledEdge({
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
                 color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                tight={_shortHop(sourceX, sourceY, targetX, targetY, targetPosition)}
               />
             </>
           )}
@@ -269,20 +267,6 @@ export default function PortLabeledEdge({
   );
 }
 
-function _shortHop(
-  sourceX: number,
-  sourceY: number,
-  targetX: number,
-  targetY: number,
-  position: Position,
-): boolean {
-  const along =
-    position === Position.Left || position === Position.Right
-      ? Math.abs(targetX - sourceX)
-      : Math.abs(targetY - sourceY);
-  return along < 80;
-}
-
 function PortLabel({
   name,
   x,
@@ -293,7 +277,6 @@ function PortLabel({
   alongLine,
   opacity,
   color,
-  tight,
 }: {
   name: string;
   x: number;
@@ -304,17 +287,14 @@ function PortLabel({
   alongLine: boolean;
   opacity?: number | string;
   color?: string;
-  tight?: boolean;
 }) {
   if (!name) return null;
 
   // ハンドルから線が出る向き。その延長線上に置けば、必ず自分のポートの隣になる
   const [dx, dy] = DIRECTION[position] ?? [0, 0];
-  // 箱の間が狭いときは、隙間に並べず箱の直上・直下へ逃がす
-  const gap = tight ? -10 : GAP;
-  const side = tight ? 22 : SIDE;
-  const px = x + dx * gap - dy * side;
-  const py = y + dy * gap + dx * side;
+  // 線と垂直な向き（進行方向から見た左）へずらして、線に重ねない
+  const px = x + dx * GAP - dy * SIDE;
+  const py = y + dy * GAP + dx * SIDE;
 
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;

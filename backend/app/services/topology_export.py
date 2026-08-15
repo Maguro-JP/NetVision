@@ -156,7 +156,7 @@ def render_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
         f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="{FONT}">'
     )
-    parts.append('<rect width="100%" height="100%" fill="#f4f1ea"/>')
+    parts.append('<rect width="100%" height="100%" fill="#ffffff"/>')
 
     # 資料に載る時刻は、サーバの時計ではなく使う人の時刻でなければ意味が無い
     generated = localtime.format(localtime.now(), with_zone=True)
@@ -279,7 +279,7 @@ def render_svg(
         pending.append((points, edge))
 
     gapped = _cut_gaps([item[0] for item in pending])
-    stroke = "#2f4d6a" if simple else "#8a94a6"
+    stroke = "#4a5364" if simple else "#8a94a6"
     for index, (points, edge) in enumerate(pending):
         dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
         for piece in gapped[index]:
@@ -296,31 +296,14 @@ def render_svg(
             target = at[edge.target]
             sx, sy = source[0] + NODE_W / 2, source[1] + NODE_H / 2
             tx, ty = target[0] + NODE_W / 2, target[1] + NODE_H / 2
-            hop = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
             parts.append(
                 _port_label(
-                    sx,
-                    sy,
-                    x1,
-                    y1,
-                    edge.source_interface,
-                    port_style,
-                    along_line,
-                    placement,
-                    hop=hop,
+                    sx, sy, x1, y1, edge.source_interface, port_style, along_line, placement
                 )
             )
             parts.append(
                 _port_label(
-                    tx,
-                    ty,
-                    x2,
-                    y2,
-                    edge.target_interface,
-                    port_style,
-                    along_line,
-                    placement,
-                    hop=hop,
+                    tx, ty, x2, y2, edge.target_interface, port_style, along_line, placement
                 )
             )
             for name in (edge.source_interface, edge.target_interface):
@@ -374,10 +357,9 @@ def render_svg(
                     f'fill="#6b6b6b" text-anchor="middle">{_esc(_clip(node.site_name, 22))}</text>'
                 )
             name_y = y + NODE_H / 2 + (0 if subtitle else 5)
-            fill = _role_fill(node)
             parts.append(
                 f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
-                f'height="{NODE_H:.0f}" rx="4" fill="{fill}" stroke="#2c2a26" '
+                f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
                 f'stroke-width="1.6"/>'
                 f'<text x="{x + NODE_W / 2:.0f}" y="{name_y:.0f}" font-size="14" '
                 f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
@@ -776,21 +758,6 @@ def _path_points(points: list[tuple[float, float]]) -> str:
     return " ".join(f"{x:.0f},{y:.0f}" for x, y in points)
 
 
-def _role_fill(node: object) -> str:
-    """資料の箱色。役割が一目で残るようにする。"""
-    kind = getattr(node, "peer_kind", None)
-    device_type = getattr(node, "device_type", "")
-    if device_type == "firewall":
-        return "#f3e6e2"
-    if kind == "up":
-        return "#e7eef6"
-    if kind == "down":
-        return "#eef3ea"
-    if device_type == "router":
-        return "#e7eef6"
-    return "#f6f1e8"
-
-
 def _interior_cross(
     a1: tuple[float, float],
     a2: tuple[float, float],
@@ -980,7 +947,6 @@ def _port_label(
     style: str,
     along_line: bool,
     placement: svglayout.Placement,
-    hop: float | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -1025,9 +991,7 @@ def _port_label(
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(
-            base, limit, short=hop is not None and hop < 56
-        )
+        for step, offset, side in _candidate_offsets(base, limit)
     ]
 
     # 置けないときは文字を短くする。重ねるくらいなら略した方がまし。
@@ -1061,25 +1025,15 @@ def _port_label(
     )
 
 
-def _candidate_offsets(
-    base: float, limit: float, *, short: bool = False
-) -> list[tuple[float, float, float]]:
+def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, float]]:
     """ラベルを置く候補を（線に沿う距離, 線から離す量, 左右）で並べる。
 
     近いほど良いので、2つのずらし量の合計が小さい順にする。1本の線に何本も
     束ねている構成（LAG など）では同じ場所に何個も置くことになるため、
     線に沿う方向と垂直な方向の両方に逃がせないと必ずどこかで被る。
-
-    箱の間が狭い線は、隙間に並べず箱の直上・直下へ先に逃がす。
     """
-    if short:
-        steps = [0.0, 8.0]
-        offsets = [34.0, 46.0, 58.0, 22.0, 72.0, 88.0, _SIDE_OFFSET]
-        offset_weight = 0.4
-    else:
-        steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
-        offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
-        offset_weight = 1.2
+    steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
+    offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
 
     out: list[tuple[float, float, float, float]] = []
     for step_index, step in enumerate(steps):
@@ -1088,7 +1042,7 @@ def _candidate_offsets(
             break
         for offset_index, offset in enumerate(offsets):
             for side in (1.0, -1.0):
-                rank = step_index + offset_index * offset_weight
+                rank = step_index + offset_index * 1.2
                 out.append((rank, step, offset, side))
 
     out.sort(key=lambda item: item[0])
