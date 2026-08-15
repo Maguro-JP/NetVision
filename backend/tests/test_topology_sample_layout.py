@@ -68,8 +68,8 @@ def test_optimal_branch_puts_uplink_above_and_offices_in_a_right_column():
     xs = {office.x for office in offices}
     assert len(xs) == 1
     assert offices[0].x > hub.x + 100
-    hub_links = sum(1 for item in edges if item.source == 2 or item.target == 2)
-    assert offices[0].x - _visual_right(hub.x, hub_links) < 200
+    assert offices[0].x - hub.x >= 400
+    assert offices[0].x - _visual_right(hub.x, 0) < 280
     ys = sorted(office.y for office in offices)
     assert ys[1] - ys[0] > 40
     assert ys[2] - ys[1] > 40

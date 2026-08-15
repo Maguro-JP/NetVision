@@ -1283,14 +1283,15 @@ def _child_order(
     return sorted(candidates, key=sort_key)
 
 
-# 機器の箱は、結線が多いほど横に広がる（画面側の widthFor と同じ規則）。
-# 数え方は「1辺あたりの最大本数」（frontend の busiest）。総本数ではない。
-# 線を1本ずつ別の通り道に沿わせるための幅も要る。
-# どちらも見込まずに対向を置くと、箱の右端が対向側へ食い込み、
-# 線がいったん行き過ぎてから戻る形になって、その戻りが交差に見える。
+# 機器の箱は、結線が多いほど広がる（画面側の widthFor / heightFor と同じ規則）。
+# 数え方は「1辺あたりの最大本数」。総本数ではない。
+# 上下に多い → 幅、左右に多い → 高さ。向きを間違えると間隔だけ増えて被りが残る。
 _BOX_WIDTH = 190.0
+_BOX_HEIGHT = 78.0
 _BOX_GROW = 55.0
+_BOX_GROW_H = 22.0
 _BOX_MAX = 620.0
+_BOX_MAX_H = 480.0
 _LANE_GAP = 16.0
 # ハブ側で重ねる位置・相手側で扇に開く位置。画面の orthogonalBusPath と同じ
 _BUS_STACK = 36.0
@@ -1299,6 +1300,7 @@ _BUS_INSET = 28.0
 _PEER_CLEAR_MIN = 120.0
 # 画面で隣り合う箱の見た目のすき間（マス目1つ）。保存座標の差ではない
 _VISUAL_CLEAR_X = 40.0
+_VISUAL_CLEAR_Y = 40.0
 # sideToward（画面）と同じ閾値
 _SAME_ROW = 60.0
 _TIER = 100.0
@@ -1306,10 +1308,17 @@ _COLUMN = 400.0
 
 
 def _box_width(links: int) -> float:
-    """1辺の最大結線本数から、画面上の箱幅を出す（frontend の widthFor と同じ）。"""
+    """上下の辺の最大結線本数から、画面上の箱幅を出す（frontend の widthFor と同じ）。"""
     if links <= 3:
         return _BOX_WIDTH
     return min(_BOX_MAX, _BOX_WIDTH + (links - 3) * _BOX_GROW)
+
+
+def _box_height(links: int) -> float:
+    """左右の辺の最大結線本数から、画面上の箱高さを出す（frontend の heightFor と同じ）。"""
+    if links <= 3:
+        return _BOX_HEIGHT
+    return min(_BOX_MAX_H, _BOX_HEIGHT + (links - 3) * _BOX_GROW_H)
 
 
 def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:
@@ -1329,6 +1338,18 @@ def _busiest_side_links(
     edges: list[TopologyEdgeView],
 ) -> dict[int, int]:
     """機器ごとに、1辺に来る結線の最大本数。画面の busiest と同じ数え方。"""
+    tb, lr = _busiest_sides(nodes, edges)
+    out: dict[int, int] = defaultdict(int)
+    for device_id in set(tb) | set(lr):
+        out[device_id] = max(tb.get(device_id, 0), lr.get(device_id, 0))
+    return out
+
+
+def _busiest_sides(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView],
+) -> tuple[dict[int, int], dict[int, int]]:
+    """上下の最大本数と、左右の最大本数を分ける。幅と高さで向きが違う。"""
     by_id = {node.device_id: node for node in nodes}
     per_side: dict[tuple[int, str], int] = defaultdict(int)
     for edge in edges:
@@ -1340,24 +1361,42 @@ def _busiest_side_links(
         target_side = edge.target_side or _side_toward_xy(target.x, target.y, source.x, source.y)
         per_side[(edge.source, source_side)] += 1
         per_side[(edge.target, target_side)] += 1
-    busiest: dict[int, int] = defaultdict(int)
-    for (device_id, _), count in per_side.items():
-        busiest[device_id] = max(busiest[device_id], count)
-    return busiest
+    busiest_tb: dict[int, int] = defaultdict(int)
+    busiest_lr: dict[int, int] = defaultdict(int)
+    for (device_id, side), count in per_side.items():
+        if side in ("left", "right"):
+            busiest_lr[device_id] = max(busiest_lr[device_id], count)
+        else:
+            busiest_tb[device_id] = max(busiest_tb[device_id], count)
+    return busiest_tb, busiest_lr
 
 
 def _visual_left(stored_x: float, links: int) -> float:
-    """保存座標（左上）から、画面に見える左端を出す。"""
+    """保存座標（左上）から、画面に見える左端を出す。links は上下辺の本数。"""
     width = _box_width(links)
     shift = (width - _BOX_WIDTH) / 2
     return stored_x - shift
 
 
 def _visual_right(stored_x: float, links: int) -> float:
-    """保存座標（左上）から、画面に見える右端を出す。"""
+    """保存座標（左上）から、画面に見える右端を出す。links は上下辺の本数。"""
     width = _box_width(links)
     shift = (width - _BOX_WIDTH) / 2
     return stored_x - shift + width
+
+
+def _visual_top(stored_y: float, links: int) -> float:
+    """保存座標から、画面に見える上端を出す。links は左右辺の本数。"""
+    height = _box_height(links)
+    shift = (height - _BOX_HEIGHT) / 2
+    return stored_y - shift
+
+
+def _visual_bottom(stored_y: float, links: int) -> float:
+    """保存座標から、画面に見える下端を出す。links は左右辺の本数。"""
+    height = _box_height(links)
+    shift = (height - _BOX_HEIGHT) / 2
+    return stored_y - shift + height
 
 
 def _min_stored_gap_x(links_left: int, links_right: int) -> float:
@@ -1365,8 +1404,14 @@ def _min_stored_gap_x(links_left: int, links_right: int) -> float:
 
     画面は箱を広げて中心を保つ（shiftFor）。保存座標の差が固定のままだと、
     広い箱どうしが食い込み、ポート名が隣の箱の下に沈む。
+    links は上下辺の本数（幅に効く方）。
     """
     return (_box_width(links_left) + _box_width(links_right)) / 2 + _VISUAL_CLEAR_X
+
+
+def _min_stored_gap_y(links_above: int, links_below: int) -> float:
+    """上下に並ぶ機器の、保存上端座標のあいだに最低限必要な差。links は左右辺。"""
+    return (_box_height(links_above) + _box_height(links_below)) / 2 + _VISUAL_CLEAR_Y
 
 
 def _lane_room(links: int) -> float:
@@ -1439,15 +1484,17 @@ def _place_peers(
     own = [by_id[i] for i in inside if i in by_id]
     if not own:
         return
-    # 画面の widthFor と同じく「1辺の最大本数」で箱幅を見込む。
-    # 総本数だと上下左右に分散した機器まで広げてしまい、間隔が狂う。
-    busiest = _busiest_side_links(list(by_id.values()), graph.edges)
+    # 画面と同じく、上下本数→幅、左右本数→高さ・右列の空き。
+    busiest_tb, busiest_lr = _busiest_sides(list(by_id.values()), graph.edges)
 
-    def links_of(node: TopologyNodeView) -> int:
-        return busiest.get(node.device_id, 0)
+    def tb_of(node: TopologyNodeView) -> int:
+        return busiest_tb.get(node.device_id, 0)
 
-    left = min(_visual_left(node.x, links_of(node)) for node in own)
-    right = max(_visual_right(node.x, links_of(node)) for node in own)
+    def lr_of(node: TopologyNodeView) -> int:
+        return busiest_lr.get(node.device_id, 0)
+
+    left = min(_visual_left(node.x, tb_of(node)) for node in own)
+    right = max(_visual_right(node.x, tb_of(node)) for node in own)
     top = min(node.y for node in own)
     middle = (left + right) / 2
     own_rank = min(rank.get(node.device_id, 0) for node in own)
@@ -1526,6 +1573,12 @@ def _place_peers(
         elif edge.target in inside and edge.source in below_ids:
             peer_links += 1
     column = right + _peer_clearance(max(peer_links, len(below_rows)))
+    # 画面の sideToward は横差 COLUMN(400) 以上で左右から出す。
+    # 箱幅を左右本数で伸ばさないいま、右端+通り道だけだと横差が 400 未満になり、
+    # 下の営業所への線が下辺から出て箱をぐるっと回る。列は COLUMN 以上離す。
+    own_centers = [node.x + _BOX_WIDTH / 2 for node in own]
+    hub_center = sum(own_centers) / len(own_centers)
+    column = max(column, hub_center + _COLUMN - _BOX_WIDTH / 2)
     for index, members in enumerate(below_rows):
         y = top + index * (_Y_SPACING * 0.7)
         for col, node in enumerate(members):
@@ -1896,8 +1949,8 @@ def _unstick_along(
     min_gap まで一気に離す。返り値はその強制移動をした device_id。
     呼び出し側で移動上限の clamp を外さないと、また同じマスに潰れる。
 
-    横方向は links_of があれば画面上の箱幅を見込む。固定の min_gap だけだと、
-    広げたハブが隣の箱へ食い込む。
+    横方向は links_of があれば画面上の箱幅を見込む。縦方向は箱高さを見込む。
+    固定の min_gap だけだと、広げたハブが隣の箱へ食い込む。
     """
     forced: set[int] = set()
     buckets: dict[float, list[TopologyNodeView]] = {}
@@ -1921,21 +1974,32 @@ def _unstick_along(
             current = getattr(curr_node, axis)
             gap = current - prev
             needed_gap = min_gap
-            if axis == "x" and links_of is not None:
-                needed_gap = max(
-                    min_gap,
-                    _min_stored_gap_x(links_of(prev_node), links_of(curr_node)),
-                )
+            if links_of is not None:
+                if axis == "x":
+                    needed_gap = max(
+                        min_gap,
+                        _min_stored_gap_x(links_of(prev_node), links_of(curr_node)),
+                    )
+                else:
+                    needed_gap = max(
+                        min_gap,
+                        _min_stored_gap_y(links_of(prev_node), links_of(curr_node)),
+                    )
             if gap >= needed_gap:
                 continue
             needed = needed_gap - gap
             # 見た目の箱が食い込んでいるときは、移動上限を超えてでも離す。
             # そうしないと広げたハブの右端が隣の下に残り、ポート名が隠れる。
             visually_overlapping = False
-            if axis == "x" and links_of is not None:
-                visually_overlapping = _visual_left(
-                    curr_node.x, links_of(curr_node)
-                ) < _visual_right(prev_node.x, links_of(prev_node))
+            if links_of is not None:
+                if axis == "x":
+                    visually_overlapping = _visual_left(
+                        curr_node.x, links_of(curr_node)
+                    ) < _visual_right(prev_node.x, links_of(prev_node))
+                else:
+                    visually_overlapping = _visual_top(
+                        curr_node.y, links_of(curr_node)
+                    ) < _visual_bottom(prev_node.y, links_of(prev_node))
             if gap < LAYOUT_GRID or visually_overlapping:
                 target = prev + needed_gap
                 setattr(curr_node, axis, _snap_at_least(target, prev + needed_gap))
@@ -1971,15 +2035,20 @@ def _polish_layout(
     _align_axis(nodes, axis="y", threshold=_ALIGN_WITHIN)
     _align_axis(nodes, axis="x", threshold=_ALIGN_WITHIN)
 
-    busiest = _busiest_side_links(nodes, edges) if edges else {}
+    busiest_tb, busiest_lr = _busiest_sides(nodes, edges) if edges else ({}, {})
 
-    def links_of(node: TopologyNodeView) -> int:
-        return busiest.get(node.device_id, 0)
+    def tb_of(node: TopologyNodeView) -> int:
+        return busiest_tb.get(node.device_id, 0)
+
+    def lr_of(node: TopologyNodeView) -> int:
+        return busiest_lr.get(node.device_id, 0)
 
     forced_x = _unstick_along(
-        nodes, axis="x", min_gap=_MIN_GAP_X, origins=origin, links_of=links_of if edges else None
+        nodes, axis="x", min_gap=_MIN_GAP_X, origins=origin, links_of=tb_of if edges else None
     )
-    forced_y = _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y, origins=origin)
+    forced_y = _unstick_along(
+        nodes, axis="y", min_gap=_MIN_GAP_Y, origins=origin, links_of=lr_of if edges else None
+    )
 
     for node in nodes:
         ox, oy = origin[node.device_id]

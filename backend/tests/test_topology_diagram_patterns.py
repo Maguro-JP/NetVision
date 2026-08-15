@@ -216,8 +216,9 @@ def test_many_offices_stay_in_a_right_column(db_session):
     xs = {round(n.x) for n in offices}
     assert len(xs) == 1
     hub = next(n for n in graph.nodes if n.hostname == "ksi-br-rt-01")
-    hub_links = sum(1 for edge in graph.edges if hub.device_id in (edge.source, edge.target))
-    assert min(n.x for n in offices) - _visual_right(hub.x, hub_links) < 200
+    # 左右から出すため COLUMN(400) 以上離す。通り道のぶんだけより少し広い
+    assert min(n.x for n in offices) - _visual_right(hub.x, 0) < 280
+    assert min(n.x for n in offices) - hub.x >= 400
 
 
 def test_horizontal_orientation_is_still_readable(db_session):

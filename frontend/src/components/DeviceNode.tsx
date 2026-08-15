@@ -5,6 +5,13 @@ import type { DeviceType, Severity } from "../api/types";
 import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 import { MEDIA_COLOR, mediaOf } from "../lib/portlabel";
 
+export interface FaceHandle {
+  id: string;
+  side: Side;
+  /** 辺の上の位置（0〜1）。スロットに丸めない。 */
+  t: number;
+}
+
 export interface DeviceNodeData extends Record<string, unknown> {
   hostname: string;
   vendor: string;
@@ -23,10 +30,16 @@ export interface DeviceNodeData extends Record<string, unknown> {
   outside?: boolean;
   /** 同じ拠点にいて、代表1台にまとめた分の台数 */
   hiddenPeers?: number;
-  /** 箱の幅。1つの辺に線が多い機器は広げて、引き出し口の間隔を確保する */
+  /** 箱の幅。上下の辺に線が多い機器は広げて、引き出し口の間隔を確保する */
   width?: number;
+  /** 箱の高さ。左右の辺に線が多い機器は高くして、接続点とポート名の間隔を確保する */
+  height?: number;
   /** 箱を広げたぶん左へ戻した量。保存時に足し戻す（TopologyPage の shiftFor）。 */
   shift?: number;
+  /** 箱を高くしたぶん上へ戻した量。保存時に足し戻す。 */
+  shiftY?: number;
+  /** 実際の結線の接続点。辺の上の連続位置。 */
+  faceHandles?: FaceHandle[];
   /** 種別の枠の色。人が凡例に合わせて変えられる */
   accent?: string;
   /** キャリア網の段（コア網 / メトロ / アクセス） */
@@ -36,8 +49,7 @@ export interface DeviceNodeData extends Record<string, unknown> {
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
 export const SIDES = ["top", "bottom", "left", "right"] as const;
 export type Side = (typeof SIDES)[number];
-/* 各辺の引き出し口。接続点は辺の上で自由に近い位置を取る。
-   本数が多いときも相手の高さへ寄せられるよう、細かく置く。 */
+/* 編集で新規に線を引くときの候補。表示中の結線は faceHandles の連続位置を使う。 */
 export const SLOTS = [
   0.08, 0.14, 0.2, 0.26, 0.32, 0.38, 0.44, 0.5, 0.56, 0.62, 0.68, 0.74, 0.8, 0.86, 0.92,
 ];
@@ -53,16 +65,11 @@ export function anchorId(side: Side, slot: number): string {
   return `${side}-${slot}`;
 }
 
-const ANCHORS = SIDES.flatMap((side) =>
-  SLOTS.map((ratio, slot) => ({
-    id: anchorId(side, slot),
-    position: POSITION_OF[side],
-    style:
-      side === "top" || side === "bottom"
-        ? { left: `${ratio * 100}%` }
-        : { top: `${ratio * 100}%` },
-  })),
-);
+function handleStyle(side: Side, t: number): { left?: string; top?: string } {
+  return side === "top" || side === "bottom"
+    ? { left: `${t * 100}%` }
+    : { top: `${t * 100}%` };
+}
 
 /** 種別ごとの記号。アイコン画像を持たずに一目で区別できるようにする。 */
 const TYPE_GLYPH: Record<DeviceType, string> = {
@@ -83,10 +90,46 @@ export default function DeviceNode({
   data: DeviceNodeData;
   selected?: boolean;
 }) {
+  // 結線がある辺は、対向位置に合わせた連続の接続点を出す。
+  // 無い辺・編集中の新規結線用に、各辺の中央も残す。
+  const used = new Set((data.faceHandles ?? []).map((h) => h.id));
+  const anchors = [
+    ...(data.faceHandles ?? []).map((handle) => ({
+      id: handle.id,
+      position: POSITION_OF[handle.side],
+      style: handleStyle(handle.side, handle.t),
+    })),
+    ...SIDES.flatMap((side) => {
+      const id = anchorId(side, 0);
+      // faceHandles が side-0 を使っているときは中央の予備を重ねない
+      if (used.has(id) && (data.faceHandles?.length ?? 0) > 0) {
+        // 既にその id がある。編集用の中央は別 id にする
+        const mid = `mid-${side}`;
+        return data.editable
+          ? [
+              {
+                id: mid,
+                position: POSITION_OF[side],
+                style: handleStyle(side, 0.5),
+              },
+            ]
+          : [];
+      }
+      return [
+        {
+          id,
+          position: POSITION_OF[side],
+          style: handleStyle(side, 0.5),
+        },
+      ];
+    }),
+  ];
+
   return (
     <div
       style={{
         ...(data.width ? { width: data.width } : {}),
+        ...(data.height ? { height: data.height, minHeight: data.height } : {}),
         ...(data.accent ? { borderColor: data.accent } : {}),
       }}
       className={
@@ -99,7 +142,7 @@ export default function DeviceNode({
       {/* 上下左右の各辺に引き出し口を置く。
           下の中央からしか出せないと、横に並べた機器の線が遠回りになる。
           相手の位置へ寄せて口を選び、線の折れと交差を減らす */}
-      {ANCHORS.map((anchor) => (
+      {anchors.map((anchor) => (
         <Fragment key={anchor.id}>
           <Handle
             type="target"

@@ -23,7 +23,6 @@ import { Link as RouterLink, useSearchParams } from "react-router-dom";
 import { api } from "../api/client";
 import type { DeviceType, TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import DeviceNode, {
-  SLOTS,
   anchorId,
   type DeviceNodeData,
   type Side,
@@ -160,16 +159,26 @@ const TIER = 100;
  */
 const COLUMN = 400;
 
-/** 箱の既定の幅（styles.css の .device-node と合わせること）。 */
+/** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
 export const DEFAULT_WIDTH = 190;
+export const DEFAULT_HEIGHT = 78;
 
-/** 1つの辺に来る本数から、箱の幅を決める。既定は 190px。
+/** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
- * 引き出し口が詰まるとポート名も重なって読めなくなるので、
+ * 上辺・下辺の引き出しが詰まるとポート名が横に被るので、
  * 4本を超えたら1本あたり 55px 見込んで箱を広げる。 */
-export function widthFor(count: number): number | undefined {
-  if (count <= 3) return undefined;
-  return Math.min(620, DEFAULT_WIDTH + (count - 3) * 55);
+export function widthFor(topBottomCount: number): number | undefined {
+  if (topBottomCount <= 3) return undefined;
+  return Math.min(620, DEFAULT_WIDTH + (topBottomCount - 3) * 55);
+}
+
+/** 左右の辺に来る本数から、箱の高さを決める。既定は 78px。
+ *
+ * 右辺・左辺に対向が何本も付くとき、幅を広げても縦の間隔は増えない。
+ * 接続点とポート名が被るので、4本を超えたら1本あたり 22px 高くする。 */
+export function heightFor(leftRightCount: number): number | undefined {
+  if (leftRightCount <= 3) return undefined;
+  return Math.min(480, DEFAULT_HEIGHT + (leftRightCount - 3) * 22);
 }
 
 /**
@@ -201,7 +210,14 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
  */
 export function assignAnchors(graph: TopologyGraph): {
   anchors: Map<number, { source: string; target: string }>;
+  /** 上下の辺の最大本数。箱幅に使う */
+  busiestTB: Map<number, number>;
+  /** 左右の辺の最大本数。箱高さに使う */
+  busiestLR: Map<number, number>;
+  /** 互換: 1辺あたりの最大本数（TB/LR の大きい方） */
   busiest: Map<number, number>;
+  /** 機器ごとの接続点（辺の上の連続位置）。スロット固定にしない */
+  faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
   lanes: Map<number, number>;
   laneRank: Map<number, { rank: number; count: number }>;
 } {
@@ -236,36 +252,81 @@ export function assignAnchors(graph: TopologyGraph): {
     (groups.get(key) ?? groups.set(key, []).get(key)!).push(end);
   }
 
-  /** 相手の位置を辺へ射影した比率。接続点は辺の上で動かせる。 */
+  // 左右の本数で高さを先に決め、射影の分母にする（幅も同様）
+  const busiestTB = new Map<number, number>();
+  const busiestLR = new Map<number, number>();
+  for (const [key, members] of groups) {
+    const device = Number(key.split(":")[0]);
+    const side = key.split(":")[1] as Side;
+    if (side === "left" || side === "right") {
+      busiestLR.set(device, Math.max(busiestLR.get(device) ?? 0, members.length));
+    } else {
+      busiestTB.set(device, Math.max(busiestTB.get(device) ?? 0, members.length));
+    }
+  }
+  const busiest = new Map<number, number>();
+  for (const node of graph.nodes) {
+    const id = node.device_id;
+    busiest.set(id, Math.max(busiestTB.get(id) ?? 0, busiestLR.get(id) ?? 0));
+  }
+
+  const faceHeight = (deviceId: number) => heightFor(busiestLR.get(deviceId) ?? 0) ?? DEFAULT_HEIGHT;
+  const faceWidth = (deviceId: number) => widthFor(busiestTB.get(deviceId) ?? 0) ?? DEFAULT_WIDTH;
+
+  /** 相手の位置を辺へ射影した比率。接続点は辺の上で自由に動かす。 */
   const idealT = (end: (typeof ends)[number]): number => {
     const here = nodes.get(end.device);
     const other = nodes.get(end.other);
     if (!here || !other) return 0.5;
     if (end.side === "left" || end.side === "right") {
-      const height = 78;
-      return Math.min(0.92, Math.max(0.08, (other.y + height / 2 - here.y) / height));
+      const height = faceHeight(end.device);
+      // 広げた箱は中心を保つので、射影も保存中心基準
+      const hereTop = here.y - shiftYFor(heightFor(busiestLR.get(end.device) ?? 0));
+      return (other.y + DEFAULT_HEIGHT / 2 - hereTop) / height;
     }
-    // 保存左上＋既定幅/2 が中心（広げても中心は動かす）。広げた幅で割ると中央がずれる。
-    return Math.min(
-      0.92,
-      Math.max(0.08, (other.x + DEFAULT_WIDTH / 2 - here.x) / DEFAULT_WIDTH),
-    );
+    const width = faceWidth(end.device);
+    const hereLeft = here.x - shiftFor(widthFor(busiestTB.get(end.device) ?? 0));
+    return (other.x + DEFAULT_WIDTH / 2 - hereLeft) / width;
   };
 
-  const spaceTs = (ideals: number[]): number[] => {
+  /**
+   * 同じ辺の接続点を広げる。
+   * 対向が箱の外にいると射影が端に潰れるので、そのときは辺全体へ均等に振る。
+   * ポート名が被らないよう、最低でも約 16px 相当の間隔を取る。
+   */
+  const spaceTs = (ideals: number[], facePx: number): number[] => {
     if (ideals.length === 0) return [];
-    const ordered = ideals.map((t, origin) => ({ origin, t })).sort((a, b) => a.t - b.t);
+    const lo = 0.08;
+    const hi = 0.92;
+    const n = ideals.length;
+    if (n === 1) {
+      return [Math.min(hi, Math.max(lo, ideals[0]))];
+    }
+    const ordered = ideals
+      .map((t, origin) => ({ origin, t: Math.min(hi, Math.max(lo, t)) }))
+      .sort((a, b) => a.t - b.t || a.origin - b.origin);
+    const minimum = Math.max(0.06, 16 / Math.max(facePx, 1));
+    const idealSpan = ordered[ordered.length - 1].t - ordered[0].t;
+    const need = minimum * (n - 1);
+    // 射影が端に潰れている（対向がみな箱の外）→ 辺をフルに使う。折れの元を消す。
+    if (idealSpan < need * 0.85) {
+      const even = ordered.map((_, index) => lo + (index * (hi - lo)) / (n - 1));
+      const result = ideals.map(() => 0.5);
+      ordered.forEach((item, index) => {
+        result[item.origin] = even[index];
+      });
+      return result;
+    }
     const spaced = ordered.map((item) => item.t);
-    const minimum = 0.06;
     for (let index = 1; index < spaced.length; index += 1) {
       if (spaced[index] - spaced[index - 1] < minimum) {
         spaced[index] = spaced[index - 1] + minimum;
       }
     }
-    if (spaced[spaced.length - 1] > 0.92) {
-      const shift = spaced[spaced.length - 1] - 0.92;
+    if (spaced[spaced.length - 1] > hi) {
+      const shift = spaced[spaced.length - 1] - hi;
       for (let index = 0; index < spaced.length; index += 1) {
-        spaced[index] = Math.max(0.08, spaced[index] - shift);
+        spaced[index] = Math.max(lo, spaced[index] - shift);
       }
       for (let index = 1; index < spaced.length; index += 1) {
         if (spaced[index] - spaced[index - 1] < minimum) {
@@ -281,26 +342,31 @@ export function assignAnchors(graph: TopologyGraph): {
   };
 
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
+  const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
   for (const [, members] of groups) {
     const side = members[0].side;
+    const device = members[0].device;
     const along = (id: number) => {
       const node = nodes.get(id);
       if (!node) return 0;
       return side === "top" || side === "bottom" ? node.x : node.y;
     };
     members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
-    const spaced = spaceTs(members.map((end) => idealT(end)));
-    const used = new Set<number>();
+    const facePx =
+      side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
+    const spaced = spaceTs(
+      members.map((end) => idealT(end)),
+      facePx,
+    );
+    const list = faceHandles.get(device) ?? [];
     members.forEach((end, index) => {
       const t = spaced[index];
-      const scored = SLOTS.map((ratio, slot) => ({
-        slot,
-        dist: Math.abs(ratio - t),
-      })).sort((a, b) => a.dist - b.dist || a.slot - b.slot);
-      const pick = scored.find((item) => !used.has(item.slot)) ?? scored[0];
-      used.add(pick.slot);
-      assigned.set(`${end.edge}:${end.device}`, anchorId(end.side, pick.slot));
+      // スロットへ丸めない。辺の上の連続位置をそのまま接続点にする。
+      const id = anchorId(end.side, index);
+      assigned.set(`${end.edge}:${end.device}`, id);
+      list.push({ id, side: end.side, t });
     });
+    faceHandles.set(device, list);
   }
 
   for (const edge of graph.edges) {
@@ -309,19 +375,12 @@ export function assignAnchors(graph: TopologyGraph): {
     if (source && target) out.set(edge.id, { source, target });
   }
 
-  // 1つの辺に何本来ているか。多い機器は箱を広げて間隔を確保する
-  const busiest = new Map<number, number>();
-  for (const [key, members] of groups) {
-    const device = Number(key.split(":")[0]);
-    busiest.set(device, Math.max(busiest.get(device) ?? 0, members.length));
-  }
-
   const visualLeft = (node: TopologyNode) => {
-    const width = widthFor(busiest.get(node.device_id) ?? 0);
+    const width = widthFor(busiestTB.get(node.device_id) ?? 0);
     return node.x - shiftFor(width);
   };
   const visualRight = (node: TopologyNode) => {
-    const width = widthFor(busiest.get(node.device_id) ?? 0) ?? DEFAULT_WIDTH;
+    const width = widthFor(busiestTB.get(node.device_id) ?? 0) ?? DEFAULT_WIDTH;
     return visualLeft(node) + width;
   };
 
@@ -372,7 +431,7 @@ export function assignAnchors(graph: TopologyGraph): {
       });
   }
 
-  return { anchors: out, busiest, lanes, laneRank };
+  return { anchors: out, busiest, busiestTB, busiestLR, faceHandles, lanes, laneRank };
 }
 
 /**
@@ -389,34 +448,48 @@ export function shiftFor(width: number | undefined): number {
   return width ? (width - DEFAULT_WIDTH) / 2 : 0;
 }
 
+/** 高さを広げたときの上方向へのずれ。中心の高さを保つ。 */
+export function shiftYFor(height: number | undefined): number {
+  return height ? (height - DEFAULT_HEIGHT) / 2 : 0;
+}
+
 /**
  * 画面の座標を、保存する左上へ戻す。
  *
- * 見た目は箱を広げたぶん左へずらしている。保存は左上の値なので、ずれを足す。
+ * 見た目は箱を広げたぶん左・上へずらしている。保存は左上の値なので、ずれを足す。
  * 手置きはマス目に載せない。丸めると希望の位置からずれる。
  */
 export function storedFromDisplay(
   display: { x: number; y: number },
-  shift: number,
+  shiftX: number,
+  shiftY: number = 0,
 ): { x: number; y: number } {
   return {
-    x: display.x + shift,
-    y: display.y,
+    x: display.x + shiftX,
+    y: display.y + shiftY,
   };
 }
 
 /** いま画面にある配置を、保存用の座標にする。差分だけ送ると、履歴に
  * 載っていない移動や対向機器が落ちて、保存直後に自動配置へ戻る。 */
 export function positionsToSave(
-  nodes: { id: string; position: { x: number; y: number }; data?: { shift?: number } | object }[],
+  nodes: {
+    id: string;
+    position: { x: number; y: number };
+    data?: { shift?: number; shiftY?: number } | object;
+  }[],
 ): { device_id: number; x: number; y: number }[] {
   const out: { device_id: number; x: number; y: number }[] = [];
   for (const node of nodes) {
     const id = Number(node.id);
     if (!Number.isFinite(id)) continue;
-    const shift =
+    const shiftX =
       node.data && "shift" in node.data && typeof node.data.shift === "number" ? node.data.shift : 0;
-    const stored = storedFromDisplay(node.position, shift);
+    const shiftY =
+      node.data && "shiftY" in node.data && typeof node.data.shiftY === "number"
+        ? node.data.shiftY
+        : 0;
+    const stored = storedFromDisplay(node.position, shiftX, shiftY);
     out.push({ device_id: id, x: stored.x, y: stored.y });
   }
   return out;
@@ -441,15 +514,17 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiest, lanes, laneRank } = assignAnchors(graph);
+  const { anchors, busiestTB, busiestLR, faceHandles, lanes, laneRank } = assignAnchors(graph);
 
   const devices = graph.nodes.map((node) => {
-    const width = widthFor(busiest.get(node.device_id) ?? 0);
+    const width = widthFor(busiestTB.get(node.device_id) ?? 0);
+    const height = heightFor(busiestLR.get(node.device_id) ?? 0);
     const shift = shiftFor(width);
+    const shiftY = shiftYFor(height);
     return {
     id: String(node.device_id),
     type: "device" as const,
-    position: { x: node.x - shift, y: node.y },
+    position: { x: node.x - shift, y: node.y - shiftY },
     // 対向（簡易表示）は線の下に置く。箱が結線を隠さないようにする
     zIndex: node.outside ? 0 : 2,
     data: {
@@ -466,7 +541,10 @@ function toFlow(
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
       width,
+      height,
       shift,
+      shiftY,
+      faceHandles: faceHandles.get(node.device_id),
       accent: options.colors.types[node.device_type],
       planeLabel: node.plane ? (PLANE_LABEL[node.plane] ?? node.plane) : undefined,
     } satisfies DeviceNodeData,
@@ -481,6 +559,7 @@ function toFlow(
         x: node.position.x,
         y: node.position.y,
         width: node.data.width,
+        height: node.data.height,
       })),
     );
     if (!box) return [];

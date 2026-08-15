@@ -230,6 +230,7 @@ export default function PortLabeledEdge({
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
                 color={typeof style?.stroke === "string" ? style.stroke : undefined}
+                rank={info.laneRank ?? 0}
               />
               <PortLabel
                 name={info.targetInterface ?? ""}
@@ -243,6 +244,7 @@ export default function PortLabeledEdge({
                 alongLine={info.alongLine ?? false}
                 opacity={style?.opacity}
                 color={typeof style?.stroke === "string" ? style.stroke : undefined}
+                rank={info.laneRank ?? 0}
               />
             </>
           )}
@@ -273,6 +275,7 @@ function PortLabel({
   alongLine,
   opacity,
   color,
+  rank = 0,
 }: {
   name: string;
   x: number;
@@ -283,10 +286,18 @@ function PortLabel({
   alongLine: boolean;
   opacity?: number | string;
   color?: string;
+  /** 同じ辺の束の順。ポート名を線と垂直方向へずらして被りを減らす */
+  rank?: number;
 }) {
   if (!name) return null;
 
-  const placed = portLabelPlacement(x, y, position);
+  const placed = portLabelPlacement(
+    x,
+    y,
+    position,
+    PORT_LABEL_GAP + Math.min(rank, 4) * 4,
+    PORT_LABEL_SIDE + rank * 11,
+  );
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;
   // 上下逆さまの文字は読めないので、半回転させて向きを揃える

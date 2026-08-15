@@ -24,7 +24,14 @@ from sqlalchemy.orm import Session
 from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
-from app.services.topology import PLANE_NAMES, TopologyGraph, load_diagram
+from app.services.topology import (
+    PLANE_NAMES,
+    TopologyGraph,
+    _box_height,
+    _box_width,
+    _busiest_sides,
+    load_diagram,
+)
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
 SEVERITY_COLOR: dict[str, str] = {
@@ -120,10 +127,33 @@ def render_svg(
     if not nodes:
         return _empty_svg(title, layer=graph.layer)
 
-    min_x = min([n.x for n in nodes] + [p.x for p in peers])
-    min_y = min([n.y for n in nodes] + [p.y for p in peers])
-    max_x = max([n.x + NODE_W for n in nodes] + [p.x + PEER_W for p in peers])
-    max_y = max([n.y + NODE_H for n in nodes] + [p.y + PEER_H for p in peers])
+    busiest_tb, busiest_lr = _busiest_sides(nodes, graph.edges)
+
+    def node_size(device_id: int) -> tuple[float, float]:
+        return (
+            _box_width(busiest_tb.get(device_id, 0)),
+            _box_height(busiest_lr.get(device_id, 0)),
+        )
+
+    def display_box(node) -> tuple[float, float, float, float]:
+        """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
+        w, h = node_size(node.device_id)
+        shift_x = (w - NODE_W) / 2
+        shift_y = (h - NODE_H) / 2
+        return (node.x - shift_x, node.y - shift_y, w, h)
+
+    sized = {n.device_id: display_box(n) for n in nodes}
+
+    min_x = min([sized[n.device_id][0] for n in nodes] + [p.x for p in peers])
+    min_y = min([sized[n.device_id][1] for n in nodes] + [p.y for p in peers])
+    max_x = max(
+        [sized[n.device_id][0] + sized[n.device_id][2] for n in nodes]
+        + [p.x + PEER_W for p in peers]
+    )
+    max_y = max(
+        [sized[n.device_id][1] + sized[n.device_id][3] for n in nodes]
+        + [p.y + PEER_H for p in peers]
+    )
     if graph.groups:
         min_x -= 24
         min_y -= 28
@@ -137,7 +167,12 @@ def render_svg(
     width = max_x - min_x + MARGIN * 2
     height = max_y - min_y + MARGIN * 2 + 34.0 + legend_h
 
-    at = {n.device_id: (n.x + dx, n.y + dy) for n in nodes}
+    at = {
+        n.device_id: (sized[n.device_id][0] + dx, sized[n.device_id][1] + dy) for n in nodes
+    }
+    size_at = {
+        n.device_id: (sized[n.device_id][2], sized[n.device_id][3]) for n in nodes
+    }
     parts: list[str] = []
     # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
     used_media: set[Media] = set()
@@ -145,7 +180,10 @@ def render_svg(
     # 機器の箱と簡易ノードを先に「埋まっている場所」として登録しておく。
     # ラベルはこれを避けて置く。少し広げるのは、枠に文字が接すると読みにくいため
     placement = svglayout.Placement(
-        [svglayout.Rect(px, py, px + NODE_W, py + NODE_H).grow(3) for px, py in at.values()]
+        [
+            svglayout.Rect(px, py, px + size_at[device_id][0], py + size_at[device_id][1]).grow(3)
+            for device_id, (px, py) in at.items()
+        ]
         + [
             svglayout.Rect(p.x + dx, p.y + dy, p.x + dx + PEER_W, p.y + dy + PEER_H).grow(3)
             for p in peers
@@ -192,13 +230,13 @@ def render_svg(
         )
 
     for group in graph.groups:
-        members = [at[i] for i in group.device_ids if i in at]
+        members = [(at[i], size_at[i]) for i in group.device_ids if i in at]
         if not members:
             continue
-        gx = min(x for x, _ in members) - 18
-        gy = min(y for _, y in members) - 26
-        gw = max(x + NODE_W for x, _ in members) - gx + 18
-        gh = max(y + NODE_H for _, y in members) - gy + 18
+        gx = min(pos[0] for pos, _ in members) - 18
+        gy = min(pos[1] for pos, _ in members) - 26
+        gw = max(pos[0] + size[0] for pos, size in members) - gx + 18
+        gh = max(pos[1] + size[1] for pos, size in members) - gy + 18
         label = group.name
         if group.plane and group.plane != "custom":
             label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
@@ -218,8 +256,8 @@ def render_svg(
         n.device_id: svglayout.Rect(
             at[n.device_id][0],
             at[n.device_id][1],
-            at[n.device_id][0] + NODE_W,
-            at[n.device_id][1] + NODE_H,
+            at[n.device_id][0] + size_at[n.device_id][0],
+            at[n.device_id][1] + size_at[n.device_id][1],
         )
         for n in nodes
     }
@@ -230,7 +268,13 @@ def render_svg(
     sides: dict[int, tuple[str, str]] = {}
     groups: dict[tuple[int, str], list[tuple[float, int]]] = {}
     boxes_by_id = {
-        n.device_id: (at[n.device_id][0], at[n.device_id][1], NODE_W, NODE_H) for n in nodes
+        n.device_id: (
+            at[n.device_id][0],
+            at[n.device_id][1],
+            size_at[n.device_id][0],
+            size_at[n.device_id][1],
+        )
+        for n in nodes
     }
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
@@ -258,7 +302,10 @@ def render_svg(
             ideals.append(_face_t(box, side, boxes_by_id[other_id]))
         for index, (_, edge_id) in enumerate(members):
             lane_rank[edge_id] = (index, len(members))
-        spaced = _space_face_ts(ideals)
+        spaced = _space_face_ts(
+            ideals,
+            box[3] if side in ("left", "right") else box[2],
+        )
         for (_, edge_id), t in zip(members, spaced, strict=False):
             face_t[(device_id, side, edge_id)] = t
 
@@ -318,16 +365,40 @@ def render_svg(
         else:
             source = at[edge.source]
             target = at[edge.target]
-            sx, sy = source[0] + NODE_W / 2, source[1] + NODE_H / 2
-            tx, ty = target[0] + NODE_W / 2, target[1] + NODE_H / 2
+            sw, sh = size_at[edge.source]
+            tw, th = size_at[edge.target]
+            source = at[edge.source]
+            target = at[edge.target]
+            sw, sh = size_at[edge.source]
+            tw, th = size_at[edge.target]
+            sx, sy = source[0] + sw / 2, source[1] + sh / 2
+            tx, ty = target[0] + tw / 2, target[1] + th / 2
             parts.append(
                 _port_label(
-                    sx, sy, x1, y1, edge.source_interface, port_style, along_line, placement
+                    sx,
+                    sy,
+                    x1,
+                    y1,
+                    edge.source_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    half_w=sw / 2,
+                    half_h=sh / 2,
                 )
             )
             parts.append(
                 _port_label(
-                    tx, ty, x2, y2, edge.target_interface, port_style, along_line, placement
+                    tx,
+                    ty,
+                    x2,
+                    y2,
+                    edge.target_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    half_w=tw / 2,
+                    half_h=th / 2,
                 )
             )
             for name in (edge.source_interface, edge.target_interface):
@@ -340,7 +411,8 @@ def render_svg(
         if anchor is None:
             continue
         px, py = peer.x + dx, peer.y + dy
-        ax, ay = anchor[0] + NODE_W / 2, anchor[1] + NODE_H / 2
+        aw, ah = size_at.get(peer.anchor, (NODE_W, NODE_H))
+        ax, ay = anchor[0] + aw / 2, anchor[1] + ah / 2
 
         obstacles = [
             rect.grow(2.0) for device_id, rect in boxes.items() if device_id != peer.anchor
@@ -349,7 +421,7 @@ def render_svg(
             for q in peers
             if q is not peer
         ]
-        src_box = (anchor[0], anchor[1], NODE_W, NODE_H)
+        src_box = (anchor[0], anchor[1], aw, ah)
         dst_box = (px, py, PEER_W, PEER_H)
         src_side = _side_toward(src_box, dst_box)
         dst_side = _side_toward(dst_box, src_box)
@@ -364,7 +436,17 @@ def render_svg(
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
         label_to = points[1] if len(points) > 1 else points[0]
         parts.append(
-            _port_label(ax, ay, *label_to, peer.local_interface, port_style, along_line, placement)
+            _port_label(
+                ax,
+                ay,
+                *label_to,
+                peer.local_interface,
+                port_style,
+                along_line,
+                placement,
+                half_w=aw / 2,
+                half_h=ah / 2,
+            )
         )
         if peer.local_interface:
             used_media.add(portlabel.media_of(peer.local_interface))
@@ -372,20 +454,21 @@ def render_svg(
     # --- 機器 ---
     for node in nodes:
         x, y = at[node.device_id]
+        nw, nh = size_at[node.device_id]
         if simple:
             # 名前だけ。枠は輪郭が分かる程度の細さに留める
             subtitle = ""
             if node.outside and node.site_name:
                 subtitle = (
-                    f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 18:.0f}" font-size="10" '
+                    f'<text x="{x + nw / 2:.0f}" y="{y + nh / 2 + 18:.0f}" font-size="10" '
                     f'fill="#6b6b6b" text-anchor="middle">{_esc(_clip(node.site_name, 22))}</text>'
                 )
-            name_y = y + NODE_H / 2 + (0 if subtitle else 5)
+            name_y = y + nh / 2 + (0 if subtitle else 5)
             parts.append(
-                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
-                f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
+                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" '
+                f'height="{nh:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
                 f'stroke-width="1.6"/>'
-                f'<text x="{x + NODE_W / 2:.0f}" y="{name_y:.0f}" font-size="14" '
+                f'<text x="{x + nw / 2:.0f}" y="{name_y:.0f}" font-size="14" '
                 f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
                 f"{_esc(_clip(node.hostname, 22))}</text>{subtitle}</g>"
             )
@@ -393,10 +476,10 @@ def render_svg(
 
         color = SEVERITY_COLOR.get(str(node.severity), SEVERITY_COLOR[str(Severity.UNKNOWN)])
         parts.append(
-            f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" height="{NODE_H:.0f}" '
+            f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{nh:.0f}" '
             f'rx="7" fill="#f7f9fc" stroke="{color}" stroke-width="2"/>'
             # 状態が一目で分かるよう左端に色帯を置く（白黒印刷でも位置で区別できる）
-            f'<rect x="{x:.0f}" y="{y:.0f}" width="5" height="{NODE_H:.0f}" '
+            f'<rect x="{x:.0f}" y="{y:.0f}" width="5" height="{nh:.0f}" '
             f'rx="2" fill="{color}"/>'
         )
         parts.append(
@@ -609,23 +692,42 @@ def _face_t(
     x, y, w, h = box
     ox, oy, ow, oh = other
     if side in ("left", "right"):
-        return min(0.85, max(0.15, ((oy + oh / 2) - y) / max(h, 1.0)))
-    return min(0.85, max(0.15, ((ox + ow / 2) - x) / max(w, 1.0)))
+        return ((oy + oh / 2) - y) / max(h, 1.0)
+    return ((ox + ow / 2) - x) / max(w, 1.0)
 
 
-def _space_face_ts(ideals: list[float]) -> list[float]:
-    """同じ辺の接続点を、重ならないよう最低間隔で広げる。"""
+def _space_face_ts(ideals: list[float], face_px: float) -> list[float]:
+    """同じ辺の接続点を、重ならないよう広げる。
+
+    対向が箱の外にいると射影が端に潰れる。そのときは辺全体へ均等に振る。
+    ポート名が被らないよう、最低でも約 16px 相当の間隔を取る。
+    """
     if not ideals:
         return []
-    ordered = sorted(enumerate(ideals), key=lambda item: item[1])
+    lo, hi = 0.08, 0.92
+    n = len(ideals)
+    if n == 1:
+        return [min(hi, max(lo, ideals[0]))]
+    ordered = sorted(
+        ((origin, min(hi, max(lo, t))) for origin, t in enumerate(ideals)),
+        key=lambda item: (item[1], item[0]),
+    )
+    minimum = max(0.06, 16.0 / max(face_px, 1.0))
+    ideal_span = ordered[-1][1] - ordered[0][1]
+    need = minimum * (n - 1)
+    if ideal_span < need * 0.85:
+        even = [lo + i * (hi - lo) / (n - 1) for i in range(n)]
+        result = [0.5] * n
+        for (origin, _), value in zip(ordered, even, strict=False):
+            result[origin] = value
+        return result
     spaced = [t for _, t in ordered]
-    minimum = 0.08
     for index in range(1, len(spaced)):
         if spaced[index] - spaced[index - 1] < minimum:
             spaced[index] = spaced[index - 1] + minimum
-    if spaced[-1] > 0.85:
-        shift = spaced[-1] - 0.85
-        spaced = [max(0.15, t - shift) for t in spaced]
+    if spaced[-1] > hi:
+        shift = spaced[-1] - hi
+        spaced = [max(lo, t - shift) for t in spaced]
         for index in range(1, len(spaced)):
             if spaced[index] - spaced[index - 1] < minimum:
                 spaced[index] = spaced[index - 1] + minimum
@@ -1006,6 +1108,9 @@ def _port_label(
     style: str,
     along_line: bool,
     placement: svglayout.Placement,
+    *,
+    half_w: float | None = None,
+    half_h: float | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -1043,15 +1148,35 @@ def _port_label(
     #
     # 線の中点は越えない。 越えると相手側の機器の方が近くなり、
     # 「どちらのポートか」が位置で分からなくなる。それでは元も子もない
-    base = _exit_distance(ux, uy) + _LABEL_GAP
+    base = _exit_distance(ux, uy, half_w=half_w, half_h=half_h) + _LABEL_GAP
+    # 上下方向へ出すとき、文字の上端が枠へ 1px 戻ることがあるので少し足す
+    if abs(ux) < 0.25:
+        base += 4.0
     limit = length * 0.45
+    # 中心→出口だけの距離だと limit が短く追加候補を置けない。
+    # 出口の先（枠の外）へ出す候補を、線に沿って必ず数点足す。
+    exit_at = _exit_distance(ux, uy, half_w=half_w, half_h=half_h)
     spots = [
         (
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(base, limit)
+        for step, offset, side in _candidate_offsets(base, max(limit, base + 1))
     ]
+    for outward in (6.0, 14.0, 24.0):
+        along = exit_at + _LABEL_GAP + outward
+        for offset, side in (
+            (_SIDE_OFFSET, 1.0),
+            (_SIDE_OFFSET, -1.0),
+            (_SIDE_OFFSET + 11.0, 1.0),
+            (_SIDE_OFFSET + 11.0, -1.0),
+        ):
+            spots.append(
+                (
+                    x1 + ux * along - uy * offset * side,
+                    y1 + uy * along + ux * offset * side,
+                )
+            )
 
     # 置けないときは文字を短くする。重ねるくらいなら略した方がまし。
     # 略した場合は元の名前を title に入れて、画面で開けば読めるようにする
@@ -1132,11 +1257,14 @@ def _label_variants(name: str, style: str) -> list[str]:
     return out
 
 
-def _exit_distance(ux: float, uy: float) -> float:
+def _exit_distance(
+    ux: float, uy: float, *, half_w: float | None = None, half_h: float | None = None
+) -> float:
     """ノードの中心から、その向きで枠を出るまでの距離。"""
-    half_w, half_h = NODE_W / 2, NODE_H / 2
-    tx = half_w / abs(ux) if abs(ux) > 1e-6 else float("inf")
-    ty = half_h / abs(uy) if abs(uy) > 1e-6 else float("inf")
+    hw = NODE_W / 2 if half_w is None else half_w
+    hh = NODE_H / 2 if half_h is None else half_h
+    tx = hw / abs(ux) if abs(ux) > 1e-6 else float("inf")
+    ty = hh / abs(uy) if abs(uy) > 1e-6 else float("inf")
     return min(tx, ty)
 
 
