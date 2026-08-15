@@ -42,8 +42,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   faceHandles?: FaceHandle[];
   /** 種別の枠の色。人が凡例に合わせて変えられる */
   accent?: string;
-  /** キャリア網の段（コア網 / メトロ / アクセス） */
-  planeLabel?: string;
+  /** シリアル番号。現場でラックの前に立つ人が照合に使う */
+  serialNumber?: string | null;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
@@ -168,8 +168,10 @@ export default function DeviceNode({
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
         <span className="topo-hostname">{data.hostname}</span>
       </div>
-      {data.planeLabel && !data.outside && (
-        <div className="muted topo-plane">{data.planeLabel}</div>
+      {data.serialNumber && !data.outside && (
+        <div className="muted topo-serial" title="シリアル番号">
+          S/N {data.serialNumber}
+        </div>
       )}
       {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
           ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}

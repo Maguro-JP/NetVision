@@ -114,6 +114,8 @@ class TopologyNodeView:
     peer_kind: str | None = None
     # キャリア網の段。backbone=コア網 / metro=メトロ / access=アクセス
     plane: str = "access"
+    # 現場で機器を特定する手がかり。ラックの前で見るのは名前ではなく銘板
+    serial_number: str | None = None
 
 
 @dataclass
@@ -301,6 +303,7 @@ def get_graph(
                 site_id=device.site_id,
                 site_name=device.site.name if device.site else None,
                 mgmt_ip=device.mgmt_ip,
+                serial_number=device.serial_number,
                 severity=evaluate(device).overall_severity,
                 interface_count=interface_counts.get(device.id, 0),
                 x=x,

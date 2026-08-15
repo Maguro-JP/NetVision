@@ -69,7 +69,7 @@ LEGEND_H = 62.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
 # 箱の中の行送り（画面の .topo-node と同じ積み方）
-_ROW_PLANE = 14.0
+_ROW_SERIAL = 14.0
 _ROW_KINDS = 15.0
 _ROW_BODY = 16.0
 _ROW_FOOT = 18.0
@@ -644,12 +644,13 @@ def render_svg(
             f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="13" font-weight="700" '
             f'fill="#1a1a1a">{_esc(_clip(node.hostname, 22))}</text>'
         )
-        plane = PLANE_NAMES.get(str(node.plane or ""), "")
-        if plane:
-            row_y += _ROW_PLANE
+        # 現場でラックの前に立つ人が照合するのはシリアル。網の段は図の並びで
+        # 分かるので、限られた行はこちらに使う
+        if node.serial_number:
+            row_y += _ROW_SERIAL
             parts.append(
                 f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="10" fill="#7a828f">'
-                f"{_esc(plane)}</text>"
+                f"S/N {_esc(_clip(node.serial_number, 22))}</text>"
             )
         if node.port_kinds:
             row_y += _ROW_KINDS

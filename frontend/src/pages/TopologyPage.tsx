@@ -175,8 +175,8 @@ export const DEFAULT_HEIGHT = 78;
 const PAD_Y = 16;
 /** 機器名の行（margin-bottom 込み） */
 const HEAD_ROW = 22;
-/** キャリア網の段（コア網 / メトロ / アクセス） */
-const PLANE_ROW = 14;
+/** シリアル番号の行 */
+const SERIAL_ROW = 14;
 /** ポートの種類の行 */
 const PORTS_ROW = 15;
 /** 型番 / 種別・拠点 / 管理IP の各行（line-height 1.3） */
@@ -202,7 +202,7 @@ const LABEL_PITCH = 18;
 const BUNDLE_LABEL_W = 56;
 
 export const DETAIL_HEIGHT =
-  PAD_Y + HEAD_ROW + PLANE_ROW + PORTS_ROW + BODY_ROW * BODY_ROWS + FOOT_ROW;
+  PAD_Y + HEAD_ROW + SERIAL_ROW + PORTS_ROW + BODY_ROW * BODY_ROWS + FOOT_ROW;
 
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
@@ -684,7 +684,7 @@ function toFlow(
       shiftY,
       faceHandles: faceHandles.get(node.device_id),
       accent: options.colors.types[node.device_type],
-      planeLabel: node.plane ? (PLANE_LABEL[node.plane] ?? node.plane) : undefined,
+      serialNumber: simple ? null : node.serial_number,
     } satisfies DeviceNodeData,
     draggable: options.editable,
     };

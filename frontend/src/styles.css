@@ -599,7 +599,7 @@ button:disabled {
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-.topo-plane {
+.topo-serial {
   font-size: 10px;
   padding: 0 2px 2px;
 }

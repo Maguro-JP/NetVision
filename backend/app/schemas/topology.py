@@ -173,6 +173,8 @@ class TopologyNodeRead(BaseModel):
     hidden_peers: int = 0
     peer_kind: str | None = None
     plane: str = "access"
+    #: 現場で機器を特定する手がかり。図の箱にそのまま出す
+    serial_number: str | None = None
 
 
 class TopologyGroupRead(BaseModel):

@@ -33,7 +33,7 @@ def test_box_height_matches_the_screen():
     expected = (
         rows["PAD_Y"]
         + rows["HEAD_ROW"]
-        + rows["PLANE_ROW"]
+        + rows["SERIAL_ROW"]
         + rows["PORTS_ROW"]
         + rows["BODY_ROW"] * rows["BODY_ROWS"]
         + rows["FOOT_ROW"]
@@ -44,11 +44,11 @@ def test_box_height_matches_the_screen():
 def test_box_height_covers_every_row_the_card_can_show():
     """出る可能性のある行を全部足しても収まること。"""
     rows = _screen_row_heights()
-    # 段・ポート種・型番・種別と拠点・管理IP・保守状態が全部出る機器
+    # シリアル・ポート種・型番・種別と拠点・管理IP・保守状態が全部出る機器
     tallest = (
         rows["PAD_Y"]
         + rows["HEAD_ROW"]
-        + rows["PLANE_ROW"]
+        + rows["SERIAL_ROW"]
         + rows["PORTS_ROW"]
         + rows["BODY_ROW"] * 3
         + rows["FOOT_ROW"]

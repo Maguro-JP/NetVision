@@ -231,6 +231,8 @@ export interface TopologyNode {
   hidden_peers: number;
   /** 対向の向き。up=上位 / down=配下 / side=横 */
   peer_kind?: "up" | "down" | "side" | null;
+  /** 現場で機器を特定する手がかり。図の箱に出す */
+  serial_number: string | null;
   /** キャリア網の段。backbone / metro / access */
   plane?: "backbone" | "metro" | "access";
 }
