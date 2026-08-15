@@ -1,5 +1,5 @@
-支社 物理構成	180.0
-  readable	96.0
+支社 物理構成	172.0
+  readable	88.0
   center	20.0
   even	12.0
   tight	12.0

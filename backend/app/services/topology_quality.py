@@ -110,12 +110,8 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
 
 
 def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
-    """書き出した図が、資料の線の定石を守っているか。"""
+    """書き出した図が、資料の線の定石を守っているか。色や地色の好みは見ない。"""
     findings: list[Finding] = []
-    if "#f4f1ea" in svg or "#fbfaf7" in svg:
-        findings.append(Finding(True, "paper", "紙の地色で出している"))
-    else:
-        findings.append(Finding(False, "not_paper", "画面の白キャンバスのまま出している"))
 
     if _has_diagonal(svg):
         findings.append(Finding(False, "diagonal", "線が斜め。縦横だけで通すこと"))

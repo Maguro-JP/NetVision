@@ -68,7 +68,7 @@ const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
 ];
 
 /** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
-const VIEW_KEY = "netvision.topology.view.v2";
+const VIEW_KEY = "netvision.topology.view";
 
 // これを超えたら、絞らずに全体を描かない。全国規模になると全体図は読めないし、
 // 描くだけで重い。拠点を選ぶか、名前で探してもらう
@@ -101,7 +101,7 @@ function loadView(): ViewSettings {
   const fallback: ViewSettings = {
     portStyle: "short",
     alongLine: false,
-    simple: true,
+    simple: false,
     orientation: "vertical",
   };
   try {
@@ -1686,19 +1686,17 @@ function TopologyEditor() {
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >
-            {!simple && (
-              <Background
-                id="layout-grid"
-                variant={BackgroundVariant.Lines}
-                gap={LAYOUT_GRID}
-                size={1}
-                color="#2a3340"
-              />
-            )}
+            <Background
+              id="layout-grid"
+              variant={BackgroundVariant.Lines}
+              gap={LAYOUT_GRID}
+              size={1}
+              color="#2a3340"
+            />
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
-            {!simple && <Controls showInteractive={false} />}
-            {!simple && <MiniMap pannable zoomable className="topo-minimap" />}
+            <Controls showInteractive={false} />
+            <MiniMap pannable zoomable className="topo-minimap" />
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">

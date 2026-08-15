@@ -1,5 +1,5 @@
-支社 配下6拠点	183.0
-  readable	96.0
+支社 配下6拠点	175.0
+  readable	88.0
   center	20.0
   even	15.0
   tight	12.0
