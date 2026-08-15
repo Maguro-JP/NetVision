@@ -651,8 +651,6 @@ def render_svg(
         # 名前と拠点だけを破線の箱に出す
         if node.outside:
             where = node.site_name or "拠点未登録"
-            if node.hidden_peers:
-                where = f"{where} ・ほか{node.hidden_peers}台"
             parts.append(
                 f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{PEER_H:.0f}" '
                 f'rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/>'

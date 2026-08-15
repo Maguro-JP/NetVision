@@ -194,10 +194,7 @@ export default function DeviceNode({
 
       {/* 対向は「どこへ出ているか」だけ。先はその拠点の図で追う */}
       {data.outside ? (
-        <div className="topo-node-sub outside-site">
-          {data.siteName ?? "拠点未登録"}
-          {(data.hiddenPeers ?? 0) > 0 ? ` ・ほか${data.hiddenPeers}台` : ""}
-        </div>
+        <div className="topo-node-sub outside-site">{data.siteName ?? "拠点未登録"}</div>
       ) : null}
 
       {data.severity && !data.outside && (
