@@ -537,7 +537,7 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, busiestLR, heights, faceHandles, lanes, laneRank } = assignAnchors(
+  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank } = assignAnchors(
     graph,
     { simple },
   );

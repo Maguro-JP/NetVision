@@ -25,12 +25,12 @@ from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import (
+    _DETAIL_HEIGHT,
     PLANE_NAMES,
     TopologyGraph,
     _box_height,
     _box_width,
     _busiest_sides,
-    _DETAIL_HEIGHT,
     load_diagram,
 )
 
