@@ -267,11 +267,15 @@ def render_svg(
         x1, y1 = points[0]
         x2, y2 = points[-1]
         shift = parallel.get(edge.id, 0.0)
-        if shift:
+        # 折れ線全体を端点どうしの向きでずらすと、縦横の辺が斜めになる。
+        # 束の分離は lane rank のバスで足りる。直線のときだけ平行にずらす。
+        if shift and len(points) == 2:
             length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
             offset_x = -(y2 - y1) / length * shift
             offset_y = (x2 - x1) / length * shift
-            points = [(x + offset_x, y + offset_y) for x, y in points]
+            shifted = [(x + offset_x, y + offset_y) for x, y in points]
+            if _residual(shifted, obstacles) <= _residual(points, obstacles):
+                points = shifted
         pending.append((points, edge))
 
     gapped = _cut_gaps([item[0] for item in pending])
@@ -517,7 +521,10 @@ def _place_peer(
 
 _ROUTE_CLEAR = 16.0  # 迂回するときに箱から離す距離
 _SAME_ROW = 60.0
-_ASIDE = 240.0
+# 一段下（または上）。親の配下は、横にずれていても上下で結ぶ
+_TIER = 100.0
+# 右の列（拠点の対向）。1列分だとコア横のアクセスまで横扱いになり箱を貫く
+_COLUMN = 400.0
 
 
 def _side_toward(
@@ -530,8 +537,10 @@ def _side_toward(
     dy = (ty + th / 2) - (hy + hh / 2)
     if abs(dy) < _SAME_ROW:
         return "right" if dx > 0 else "left"
-    if abs(dx) >= _ASIDE:
+    if abs(dx) >= _COLUMN:
         return "right" if dx > 0 else "left"
+    if abs(dy) >= _TIER:
+        return "bottom" if dy > 0 else "top"
     return "bottom" if dy > 0 else "top"
 
 
@@ -610,16 +619,17 @@ def _wire_path(
     t = 0.5 if count <= 1 else 0.25 + 0.5 * (rank / max(count - 1, 1))
     start = _anchor(src_box, src_side, t)
     end = _anchor(dst_box, dst_side, t)
+    candidates: list[list[tuple[float, float]]] = []
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
-    if bus and _residual(bus, obstacles) == 0:
-        return bus
+    if bus:
+        candidates.append(bus)
     manhattan = _manhattan(start, end, src_side, dst_side)
-    if _residual(manhattan, obstacles) == 0:
-        return manhattan
+    candidates.append(manhattan)
     routed = _route(start, end, obstacles)
     if _is_orthogonal(routed):
-        return routed
-    return manhattan
+        candidates.append(routed)
+    # 箱を貫く線より、遠回りでも空いている縦横を採る
+    return min(candidates, key=lambda route: (_residual(route, obstacles), _length(route)))
 
 
 def _manhattan(
@@ -845,6 +855,10 @@ def _cut_gaps(
     """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。"""
     out: list[list[list[tuple[float, float]]]] = []
     earlier: list[tuple[tuple[float, float], tuple[float, float]]] = []
+
+    def near(p: tuple[float, float], q: tuple[float, float]) -> bool:
+        return abs(p[0] - q[0]) <= 0.5 and abs(p[1] - q[1]) <= 0.5
+
     for wire in wires:
         pieces: list[list[tuple[float, float]]] = []
         current: list[tuple[float, float]] = [wire[0]]
@@ -856,12 +870,18 @@ def _cut_gaps(
             ]
             chunks = _cut_segment(a, b, holes, radius)
             for index, chunk in enumerate(chunks):
-                if index == 0:
+                # 角の手前で切ったあとに次の辺をそのまま足すと斜めになる。
+                # 切れた端と次の始点が接しているときだけつなぐ。
+                if index == 0 and current and near(current[-1], chunk[0]):
                     current.extend(chunk[1:])
                 else:
                     if len(current) >= 2:
                         pieces.append(current)
                     current = list(chunk)
+            if current and not near(current[-1], b):
+                if len(current) >= 2:
+                    pieces.append(current)
+                current = []
         if len(current) >= 2:
             pieces.append(current)
         out.append(pieces or [wire])

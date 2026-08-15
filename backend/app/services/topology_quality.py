@@ -154,7 +154,9 @@ def is_acceptable(findings: list[Finding]) -> bool:
 
 
 def _should_sit_abreast(left, right, graph: TopologyGraph) -> bool:
-    """冗長の対だけ横並びが要る。縦の背骨（出口→ファイアウォール→コア）は対象外。"""
+    """冗長の対だけ横並びが要る。縦の背骨や、上位と配下のすれ違いは対象外。"""
+    if left.device_type != right.device_type:
+        return False
     neighbours: dict[int, set[int]] = defaultdict(set)
     bundle = 0
     for edge in graph.edges:

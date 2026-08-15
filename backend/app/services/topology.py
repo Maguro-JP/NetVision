@@ -614,9 +614,11 @@ def _rank_root(
     adjacency: dict,
     tiers: dict[int, int] | None,
 ) -> int:
-    """星型は中心から、鎖は種別が上の端から数える。種別が同じなら中心に近い端。"""
-    if len(adjacency.get(centre, [])) >= 3:
-        return centre
+    """上下の起点。種別が違う端なら上の種別を採る。同じなら星型の中心。
+
+    コアに配下が多いと中心がコアになり、出口とファイアウォールが下に落ちる。
+    種別が違うときは端の種別を先に見る。種別が同じ星型・二重化コアは中心から。
+    """
     if end_a == end_b:
         return centre
     if tiers:
@@ -626,6 +628,8 @@ def _rank_root(
             return end_a
         if tier_b < tier_a:
             return end_b
+    if len(adjacency.get(centre, [])) >= 3:
+        return centre
     _, from_centre = _far(centre, adjacency)
     dist_a = from_centre.get(end_a, 99)
     dist_b = from_centre.get(end_b, 99)
@@ -1100,10 +1104,11 @@ def _rank_slots(
     polish: bool,
     horizontal: bool,
 ) -> dict[int, float]:
-    """同じ段の横位置。親が複数ならその平均、1人ならポート順。
+    """同じ段の横位置。
 
-    配下を片方の親にだけ付けると、両方に繋がっている機器が片側へ寄る。
-    結線の形が変わっても、段の上で隣の平均に寄せれば同じ規則で置ける。
+    片親の配下はポート順でその親の下に置く（専属の並び）。
+    両方に繋がっている機器だけ、親の平均へ寄せる。
+    全部を平均にすると片親の列が流れて、線が隣の箱を貫く。
     """
     by_depth: dict[int, list[int]] = defaultdict(list)
     for device_id, level in depth.items():
@@ -1126,51 +1131,71 @@ def _rank_slots(
             other for other in neighbours.get(device_id, []) if depth.get(other, level) == level + 1
         ]
 
-    def port_from(parent: int, kid: int) -> tuple:
-        return port_key(port_between.get((parent, kid), ""))
+    children: dict[int, list[int]] = {}
+    parents_map: dict[int, list[int]] = defaultdict(list)
+    for device_id in by_id:
+        ordered = _child_order(
+            device_id,
+            children_of(device_id),
+            by_id,
+            port_between,
+            horizontal=horizontal,
+            polish=polish,
+        )
+        children[device_id] = ordered
+        for kid in ordered:
+            parents_map[kid].append(device_id)
 
-    first = layers[0]
-    by_depth[first].sort(key=lambda device_id: by_id[device_id].hostname)
-    for index, device_id in enumerate(by_depth[first]):
-        across[device_id] = float(index)
+    exclusive: dict[int, list[int]] = {device_id: [] for device_id in by_id}
+    for kid, parents in parents_map.items():
+        parents.sort(
+            key=lambda parent: (
+                depth[parent],
+                by_id[parent].hostname,
+                port_key(port_between.get((parent, kid), "")),
+            )
+        )
+        exclusive[parents[0]].append(kid)
+    for parent, kids in exclusive.items():
+        exclusive[parent] = _child_order(
+            parent,
+            kids,
+            by_id,
+            port_between,
+            horizontal=horizontal,
+            polish=polish,
+        )
 
-    for level in layers[1:]:
+    roots = [
+        device_id
+        for device_id in sorted(by_id, key=lambda i: (depth[i], by_id[i].hostname))
+        if not any(
+            other in by_id and depth[other] < depth[device_id]
+            for other in neighbours.get(device_id, [])
+        )
+    ]
 
-        def sort_key(device_id: int) -> tuple:
-            parents = parents_of(device_id)
-            if len(parents) == 1:
-                parent = parents[0]
-                return (
-                    across.get(parent, 0.0),
-                    port_from(parent, device_id),
-                    by_id[device_id].hostname,
-                )
-            if parents:
-                bary = sum(across.get(parent, 0.0) for parent in parents) / len(parents)
-                port = min(port_from(parent, device_id) for parent in parents)
-                return (bary, port, by_id[device_id].hostname)
-            return (float(len(across) + 1), (1, (), ""), by_id[device_id].hostname)
+    slot = 0.0
 
-        ordered = sorted(by_depth[level], key=sort_key)
-        if polish:
-            for parent in {p for device_id in ordered for p in parents_of(device_id)}:
-                kids = [device_id for device_id in ordered if parents_of(device_id) == [parent]]
-                if len(kids) < 2:
-                    continue
-                wanted = _child_order(
-                    parent,
-                    kids,
-                    by_id,
-                    port_between,
-                    horizontal=horizontal,
-                    polish=True,
-                )
-                positions = [ordered.index(kid) for kid in kids]
-                for kid, pos in zip(wanted, sorted(positions), strict=True):
-                    ordered[pos] = kid
-        by_depth[level] = ordered
-        for index, device_id in enumerate(ordered):
-            across[device_id] = float(index)
+    def place(device_id: int) -> float:
+        nonlocal slot
+        kids = exclusive.get(device_id, [])
+        if not kids:
+            across[device_id] = slot
+            slot += 1.0
+            return across[device_id]
+        spots = [place(kid) for kid in kids]
+        across[device_id] = (spots[0] + spots[-1]) / 2
+        return across[device_id]
+
+    for root in roots:
+        place(root)
+        slot += 1.0
+
+    for device_id in by_id:
+        if device_id not in across:
+            across[device_id] = slot
+            slot += 1.0
 
     def spread(ids: list[int]) -> None:
         if len(ids) < 2:
@@ -1188,46 +1213,20 @@ def _rank_slots(
         for device_id in ids:
             across[device_id] += shift
 
-    def restore_fans(level: int) -> None:
-        fans: dict[int, list[int]] = defaultdict(list)
-        for device_id in by_depth[level]:
-            parents = parents_of(device_id)
-            if len(parents) == 1:
-                fans[parents[0]].append(device_id)
-        for parent, kids in fans.items():
-            if len(kids) < 2:
-                continue
-            ordered = _child_order(
-                parent,
-                kids,
-                by_id,
-                port_between,
-                horizontal=horizontal,
-                polish=polish,
-            )
-            # 片親の配下はポート順の1行。平均に潰れると名前順で広がり、実機の順と食い違う
-            center = across.get(parent, sum(across[kid] for kid in kids) / len(kids))
-            start = center - (len(ordered) - 1) / 2
-            for index, kid in enumerate(ordered):
-                across[kid] = start + index
-
-    for _ in range(6):
-        for level in reversed(layers[:-1]):
-            for device_id in by_depth[level]:
-                kids = children_of(device_id)
-                if kids:
-                    across[device_id] = sum(across[kid] for kid in kids) / len(kids)
-            spread(by_depth[level])
+    for _ in range(4):
         for level in layers[1:]:
             for device_id in by_depth[level]:
                 parents = parents_of(device_id)
-                if parents:
+                if len(parents) >= 2:
                     across[device_id] = sum(across[parent] for parent in parents) / len(parents)
-            restore_fans(level)
+            spread(by_depth[level])
+        for level in reversed(layers[:-1]):
+            for device_id in by_depth[level]:
+                kids = [kid for kid in children_of(device_id) if len(parents_of(kid)) >= 2]
+                if kids:
+                    across[device_id] = sum(across[kid] for kid in kids) / len(kids)
             spread(by_depth[level])
 
-    for device_id in by_id:
-        across.setdefault(device_id, float(len(across)))
     return across
 
 

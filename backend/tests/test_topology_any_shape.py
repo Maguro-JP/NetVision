@@ -225,7 +225,7 @@ def test_site_view_with_uplinks_and_many_peer_sites():
 
 def test_random_layered_networks_stay_readable():
     """階層のある物理網を乱数で組んでも、同じ規則で読める。"""
-    for seed in range(24):
+    for seed in range(48):
         rng = random.Random(seed)
         nodes, edges = _random_layered(rng, seed)
         graph, svg = _layout(nodes, edges)
