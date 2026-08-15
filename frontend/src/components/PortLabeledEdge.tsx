@@ -84,6 +84,8 @@ export function orthogonalBusPath(input: {
   rank: number;
   count: number;
   gap?: number;
+  /** 同じ辺回りの横バスを、通路上の箱の外へ押し出す */
+  obstacles?: WireBox[];
 }): { path: string; labelX: number; labelY: number } | null {
   const gap = input.gap ?? 16;
   const inset = 28;
@@ -93,6 +95,20 @@ export function orthogonalBusPath(input: {
   const sy = input.sourceY;
   const tx = input.targetX;
   const ty = input.targetY;
+  const clearBusY = (busY: number, side: "above" | "below") => {
+    const boxes = input.obstacles ?? [];
+    if (boxes.length === 0) return busY;
+    const loX = Math.min(sx, tx);
+    const hiX = Math.max(sx, tx);
+    const pad = 24;
+    let out = busY;
+    for (const box of boxes) {
+      if (box.x2 < loX - 1 || box.x1 > hiX + 1) continue;
+      if (side === "below") out = Math.max(out, box.y2 + pad);
+      else out = Math.min(out, box.y1 - pad);
+    }
+    return out;
+  };
   // 接続点が相手の高さに寄っている前提。高さが揃えば横一直線。
   // ハブ側で一度重ねると折れが増えるだけなので、出口から扇に開く。
   if (input.sourceFace === "right" && input.targetFace === "left" && tx - sx > 40) {
@@ -165,7 +181,7 @@ export function orthogonalBusPath(input: {
   }
   // 同じ段で左右が塞がるとき、上下どちらかの辺から回す（2折れ）
   if (input.sourceFace === "bottom" && input.targetFace === "bottom") {
-    const busY = Math.max(sy, ty) + inset + rank * (steps > 0 ? gap : 0);
+    const busY = clearBusY(Math.max(sy, ty) + inset + rank * (steps > 0 ? gap : 0), "below");
     return {
       path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
       labelX: (sx + tx) / 2,
@@ -173,7 +189,7 @@ export function orthogonalBusPath(input: {
     };
   }
   if (input.sourceFace === "top" && input.targetFace === "top") {
-    const busY = Math.min(sy, ty) - inset - rank * (steps > 0 ? gap : 0);
+    const busY = clearBusY(Math.min(sy, ty) - inset - rank * (steps > 0 ? gap : 0), "above");
     return {
       path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
       labelX: (sx + tx) / 2,
@@ -279,6 +295,17 @@ function exitsOutward(points: Pt[], face: Face): boolean {
   if (face === "right") return b.x > a.x + 0.5;
   if (face === "top") return b.y < a.y - 0.5;
   if (face === "bottom") return b.y > a.y + 0.5;
+  return true;
+}
+
+function arrivesFromOutside(points: Pt[], face: Face): boolean {
+  if (points.length < 2) return false;
+  const tip = points[points.length - 1];
+  const prev = points[points.length - 2];
+  if (face === "left") return prev.x < tip.x - 0.5;
+  if (face === "right") return prev.x > tip.x + 0.5;
+  if (face === "top") return prev.y < tip.y - 0.5;
+  if (face === "bottom") return prev.y > tip.y + 0.5;
   return true;
 }
 
@@ -451,6 +478,7 @@ export function facesForEdge(input: {
         targetFace: tf,
         rank: 0,
         count: 1,
+        obstacles: boxes,
       });
       if (!bus) return false;
       const points = bus.path
@@ -514,7 +542,7 @@ export function routeWire(input: {
   );
   if (straight) candidates.push(parsePathPoints(straight.path));
 
-  const bus = orthogonalBusPath(input);
+  const bus = orthogonalBusPath({ ...input, obstacles: pierceBoxes });
   if (bus) candidates.push(parsePathPoints(bus.path));
 
   const out = 16;
@@ -563,6 +591,7 @@ export function routeWire(input: {
       points,
       pierce: routePierceCount(points, pierceBoxes),
       outward: exitsOutward(points, input.sourceFace) ? 0 : 1,
+      arrive: arrivesFromOutside(points, input.targetFace) ? 0 : 1,
       bends: Math.max(0, points.length - 2),
       length: pathLength(points),
     }));
@@ -570,6 +599,7 @@ export function routeWire(input: {
     (a, b) =>
       a.pierce - b.pierce ||
       a.outward - b.outward ||
+      a.arrive - b.arrive ||
       a.bends - b.bends ||
       a.length - b.length,
   );

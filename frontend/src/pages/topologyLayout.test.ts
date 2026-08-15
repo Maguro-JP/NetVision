@@ -308,6 +308,35 @@ describe("直交の通り道", () => {
     expect(points.some((p) => p.y > 80 || p.y < 0)).toBe(true);
   });
 
+  it("同じ辺回りの横バスは通路上の箱の下を通る", () => {
+    const hub = { x1: 200, y1: 200, x2: 390, y2: 332 };
+    const near = { x1: 600, y1: 200, x2: 790, y2: 332 };
+    const far = { x1: 920, y1: 200, x2: 1110, y2: 332 };
+    const down = { x1: 600, y1: 450, x2: 790, y2: 582 };
+    const routed = orthogonalBusPath({
+      sourceX: 1015,
+      sourceY: 332,
+      targetX: 295,
+      targetY: 332,
+      sourceFace: "bottom",
+      targetFace: "bottom",
+      rank: 0,
+      count: 1,
+      obstacles: [hub, near, far, down],
+    });
+    expect(routed).not.toBeNull();
+    const points = routed!.path
+      .split(/[ML]\s*/)
+      .filter(Boolean)
+      .map((part) => {
+        const [x, y] = part.split(",").map(Number);
+        return { x, y };
+      });
+    expect(Math.max(0, points.length - 2)).toBeLessThanOrEqual(2);
+    // 配下箱の下まで押し出す（口のすぐ下 332+28 では交差する）
+    expect(points.some((p) => p.y >= down.y2 + 24)).toBe(true);
+  });
+
   it("上下が揃っていれば縦一直線", () => {
     const routed = orthogonalBusPath({
       sourceX: 100,

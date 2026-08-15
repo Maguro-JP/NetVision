@@ -355,6 +355,39 @@ def render_svg(
                 points = shifted
         pending.append((points, edge))
 
+    # 同じ辺回りは箱の下を通る。キャンバスを箱だけだと線が凡例や外枠へ食い込む。
+    wire_ys = [y for points, _ in pending for _, y in points]
+    wire_xs = [x for points, _ in pending for x, _ in points]
+    if wire_ys:
+        # 凡例（または下余白）の手前に MARGIN 分空ける
+        floor = height - legend_h - MARGIN
+        ceiling = MARGIN
+        right = width - MARGIN
+        left = MARGIN
+        grow_y = max(0.0, max(wire_ys) - floor) + max(0.0, ceiling - min(wire_ys))
+        grow_x = max(0.0, max(wire_xs) - right) + max(0.0, left - min(wire_xs))
+        if grow_y or grow_x:
+            height += grow_y
+            width += grow_x
+            for index, part in enumerate(parts):
+                if part.startswith("<svg "):
+                    parts[index] = (
+                        f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" '
+                        f'height="{height:.0f}" viewBox="0 0 {width:.0f} {height:.0f}" '
+                        f'font-family="{FONT}">'
+                    )
+                    break
+            # 右上の時点ラベルも新しい幅へ
+            if grow_x:
+                for index, part in enumerate(parts):
+                    if 'text-anchor="end"' in part and "時点" in part:
+                        parts[index] = part.replace(
+                            f'x="{width - grow_x - MARGIN:.0f}"',
+                            f'x="{width - MARGIN:.0f}"',
+                            1,
+                        )
+                        break
+
     gapped = _cut_gaps([item[0] for item in pending])
     stroke = "#4a5364" if simple else "#8a94a6"
     for index, (points, edge) in enumerate(pending):
@@ -663,7 +696,7 @@ def _lr_path_clear(
     end = _anchor(dst_box, dst_side, 0.5)
     boxes = [_xywh_bounds(src_box), _xywh_bounds(dst_box), *others]
     for route in (
-        _orthogonal_bus(start, src_side, end, dst_side, 0, 1),
+        _orthogonal_bus(start, src_side, end, dst_side, 0, 1, boxes),
         _manhattan(start, end, src_side, dst_side),
     ):
         if not route:
@@ -694,7 +727,7 @@ def _faces_for_edge(
         for face_s, face_t in face_pairs:
             start = _anchor(src_box, face_s, 0.5)
             end = _anchor(dst_box, face_t, 0.5)
-            route = _orthogonal_bus(start, face_s, end, face_t, 0, 1)
+            route = _orthogonal_bus(start, face_s, end, face_t, 0, 1, boxes)
             if not route:
                 continue
             if _route_pierce_count(route, boxes) > 0:
@@ -706,6 +739,34 @@ def _faces_for_edge(
     return src, dst
 
 
+def _clear_bus_y(
+    bus_y: float,
+    sx: float,
+    tx: float,
+    side: str,
+    obstacles: list[tuple[float, float, float, float]] | None,
+    *,
+    pad: float = 24.0,
+) -> float:
+    """同じ辺回りの横バスを、通路上の箱の外へ押し出す。
+
+    口のすぐ下だけ回すと、配下への縦線と直角に交差し、隙間切りで切れ端になる。
+    横に重なる箱の下（または上）まで逃がせば、2折れのまま交差を減らせる。
+    """
+    if not obstacles:
+        return bus_y
+    lo_x, hi_x = (min(sx, tx), max(sx, tx))
+    out = bus_y
+    for x1, y1, x2, y2 in obstacles:
+        if x2 < lo_x - 1 or x1 > hi_x + 1:
+            continue
+        if side == "below":
+            out = max(out, y2 + pad)
+        else:
+            out = min(out, y1 - pad)
+    return out
+
+
 def _orthogonal_bus(
     source: tuple[float, float],
     source_face: str,
@@ -713,6 +774,7 @@ def _orthogonal_bus(
     target_face: str,
     rank: int,
     count: int,
+    obstacles: list[tuple[float, float, float, float]] | None = None,
 ) -> list[tuple[float, float]] | None:
     """縦横だけの通り道。出口から相手の高さへ直角に扇を開く。"""
     gap = 16.0
@@ -752,9 +814,11 @@ def _orthogonal_bus(
     # 同じ段で左右が塞がるとき、上下どちらかの辺から回す（2折れ）
     if source_face == "bottom" and target_face == "bottom":
         bus_y = max(sy, ty) + inset + rank * (gap if steps else 0.0)
+        bus_y = _clear_bus_y(bus_y, sx, tx, "below", obstacles)
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "top":
         bus_y = min(sy, ty) - inset - rank * (gap if steps else 0.0)
+        bus_y = _clear_bus_y(bus_y, sx, tx, "above", obstacles)
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -1034,7 +1098,7 @@ def _wire_path(
         if _is_orthogonal(fixed):
             candidates.append((face_s, face_t, fixed))
 
-    bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
+    bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count, pierce_boxes)
     if bus:
         bus = _collapse_collinear(_ensure_outward(bus, src_side))
         if (
