@@ -1,8 +1,8 @@
-支社 配下6拠点	154.5
+支社 配下6拠点	153.7
   readable	88.0
   center	13.3
-  even	13.3
-  tight	8.8
+  even	13.8
+  tight	7.5
   corridor	3.0
   wires	18.0
   labels	10.0

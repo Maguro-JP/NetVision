@@ -299,6 +299,30 @@ function pathLength(points: Pt[]): number {
   return len;
 }
 
+function collapseCollinear(points: Pt[]): Pt[] {
+  if (points.length < 3) return points;
+  const out: Pt[] = [points[0]];
+  for (let i = 1; i < points.length - 1; i += 1) {
+    const a = out[out.length - 1];
+    const b = points[i];
+    const c = points[i + 1];
+    if (Math.abs(b.x - a.x) <= 0.5 && Math.abs(b.y - a.y) <= 0.5) continue;
+    const colinear =
+      (Math.abs(a.x - b.x) <= 0.5 && Math.abs(b.x - c.x) <= 0.5) ||
+      (Math.abs(a.y - b.y) <= 0.5 && Math.abs(b.y - c.y) <= 0.5);
+    if (colinear) continue;
+    out.push(b);
+  }
+  const last = points[points.length - 1];
+  if (
+    Math.abs(last.x - out[out.length - 1].x) > 0.5 ||
+    Math.abs(last.y - out[out.length - 1].y) > 0.5
+  ) {
+    out.push(last);
+  }
+  return out.length > 1 ? out : points;
+}
+
 function parsePathPoints(path: string): Pt[] {
   return path
     .split(/[ML]\s*/)
@@ -330,14 +354,21 @@ function detourKeepFaces(
     return null;
   }
   const pad = 24;
-  let channel = side === "below" ? Math.max(sy, ty) + pad : Math.min(sy, ty) - pad;
-  for (const box of boxes) {
-    if (side === "below") channel = Math.max(channel, box.y2 + pad);
-    else channel = Math.min(channel, box.y1 - pad);
-  }
   const out = 16;
   const ox = sx + (sourceFace === "right" ? out : sourceFace === "left" ? -out : 0);
   const ix = tx + (targetFace === "right" ? out : targetFace === "left" ? -out : 0);
+  // 通り道の横幅に重なり、直進帯を塞ぐ箱だけ避ける
+  const loX = Math.min(ox, ix);
+  const hiX = Math.max(ox, ix);
+  const bandLo = Math.min(sy, ty) - pad;
+  const bandHi = Math.max(sy, ty) + pad;
+  let channel = side === "below" ? Math.max(sy, ty) + pad : Math.min(sy, ty) - pad;
+  for (const box of boxes) {
+    if (box.x2 < loX - 1 || box.x1 > hiX + 1) continue;
+    if (box.y2 < bandLo || box.y1 > bandHi) continue;
+    if (side === "below") channel = Math.max(channel, box.y2 + pad);
+    else channel = Math.min(channel, box.y1 - pad);
+  }
   return [
     { x: sx, y: sy },
     { x: ox, y: sy },
@@ -426,7 +457,7 @@ export function routeWire(input: {
   }
 
   const scored = candidates
-    .map((raw) => ensureOutward(raw, input.sourceFace))
+    .map((raw) => collapseCollinear(ensureOutward(raw, input.sourceFace)))
     .map((points) => ({
       points,
       pierce: routePierceCount(points, pierceBoxes),

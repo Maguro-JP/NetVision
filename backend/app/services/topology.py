@@ -61,7 +61,8 @@ TIER_ORDER: dict[DeviceType, int] = {
 # 広げすぎると開いた図が間延びして、構成図として読めない
 _X_SPACING = 240.0
 # 詳細箱（132）＋すき間。180 はマス目丸めで 160 に落ちて段が食い込む
-_Y_SPACING = 200.0
+# _min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
+_Y_SPACING = 220.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -1134,9 +1135,59 @@ def _separate_grown_boxes(
     else:
         _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X, origins=origin, links_of=tb_of)
         _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y, origins=origin, links_of=lr_of)
+    # 同じ段・列以外でも、見た目の箱が食い込む対は離す
+    _unstick_visual_pairs(nodes, tb_of=tb_of, lr_of=lr_of, horizontal=horizontal)
     for node in nodes:
         node.x = _snap_to_grid(node.x)
         node.y = _snap_to_grid(node.y)
+
+
+def _unstick_visual_pairs(
+    nodes: list[TopologyNodeView],
+    *,
+    tb_of,
+    lr_of,
+    horizontal: bool,
+) -> None:
+    """列がずれていても、画面上の箱が重なる対だけ軸方向へ離す。"""
+    ordered = sorted(nodes, key=lambda node: (node.y, node.x, node.device_id))
+    for _ in range(len(ordered)):
+        moved = False
+        for i, a in enumerate(ordered):
+            for b in ordered[i + 1 :]:
+                if not (
+                    _visual_left(a.x, tb_of(a)) < _visual_right(b.x, tb_of(b)) - 1
+                    and _visual_left(b.x, tb_of(b)) < _visual_right(a.x, tb_of(a)) - 1
+                    and _visual_top(a.y, lr_of(a)) < _visual_bottom(b.y, lr_of(b)) - 1
+                    and _visual_top(b.y, lr_of(b)) < _visual_bottom(a.y, lr_of(a)) - 1
+                ):
+                    continue
+                overlap_x = min(_visual_right(a.x, tb_of(a)), _visual_right(b.x, tb_of(b))) - max(
+                    _visual_left(a.x, tb_of(a)), _visual_left(b.x, tb_of(b))
+                )
+                overlap_y = min(_visual_bottom(a.y, lr_of(a)), _visual_bottom(b.y, lr_of(b))) - max(
+                    _visual_top(a.y, lr_of(a)), _visual_top(b.y, lr_of(b))
+                )
+                # 食い込みの薄い軸へ離す（少ない移動で済む方）
+                push_y = overlap_x >= overlap_y
+                if horizontal:
+                    push_y = not push_y
+                if push_y:
+                    need = _min_stored_gap_y(lr_of(a), lr_of(b))
+                    if b.y < a.y:
+                        a.y = b.y + need
+                    else:
+                        b.y = a.y + need
+                else:
+                    need = _min_stored_gap_x(tb_of(a), tb_of(b))
+                    if b.x < a.x:
+                        a.x = b.x + need
+                    else:
+                        b.x = a.x + need
+                moved = True
+        if not moved:
+            break
+        ordered = sorted(nodes, key=lambda node: (node.y, node.x, node.device_id))
 
 
 def _rank_slots(
@@ -1346,7 +1397,8 @@ _BUS_INSET = 28.0
 _PEER_CLEAR_MIN = 120.0
 # 画面で隣り合う箱の見た目のすき間。ポート名が両側から出るので広めに取る
 _VISUAL_CLEAR_X = 100.0
-_VISUAL_CLEAR_Y = 40.0
+# 詳細箱＋バスの inset（28）が縦に入るよう、40 だと口が潰れて階段になる
+_VISUAL_CLEAR_Y = 72.0
 # sideToward（画面）と同じ閾値
 _SAME_ROW = 60.0
 _TIER = 100.0
@@ -1549,7 +1601,6 @@ def _place_peers(
     left = min(_visual_left(node.x, tb_of(node)) for node in own)
     right = max(_visual_right(node.x, tb_of(node)) for node in own)
     top = min(node.y for node in own)
-    own_top = min(_visual_top(node.y, lr_of(node)) for node in own)
     middle = (left + right) / 2
     own_rank = min(rank.get(node.device_id, 0) for node in own)
     world_graph = world or graph
@@ -1609,8 +1660,9 @@ def _place_peers(
     above_rows = rows_of(above)
     flat_above = [node for row in above_rows for node in row]
     # 上位は自拠点の見た目の上端より上へ。ハブが高さ方向に伸びていても食い込まない。
-    peer_h = _box_height(0, _DETAIL_HEIGHT)
-    above_y = own_top - _VISUAL_CLEAR_Y - (peer_h + _BOX_HEIGHT) / 2
+    # 詳細箱＋縦バス用のすき間は _min_stored_gap_y に揃える（CLEAR だけだと口が潰れる）。
+    hub_lr = max((lr_of(node) for node in own), default=0)
+    above_y = top - _min_stored_gap_y(0, hub_lr)
     if horizontal:
         # swap 後に X になる距離。幅方向のすき間を確保する
         above_y = top - _min_stored_gap_x(0, 0)
@@ -1950,8 +2002,8 @@ _ALIGN_WITHIN = 36.0
 _POLISH_MAX_MOVE = 80.0
 #: 箱（190）＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
 _MIN_GAP_X = 300.0
-#: 詳細表示の箱（約 132）＋すき間。120 だと段どうしでポート名が被る
-_MIN_GAP_Y = 160.0
+#: 詳細表示の箱（約 132）＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
+_MIN_GAP_Y = 204.0
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

@@ -865,6 +865,71 @@ def _ensure_outward(
     return out if len(out) > 1 else route
 
 
+def _collapse_collinear(route: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """一直線上の中間点を落とす。迂回の折れが余分に見えるのを防ぐ。"""
+    if len(route) < 3:
+        return route
+    out = [route[0]]
+    for index in range(1, len(route) - 1):
+        ax, ay = out[-1]
+        bx, by = route[index]
+        cx, cy = route[index + 1]
+        # 同じ点は飛ばす
+        if abs(bx - ax) <= 0.5 and abs(by - ay) <= 0.5:
+            continue
+        colinear = (abs(ax - bx) <= 0.5 and abs(bx - cx) <= 0.5) or (
+            abs(ay - by) <= 0.5 and abs(by - cy) <= 0.5
+        )
+        if colinear:
+            continue
+        out.append(route[index])
+    last = route[-1]
+    if abs(last[0] - out[-1][0]) > 0.5 or abs(last[1] - out[-1][1]) > 0.5:
+        out.append(last)
+    return out if len(out) > 1 else route
+
+
+def _detour_keep_faces(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    src_side: str,
+    dst_side: str,
+    boxes: list[tuple[float, float, float, float]],
+    side: str,
+) -> list[tuple[float, float]] | None:
+    """同じ口のまま上下のすき間へ迂回する。口を付け替えると画面ハンドルと食い違う。"""
+    if src_side not in ("left", "right") or dst_side not in ("left", "right"):
+        return None
+    pad = 24.0
+    sx, sy = start
+    tx, ty = end
+    out = 16.0
+    ox = sx + (out if src_side == "right" else -out if src_side == "left" else 0.0)
+    ix = tx + (out if dst_side == "right" else -out if dst_side == "left" else 0.0)
+    # 通り道の横幅に重なり、直進帯（同じ高さ付近）を塞ぐ箱だけ避ける。
+    # 下の段まで全部拾うと、無関係な拠点の下を大回りする。
+    lo_x, hi_x = (min(ox, ix), max(ox, ix))
+    band_lo, band_hi = (min(sy, ty) - pad, max(sy, ty) + pad)
+    channel = max(sy, ty) + pad if side == "below" else min(sy, ty) - pad
+    for x1, y1, x2, y2 in boxes:
+        if x2 < lo_x - 1 or x1 > hi_x + 1:
+            continue
+        if y2 < band_lo or y1 > band_hi:
+            continue
+        if side == "below":
+            channel = max(channel, y2 + pad)
+        else:
+            channel = min(channel, y1 - pad)
+    return [
+        (sx, sy),
+        (ox, sy),
+        (ox, channel),
+        (ix, channel),
+        (ix, ty),
+        (tx, ty),
+    ]
+
+
 def _wire_path(
     src_box: tuple[float, float, float, float],
     dst_box: tuple[float, float, float, float],
@@ -893,13 +958,13 @@ def _wire_path(
     def consider(face_s: str, face_t: str, route: list[tuple[float, float]] | None) -> None:
         if not route or not _is_orthogonal(route):
             return
-        fixed = _ensure_outward(route, face_s)
+        fixed = _collapse_collinear(_ensure_outward(route, face_s))
         if _is_orthogonal(fixed):
             candidates.append((face_s, face_t, fixed))
 
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
     if bus:
-        bus = _ensure_outward(bus, src_side)
+        bus = _collapse_collinear(_ensure_outward(bus, src_side))
         if (
             _route_pierce_count(bus, pierce_boxes) == 0
             and _exits_outward(bus, src_side)
@@ -909,8 +974,15 @@ def _wire_path(
     consider(src_side, dst_side, bus)
     consider(src_side, dst_side, _manhattan(start, end, src_side, dst_side))
     consider(src_side, dst_side, _route(start, end, obstacles))
-    # 左右に出して隣を貫くとき、段のすき間経由も試す
+    # 左右のまま上下へ迂回（口を付け替えない）
     if src_side in ("left", "right") and dst_side in ("left", "right"):
+        for side in ("below", "above"):
+            consider(
+                src_side,
+                dst_side,
+                _detour_keep_faces(start, end, src_side, dst_side, pierce_boxes, side),
+            )
+        # どうしても通らないときだけ、上下の口も候補に残す
         for alt_src, alt_dst in (("bottom", "top"), ("top", "bottom")):
             alt_start = _anchor(src_box, alt_src, src_t)
             alt_end = _anchor(dst_box, alt_dst, dst_t)
@@ -920,15 +992,15 @@ def _wire_path(
                 _orthogonal_bus(alt_start, alt_src, alt_end, alt_dst, rank, count),
             )
             consider(alt_src, alt_dst, _manhattan(alt_start, alt_end, alt_src, alt_dst))
-            consider(alt_src, alt_dst, _route(alt_start, alt_end, obstacles))
 
     def score(item: tuple[str, str, list[tuple[float, float]]]) -> tuple:
         face_s, face_t, route = item
+        bends = max(0, len(route) - 2)
         return (
             _route_pierce_count(route, pierce_boxes),
             0 if _exits_outward(route, face_s) else 1,
             0 if _arrives_from_outside(route, face_t) else 1,
-            len(route),
+            bends,
             _length(route),
         )
 
