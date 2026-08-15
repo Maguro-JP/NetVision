@@ -19,17 +19,24 @@
 
 import { describe, expect, it } from "vitest";
 
-import { orthogonalBusPath, manhattanRoute } from "../components/PortLabeledEdge";
+import { orthogonalBusPath, manhattanRoute, portLabelPlacement, routeWire, routePierceCount } from "../components/PortLabeledEdge";
+import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
   keepLocalPositions,
   shiftFor,
+  shiftYFor,
   sideToward,
   siteNameOnCanvas,
   storedFromDisplay,
   placementFromClick,
   positionsToSave,
+  widthFor,
+  heightFor,
+  DEFAULT_WIDTH,
+  DEFAULT_HEIGHT,
+  DETAIL_HEIGHT,
 } from "./TopologyPage";
 
 function node(
@@ -37,6 +44,7 @@ function node(
   hostname: string,
   x: number,
   y: number,
+  outside = false,
 ): TopologyNode {
   return {
     device_id: id,
@@ -51,7 +59,7 @@ function node(
     port_kinds: [],
     x,
     y,
-    outside: false,
+    outside,
     hidden_peers: 0,
   } as unknown as TopologyNode;
 }
@@ -123,28 +131,38 @@ describe("線をどの辺から出すか", () => {
 describe("引き出し口と通り道", () => {
   it("1本しか出ていない辺は、真ん中から出す", () => {
     // 端に寄ると、真下の相手へ引いた線が斜めに折れる
-    const { anchors } = assignAnchors(branchOffice(6));
-    expect(anchors.get(2)?.source).toBe("bottom-3");
-    expect(anchors.get(2)?.target).toBe("top-3");
+    const { anchors, faceHandles } = assignAnchors(branchOffice(6));
+    expect(anchors.get(2)?.source).toBe("bottom-0");
+    expect(anchors.get(2)?.target).toBe("top-0");
     // センターから支社へは、センターの下から出て支社の上へ入る
-    expect(anchors.get(1)?.source).toBe("bottom-3");
-    expect(anchors.get(1)?.target).toBe("top-3");
+    expect(anchors.get(1)?.source).toBe("bottom-0");
+    expect(anchors.get(1)?.target).toBe("top-0");
+    const hubHandle = faceHandles.get(2)?.find((h) => h.id === "bottom-0");
+    expect(hubHandle?.t).toBeCloseTo(0.5, 1);
   });
 
   it("上にいる相手ほど、上の引き出し口から出る", () => {
     const graph = branchOffice(6);
-    const { anchors } = assignAnchors(graph);
+    const { anchors, faceHandles } = assignAnchors(graph);
+    const branchId = 2;
     const slots = graph.nodes
       .filter((n) => n.device_id >= 10)
       .sort((a, b) => a.y - b.y)
-      .map((office) =>
-        Number(anchors.get(office.device_id)?.source.split("-")[1]),
-      );
+      .map((office) => {
+        const edge = graph.edges.find(
+          (e) => e.source === branchId && e.target === office.device_id,
+        )!;
+        const id = anchors.get(edge.id)?.source;
+        return faceHandles.get(branchId)?.find((h) => h.id === id)?.t ?? 0;
+      });
 
     expect(slots).toHaveLength(6);
     for (let i = 1; i < slots.length; i += 1) {
       expect(slots[i]).toBeGreaterThan(slots[i - 1]);
     }
+    // 対向が箱の外に並ぶときは辺全体を使い、端に潰さない
+    expect(slots[0]).toBeLessThan(0.2);
+    expect(slots[slots.length - 1]).toBeGreaterThan(0.8);
   });
 
   it("相手の並び順どおりに通り道を振る（近くても順を入れ替えない）", () => {
@@ -161,17 +179,20 @@ describe("引き出し口と通り道", () => {
       edges: [link(10, 1, 2), link(11, 1, 3), link(12, 1, 4)],
       unplaced_count: 0,
     } as unknown as TopologyGraph;
-    const { lanes, anchors } = assignAnchors(graph);
+    const { lanes, anchors, faceHandles } = assignAnchors(graph);
     const edgeOf: Record<number, number> = { 2: 10, 3: 11, 4: 12 };
     const byY = dests
       .slice()
       .sort((a, b) => a.y - b.y)
-      .map((d) => ({
-        slot: Number(anchors.get(edgeOf[d.device_id])?.source.split("-")[1]),
-        lane: lanes.get(edgeOf[d.device_id]) ?? 0,
-      }));
-    expect(byY[0].slot).toBeLessThan(byY[1].slot);
-    expect(byY[1].slot).toBeLessThan(byY[2].slot);
+      .map((d) => {
+        const id = anchors.get(edgeOf[d.device_id])?.source;
+        return {
+          t: faceHandles.get(1)?.find((h) => h.id === id)?.t ?? 0,
+          lane: lanes.get(edgeOf[d.device_id]) ?? 0,
+        };
+      });
+    expect(byY[0].t).toBeLessThan(byY[1].t);
+    expect(byY[1].t).toBeLessThan(byY[2].t);
     expect(byY[0].lane).toBeLessThan(byY[1].lane);
     expect(byY[1].lane).toBeLessThan(byY[2].lane);
     expect(byY[1].lane).toBeGreaterThan(byY[0].lane);
@@ -191,7 +212,7 @@ describe("引き出し口と通り道", () => {
 });
 
 describe("直交の通り道", () => {
-  it("右から左へはハブ側で重ねてから扇に開き、縦横だけ通す", () => {
+  it("右から左へは出口から扇に開き、縦横だけ通す", () => {
     const a = orthogonalBusPath({
       sourceX: 0,
       sourceY: 0,
@@ -215,13 +236,13 @@ describe("直交の通り道", () => {
     expect(a).not.toBeNull();
     expect(b).not.toBeNull();
     expect(a!.path.includes("C ")).toBe(false);
-    const stackA = Number(a!.path.split(" ")[3].split(",")[0]);
-    const stackB = Number(b!.path.split(" ")[3].split(",")[0]);
-    expect(stackA).toBe(stackB);
-    const peelA = Number(a!.path.split(" ")[5].split(",")[1]);
-    const peelB = Number(b!.path.split(" ")[5].split(",")[1]);
-    expect(peelA).toBe(80);
-    expect(peelB).toBe(200);
+    // M sx,sy L bus,sy L bus,ty L tx,ty
+    expect(a!.path.startsWith("M 0,0 L ")).toBe(true);
+    expect(a!.path.endsWith(" L 400,80")).toBe(true);
+    expect(b!.path.endsWith(" L 400,200")).toBe(true);
+    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
+    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
+    expect(busA).toBeGreaterThan(busB);
   });
 
   it("上下が近いときは直交バスにしない", () => {
@@ -257,6 +278,78 @@ describe("直交の通り道", () => {
       const [x, y] = part.split(",").map(Number);
       expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
     }
+  });
+
+  it("途中の箱を貫く左右の線は下へ迂回する", () => {
+    const obstacle = { x1: 200, y1: 0, y2: 80, x2: 400 };
+    const routed = routeWire({
+      sourceX: 500,
+      sourceY: 40,
+      targetX: 100,
+      targetY: 40,
+      sourceFace: "left",
+      targetFace: "right",
+      rank: 0,
+      count: 1,
+      obstacles: [obstacle],
+      sourceBox: { x1: 500, y1: 0, x2: 690, y2: 80 },
+      targetBox: { x1: -90, y1: 0, x2: 100, y2: 80 },
+    });
+    expect(routed.path.includes("C ")).toBe(false);
+    const points = routed.path
+      .split(/[ML]\s*/)
+      .filter(Boolean)
+      .map((part) => {
+        const [x, y] = part.split(",").map(Number);
+        return { x, y };
+      });
+    expect(routePierceCount(points, [obstacle])).toBe(0);
+    // まっすぐ y=40 だと障害を貫くので、迂回で高さが変わる
+    expect(points.some((p) => p.y > 80 || p.y < 0)).toBe(true);
+  });
+
+  it("同じ辺回りの横バスは通路上の箱の下を通る", () => {
+    const hub = { x1: 200, y1: 200, x2: 390, y2: 332 };
+    const near = { x1: 600, y1: 200, x2: 790, y2: 332 };
+    const far = { x1: 920, y1: 200, x2: 1110, y2: 332 };
+    const down = { x1: 600, y1: 450, x2: 790, y2: 582 };
+    const routed = orthogonalBusPath({
+      sourceX: 1015,
+      sourceY: 332,
+      targetX: 295,
+      targetY: 332,
+      sourceFace: "bottom",
+      targetFace: "bottom",
+      rank: 0,
+      count: 1,
+      obstacles: [hub, near, far, down],
+    });
+    expect(routed).not.toBeNull();
+    const points = routed!.path
+      .split(/[ML]\s*/)
+      .filter(Boolean)
+      .map((part) => {
+        const [x, y] = part.split(",").map(Number);
+        return { x, y };
+      });
+    expect(Math.max(0, points.length - 2)).toBeLessThanOrEqual(2);
+    // 配下箱の下まで押し出す（口のすぐ下では配下への縦線と交差する）
+    expect(points.some((p) => p.y >= down.y2 + 24)).toBe(true);
+  });
+
+  it("上下が揃っていれば縦一直線", () => {
+    const routed = orthogonalBusPath({
+      sourceX: 100,
+      sourceY: 0,
+      targetX: 100,
+      targetY: 120,
+      sourceFace: "bottom",
+      targetFace: "top",
+      rank: 0,
+      count: 1,
+    });
+    expect(routed).not.toBeNull();
+    expect(routed!.path).toBe("M 100,0 L 100,120");
   });
 });
 
@@ -347,5 +440,129 @@ describe("シンプル表示の拠点名", () => {
     );
     expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, true)).toBeNull();
     expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, false)).toBe("関西支社");
+  });
+});
+
+describe("箱幅・高さとポート名の画面座標", () => {
+  it("広げた箱の中心は保存左上 + 既定幅/2 に留まる", () => {
+    const width = widthFor(8)!;
+    const shift = shiftFor(width);
+    const stored = 0;
+    const displayLeft = stored - shift;
+    const center = displayLeft + width / 2;
+    expect(center).toBe(stored + DEFAULT_WIDTH / 2);
+  });
+
+  it("左右に多いときは高さを伸ばし、中心の高さを保つ", () => {
+    const height = heightFor(8);
+    const shiftY = shiftYFor(height);
+    const stored = 200;
+    const displayTop = stored - shiftY;
+    expect(displayTop + height / 2).toBe(stored + DEFAULT_HEIGHT / 2);
+  });
+
+  it("詳細表示の基準高さは中身分だけ高い", () => {
+    expect(DETAIL_HEIGHT).toBeGreaterThan(DEFAULT_HEIGHT);
+    expect(heightFor(2, DETAIL_HEIGHT)).toBe(DETAIL_HEIGHT);
+    expect(heightFor(3, DETAIL_HEIGHT)).toBeGreaterThan(DETAIL_HEIGHT);
+    expect(heightFor(8, DETAIL_HEIGHT)).toBeGreaterThan(DETAIL_HEIGHT);
+  });
+
+  it("右辺のポート名は中央寄せせず、箱の外側基準で置く", () => {
+    const placed = portLabelPlacement(100, 40, Position.Right);
+    expect(placed.anchor).toBe("0%, -50%");
+    expect(placed.x).toBeGreaterThan(100);
+  });
+
+  it("右辺に多本数でも幅は広げず、高さで接続点の間隔を取る", () => {
+    const hub = node(1, "hub", 0, 200);
+    const peers = Array.from({ length: 12 }, (_, i) =>
+      node(10 + i, `p${i}`, 400, i * 60),
+    );
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...peers],
+      edges: peers.map((p, i) => link(100 + i, 1, p.device_id)),
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { busiestLR, busiestTB, faceHandles, heights, lanes } = assignAnchors(graph, {
+      simple: true,
+    });
+    expect(busiestLR.get(1)).toBe(12);
+    expect(busiestTB.get(1) ?? 0).toBe(0);
+    expect(widthFor(busiestTB.get(1) ?? 0)).toBeUndefined();
+    const height = heights.get(1)!;
+    expect(height).toBeGreaterThan(DEFAULT_HEIGHT);
+    const ts = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "right")
+      .map((h) => h.t)
+      .sort((a, b) => a - b);
+    expect(ts[0]).toBeLessThan(0.15);
+    expect(ts[ts.length - 1]).toBeGreaterThan(0.85);
+    // 辺全体に振ったうえで、隣どうしはポート名が被らない間隔
+    for (let i = 1; i < ts.length; i += 1) {
+      expect((ts[i] - ts[i - 1]) * height).toBeGreaterThanOrEqual(15);
+    }
+    // 幅を広げない分、通り道は箱の間のすき間に収める
+    const widest = Math.max(0, ...lanes.values());
+    expect(widest).toBeLessThan(400 / 2);
+  });
+
+  it("詳細表示でも対向の高さへ口が寄り、中央から階段にしない", () => {
+    const hub = node(1, "edge-v", 0, 200);
+    const upper = node(2, "core-a", 500, 80);
+    const lower = node(3, "core-b", 500, 320);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, upper, lower],
+      edges: [link(10, 1, 2), link(11, 1, 3)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)!).toBeGreaterThanOrEqual(DETAIL_HEIGHT);
+    const rights = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "right")
+      .sort((a, b) => a.t - b.t);
+    expect(rights).toHaveLength(2);
+    // 上の対向は上側の口、下は下側。両方 0.5 付近に寄らない
+    expect(rights[0].t).toBeLessThan(0.4);
+    expect(rights[1].t).toBeGreaterThan(0.6);
+  });
+
+  it("同じ段の対向へは口の高さが揃い、他Hで中心がずれない", () => {
+    const hub = node(1, "sw-a", 0, 200);
+    const peer = node(2, "sw-b", 400, 200);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, peer],
+      edges: [link(10, 1, 2)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)).toBe(DETAIL_HEIGHT);
+    const right = faceHandles.get(1)!.find((h) => h.side === "right");
+    expect(right?.t).toBeCloseTo(0.5, 2);
+    // 口の画面 Y が対向中心と揃う（階段の元を潰す）
+    const shiftY = shiftYFor(heights.get(1)!);
+    const mouthY = hub.y - shiftY + right!.t * heights.get(1)!;
+    expect(mouthY).toBeCloseTo(peer.y + DEFAULT_HEIGHT / 2, 5);
+  });
+
+  it("詳細の箱高さと接続点の分母が一致する", () => {
+    const hub = node(1, "edge", 0, 100);
+    const peer = node(2, "core", 500, 100);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, peer],
+      edges: [link(1, 1, 2)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)).toBe(DETAIL_HEIGHT);
+    expect(heights.get(2)).toBe(DETAIL_HEIGHT);
+    const simple = assignAnchors(graph, { simple: true });
+    expect(simple.heights.get(1)).toBe(DEFAULT_HEIGHT);
   });
 });

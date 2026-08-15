@@ -1,0 +1,98 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="846" height="1604" viewBox="0 0 846 1604" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 配下6拠点</text>
+<text x="798" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-15 13:22 JST 時点 / レイヤ: physical / 9台 8本</text>
+<polyline points="223,278 223,214" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="223.0" y="262.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="219.0" y="231.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="383,278 383,214" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="394.3" y="271.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="364.0" y="203.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="398,324 580,324 580,388 608,388" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="410.2" y="321.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/1</text>
+<text class="port-label" x="598.0" y="378.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="398,416 580,416 580,533 608,533" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="405.6" y="423.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/2</text>
+<text class="port-label" x="602.9" y="518.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="398,432 580,432 580,733 608,733" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="404.1" y="440.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/3</text>
+<text class="port-label" x="602.9" y="718.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="398,448 580,448 580,933 608,933" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="402.7" y="456.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/4</text>
+<text class="port-label" x="602.9" y="918.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="398,464 580,464 580,1133 608,1133" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="401.4" y="473.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/5</text>
+<text class="port-label" x="602.9" y="1118.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="398,480 580,480 580,1373 608,1373" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="377.3" y="513.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/6</text>
+<text class="port-label" x="602.9" y="1358.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<g><rect x="208" y="278" width="190" height="220" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="278" width="5" height="220" rx="2" fill="#7a7a7a"/>
+<text x="222" y="300" font-size="13" font-weight="700" fill="#1a1a1a">ksi-br-rt-01</text>
+<text x="222" y="316" font-size="10" fill="#5a6270">Cisco ISR4451-X</text>
+<text x="222" y="330" font-size="10" fill="#7a828f">関西支社</text>
+<text x="222" y="346" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="48" y="82" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="82" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="62" y="104" font-size="13" font-weight="700" fill="#1a1a1a">west-core-rt-01</text>
+<text x="62" y="120" font-size="10" fill="#5a6270">Juniper MX304</text>
+<text x="62" y="134" font-size="10" fill="#7a828f">西日本センター</text>
+<text x="62" y="150" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
+</g>
+<g><rect x="368" y="82" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="368" y="82" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="382" y="104" font-size="13" font-weight="700" fill="#1a1a1a">west-core-rt-02</text>
+<text x="382" y="120" font-size="10" fill="#5a6270">Juniper MX304</text>
+<text x="382" y="134" font-size="10" fill="#7a828f">西日本センター</text>
+<text x="382" y="150" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
+</g>
+<g><rect x="608" y="322" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="322" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="344" font-size="13" font-weight="700" fill="#1a1a1a">shiga-rt-01</text>
+<text x="622" y="360" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="374" font-size="10" fill="#7a828f">shiga営業所</text>
+<text x="622" y="390" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="608" y="522" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="522" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="544" font-size="13" font-weight="700" fill="#1a1a1a">kyoto-rt-01</text>
+<text x="622" y="560" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="574" font-size="10" fill="#7a828f">kyoto営業所</text>
+<text x="622" y="590" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="608" y="722" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="722" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="744" font-size="13" font-weight="700" fill="#1a1a1a">osaka-rt-01</text>
+<text x="622" y="760" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="774" font-size="10" fill="#7a828f">osaka営業所</text>
+<text x="622" y="790" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="608" y="922" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="922" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="944" font-size="13" font-weight="700" fill="#1a1a1a">hyogo-rt-01</text>
+<text x="622" y="960" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="974" font-size="10" fill="#7a828f">hyogo営業所</text>
+<text x="622" y="990" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="608" y="1122" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="1122" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="1144" font-size="13" font-weight="700" fill="#1a1a1a">nara-rt-01</text>
+<text x="622" y="1160" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="1174" font-size="10" fill="#7a828f">nara営業所</text>
+<text x="622" y="1190" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<g><rect x="608" y="1362" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="608" y="1362" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="622" y="1384" font-size="13" font-weight="700" fill="#1a1a1a">wakayama-rt-01</text>
+<text x="622" y="1400" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="622" y="1414" font-size="10" fill="#7a828f">wakayama営業所</text>
+<text x="622" y="1430" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<line x1="48" y1="1540" x2="798" y2="1540" stroke="#dfe3ea" stroke-width="1"/>
+<text x="48" y="1556" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
+<rect x="144" y="1547" width="10" height="10" rx="2" fill="#c0392b"/>
+<text x="159" y="1556" font-size="10" fill="#4a4a4a">期限切れ</text>
+<rect x="210" y="1547" width="10" height="10" rx="2" fill="#e07b39"/>
+<text x="225" y="1556" font-size="10" fill="#4a4a4a">90日以内</text>
+<rect x="287" y="1547" width="10" height="10" rx="2" fill="#c9a227"/>
+<text x="302" y="1556" font-size="10" fill="#4a4a4a">1年以内</text>
+<rect x="353" y="1547" width="10" height="10" rx="2" fill="#2d8a4e"/>
+<text x="368" y="1556" font-size="10" fill="#4a4a4a">余裕あり</text>
+<rect x="419" y="1547" width="10" height="10" rx="2" fill="#7a7a7a"/>
+<text x="434" y="1556" font-size="10" fill="#4a4a4a">情報未登録</text>
+<text x="48" y="1576" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
+<text x="298" y="1576" font-size="10" fill="#6b6b6b">ポート種別</text>
+<text x="358" y="1576" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
+</svg>

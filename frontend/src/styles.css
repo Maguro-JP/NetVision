@@ -642,7 +642,12 @@ button:disabled {
   fill: var(--panel);
 }
 
-/* ポート名は機器の隣に置く。線に重ならないよう背景を敷いて読ませる */
+/* ポート名は機器の隣に置く。線に重ならないよう背景を敷いて読ませる。
+   React Flow は edgelabel を nodes より先に描くので、z-index を付けないと
+   箱（zIndex:2）の下に沈んでポート名が隠れる。 */
+.react-flow__edgelabel-renderer {
+  z-index: 5;
+}
 .topo-edge-label {
   position: absolute;
   pointer-events: none;
@@ -652,6 +657,7 @@ button:disabled {
   padding: 1px 4px;
   border-radius: 4px;
   background: rgb(15 20 25 / 82%);
+  z-index: 5;
 }
 .topo-edge-label.port {
   font-weight: 600;

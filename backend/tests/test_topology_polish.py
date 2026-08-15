@@ -7,8 +7,14 @@ from app.services.topology import (
     LAYOUT_GRID,
     TopologyEdgeView,
     TopologyNodeView,
+    _box_height,
+    _box_width,
+    _busiest_side_links,
     _polish_layout,
+    _shift_centers_to,
     _snap_to_grid,
+    _visual_left,
+    _visual_right,
 )
 
 
@@ -32,7 +38,9 @@ def edge(
     )
 
 
-def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
+def node(
+    device_id: int, hostname: str, x: float, y: float, *, outside: bool = False
+) -> TopologyNodeView:
     return TopologyNodeView(
         device_id=device_id,
         hostname=hostname,
@@ -48,6 +56,7 @@ def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
         x=x,
         y=y,
         placed=True,
+        outside=outside,
     )
 
 
@@ -130,10 +139,10 @@ def test_near_overlap_within_budget_is_cleared():
     """上限内で空けられる近さなら、箱が重ならない間隔まで空ける。"""
     nodes = [
         node(1, "a", 0, 0),
-        node(2, "b", 180, 0),  # 230 まで 50。上限 80 以内
+        node(2, "b", 240, 0),  # 300 まで 60。上限 80 以内
     ]
     _polish_layout(nodes)
-    assert nodes[1].x - nodes[0].x >= 230
+    assert nodes[1].x - nodes[0].x >= 300
 
 
 def test_a_column_is_not_flattened_into_a_row():
@@ -162,8 +171,8 @@ def test_stacked_nodes_are_separated_in_one_polish():
     ]
     _polish_layout(nodes)
     xs = sorted(n.x for n in nodes)
-    assert xs[1] - xs[0] >= 230
-    assert xs[2] - xs[1] >= 230
+    assert xs[1] - xs[0] >= 300
+    assert xs[2] - xs[1] >= 300
     first = [(n.device_id, n.x, n.y) for n in nodes]
     _polish_layout(nodes)
     second = [(n.device_id, n.x, n.y) for n in nodes]
@@ -234,3 +243,56 @@ def test_uncross_does_not_pull_unaligned_neighbors():
     _polish_layout(nodes, edges=edges, owned={1, 2, 3})
     assert abs(row.y - 200) <= LAYOUT_GRID * 2
     assert below.y >= 400
+
+
+def test_busiest_matches_max_on_one_side_not_total():
+    """箱の広がりは1辺の最大本数。総本数だと上下左右に分散した機器まで広がる。"""
+    hub = node(1, "hub", 0, 0)
+    # 上3・下3・右3 → 総9だが1辺は3なので既定のまま
+    nodes = [hub] + [node(10 + i, f"u{i}", i * 40, -200) for i in range(3)]
+    nodes += [node(20 + i, f"d{i}", i * 40, 200) for i in range(3)]
+    nodes += [node(30 + i, f"r{i}", 500, i * 80) for i in range(3)]
+    edges = []
+    eid = 1
+    for other in nodes[1:]:
+        edges.append(edge(eid, 1, other.device_id, f"Gi0/{eid}"))
+        eid += 1
+    busiest = _busiest_side_links(nodes, edges)
+    assert busiest[1] == 3
+    assert _box_width(busiest[1]) == 190.0
+    assert _box_height(3) == 78.0 + 22.0
+
+
+def test_shift_centers_uses_default_half_not_grown_width():
+    """広げた箱の中心は保存左上+既定幅/2。実幅/2だと広い箱へ寄る。"""
+    narrow = node(1, "narrow", 0, 0)
+    wide = node(2, "wide", 240, 0)
+    _shift_centers_to([narrow, wide], 215.0)
+    assert narrow.x == 0.0
+    assert wide.x == 240.0
+
+
+def test_polish_separates_wide_hub_from_neighbor():
+    """上下に結線が多い箱が隣へ食い込むとき、整頓で見た目のすき間を空ける。"""
+    hub = node(1, "hub", 0, 0)
+    # 同じ段の隣。保存差 240 だと幅の広いハブと食い込む
+    neighbor = node(2, "neighbor", 240, 0)
+    # 下辺の本数を稼ぐ（幅が伸びる向き）
+    leaves = [node(10 + i, f"leaf{i}", i * 40, 400) for i in range(7)]
+    nodes = [hub, neighbor, *leaves]
+    edges = [edge(100, 1, 2, "Gi0/0")] + [
+        edge(101 + i, 1, leaf.device_id, f"Gi0/{i + 1}") for i, leaf in enumerate(leaves)
+    ]
+    # 下辺 7 + 右の隣 1 だが、下辺が 7 で幅が伸びる
+    assert _busiest_side_links(nodes, edges)[1] == 7
+    assert _visual_right(hub.x, 7) > _visual_left(neighbor.x, 0)
+    _polish_layout(nodes, edges=edges, owned={n.device_id for n in nodes})
+    assert _visual_left(neighbor.x, 0) >= _visual_right(hub.x, 7) - 1
+
+
+def test_box_height_grows_when_left_right_is_busy():
+    """左右の辺に多いときは高さを伸ばす。幅を広げても縦の被りは消えない。"""
+    assert _box_height(2) == 78.0
+    assert _box_height(3) == 78.0 + 22.0
+    assert _box_height(8) == 78.0 + 6 * 22.0
+    assert _box_width(8) == 190.0 + 5 * 55.0

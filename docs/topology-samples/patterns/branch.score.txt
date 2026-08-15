@@ -1,8 +1,8 @@
-支社 物理構成	172.0
-  readable	88.0
+支社 物理構成	185.5
+  readable	104.0
   center	20.0
   even	12.0
-  tight	12.0
+  tight	9.5
   corridor	12.0
   wires	18.0
   labels	10.0

@@ -10,7 +10,14 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 
-from app.services.topology import TopologyGraph, _visual_right
+from app.services.topology import (
+    TopologyGraph,
+    _busiest_sides,
+    _visual_bottom,
+    _visual_left,
+    _visual_right,
+    _visual_top,
+)
 
 
 @dataclass(frozen=True)
@@ -33,10 +40,21 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
 
     findings.append(Finding(True, "has_spine", f"自拠点 {len(inside)} 台"))
 
+    busiest_tb, busiest_lr = _busiest_sides(graph.nodes, graph.edges)
     overlap = False
     for i, a in enumerate(graph.nodes):
         for b in graph.nodes[i + 1 :]:
-            if abs(a.x - b.x) < 160 and abs(a.y - b.y) < 60:
+            a_tb = busiest_tb.get(a.device_id, 0)
+            b_tb = busiest_tb.get(b.device_id, 0)
+            a_lr = busiest_lr.get(a.device_id, 0)
+            b_lr = busiest_lr.get(b.device_id, 0)
+            # 見た目の箱で判定。保存座標の差だけだと広げた箱の食い込みを見逃す。
+            if (
+                _visual_left(a.x, a_tb) < _visual_right(b.x, b_tb) - 1
+                and _visual_left(b.x, b_tb) < _visual_right(a.x, a_tb) - 1
+                and _visual_top(a.y, a_lr) < _visual_bottom(b.y, b_lr) - 1
+                and _visual_top(b.y, b_lr) < _visual_bottom(a.y, a_lr) - 1
+            ):
                 overlap = True
                 findings.append(
                     Finding(False, "overlap", f"{a.hostname} と {b.hostname} が重なっている")
@@ -80,16 +98,24 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
     up_peers = [n for n in outside if (n.peer_kind or "") == "up"]
     down_peers = [n for n in outside if n not in up_peers]
     if up_peers:
-        if all(n.y < min(i.y for i in inside) - 40 for n in up_peers):
+        inside_top = min(i.y for i in inside)
+        inside_left = min(i.x for i in inside)
+        above = all(n.y < inside_top - 40 for n in up_peers)
+        left = all(n.x < inside_left - 40 for n in up_peers)
+        if above:
             findings.append(Finding(True, "uplink_above", "上位が自拠点の上にある"))
+        elif left:
+            # 左右配置（orientation=horizontal）では上位を左に置く
+            findings.append(Finding(True, "uplink_left", "上位が自拠点の左にある"))
         else:
-            findings.append(Finding(False, "uplink_not_above", "上位が上に無い"))
+            findings.append(Finding(False, "uplink_not_above", "上位が上（または左）に無い"))
         if len(up_peers) >= 2:
             ys = [n.y for n in up_peers]
-            if max(ys) - min(ys) < 40:
-                findings.append(Finding(True, "uplink_row", "上位の冗長が同じ高さ"))
+            xs = [n.x for n in up_peers]
+            if max(ys) - min(ys) < 40 or max(xs) - min(xs) < 40:
+                findings.append(Finding(True, "uplink_row", "上位の冗長が同じ段にある"))
             else:
-                findings.append(Finding(False, "uplink_not_row", "上位の冗長が同じ高さに無い"))
+                findings.append(Finding(False, "uplink_not_row", "上位の冗長が同じ段に無い"))
 
     if down_peers:
         right = max(n.x for n in inside)
@@ -134,6 +160,27 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
             break
     if not pierced:
         findings.append(Finding(True, "no_pierce", "線が箱を貫いていない"))
+
+    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）
+    too_bent = any(max(0, len(wire) - 2) > 2 for wire in wires)
+    if too_bent:
+        findings.append(Finding(False, "too_bent", "線の折れが多すぎる"))
+    else:
+        findings.append(Finding(True, "bend_ok", "線の折れは許容内"))
+
+    # 直角交差は隙間切りで切れ端になりやすい。通せるなら交差させない。
+    segs = [(a, b) for wire in wires for a, b in zip(wire, wire[1:], strict=False)]
+    crossed = False
+    for i, (a1, a2) in enumerate(segs):
+        for b1, b2 in segs[i + 1 :]:
+            if _score_cross(a1, a2, b1, b2):
+                crossed = True
+                findings.append(Finding(False, "wire_cross", "線どうしが直角に交差している"))
+                break
+        if crossed:
+            break
+    if not crossed:
+        findings.append(Finding(True, "no_wire_cross", "線どうしが交差していない"))
 
     for node in graph.nodes:
         if node.hostname not in svg:
@@ -365,16 +412,29 @@ def _svg_boxes(svg: str) -> list[tuple[float, float, float, float]]:
 def _segment_pierces(
     box: tuple[float, float, float, float], a: tuple[float, float], b: tuple[float, float]
 ) -> bool:
-    """端が箱の辺にある接続は貫きではない。箱の中を通過する線だけを落とす。"""
+    """端が箱の辺にある接続は貫きではない。箱の中を通過する線だけを落とす。
+
+    長い線分の固定サンプルだと、箱の端をかすめる貫きを見逃すことがある。
+    """
     x1, y1, x2, y2 = box
     pad = 4.0
-    inner = (x1 + pad, y1 + pad, x2 - pad, y2 - pad)
-    samples = 8
-    hits = 0
-    for i in range(1, samples):
-        t = i / samples
-        x = a[0] + (b[0] - a[0]) * t
-        y = a[1] + (b[1] - a[1]) * t
-        if inner[0] < x < inner[2] and inner[1] < y < inner[3]:
-            hits += 1
-    return hits >= 3
+    ix1, iy1, ix2, iy2 = x1 + pad, y1 + pad, x2 - pad, y2 - pad
+    if ix2 <= ix1 or iy2 <= iy1:
+        return False
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, ax - ix1), (dx, ix2 - ax), (-dy, ay - iy1), (dy, iy2 - ay)):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    return t1 - t0 > 1e-4 and t0 < 1.0 - 1e-9 and t1 > 1e-9

@@ -32,16 +32,22 @@ def _ok(graph, title: str, filename: str) -> None:
     findings = evaluate_site_diagram(graph)
     failed = [item.detail for item in findings if not item.ok]
     assert is_acceptable(findings), f"{title}: {failed}"
-    svg = render_svg(graph, title=title, style="simple")
-    svg_findings = evaluate_svg(svg, graph)
-    failed_svg = [item.detail for item in svg_findings if not item.ok]
-    assert is_acceptable(svg_findings), f"{title} SVG: {failed_svg}"
-    scored = score_diagram(graph, svg)
-    assert scored.total > 100, f"{title} {scored.total}点 {scored.parts}"
-    _write(filename, svg)
-    lines = [f"{title}\t{scored.total}"]
-    lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
-    _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
+    scored = None
+    for style in ("simple", "detail"):
+        svg = render_svg(graph, title=title, style=style)
+        svg_findings = evaluate_svg(svg, graph)
+        failed_svg = [item.detail for item in svg_findings if not item.ok]
+        assert is_acceptable(svg_findings), f"{title} SVG({style}): {failed_svg}"
+        if style == "simple":
+            scored = score_diagram(graph, svg)
+            assert scored.total > 100, f"{title} {scored.total}点 {scored.parts}"
+            _write(filename, svg)
+            lines = [f"{title}\t{scored.total}"]
+            lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
+            _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
+        else:
+            # 画面の既定は詳細。詳細も同じ合格線を通す
+            _write(filename.replace(".svg", "-detail.svg"), svg)
     return scored
 
 
@@ -216,8 +222,9 @@ def test_many_offices_stay_in_a_right_column(db_session):
     xs = {round(n.x) for n in offices}
     assert len(xs) == 1
     hub = next(n for n in graph.nodes if n.hostname == "ksi-br-rt-01")
-    hub_links = sum(1 for edge in graph.edges if hub.device_id in (edge.source, edge.target))
-    assert min(n.x for n in offices) - _visual_right(hub.x, hub_links) < 200
+    # 左右から出すため COLUMN(400) 以上離す。ポート名用のすき間で通り道より少し広い
+    assert min(n.x for n in offices) - _visual_right(hub.x, 0) < 360
+    assert min(n.x for n in offices) - hub.x >= 400
 
 
 def test_horizontal_orientation_is_still_readable(db_session):
@@ -227,18 +234,12 @@ def test_horizontal_orientation_is_still_readable(db_session):
         site_id=ids["osaka"],
         orientation="horizontal",
     )
-    svg = render_svg(graph, title="営業所 左右配置", style="simple")
-    _write("office-horizontal.svg", svg)
-    assert not any(
-        abs(a[0] - b[0]) > 8 and abs(a[1] - b[1]) > 8
-        for match in __import__("re").finditer(r'<polyline points="([^"]+)"', svg)
-        for pts in [
-            [(float(p.split(",")[0]), float(p.split(",")[1])) for p in match.group(1).split()]
-        ]
-        for a, b in zip(pts, pts[1:], strict=False)
-    )
+    _ok(graph, "営業所 左右配置", "office-horizontal.svg")
     placed = {n.hostname: n for n in graph.nodes}
     assert placed["east-core-rt-01"].x < placed["osaka-rt-01"].x < placed["osaka-sw-01"].x
+    # 箱幅より狭い間隔だと食い込む（左右配置の段ピッチ退行防止）
+    assert placed["osaka-sw-01"].x - placed["osaka-rt-01"].x >= 190
+    assert placed["osaka-rt-01"].x - placed["east-core-rt-01"].x >= 190
 
 
 def test_physical_and_l2_are_different_sheets(db_session):
