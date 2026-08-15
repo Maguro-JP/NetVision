@@ -202,6 +202,7 @@ def _seed(force: bool) -> None:
         wiring = [
             ("edge-rt-01", "ge-0/0/0", "fw-01", "port1", True),
             ("fw-01", "port2", "core-sw-01", "GigabitEthernet1/0/24", True),
+            ("fw-01", "port3", "core-sw-02", "GigabitEthernet1/0/23", True),
             (
                 "core-sw-01",
                 "TenGigabitEthernet1/1/1",
@@ -227,9 +228,8 @@ def _seed(force: bool) -> None:
                 for a, a_if, b, b_if, confirmed in wiring
             ]
         )
-        # 人が引いた線と、同じ機器間の2本目。
-        # 前者は自動推定と区別が付くこと、後者は同じ辺に複数本来たときに
-        # 引き出し口が散ることを、デモで見せるために入れてある
+        # 同じ機器間の2本目。同じ辺に複数本来たときに引き出し口が散ることを
+        # デモで見せる。人が引いた線は、段を飛ばすと自動配置が崩れるので足さない
         db.add_all(
             [
                 Link(
@@ -240,15 +240,6 @@ def _seed(force: bool) -> None:
                     origin=LinkOrigin.DISCOVERED,
                     protocol="lldp",
                     confirmed_both_ways=True,
-                ),
-                Link(
-                    a_device_id=by_host["edge-rt-01"].id,
-                    a_interface="ge-0/0/3",
-                    b_device_id=by_host["acc-sw-01"].id,
-                    b_interface="GigabitEthernet0/24",
-                    origin=LinkOrigin.MANUAL,
-                    label="本社⇔西日本センター 専用線",
-                    confirmed_both_ways=False,
                 ),
             ]
         )
@@ -313,7 +304,9 @@ def _seed(force: bool) -> None:
             ("edge-rt-01", "ge-0/0/0", None, None, None, None, "10.255.0.1/30"),
             ("fw-01", "port1", None, None, None, None, "10.255.0.2/30"),
             ("fw-01", "port2", None, None, None, None, "10.255.0.5/30"),
+            ("fw-01", "port3", None, None, None, None, "10.255.0.9/30"),
             ("core-sw-01", "GigabitEthernet1/0/24", None, None, None, None, "10.255.0.6/30"),
+            ("core-sw-02", "GigabitEthernet1/0/23", None, None, None, None, "10.255.0.10/30"),
         ]
         db.add_all(
             [

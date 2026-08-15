@@ -186,28 +186,30 @@ def build_center(db) -> dict[str, int]:
     return {"branch": branch.id, "center": center.id}
 
 
-def test_each_peer_site_is_represented_by_one_device(db_session):
-    """対向は相手の拠点ごとに1台だけにすること。
-
-    支社を見たいのに、営業所の中まで2台3台と出てくると、肝心の支社が読めない。
-    """
+def test_each_boundary_peer_is_kept_so_redundancy_stays_visible(db_session):
+    """こちらと線がある対向は残す。折ると冗長の2台目が消える。"""
     ids = build_center(db_session)
     graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["branch"])
 
     outside = sorted(n.hostname for n in graph.nodes if n.outside)
-    # 京都府営業所は2台繋がっているが、出るのは1台
-    assert outside == ["kyoto-rt-01", "nara-rt-01", "west-core-rt-01"]
+    assert "west-core-rt-01" in outside
+    assert "west-core-rt-02" in outside
+    assert "kyoto-rt-01" in outside
+    assert "kyoto-rt-02" in outside
+    assert "nara-rt-01" in outside
 
 
-def test_the_devices_folded_away_are_counted_not_hidden_silently(db_session):
-    """まとめた分は台数として出す。黙って消すと「1台しかない」と読まれる。"""
+def test_boundary_peers_are_not_folded_into_a_count(db_session):
+    """境界の対向は台数に畳まず、箱として出す。"""
     ids = build_center(db_session)
     graph = topology.scope_graph(topology.get_graph(db_session), site_id=ids["branch"])
 
     folded = {n.hostname: n.hidden_peers for n in graph.nodes if n.outside}
-    assert folded["kyoto-rt-01"] == 1
-    assert folded["west-core-rt-01"] == 1
-    assert folded["nara-rt-01"] == 0
+    assert all(count == 0 for count in folded.values())
+    cores = [n for n in graph.nodes if n.hostname.startswith("west-core-rt-")]
+    assert len(cores) == 2
+    assert abs(cores[0].y - cores[1].y) < 1
+    assert abs(cores[0].x - cores[1].x) >= 200
 
 
 def test_lines_between_two_peers_are_not_drawn(db_session):

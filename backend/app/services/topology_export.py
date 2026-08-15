@@ -24,7 +24,7 @@ from sqlalchemy.orm import Session
 from app.services import localtime, portlabel, svglayout
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
-from app.services.topology import PLANE_NAMES, TopologyGraph, attach_groups, get_graph
+from app.services.topology import PLANE_NAMES, TopologyGraph, load_diagram
 
 # 画面の配色に合わせる。印刷しても潰れないよう、白地でも読める濃さにしてある
 SEVERITY_COLOR: dict[str, str] = {
@@ -74,26 +74,30 @@ def render_svg(
     along_line: bool = False,
     show_peers: bool = True,
 ) -> str:
-    """トポロジを SVG にする。位置は画面で整えたものをそのまま使う。
+    """トポロジを SVG にする。位置は渡されたグラフのまま使う。
 
-    `vlan` / `vrf` / `site_id` を指定すると、それに載っている機器だけを描く。
-    セグメント単位・VRF 単位・拠点単位で資料を作るときに使う。
+    拠点の図は、画面と同じ配置（自拠点と対向）をそのまま描く。
+    ここで自拠点だけ残して対向を置き直すと、箱が千切れ、斜め線が出る。
+
+    `vlan` / `vrf` でさらに切ったときだけ、外に出た相手を簡易表示で残す。
+    未整理の全台グラフに `site_id` だけ渡された場合も、同じ簡易表示に落とす。
 
     `style="simple"` は機器名と結線だけの図。型番・IP・保守状態・VLAN を
     一切載せない。作業手順書や現場での指差し確認では、余計な情報が入っている方が
     読み違いのもとになるため、用途で図を分けられるようにしてある。
-
-    絞り込んだ場合、外に出た対向機器は `show_peers` で簡易表示として残す。
-    線ごと消すと、拠点の図で上位への接続が「無い」ように見えてしまうため。
     """
     simple = style == "simple"
     everything = graph
     nodes = graph.nodes
+    # 画面が組んだ拠点図（対向に outside が付いている）は、切らずに描く
+    already_site_diagram = any(n.outside for n in graph.nodes)
     if vlan is not None:
         nodes = [n for n in nodes if vlan in n.vlans]
     if vrf is not None:
         nodes = [n for n in nodes if vrf in n.vrfs]
-    if site_id is not None:
+    if already_site_diagram and not show_peers:
+        nodes = [n for n in nodes if not n.outside]
+    elif site_id is not None and not already_site_diagram:
         nodes = [n for n in nodes if n.site_id == site_id]
 
     peers: list[_Peer] = []
@@ -152,7 +156,7 @@ def render_svg(
         f'<svg xmlns="http://www.w3.org/2000/svg" width="{width:.0f}" height="{height:.0f}" '
         f'viewBox="0 0 {width:.0f} {height:.0f}" font-family="{FONT}">'
     )
-    parts.append('<rect width="100%" height="100%" fill="#ffffff"/>')
+    parts.append('<rect width="100%" height="100%" fill="#f4f1ea"/>')
 
     # 資料に載る時刻は、サーバの時計ではなく使う人の時刻でなければ意味が無い
     generated = localtime.format(localtime.now(), with_zone=True)
@@ -163,7 +167,9 @@ def render_svg(
     scope = f"{f' / VLAN {vlan}' if vlan is not None else ''}"
     scope += f"{f' / VRF {vrf}' if vrf else ''}"
     if site_id is not None:
-        site_name = next((n.site_name for n in nodes if n.site_name), None)
+        site_name = next((n.site_name for n in nodes if not n.outside and n.site_name), None)
+        if not site_name:
+            site_name = next((n.site_name for n in nodes if n.site_name), None)
         scope += f" / {site_name}" if site_name else ""
     # 対象外へ出ていく線も本数に入れる。描いてある線が数に入っていないと、
     # 図と見出しが食い違って見える
@@ -243,6 +249,7 @@ def render_svg(
             lane_rank.setdefault(edge_id, (index, len(members)))
 
     # --- 結線（ノードより先に描いて背面に回す） ---
+    pending: list[tuple[list[tuple[float, float]], object]] = []
     for edge in graph.edges:
         source, target = at.get(edge.source), at.get(edge.target)
         if source is None or target is None:
@@ -260,36 +267,60 @@ def render_svg(
         x1, y1 = points[0]
         x2, y2 = points[-1]
         shift = parallel.get(edge.id, 0.0)
-        if shift:
+        # 折れ線全体を端点どうしの向きでずらすと、縦横の辺が斜めになる。
+        # 束の分離は lane rank のバスで足りる。直線のときだけ平行にずらす。
+        if shift and len(points) == 2:
             length = max(((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5, 1.0)
             offset_x = -(y2 - y1) / length * shift
             offset_y = (x2 - x1) / length * shift
-            points = [(x + offset_x, y + offset_y) for x, y in points]
-            x1, y1 = points[0]
-            x2, y2 = points[-1]
+            shifted = [(x + offset_x, y + offset_y) for x, y in points]
+            if _residual(shifted, obstacles) <= _residual(points, obstacles):
+                points = shifted
+        pending.append((points, edge))
 
+    gapped = _cut_gaps([item[0] for item in pending])
+    stroke = "#2f4d6a" if simple else "#8a94a6"
+    for index, (points, edge) in enumerate(pending):
         dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
-        stroke = "#4a5364" if simple else "#8a94a6"
-        parts.append(
-            f'<polyline points="{_path_points(points)}" fill="none" '
-            f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
-        )
-
+        for piece in gapped[index]:
+            parts.append(
+                f'<polyline points="{_path_points(piece)}" fill="none" '
+                f'stroke="{stroke}" stroke-width="1.6"{dash}/>'
+            )
+        x1, y1 = points[0]
+        x2, y2 = points[-1]
         if edge.label:
-            # 人が付けた名前は線の中央に置く。ポート名とは性質が違うため
             parts.append(_center_label(*_path_middle(points), edge.label, placement))
         else:
-            # ポート名は機器の中心から枠の外へ出す。線の折れ点を使うと中央に寄る
+            source = at[edge.source]
+            target = at[edge.target]
             sx, sy = source[0] + NODE_W / 2, source[1] + NODE_H / 2
             tx, ty = target[0] + NODE_W / 2, target[1] + NODE_H / 2
+            hop = ((x2 - x1) ** 2 + (y2 - y1) ** 2) ** 0.5
             parts.append(
                 _port_label(
-                    sx, sy, x1, y1, edge.source_interface, port_style, along_line, placement
+                    sx,
+                    sy,
+                    x1,
+                    y1,
+                    edge.source_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    hop=hop,
                 )
             )
             parts.append(
                 _port_label(
-                    tx, ty, x2, y2, edge.target_interface, port_style, along_line, placement
+                    tx,
+                    ty,
+                    x2,
+                    y2,
+                    edge.target_interface,
+                    port_style,
+                    along_line,
+                    placement,
+                    hop=hop,
                 )
             )
             for name in (edge.source_interface, edge.target_interface):
@@ -303,7 +334,6 @@ def render_svg(
             continue
         px, py = peer.x + dx, peer.y + dy
         ax, ay = anchor[0] + NODE_W / 2, anchor[1] + NODE_H / 2
-        cx, cy = px + PEER_W / 2, py + PEER_H / 2
 
         obstacles = [
             rect.grow(2.0) for device_id, rect in boxes.items() if device_id != peer.anchor
@@ -312,7 +342,11 @@ def render_svg(
             for q in peers
             if q is not peer
         ]
-        points = _route((ax, ay), (cx, cy), obstacles)
+        src_box = (anchor[0], anchor[1], NODE_W, NODE_H)
+        dst_box = (px, py, PEER_W, PEER_H)
+        src_side = _side_toward(src_box, dst_box)
+        dst_side = _side_toward(dst_box, src_box)
+        points = _wire_path(src_box, dst_box, src_side, dst_side, 0, 1, obstacles)
         parts.append(
             f'<polyline points="{_path_points(points)}" fill="none" '
             f'stroke="#8a94a6" stroke-width="1.6"'
@@ -321,8 +355,9 @@ def render_svg(
         )
         parts.append(_peer_box(px, py, peer, simple))
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
+        label_to = points[1] if len(points) > 1 else points[0]
         parts.append(
-            _port_label(ax, ay, *points[1], peer.local_interface, port_style, along_line, placement)
+            _port_label(ax, ay, *label_to, peer.local_interface, port_style, along_line, placement)
         )
         if peer.local_interface:
             used_media.add(portlabel.media_of(peer.local_interface))
@@ -332,13 +367,21 @@ def render_svg(
         x, y = at[node.device_id]
         if simple:
             # 名前だけ。枠は輪郭が分かる程度の細さに留める
+            subtitle = ""
+            if node.outside and node.site_name:
+                subtitle = (
+                    f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 18:.0f}" font-size="10" '
+                    f'fill="#6b6b6b" text-anchor="middle">{_esc(_clip(node.site_name, 22))}</text>'
+                )
+            name_y = y + NODE_H / 2 + (0 if subtitle else 5)
+            fill = _role_fill(node)
             parts.append(
                 f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{NODE_W:.0f}" '
-                f'height="{NODE_H:.0f}" rx="7" fill="#ffffff" stroke="#4a5364" '
+                f'height="{NODE_H:.0f}" rx="4" fill="{fill}" stroke="#2c2a26" '
                 f'stroke-width="1.6"/>'
-                f'<text x="{x + NODE_W / 2:.0f}" y="{y + NODE_H / 2 + 5:.0f}" font-size="14" '
+                f'<text x="{x + NODE_W / 2:.0f}" y="{name_y:.0f}" font-size="14" '
                 f'font-weight="700" fill="#1a1a1a" text-anchor="middle">'
-                f"{_esc(_clip(node.hostname, 22))}</text></g>"
+                f"{_esc(_clip(node.hostname, 22))}</text>{subtitle}</g>"
             )
             continue
 
@@ -478,7 +521,10 @@ def _place_peer(
 
 _ROUTE_CLEAR = 16.0  # 迂回するときに箱から離す距離
 _SAME_ROW = 60.0
-_ASIDE = 240.0
+# 一段下（または上）。親の配下は、横にずれていても上下で結ぶ
+_TIER = 100.0
+# 右の列（拠点の対向）。1列分だとコア横のアクセスまで横扱いになり箱を貫く
+_COLUMN = 400.0
 
 
 def _side_toward(
@@ -491,8 +537,10 @@ def _side_toward(
     dy = (ty + th / 2) - (hy + hh / 2)
     if abs(dy) < _SAME_ROW:
         return "right" if dx > 0 else "left"
-    if abs(dx) >= _ASIDE:
+    if abs(dx) >= _COLUMN:
         return "right" if dx > 0 else "left"
+    if abs(dy) >= _TIER:
+        return "bottom" if dy > 0 else "top"
     return "bottom" if dy > 0 else "top"
 
 
@@ -516,9 +564,10 @@ def _orthogonal_bus(
     rank: int,
     count: int,
 ) -> list[tuple[float, float]] | None:
-    """縦横だけの通り道。束の先頭ほど相手に近いレーンを使う。"""
+    """縦横だけの通り道。ハブ側で重ねてから、相手の高さで扇に開く。"""
     gap = 16.0
     inset = 28.0
+    stack = 36.0
     rank = max(0, rank)
     steps = max(0, count - 1)
     sx, sy = source
@@ -527,21 +576,33 @@ def _orthogonal_bus(
         usable = max(0.0, tx - sx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx - inset - rank * pitch
+        stack_x = sx + stack
+        if bus_x - stack_x > 8:
+            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "left" and target_face == "right" and sx - tx > 40:
         usable = max(0.0, sx - tx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx + inset + rank * pitch
+        stack_x = sx - stack
+        if stack_x - bus_x > 8:
+            return [(sx, sy), (stack_x, sy), (stack_x, ty), (bus_x, ty), (tx, ty)]
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "bottom" and target_face == "top" and ty - sy > 40:
         usable = max(0.0, ty - sy - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty - inset - rank * pitch
+        stack_y = sy + stack
+        if bus_y - stack_y > 8:
+            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "bottom" and sy - ty > 40:
         usable = max(0.0, sy - ty - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty + inset + rank * pitch
+        stack_y = sy - stack
+        if stack_y - bus_y > 8:
+            return [(sx, sy), (sx, stack_y), (tx, stack_y), (tx, bus_y), (tx, ty)]
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -558,10 +619,59 @@ def _wire_path(
     t = 0.5 if count <= 1 else 0.25 + 0.5 * (rank / max(count - 1, 1))
     start = _anchor(src_box, src_side, t)
     end = _anchor(dst_box, dst_side, t)
+    candidates: list[list[tuple[float, float]]] = []
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
-    if bus and _residual(bus, obstacles) == 0:
-        return bus
-    return _route(start, end, obstacles)
+    if bus:
+        candidates.append(bus)
+    manhattan = _manhattan(start, end, src_side, dst_side)
+    candidates.append(manhattan)
+    routed = _route(start, end, obstacles)
+    if _is_orthogonal(routed):
+        candidates.append(routed)
+    # 箱を貫く線より、遠回りでも空いている縦横を採る
+    return min(candidates, key=lambda route: (_residual(route, obstacles), _length(route)))
+
+
+def _manhattan(
+    source: tuple[float, float],
+    target: tuple[float, float],
+    source_face: str,
+    target_face: str,
+) -> list[tuple[float, float]]:
+    """バスが使えないときも縦横だけ。画面側の manhattanRoute と同じ形。"""
+    out = 16.0
+    sx, sy = source
+    tx, ty = target
+    ox = sx + (out if source_face == "right" else -out if source_face == "left" else 0.0)
+    oy = sy + (out if source_face == "bottom" else -out if source_face == "top" else 0.0)
+    ix = tx + (out if target_face == "right" else -out if target_face == "left" else 0.0)
+    iy = ty + (out if target_face == "bottom" else -out if target_face == "top" else 0.0)
+    horizontal_first = source_face in ("left", "right")
+    mid = (ox, iy) if horizontal_first else (ix, oy)
+    points = [source, (ox, oy), mid, (ix, iy), target]
+    out_pts = [points[0]]
+    for point in points[1:]:
+        if abs(point[0] - out_pts[-1][0]) > 0.5 or abs(point[1] - out_pts[-1][1]) > 0.5:
+            out_pts.append(point)
+    return out_pts if len(out_pts) > 1 else [source, target]
+
+
+def _ell(
+    p1: tuple[float, float], p2: tuple[float, float], horizontal_first: bool
+) -> list[tuple[float, float]]:
+    mid = (p2[0], p1[1]) if horizontal_first else (p1[0], p2[1])
+    if abs(mid[0] - p1[0]) < 0.5 and abs(mid[1] - p1[1]) < 0.5:
+        return [p1, p2]
+    if abs(mid[0] - p2[0]) < 0.5 and abs(mid[1] - p2[1]) < 0.5:
+        return [p1, p2]
+    return [p1, mid, p2]
+
+
+def _is_orthogonal(points: list[tuple[float, float]]) -> bool:
+    return all(
+        abs(a[0] - b[0]) <= 0.5 or abs(a[1] - b[1]) <= 0.5
+        for a, b in zip(points, points[1:], strict=False)
+    )
 
 
 def _route(
@@ -570,20 +680,38 @@ def _route(
     obstacles: list[svglayout.Rect],
     depth: int = 0,
 ) -> list[tuple[float, float]]:
-    """関係の無い機器の箱を避けて通る折れ線を返す。
+    """関係の無い機器の箱を避けて通る折れ線を返す。斜めは出さない。
 
     直線で結ぶと、間にある機器の上を通ってしまうことがある。図の上では
     「通過」と「接続」を見分けられないので、その機器にも繋がっていると
     読まれてしまう。専用線が FW を貫いて見えるのがこれ。
 
     迂回は上下左右の4方向を試し、他の箱にも当たらず、遠回りの少ないものを採る。
-    どうしても避けられない場合は直線のまま出す。線を消す方が誤解を招くため。
+    どうしても避けられない場合も縦横の折れ線のまま出す。
     """
-    blockers = [rect for rect in obstacles if svglayout.segment_hits(rect, p1, p2)]
-    if not blockers:
-        return [p1, p2]
+    aligned = abs(p1[0] - p2[0]) <= 0.5 or abs(p1[1] - p2[1]) <= 0.5
+    if aligned:
+        blockers = [rect for rect in obstacles if svglayout.segment_hits(rect, p1, p2)]
+        if not blockers:
+            return [p1, p2]
+    else:
+        options = [_ell(p1, p2, True), _ell(p1, p2, False)]
+        clear = [route for route in options if _residual(route, obstacles) == 0]
+        if clear:
+            return min(clear, key=_length)
+        blockers = [
+            rect
+            for rect in obstacles
+            for route in options
+            for a, b in zip(route, route[1:], strict=False)
+            if svglayout.segment_hits(rect, a, b)
+        ]
+        if not blockers:
+            return options[0]
+
     if depth >= 3:
-        return [p1, p2]
+        options = [_ell(p1, p2, True), _ell(p1, p2, False)]
+        return min(options, key=lambda route: (_residual(route, obstacles), _length(route)))
 
     # 邪魔をしている箱をまとめて1つの塊として避ける。1個ずつ避けると、
     # 避けた先にまた次の箱がいて、堂々巡りになる
@@ -596,16 +724,12 @@ def _route(
     mid_x, mid_y = (hit.x1 + hit.x2) / 2, (hit.y1 + hit.y2) / 2
     left, right = hit.x1 - _ROUTE_CLEAR, hit.x2 + _ROUTE_CLEAR
     top, bottom = hit.y1 - _ROUTE_CLEAR, hit.y2 + _ROUTE_CLEAR
-    # 辺の外側と、角の外側。斜めの線は角を回る方が短く済む
+    # 辺の外側。角は斜めになるので使わない
     candidates = [
         (mid_x, top),
         (mid_x, bottom),
         (left, mid_y),
         (right, mid_y),
-        (left, top),
-        (right, top),
-        (left, bottom),
-        (right, bottom),
     ]
     # 候補ごとに実際に両側を引き直してから選ぶ。
     # 「この方向なら空いている」を1手だけ見て決めると、避けた先にまた箱がいる
@@ -621,14 +745,14 @@ def _route(
         if cost[0] == 0 and depth > 0:
             break  # 奥の階層では、通れる道が見つかった時点で十分
 
-    points = best or [p1, p2]
+    points = best or _ell(p1, p2, True)
 
     # 同じ点が続くと、そこだけ向きが決まらない。折れ線から落とす
     out = [points[0]]
     for point in points[1:]:
         if abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
             out.append(point)
-    return out if len(out) > 1 else [p1, p2]
+    return out if len(out) > 1 else _ell(p1, p2, True)
 
 
 def _residual(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]) -> int:
@@ -650,6 +774,119 @@ def _length(route: list[tuple[float, float]]) -> float:
 
 def _path_points(points: list[tuple[float, float]]) -> str:
     return " ".join(f"{x:.0f},{y:.0f}" for x, y in points)
+
+
+def _role_fill(node: object) -> str:
+    """資料の箱色。役割が一目で残るようにする。"""
+    kind = getattr(node, "peer_kind", None)
+    device_type = getattr(node, "device_type", "")
+    if device_type == "firewall":
+        return "#f3e6e2"
+    if kind == "up":
+        return "#e7eef6"
+    if kind == "down":
+        return "#eef3ea"
+    if device_type == "router":
+        return "#e7eef6"
+    return "#f6f1e8"
+
+
+def _interior_cross(
+    a1: tuple[float, float],
+    a2: tuple[float, float],
+    b1: tuple[float, float],
+    b2: tuple[float, float],
+) -> tuple[float, float] | None:
+    """直角に交わる線の内側の交点。端で接する重なりは隙間にしない。"""
+    ah = abs(a1[1] - a2[1]) <= 0.5
+    av = abs(a1[0] - a2[0]) <= 0.5
+    bh = abs(b1[1] - b2[1]) <= 0.5
+    bv = abs(b1[0] - b2[0]) <= 0.5
+    if ah and bv:
+        x, y = b1[0], a1[1]
+        if (
+            min(a1[0], a2[0]) + 2 < x < max(a1[0], a2[0]) - 2
+            and min(b1[1], b2[1]) + 2 < y < max(b1[1], b2[1]) - 2
+        ):
+            return (x, y)
+    if av and bh:
+        x, y = a1[0], b1[1]
+        if (
+            min(b1[0], b2[0]) + 2 < x < max(b1[0], b2[0]) - 2
+            and min(a1[1], a2[1]) + 2 < y < max(a1[1], a2[1]) - 2
+        ):
+            return (x, y)
+    return None
+
+
+def _cut_segment(
+    p1: tuple[float, float],
+    p2: tuple[float, float],
+    holes: list[tuple[float, float]],
+    radius: float,
+) -> list[list[tuple[float, float]]]:
+    if not holes:
+        return [[p1, p2]]
+    dx, dy = p2[0] - p1[0], p2[1] - p1[1]
+    length = max((dx * dx + dy * dy) ** 0.5, 1.0)
+    ux, uy = dx / length, dy / length
+
+    def along(point: tuple[float, float]) -> float:
+        return (point[0] - p1[0]) * ux + (point[1] - p1[1]) * uy
+
+    ordered = sorted(holes, key=along)
+    pieces: list[list[tuple[float, float]]] = []
+    cursor = p1
+    for hole in ordered:
+        t = along(hole)
+        stop = (p1[0] + ux * max(0.0, t - radius), p1[1] + uy * max(0.0, t - radius))
+        start = (p1[0] + ux * min(length, t + radius), p1[1] + uy * min(length, t + radius))
+        if along(stop) - along(cursor) > 1:
+            pieces.append([cursor, stop])
+        cursor = start
+    if along(p2) - along(cursor) > 1:
+        pieces.append([cursor, p2])
+    return pieces or [[p1, p2]]
+
+
+def _cut_gaps(
+    wires: list[list[tuple[float, float]]], *, radius: float = 5.0
+) -> list[list[list[tuple[float, float]]]]:
+    """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。"""
+    out: list[list[list[tuple[float, float]]]] = []
+    earlier: list[tuple[tuple[float, float], tuple[float, float]]] = []
+
+    def near(p: tuple[float, float], q: tuple[float, float]) -> bool:
+        return abs(p[0] - q[0]) <= 0.5 and abs(p[1] - q[1]) <= 0.5
+
+    for wire in wires:
+        pieces: list[list[tuple[float, float]]] = []
+        current: list[tuple[float, float]] = [wire[0]]
+        for a, b in zip(wire, wire[1:], strict=False):
+            holes = [
+                cross
+                for seg in earlier
+                if (cross := _interior_cross(a, b, seg[0], seg[1])) is not None
+            ]
+            chunks = _cut_segment(a, b, holes, radius)
+            for index, chunk in enumerate(chunks):
+                # 角の手前で切ったあとに次の辺をそのまま足すと斜めになる。
+                # 切れた端と次の始点が接しているときだけつなぐ。
+                if index == 0 and current and near(current[-1], chunk[0]):
+                    current.extend(chunk[1:])
+                else:
+                    if len(current) >= 2:
+                        pieces.append(current)
+                    current = list(chunk)
+            if current and not near(current[-1], b):
+                if len(current) >= 2:
+                    pieces.append(current)
+                current = []
+        if len(current) >= 2:
+            pieces.append(current)
+        out.append(pieces or [wire])
+        earlier.extend(zip(wire, wire[1:], strict=False))
+    return out
 
 
 def _path_middle(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:
@@ -743,6 +980,7 @@ def _port_label(
     style: str,
     along_line: bool,
     placement: svglayout.Placement,
+    hop: float | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -787,7 +1025,9 @@ def _port_label(
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(base, limit)
+        for step, offset, side in _candidate_offsets(
+            base, limit, short=hop is not None and hop < 56
+        )
     ]
 
     # 置けないときは文字を短くする。重ねるくらいなら略した方がまし。
@@ -821,15 +1061,25 @@ def _port_label(
     )
 
 
-def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, float]]:
+def _candidate_offsets(
+    base: float, limit: float, *, short: bool = False
+) -> list[tuple[float, float, float]]:
     """ラベルを置く候補を（線に沿う距離, 線から離す量, 左右）で並べる。
 
     近いほど良いので、2つのずらし量の合計が小さい順にする。1本の線に何本も
     束ねている構成（LAG など）では同じ場所に何個も置くことになるため、
     線に沿う方向と垂直な方向の両方に逃がせないと必ずどこかで被る。
+
+    箱の間が狭い線は、隙間に並べず箱の直上・直下へ先に逃がす。
     """
-    steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
-    offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
+    if short:
+        steps = [0.0, 8.0]
+        offsets = [34.0, 46.0, 58.0, 22.0, 72.0, 88.0, _SIDE_OFFSET]
+        offset_weight = 0.4
+    else:
+        steps = [0.0, 14.0, 28.0, 44.0, 62.0, 84.0, 110.0]
+        offsets = [_SIDE_OFFSET + 11.0 * index for index in range(12)]
+        offset_weight = 1.2
 
     out: list[tuple[float, float, float, float]] = []
     for step_index, step in enumerate(steps):
@@ -838,7 +1088,7 @@ def _candidate_offsets(base: float, limit: float) -> list[tuple[float, float, fl
             break
         for offset_index, offset in enumerate(offsets):
             for side in (1.0, -1.0):
-                rank = step_index + offset_index * 1.2
+                rank = step_index + offset_index * offset_weight
                 out.append((rank, step, offset, side))
 
     out.sort(key=lambda item: item[0])
@@ -978,7 +1228,7 @@ def export_svg(
     orientation: str = "vertical",
 ) -> str:
     return render_svg(
-        attach_groups(db, get_graph(db, layer, orientation=orientation, site_id=site_id)),
+        load_diagram(db, layer, site_id=site_id, orientation=orientation),
         title=title,
         vlan=vlan,
         vrf=vrf,

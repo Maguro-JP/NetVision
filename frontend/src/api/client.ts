@@ -449,13 +449,15 @@ export const api = {
     request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {
       method: "DELETE",
     }),
-  /** いま見えている範囲を自動配置で並べ直して保存する。 */
+  /** いま画面にある配置を起点に、マス目・揃いだけ整えて保存する。 */
   arrangePositions: (
     layer: string,
     scope: { site_id?: number; q?: string; scope?: string; orientation?: string } = {},
+    positions: { device_id: number; x: number; y: number }[] = [],
   ) =>
     request<{ arranged: number }>(`/topology/positions/arrange${query({ layer, ...scope })}`, {
       method: "POST",
+      body: JSON.stringify({ positions }),
     }),
   rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
   listTopologyVlans: () => request<TopologyVlan[]>("/topology/vlans"),

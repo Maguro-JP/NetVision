@@ -150,8 +150,15 @@ interface LabelOptions {
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
 const SAME_ROW = 60;
 
-/** 横へ大きく離れていると見なす差。これを超えたら横から出す。 */
-const ASIDE = 240;
+/** 一段下（または上）と見なす縦の差。親の真下の配下はここから上下で結ぶ。 */
+const TIER = 100;
+
+/**
+ * 右の列（拠点の対向など）と見なす横の差。
+ * 1列分（240）だと、コアの隣のアクセスまで横扱いになり箱を貫く。
+ * 対向の列は通り道を挟んでもう一段先なので、それより大きく取る。
+ */
+const COLUMN = 400;
 
 /**
  * 機器の箱のどの辺から線を出すか。
@@ -162,13 +169,14 @@ const ASIDE = 240;
  * 難しいのは、段が違ううえに横へも離れている相手——支社から見た各営業所が
  * これにあたる。下から出すと、自分の真下にある配下の機器へ向かう線を
  * 何本もまたぐことになる。横から出せばまたがずに済み、線も短い。
- * 横へ 1 列以上ずれている相手は、下ではなく横につなぐ。
+ * 右の列にいる対向は横から。一段下のアクセスは、横にずれていても下から。
  */
 export function sideToward(from: TopologyNode, to: TopologyNode): Side {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   if (Math.abs(dy) < SAME_ROW) return dx > 0 ? "right" : "left";
-  if (Math.abs(dx) >= ASIDE) return dx > 0 ? "right" : "left";
+  if (Math.abs(dx) >= COLUMN) return dx > 0 ? "right" : "left";
+  if (Math.abs(dy) >= TIER) return dy > 0 ? "bottom" : "top";
   return dy > 0 ? "bottom" : "top";
 }
 
@@ -390,6 +398,7 @@ function toFlow(
       editable: options.editable,
       outside: node.outside,
       hiddenPeers: node.hidden_peers,
+      peerKind: node.peer_kind ?? null,
       width,
       shift,
       compact: simple,
@@ -799,12 +808,18 @@ function TopologyEditor() {
   });
 
   const arrange = useMutation({
-    mutationFn: () =>
-      api.arrangePositions(layer, {
-        ...viewScope,
-        scope,
-        orientation,
-      }),
+    mutationFn: () => {
+      const current = instance.current?.getNodes() ?? nodes;
+      return api.arrangePositions(
+        layer,
+        {
+          ...viewScope,
+          scope,
+          orientation,
+        },
+        positionsToSave(current),
+      );
+    },
     onSuccess: async (result) => {
       shouldFit.current = true;
       await refresh();
@@ -825,7 +840,7 @@ function TopologyEditor() {
         `Config から ${result.links_created} 本の結線を作り直しました` +
           (unresolved ? `（台帳に無い隣接先が ${unresolved} 件あります）` : ""),
       );
-      refresh();
+      refresh({ takeLayout: false });
     },
   });
 
@@ -1671,17 +1686,19 @@ function TopologyEditor() {
             minZoom={0.2}
             proOptions={{ hideAttribution: true }}
           >
-            <Background
-              id="layout-grid"
-              variant={BackgroundVariant.Lines}
-              gap={LAYOUT_GRID}
-              size={1}
-              color={simple ? "#d8d2c6" : "#2a3340"}
-            />
+            {!simple && (
+              <Background
+                id="layout-grid"
+                variant={BackgroundVariant.Lines}
+                gap={LAYOUT_GRID}
+                size={1}
+                color="#2a3340"
+              />
+            )}
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
-            <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="topo-minimap" />
+            {!simple && <Controls showInteractive={false} />}
+            {!simple && <MiniMap pannable zoomable className="topo-minimap" />}
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">

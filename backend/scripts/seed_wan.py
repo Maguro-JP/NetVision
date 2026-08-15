@@ -232,12 +232,19 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
         links.append(
             (branch_rt, "GigabitEthernet0/0/1", f"{code}-br-sw-01", "GigabitEthernet1/0/1")
         )
-        # 支社は東西どちらかのセンターへ上がる。センター2台のうち1号機へ
         links.append(
             (
                 branch_rt,
                 "GigabitEthernet0/0/0",
                 f"{side}-core-rt-01",
+                f"ge-0/0/{region_index}",
+            )
+        )
+        links.append(
+            (
+                branch_rt,
+                "GigabitEthernet0/0/2",
+                f"{side}-core-rt-02",
                 f"ge-0/0/{region_index}",
             )
         )

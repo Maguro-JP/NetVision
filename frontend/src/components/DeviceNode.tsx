@@ -34,6 +34,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   accent?: string;
   /** キャリア網の段（コア網 / メトロ / アクセス） */
   planeLabel?: string;
+  /** 対向の向き。up=上位 / down=配下 */
+  peerKind?: "up" | "down" | "side" | null;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
@@ -93,6 +95,8 @@ export default function DeviceNode({
       className={
         `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
         (data.outside ? "outside " : "") +
+        (data.peerKind ? `peer-${data.peerKind} ` : "") +
+        `type-${data.deviceType} ` +
         (data.compact ? "compact " : "") +
         (data.editable ? "editable " : "") +
         (selected ? "selected" : "")

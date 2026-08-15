@@ -171,6 +171,7 @@ class TopologyNodeRead(BaseModel):
     port_kinds: list[str] = []
     outside: bool = False
     hidden_peers: int = 0
+    peer_kind: str | None = None
     plane: str = "access"
 
 
@@ -220,6 +221,12 @@ class SavePositions(BaseModel):
     # どの拠点の図として残すか。空は全体図
     site_id: int | None = None
     positions: list[NodePosition]
+
+
+class ArrangePositions(BaseModel):
+    """整頓の起点。空ならサーバ上の保存済み（無ければ自動配置）から整える。"""
+
+    positions: list[NodePosition] = []
 
 
 class LinkCreate(BaseModel):
