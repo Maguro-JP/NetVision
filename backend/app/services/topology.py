@@ -722,6 +722,12 @@ def load_diagram(
     return attach_groups(db, graph)
 
 
+#: 同じ段とみなす高さの幅。枠のメンバーを並べ替えるときの段の分け方
+_ROW_TOLERANCE = 60.0
+#: 並べ替えた段で、隣の箱との間に最低限空ける見た目のすき間
+_GROUP_ROW_CLEAR = 24.0
+
+
 def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
     """今見えている機器が属する枠だけを図に載せる。"""
     visible = {node.device_id for node in graph.nodes}
@@ -747,7 +753,83 @@ def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
             )
         )
     graph.groups = groups
+    _pull_groups_together(graph.nodes, groups, graph.edges)
     return graph
+
+
+def _pull_groups_together(
+    nodes: list[TopologyNodeView],
+    groups: list[TopologyGroupView],
+    edges: list[TopologyEdgeView] | None = None,
+) -> None:
+    """同じ枠の機器を、自動配置の段の中で隣どうしに並べ替える。
+
+    枠は「ここはひとまとまり」という人の意思なので、その中に関係の無い機器が
+    挟まると枠が伸びて、囲んだ意味が無くなる。
+
+    触るのは自動で置いた機器だけ。人が動かした位置は意思なので動かさない。
+    段（同じ高さの並び）の中で、順番だけ入れ替える。箱の幅は結線の本数で
+    変わるので、並べ直したあとに隣どうしの間隔を取り直す。
+    """
+    if not groups:
+        return
+    group_of: dict[int, int] = {}
+    for index, group in enumerate(groups):
+        for device_id in group.device_ids:
+            group_of.setdefault(device_id, index)
+    if not group_of:
+        return
+
+    rows: dict[float, list[TopologyNodeView]] = defaultdict(list)
+    for node in nodes:
+        rows[round(node.y / _ROW_TOLERANCE)].append(node)
+
+    for row in rows.values():
+        if len(row) < 3:
+            continue
+        # 人が置いた機器が混ざる段は触らない。並べ替えるとその意思を壊す
+        if any(node.placed for node in row):
+            continue
+        row.sort(key=lambda node: (node.x, node.device_id))
+        spots = [node.x for node in row]
+
+        # 左から順に並べ直す。枠の機器に当たったら、その枠の残りをその場で
+        # 続けて出す。枠に入っていない機器は元の順のまま
+        ordered: list[TopologyNodeView] = []
+        done: set[int] = set()
+        members: dict[int, list[TopologyNodeView]] = defaultdict(list)
+        for node in row:
+            key = group_of.get(node.device_id)
+            if key is not None:
+                members[key].append(node)
+        for node in row:
+            if node.device_id in done:
+                continue
+            key = group_of.get(node.device_id)
+            if key is None:
+                ordered.append(node)
+                done.add(node.device_id)
+                continue
+            for member in members[key]:
+                if member.device_id not in done:
+                    ordered.append(member)
+                    done.add(member.device_id)
+
+        # 箱の幅は上下の辺の本数で変わる。並べ替えたあとの隣どうしで
+        # 取り直さないと、広い箱が狭い場所に来て食い込む
+        busiest_tb, _ = _busiest_sides(row, list(edges or []))
+        at = spots[0]
+        for index, node in enumerate(ordered):
+            if index:
+                previous = ordered[index - 1]
+                # 元の並びの間隔をまず使い、広い箱が来たときだけ押し出す
+                at = max(
+                    spots[index],
+                    _visual_right(previous.x, busiest_tb.get(previous.device_id, 0))
+                    + _GROUP_ROW_CLEAR
+                    + (_box_width(busiest_tb.get(node.device_id, 0)) - _BOX_WIDTH) / 2,
+                )
+            node.x = at
 
 
 def create_group(

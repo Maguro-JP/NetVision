@@ -2,10 +2,16 @@
 
 from app.models.device import Device, DeviceType
 from app.models.site import Site
-from app.models.topology import Link
+from app.models.topology import Link, LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.topology import (
+    TopologyEdgeView,
+    TopologyGroupView,
     TopologyNodeView,
+    _busiest_sides,
+    _pull_groups_together,
+    _visual_left,
+    _visual_right,
     apply_planes,
     attach_groups,
     get_graph,
@@ -182,3 +188,85 @@ def test_groups_from_planes_follows_carrier_ranks(db_session, client):
     body = svg.text
     assert any(name in body for name in names)
     assert "stroke-dasharray" in body
+
+
+def _row_node(device_id: int, x: float, *, placed: bool = False) -> TopologyNodeView:
+    return TopologyNodeView(
+        device_id=device_id,
+        hostname=f"sw-{device_id:02d}",
+        vendor="x",
+        model="x",
+        device_type="switch",
+        status="active",
+        site_id=None,
+        site_name=None,
+        mgmt_ip=None,
+        severity=Severity.OK,
+        interface_count=0,
+        x=x,
+        y=400,
+        placed=placed,
+    )
+
+
+def test_group_members_end_up_next_to_each_other():
+    """枠のメンバーの間に、枠の外の機器が挟まらないこと。
+
+    挟まると枠がそこまで伸びて、囲んだ意味が無くなる。
+    """
+    row = [_row_node(device_id, index * 240.0) for index, device_id in enumerate([1, 2, 3, 4])]
+    group = TopologyGroupView(id=1, name="拠点A", plane="custom", color="#888", device_ids=[1, 3])
+
+    _pull_groups_together(row, [group])
+
+    order = [node.device_id for node in sorted(row, key=lambda node: node.x)]
+    assert order.index(3) - order.index(1) == 1
+    # 使う場所そのものは変えない（間隔や重なりは配置側で決まっている）
+    assert sorted(node.x for node in row) == [0.0, 240.0, 480.0, 720.0]
+
+
+def test_a_row_the_user_placed_is_left_alone():
+    """人が置いた段は触らない。並べ替えるとその意思を壊す。"""
+    row = [
+        _row_node(1, 0.0),
+        _row_node(2, 240.0, placed=True),
+        _row_node(3, 480.0),
+        _row_node(4, 720.0),
+    ]
+    group = TopologyGroupView(id=1, name="拠点A", plane="custom", color="#888", device_ids=[1, 3])
+
+    _pull_groups_together(row, [group])
+
+    assert [node.x for node in row] == [0.0, 240.0, 480.0, 720.0]
+
+
+def test_reordering_does_not_make_wide_boxes_overlap():
+    """結線が多い機器は箱が広い。並べ替えたあとも食い込まないこと。"""
+    row = [_row_node(device_id, index * 300.0) for index, device_id in enumerate([1, 2, 3, 4])]
+    # 4番の機器に上下の辺の結線を集め、箱を広げる
+    edges = [
+        TopologyEdgeView(
+            id=index,
+            source=4,
+            target=1,
+            source_interface=f"GigabitEthernet0/{index}",
+            target_interface="GigabitEthernet0/0",
+            origin=LinkOrigin.MANUAL,
+            protocol=None,
+            label=None,
+            confirmed_both_ways=True,
+            source_side="bottom",
+            target_side="top",
+        )
+        for index in range(1, 9)
+    ]
+    group = TopologyGroupView(id=1, name="拠点A", plane="custom", color="#888", device_ids=[1, 4])
+
+    _pull_groups_together(row, [group], edges)
+
+    busiest_tb, _ = _busiest_sides(row, edges)
+    ordered = sorted(row, key=lambda node: node.x)
+    for left, right in zip(ordered, ordered[1:], strict=False):
+        assert _visual_right(left.x, busiest_tb.get(left.device_id, 0)) <= _visual_left(
+            right.x, busiest_tb.get(right.device_id, 0)
+        )
