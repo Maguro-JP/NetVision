@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="926" height="324" viewBox="0 0 926 324" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">営業所 左右配置</text>
+<text x="878" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-15 13:09 JST 時点 / レイヤ: physical / 3台 2本</text>
+<polyline points="368,148 238,148" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="358.0" y="138.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/0</title>GE0/0</text>
+<text class="port-label" x="248.0" y="152.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="558,148 688,148" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="568.0" y="152.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/1</title>GE0/1</text>
+<text class="port-label" x="678.0" y="138.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigabitEthernet1/0/25</title>Gi1/0/25</text>
+<g><rect x="48" y="82" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="82" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="62" y="104" font-size="13" font-weight="700" fill="#1a1a1a">east-core-rt-01</text>
+<text x="62" y="120" font-size="10" fill="#5a6270">Juniper MX304</text>
+<text x="62" y="134" font-size="10" fill="#7a828f">東日本センター</text>
+<text x="62" y="150" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
+</g>
+<g><rect x="368" y="82" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="368" y="82" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="382" y="104" font-size="13" font-weight="700" fill="#1a1a1a">osaka-rt-01</text>
+<text x="382" y="120" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="382" y="134" font-size="10" fill="#7a828f">大阪府営業所</text>
+<text x="382" y="150" font-size="9"><tspan fill="#2f6fb5">GigaEthernet</tspan></text>
+</g>
+<g><rect x="688" y="82" width="190" height="132" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="688" y="82" width="5" height="132" rx="2" fill="#7a7a7a"/>
+<text x="702" y="104" font-size="13" font-weight="700" fill="#1a1a1a">osaka-sw-01</text>
+<text x="702" y="120" font-size="10" fill="#5a6270">NEC QX-S5528P</text>
+<text x="702" y="134" font-size="10" fill="#7a828f">大阪府営業所</text>
+<text x="702" y="150" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+</g>
+<line x1="48" y1="260" x2="878" y2="260" stroke="#dfe3ea" stroke-width="1"/>
+<text x="48" y="276" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
+<rect x="144" y="267" width="10" height="10" rx="2" fill="#c0392b"/>
+<text x="159" y="276" font-size="10" fill="#4a4a4a">期限切れ</text>
+<rect x="210" y="267" width="10" height="10" rx="2" fill="#e07b39"/>
+<text x="225" y="276" font-size="10" fill="#4a4a4a">90日以内</text>
+<rect x="287" y="267" width="10" height="10" rx="2" fill="#c9a227"/>
+<text x="302" y="276" font-size="10" fill="#4a4a4a">1年以内</text>
+<rect x="353" y="267" width="10" height="10" rx="2" fill="#2d8a4e"/>
+<text x="368" y="276" font-size="10" fill="#4a4a4a">余裕あり</text>
+<rect x="419" y="267" width="10" height="10" rx="2" fill="#7a7a7a"/>
+<text x="434" y="276" font-size="10" fill="#4a4a4a">情報未登録</text>
+<text x="48" y="296" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
+<text x="298" y="296" font-size="10" fill="#6b6b6b">ポート種別</text>
+<text x="358" y="296" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
+</svg>

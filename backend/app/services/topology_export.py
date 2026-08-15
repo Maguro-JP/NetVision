@@ -278,8 +278,18 @@ def render_svg(
             continue
         src_box = boxes_by_id[edge.source]
         dst_box = boxes_by_id[edge.target]
-        src_side = edge.source_side or _side_toward(src_box, dst_box)
-        dst_side = edge.target_side or _side_toward(dst_box, src_box)
+        others = [
+            _xywh_bounds(boxes_by_id[device_id])
+            for device_id in boxes_by_id
+            if device_id not in (edge.source, edge.target)
+        ]
+        src_side, dst_side = _faces_for_edge(
+            src_box,
+            dst_box,
+            others,
+            src_side=edge.source_side,
+            dst_side=edge.target_side,
+        )
         sides[edge.id] = (src_side, dst_side)
         src_along = dst_box[1] if src_side in ("left", "right") else dst_box[0]
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
@@ -641,6 +651,61 @@ def _anchor(box: tuple[float, float, float, float], side: str, t: float) -> tupl
     return (x + w * t, y)
 
 
+def _lr_path_clear(
+    src_box: tuple[float, float, float, float],
+    dst_box: tuple[float, float, float, float],
+    src_side: str,
+    dst_side: str,
+    others: list[tuple[float, float, float, float]],
+) -> bool:
+    """左右の口で直進（または短い扇）できるか。途中の箱を貫くなら False。"""
+    start = _anchor(src_box, src_side, 0.5)
+    end = _anchor(dst_box, dst_side, 0.5)
+    boxes = [_xywh_bounds(src_box), _xywh_bounds(dst_box), *others]
+    for route in (
+        _orthogonal_bus(start, src_side, end, dst_side, 0, 1),
+        _manhattan(start, end, src_side, dst_side),
+    ):
+        if not route:
+            continue
+        if _route_pierce_count(route, boxes) == 0:
+            return True
+    return False
+
+
+def _faces_for_edge(
+    src_box: tuple[float, float, float, float],
+    dst_box: tuple[float, float, float, float],
+    others: list[tuple[float, float, float, float]],
+    *,
+    src_side: str | None = None,
+    dst_side: str | None = None,
+) -> tuple[str, str]:
+    """引き出し辺。左右が塞がる同じ段は上下の同じ辺から回して2折れにする。"""
+    src = src_side or _side_toward(src_box, dst_box)
+    dst = dst_side or _side_toward(dst_box, src_box)
+    if src in ("left", "right") and dst in ("left", "right"):
+        if _lr_path_clear(src_box, dst_box, src, dst, others):
+            return src, dst
+        # 左右が塞がる。段差があるなら上下の対向辺、同じ段なら同じ辺から回す。
+        boxes = [_xywh_bounds(src_box), _xywh_bounds(dst_box), *others]
+        candidates: list[tuple[float, str, str]] = []
+        face_pairs = (("bottom", "top"), ("top", "bottom"), ("bottom", "bottom"), ("top", "top"))
+        for face_s, face_t in face_pairs:
+            start = _anchor(src_box, face_s, 0.5)
+            end = _anchor(dst_box, face_t, 0.5)
+            route = _orthogonal_bus(start, face_s, end, face_t, 0, 1)
+            if not route:
+                continue
+            if _route_pierce_count(route, boxes) > 0:
+                continue
+            candidates.append((_length(route), face_s, face_t))
+        if candidates:
+            candidates.sort()
+            return candidates[0][1], candidates[0][2]
+    return src, dst
+
+
 def _orthogonal_bus(
     source: tuple[float, float],
     source_face: str,
@@ -683,6 +748,13 @@ def _orthogonal_bus(
         usable = max(0.0, sy - ty - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty + inset + rank * pitch
+        return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
+    # 同じ段で左右が塞がるとき、上下どちらかの辺から回す（2折れ）
+    if source_face == "bottom" and target_face == "bottom":
+        bus_y = max(sy, ty) + inset + rank * (gap if steps else 0.0)
+        return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
+    if source_face == "top" and target_face == "top":
+        bus_y = min(sy, ty) - inset - rank * (gap if steps else 0.0)
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -974,7 +1046,7 @@ def _wire_path(
     consider(src_side, dst_side, bus)
     consider(src_side, dst_side, _manhattan(start, end, src_side, dst_side))
     consider(src_side, dst_side, _route(start, end, obstacles))
-    # 左右のまま上下へ迂回（口を付け替えない）
+    # 口は描画前に固定。左右のまま上下へ迂回だけ試す（口の付け替えはしない）
     if src_side in ("left", "right") and dst_side in ("left", "right"):
         for side in ("below", "above"):
             consider(
@@ -982,16 +1054,6 @@ def _wire_path(
                 dst_side,
                 _detour_keep_faces(start, end, src_side, dst_side, pierce_boxes, side),
             )
-        # どうしても通らないときだけ、上下の口も候補に残す
-        for alt_src, alt_dst in (("bottom", "top"), ("top", "bottom")):
-            alt_start = _anchor(src_box, alt_src, src_t)
-            alt_end = _anchor(dst_box, alt_dst, dst_t)
-            consider(
-                alt_src,
-                alt_dst,
-                _orthogonal_bus(alt_start, alt_src, alt_end, alt_dst, rank, count),
-            )
-            consider(alt_src, alt_dst, _manhattan(alt_start, alt_end, alt_src, alt_dst))
 
     def score(item: tuple[str, str, list[tuple[float, float]]]) -> tuple:
         face_s, face_t, route = item

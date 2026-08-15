@@ -28,7 +28,11 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
-import PortLabeledEdge, { type PortEdgeData } from "../components/PortLabeledEdge";
+import PortLabeledEdge, {
+  type PortEdgeData,
+  type WireBox,
+  facesForEdge,
+} from "../components/PortLabeledEdge";
 import { DEVICE_TYPE_LABEL } from "../lib/format";
 import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 import {
@@ -239,22 +243,50 @@ export function assignAnchors(
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
   const out = new Map<number, { source: string; target: string }>();
 
-  // まず、どの辺から出すかを決める
+  // まず、どの辺から出すかを決める（左右が塞がる同じ段は上下へ回す）
+  const provisionalH = new Map<number, number>();
+  const provisionalW = new Map<number, number>();
+  for (const node of graph.nodes) {
+    provisionalH.set(node.device_id, baseHeight);
+    provisionalW.set(node.device_id, DEFAULT_WIDTH);
+  }
+  const displayBox = (id: number): WireBox => {
+    const node = nodes.get(id)!;
+    const w = provisionalW.get(id) ?? DEFAULT_WIDTH;
+    const h = provisionalH.get(id) ?? baseHeight;
+    const sx = shiftFor(w);
+    const sy = shiftYFor(h);
+    return {
+      x1: node.x - sx,
+      y1: node.y - sy,
+      x2: node.x - sx + w,
+      y2: node.y - sy + h,
+    };
+  };
   const ends: { edge: number; device: number; side: Side; other: number }[] = [];
   for (const edge of graph.edges) {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
     if (!source || !target) continue;
+    const faces = facesForEdge({
+      sourceBox: displayBox(edge.source),
+      targetBox: displayBox(edge.target),
+      obstacles: graph.nodes
+        .filter((n) => n.device_id !== edge.source && n.device_id !== edge.target)
+        .map((n) => displayBox(n.device_id)),
+      sourceSide: (edge.source_side as Side | null) ?? null,
+      targetSide: (edge.target_side as Side | null) ?? null,
+    });
     ends.push({
       edge: edge.id,
       device: edge.source,
-      side: (edge.source_side as Side | null) ?? sideToward(source, target),
+      side: faces.sourceFace,
       other: edge.target,
     });
     ends.push({
       edge: edge.id,
       device: edge.target,
-      side: (edge.target_side as Side | null) ?? sideToward(target, source),
+      side: faces.targetFace,
       other: edge.source,
     });
   }

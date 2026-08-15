@@ -32,6 +32,7 @@ def _ok(graph, title: str, filename: str) -> None:
     findings = evaluate_site_diagram(graph)
     failed = [item.detail for item in findings if not item.ok]
     assert is_acceptable(findings), f"{title}: {failed}"
+    scored = None
     for style in ("simple", "detail"):
         svg = render_svg(graph, title=title, style=style)
         svg_findings = evaluate_svg(svg, graph)
@@ -44,8 +45,10 @@ def _ok(graph, title: str, filename: str) -> None:
             lines = [f"{title}\t{scored.total}"]
             lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
             _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
-            return scored
-    return None
+        else:
+            # 画面の既定は詳細。詳細も同じ合格線を通す
+            _write(filename.replace(".svg", "-detail.svg"), svg)
+    return scored
 
 
 def test_branch_with_redundant_cores_and_offices(db_session):

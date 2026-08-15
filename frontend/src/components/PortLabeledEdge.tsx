@@ -163,6 +163,23 @@ export function orthogonalBusPath(input: {
       labelY: busY,
     };
   }
+  // 同じ段で左右が塞がるとき、上下どちらかの辺から回す（2折れ）
+  if (input.sourceFace === "bottom" && input.targetFace === "bottom") {
+    const busY = Math.max(sy, ty) + inset + rank * (steps > 0 ? gap : 0);
+    return {
+      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
+      labelX: (sx + tx) / 2,
+      labelY: busY,
+    };
+  }
+  if (input.sourceFace === "top" && input.targetFace === "top") {
+    const busY = Math.min(sy, ty) - inset - rank * (steps > 0 ? gap : 0);
+    return {
+      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
+      labelX: (sx + tx) / 2,
+      labelY: busY,
+    };
+  }
   return null;
 }
 
@@ -377,6 +394,90 @@ function detourKeepFaces(
     { x: ix, y: ty },
     { x: tx, y: ty },
   ];
+}
+
+export function facesForEdge(input: {
+  sourceBox: WireBox;
+  targetBox: WireBox;
+  obstacles: WireBox[];
+  sourceSide?: Face | null;
+  targetSide?: Face | null;
+}): { sourceFace: Face; targetFace: Face } {
+  const mid = (box: WireBox) => ({
+    x: (box.x1 + box.x2) / 2,
+    y: (box.y1 + box.y2) / 2,
+  });
+  const srcMid = mid(input.sourceBox);
+  const dstMid = mid(input.targetBox);
+  // sideToward 相当（保存座標中心）
+  const toward = (from: Pt, to: Pt): Face => {
+    const dx = to.x - from.x;
+    const dy = to.y - from.y;
+    if (Math.abs(dy) < 60) return dx > 0 ? "right" : "left";
+    if (Math.abs(dx) >= 400) return dx > 0 ? "right" : "left";
+    if (Math.abs(dy) >= 100) return dy > 0 ? "bottom" : "top";
+    return dy > 0 ? "bottom" : "top";
+  };
+  let sourceFace = input.sourceSide ?? toward(srcMid, dstMid);
+  let targetFace = input.targetSide ?? toward(dstMid, srcMid);
+  if (
+    (sourceFace === "left" || sourceFace === "right") &&
+    (targetFace === "left" || targetFace === "right")
+  ) {
+    const boxes = [input.sourceBox, input.targetBox, ...input.obstacles];
+    const clear = (sf: Face, tf: Face) => {
+      const start =
+        sf === "right"
+          ? { x: input.sourceBox.x2, y: srcMid.y }
+          : sf === "left"
+            ? { x: input.sourceBox.x1, y: srcMid.y }
+            : sf === "bottom"
+              ? { x: srcMid.x, y: input.sourceBox.y2 }
+              : { x: srcMid.x, y: input.sourceBox.y1 };
+      const end =
+        tf === "right"
+          ? { x: input.targetBox.x2, y: dstMid.y }
+          : tf === "left"
+            ? { x: input.targetBox.x1, y: dstMid.y }
+            : tf === "bottom"
+              ? { x: dstMid.x, y: input.targetBox.y2 }
+              : { x: dstMid.x, y: input.targetBox.y1 };
+      const bus = orthogonalBusPath({
+        sourceX: start.x,
+        sourceY: start.y,
+        targetX: end.x,
+        targetY: end.y,
+        sourceFace: sf,
+        targetFace: tf,
+        rank: 0,
+        count: 1,
+      });
+      if (!bus) return false;
+      const points = bus.path
+        .split(/[ML]\s*/)
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .map((part) => {
+          const [x, y] = part.split(",").map(Number);
+          return { x, y };
+        });
+      return routePierceCount(points, boxes) === 0;
+    };
+    if (!clear(sourceFace, targetFace)) {
+      const pairs: Array<[Face, Face]> = [
+        ["bottom", "top"],
+        ["top", "bottom"],
+        ["bottom", "bottom"],
+        ["top", "top"],
+      ];
+      for (const [sf, tf] of pairs) {
+        if (clear(sf, tf)) {
+          return { sourceFace: sf, targetFace: tf };
+        }
+      }
+    }
+  }
+  return { sourceFace, targetFace };
 }
 
 /**

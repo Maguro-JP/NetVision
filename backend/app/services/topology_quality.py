@@ -161,6 +161,13 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
     if not pierced:
         findings.append(Finding(True, "no_pierce", "線が箱を貫いていない"))
 
+    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）
+    too_bent = any(max(0, len(wire) - 2) > 2 for wire in wires)
+    if too_bent:
+        findings.append(Finding(False, "too_bent", "線の折れが多すぎる"))
+    else:
+        findings.append(Finding(True, "bend_ok", "線の折れは許容内"))
+
     for node in graph.nodes:
         if node.hostname not in svg:
             findings.append(Finding(False, "missing_node", f"{node.hostname} が図に無い"))
