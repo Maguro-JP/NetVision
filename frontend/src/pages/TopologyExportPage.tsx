@@ -96,7 +96,7 @@ export default function TopologyExportPage() {
           </span>
         </div>
         {/* 保存は、押す前に何が落ちてくるか分かるように種類まで書く */}
-        <a className="button primary export-save" href={url[kind]} download>
+        <a className="button export-save" href={url[kind]} download>
           <span className="export-save-icon" aria-hidden="true">
             ⤓
           </span>

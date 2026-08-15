@@ -1257,19 +1257,34 @@ button:disabled {
 .export-head-text .muted {
   font-size: 12px;
 }
-/* 保存は迷わせない。何が落ちてくるかを書いて、いちばん目立たせる */
-.export-save {
+/* 保存は迷わせない。この窓でいちばんやりたいことなので、色を付けて
+   ほかのボタンより一段大きくする。何が落ちてくるかも書いてある */
+a.button.export-save {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 18px;
+  padding: 11px 20px;
   font-size: 15px;
   font-weight: 700;
+  color: #ffffff;
+  background: var(--sev-ok);
+  border-color: color-mix(in srgb, var(--sev-ok) 70%, #000);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--sev-ok) 35%, transparent);
 }
-.export-save:hover {
+a.button.export-save:hover {
   text-decoration: none;
-  filter: brightness(1.08);
+  background: color-mix(in srgb, var(--sev-ok) 85%, #ffffff);
+  border-color: var(--sev-ok);
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--sev-ok) 50%, transparent);
+}
+a.button.export-save:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+a.button.export-save:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
 }
 .export-save-icon {
   font-size: 20px;
@@ -1279,7 +1294,12 @@ button:disabled {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  opacity: 0.75;
+  opacity: 0.85;
+}
+/* 保存を目立たせるため、切り替えのタブは控えめにする。
+   選んでいるものだけ色を付ける */
+.export-kinds button {
+  font-weight: 600;
 }
 .export-kinds {
   display: flex;
