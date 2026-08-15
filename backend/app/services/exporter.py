@@ -81,6 +81,7 @@ def build_row(device: Device, include_status: bool = True) -> list[object]:
     values: dict[str, object] = {
         "device_id": device.id,
         "code": device.code,
+        "label": device.label,
         "hostname": device.hostname,
         "vendor": device.vendor,
         "model": device.model,

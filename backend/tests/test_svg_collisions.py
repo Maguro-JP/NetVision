@@ -14,7 +14,7 @@ import pytest
 from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.svglayout import Rect, text_rect, text_width
-from app.services.topology import TopologyEdgeView, TopologyGraph, TopologyNodeView
+from app.services.topology import _DETAIL_HEIGHT, TopologyEdgeView, TopologyGraph, TopologyNodeView
 from app.services.topology_export import NODE_H, NODE_W, render_svg
 from tests import svgread
 
@@ -186,7 +186,8 @@ def test_random_layouts_never_overlap():
         while len(placed) < count:
             spot = (rng.uniform(0, 1200), rng.uniform(0, 900))
             if all(
-                abs(spot[0] - other[0]) > NODE_W + 70 or abs(spot[1] - other[1]) > NODE_H + 70
+                abs(spot[0] - other[0]) > NODE_W + 70
+                or abs(spot[1] - other[1]) > _DETAIL_HEIGHT + 70
                 for other in placed
             ):
                 placed.append(spot)

@@ -356,10 +356,10 @@ describe("直交の通り道", () => {
 describe("保存する座標", () => {
   it("広げた箱のずれは、見た目の位置へ戻る", () => {
     const shift = shiftFor(245);
-    expect(shift).toBe(27.5);
+    expect(shift).toBe((245 - DEFAULT_WIDTH) / 2);
     const display = { x: 83, y: 117 };
     const stored = storedFromDisplay(display, shift);
-    expect(stored).toEqual({ x: 110.5, y: 117 });
+    expect(stored).toEqual({ x: 83 + shift, y: 117 });
     expect({ x: stored.x - shift, y: stored.y }).toEqual(display);
   });
 

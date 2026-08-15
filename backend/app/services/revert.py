@@ -27,6 +27,7 @@ from app.models.change_log import ChangeAction, ChangeLog
 REVERTABLE_FIELDS: frozenset[str] = frozenset(
     {
         "hostname",
+        "label",
         "vendor",
         "model",
         "serial_number",

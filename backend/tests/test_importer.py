@@ -36,9 +36,16 @@ def test_detect_mapping_normalizes_case_and_symbols():
 
 
 def test_detect_mapping_keeps_first_column_for_duplicate_fields():
-    mapping = detect_mapping(["ホスト名", "機器名", "ベンダー", "型番"])
+    mapping = detect_mapping(["ホスト名", "hostname", "ベンダー", "型番"])
     assert mapping["ホスト名"] == "hostname"
-    assert "機器名" not in mapping
+    assert "hostname" not in mapping
+
+
+def test_hostname_and_device_name_are_different_columns():
+    """ホスト名は機械の名前、機器名は人が付けた呼び名。同じ列にしない。"""
+    mapping = detect_mapping(["ホスト名", "機器名"])
+    assert mapping["ホスト名"] == "hostname"
+    assert mapping["機器名"] == "label"
 
 
 def test_unknown_columns_are_not_mapped():

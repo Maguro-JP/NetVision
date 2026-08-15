@@ -57,11 +57,13 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
-# 広げすぎると開いた図が間延びして、構成図として読めない
-_X_SPACING = 300.0
-# 詳細箱（132）＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
-_Y_SPACING = 220.0
+# 自動配置の間隔。機器の箱に加えて、ポート名を置く余白を見込む。
+# 広げすぎると開いた図が間延びして、構成図として読めない。
+# 箱の大きさ（_BOX_WIDTH / _DETAIL_HEIGHT）を変えたら、_min_stored_gap_* を
+# 下回らないようにここも見直すこと
+_X_SPACING = 340.0
+# 詳細箱＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
+_Y_SPACING = 240.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -116,6 +118,10 @@ class TopologyNodeView:
     plane: str = "access"
     # 現場で機器を特定する手がかり。ラックの前で見るのは名前ではなく銘板
     serial_number: str | None = None
+    # 人が付けた機器の名称。空ならホスト名で呼ぶ
+    label: str | None = None
+    # 人が決めた管理ID
+    code: str | None = None
 
 
 @dataclass
@@ -304,6 +310,8 @@ def get_graph(
                 site_name=device.site.name if device.site else None,
                 mgmt_ip=device.mgmt_ip,
                 serial_number=device.serial_number,
+                label=device.label,
+                code=device.code,
                 severity=evaluate(device).overall_severity,
                 interface_count=interface_counts.get(device.id, 0),
                 x=x,
@@ -1465,12 +1473,12 @@ def _child_order(
 # 機器の箱は、結線が多いほど広がる（画面側の widthFor / heightFor と同じ規則）。
 # 数え方は「1辺あたりの最大本数」。総本数ではない。
 # 上下に多い → 幅、左右に多い → 高さ。向きを間違えると間隔だけ増えて被りが残る。
-_BOX_WIDTH = 190.0
+_BOX_WIDTH = 210.0
 _BOX_HEIGHT = 78.0
 # 詳細表示の箱の高さ（frontend DETAIL_HEIGHT）。整頓・すき間は画面に合わせる。
 # 中身がいちばん多い機器（段・ポート種・型番・拠点・管理IP・保守状態）でも
 # 行が枠から切れないところまで取ってある
-_DETAIL_HEIGHT = 133.0
+_DETAIL_HEIGHT = 157.0
 _BOX_GROW = 55.0
 _BOX_GROW_H = 22.0
 _BOX_MAX = 620.0
@@ -2089,10 +2097,10 @@ LAYOUT_GRID = 40.0
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
-#: 箱（190）＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
-_MIN_GAP_X = 300.0
-#: 詳細表示の箱（約 132）＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
-_MIN_GAP_Y = 204.0
+#: 箱＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
+_MIN_GAP_X = 340.0
+#: 詳細表示の箱＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
+_MIN_GAP_Y = 232.0
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

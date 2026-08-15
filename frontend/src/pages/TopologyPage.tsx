@@ -34,7 +34,7 @@ import PortLabeledEdge, {
   type WireBox,
   facesForEdge,
 } from "../components/PortLabeledEdge";
-import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
+import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 import {
   DEFAULT_TYPE_COLOR,
@@ -165,7 +165,7 @@ const TIER = 100;
 const COLUMN = 400;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
-export const DEFAULT_WIDTH = 190;
+export const DEFAULT_WIDTH = 210;
 /** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
 /* 詳細表示の箱の中身。1行あたりの高さ（styles.css の指定と合わせること）。
@@ -173,36 +173,31 @@ export const DEFAULT_HEIGHT = 78;
    ずれる。いちばん行数の多い機器に合わせて、全部同じ高さで設計する。 */
 /** .topo-node の上下パディング */
 const PAD_Y = 16;
-/** 機器名の行（margin-bottom 込み） */
+/** 管理IDと種別の上段 */
+const TOP_ROW = 14;
+/** 機器名の行 */
 const HEAD_ROW = 22;
-/** シリアル番号の行 */
-const SERIAL_ROW = 14;
-/** ポートの種類の行 */
-const PORTS_ROW = 15;
-/** 型番 / 種別・拠点 / 管理IP の各行（line-height 1.3） */
+/** ホスト名の行（機器名を出しているときだけ埋まる） */
+const SUB_ROW = 15;
+/** 型番 / シリアル / 管理IP の各行 */
 const BODY_ROW = 16;
-/** 保守状態の行 */
-const FOOT_ROW = 18;
-/** 詳細表示で出る本文の最大行数（型番・種別と拠点・管理IP） */
+/** 本文の最大行数 */
 const BODY_ROWS = 3;
+/** ポート種別。長い名前が続くので2行ぶん取り、余れば空きにする */
+const PORTS_ROW = 26;
+/** 稼働状態と保守状態の行 */
+const FOOT_ROW = 16;
 
-/**
- * 詳細表示の箱の高さ。
- *
- * 中身が入りきらないと、下の行（保守状態やポート種）が枠から切れる。
- * 出る可能性のある行を全部足した高さにしておけば、どの機器でも切れない。
- * 行数を保証するために、styles.css 側で各行の折り返しを止めてある。
- */
 /* ポート名が縦に積まれても重ならない間隔。
    ラベルは font-size 10・line-height 1.2・上下の余白1px で 14px。
    読みやすさのため 4px 空ける（styles.css の .topo-edge-label と合わせること） */
 const LABEL_PITCH = 18;
 /* 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
-   上下の辺は名前を横書きするので名前の幅、左右の辺は行の高さで決まる */
+   上下の辺は名前を横書きするので名前の幅で決まる */
 const BUNDLE_LABEL_W = 56;
 
 export const DETAIL_HEIGHT =
-  PAD_Y + HEAD_ROW + SERIAL_ROW + PORTS_ROW + BODY_ROW * BODY_ROWS + FOOT_ROW;
+  PAD_Y + TOP_ROW + HEAD_ROW + SUB_ROW + BODY_ROW * BODY_ROWS + PORTS_ROW + FOOT_ROW;
 
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
@@ -667,6 +662,8 @@ function toFlow(
     zIndex: node.outside ? 0 : 2,
     data: {
       hostname: node.hostname,
+      label: simple ? null : node.label,
+      code: simple ? null : node.code,
       vendor: simple ? "" : node.vendor,
       model: simple ? "" : node.model,
       deviceType: node.device_type,
@@ -685,6 +682,8 @@ function toFlow(
       faceHandles: faceHandles.get(node.device_id),
       accent: options.colors.types[node.device_type],
       serialNumber: simple ? null : node.serial_number,
+      statusLabel: simple ? null : DEVICE_STATUS_LABEL[node.status],
+      typeLabel: simple ? null : DEVICE_TYPE_LABEL[node.device_type],
     } satisfies DeviceNodeData,
     draggable: options.editable,
     };

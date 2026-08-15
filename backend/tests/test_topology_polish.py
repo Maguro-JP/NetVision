@@ -4,6 +4,8 @@ from app.models.device import DeviceStatus, DeviceType
 from app.models.topology import LinkOrigin
 from app.services.lifecycle import Severity
 from app.services.topology import (
+    _BOX_WIDTH,
+    _MIN_GAP_X,
     LAYOUT_GRID,
     TopologyEdgeView,
     TopologyNodeView,
@@ -139,10 +141,11 @@ def test_near_overlap_within_budget_is_cleared():
     """上限内で空けられる近さなら、箱が重ならない間隔まで空ける。"""
     nodes = [
         node(1, "a", 0, 0),
-        node(2, "b", 240, 0),  # 300 まで 60。上限 80 以内
+        # 必要な間隔まで 60。動かしてよい上限（80）の内側
+        node(2, "b", _MIN_GAP_X - 60, 0),
     ]
     _polish_layout(nodes)
-    assert nodes[1].x - nodes[0].x >= 300
+    assert nodes[1].x - nodes[0].x >= _MIN_GAP_X
 
 
 def test_a_column_is_not_flattened_into_a_row():
@@ -259,7 +262,7 @@ def test_busiest_matches_max_on_one_side_not_total():
         eid += 1
     busiest = _busiest_side_links(nodes, edges)
     assert busiest[1] == 3
-    assert _box_width(busiest[1]) == 190.0
+    assert _box_width(busiest[1]) == _BOX_WIDTH
     assert _box_height(3) == 78.0 + 22.0
 
 
@@ -267,7 +270,8 @@ def test_shift_centers_uses_default_half_not_grown_width():
     """広げた箱の中心は保存左上+既定幅/2。実幅/2だと広い箱へ寄る。"""
     narrow = node(1, "narrow", 0, 0)
     wide = node(2, "wide", 240, 0)
-    _shift_centers_to([narrow, wide], 215.0)
+    # いまの2台の中心。動かす必要が無い位置を渡す
+    _shift_centers_to([narrow, wide], (0 + 240) / 2 + _BOX_WIDTH / 2)
     assert narrow.x == 0.0
     assert wide.x == 240.0
 
@@ -295,4 +299,4 @@ def test_box_height_grows_when_left_right_is_busy():
     assert _box_height(2) == 78.0
     assert _box_height(3) == 78.0 + 22.0
     assert _box_height(8) == 78.0 + 6 * 22.0
-    assert _box_width(8) == 190.0 + 5 * 55.0
+    assert _box_width(8) == _BOX_WIDTH + 5 * 55.0

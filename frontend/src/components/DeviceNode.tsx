@@ -2,7 +2,7 @@ import { Handle, Position } from "@xyflow/react";
 import { Fragment } from "react";
 
 import type { DeviceType, Severity } from "../api/types";
-import { DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
+import { SEVERITY_LABEL } from "../lib/format";
 import { MEDIA_COLOR, mediaOf } from "../lib/portlabel";
 
 export interface FaceHandle {
@@ -14,6 +14,10 @@ export interface FaceHandle {
 
 export interface DeviceNodeData extends Record<string, unknown> {
   hostname: string;
+  /** 人が付けた機器の名称。あればこちらを大きく出す */
+  label?: string | null;
+  /** 人が決めた管理ID。左上に小さく出す */
+  code?: string | null;
   vendor: string;
   model: string;
   deviceType: DeviceType;
@@ -44,6 +48,10 @@ export interface DeviceNodeData extends Record<string, unknown> {
   accent?: string;
   /** シリアル番号。現場でラックの前に立つ人が照合に使う */
   serialNumber?: string | null;
+  /** 台帳の稼働状態（稼働中 / 予備機 / 保守中）。右下に小さく出す */
+  statusLabel?: string | null;
+  /** 種別の呼び名。右上に小さく出す */
+  typeLabel?: string | null;
 }
 
 /** 各辺の引き出し口。辺ごとに3か所（手前 / 中央 / 奥）。 */
@@ -164,56 +172,56 @@ export default function DeviceNode({
         </Fragment>
       ))}
 
+      {/* 上段。左に管理ID、右に種別。名前の行を1行まるごと使えるようにする */}
+      {!data.outside && (data.code || data.typeLabel) && (
+        <div className="topo-node-top">
+          <span className="topo-code" title="管理ID">
+            {data.code ?? ""}
+          </span>
+          <span className="topo-type">{data.typeLabel ?? ""}</span>
+        </div>
+      )}
+
       <div className="topo-node-head">
         <span className="topo-glyph">{TYPE_GLYPH[data.deviceType]}</span>
-        <span className="topo-hostname">{data.hostname}</span>
+        <span className="topo-hostname">{data.label || data.hostname}</span>
       </div>
-      {data.serialNumber && !data.outside && (
-        <div className="muted topo-serial" title="シリアル番号">
-          S/N {data.serialNumber}
-        </div>
+      {/* 機器名を出しているときは、ホスト名を下に小さく添える。
+          現場の呼び名と機械の名前は食い違うことがあり、両方要る */}
+      {!data.outside && (
+        <div className="topo-node-sub">{data.label ? data.hostname : ""}</div>
       )}
-      {/* ポートの種類を機器側に書いておく。線のラベルを番号だけにしても、
-          ここを見れば何のポートか分かる（色は線のラベルと揃えてある） */}
-      {/* 対向は簡易表示。見たいのは絞り込んだ側で、相手は「どこへ出ているか」が
-          分かれば足りる。型番や保守状態まで出すと、肝心の側が読みにくくなる */}
+
+      {/* 対向は「どこへ出ているか」だけ。先はその拠点の図で追う */}
       {data.outside ? (
-        <div className="topo-node-body">
-          <div className="muted">{data.siteName ?? "拠点未登録"}</div>
-          {(data.hiddenPeers ?? 0) > 0 && (
-            <div className="muted">ほかに {data.hiddenPeers} 台（この拠点内）</div>
-          )}
+        <div className="topo-node-sub outside-site">
+          {data.siteName ?? "拠点未登録"}
+          {(data.hiddenPeers ?? 0) > 0 ? ` ・ほか${data.hiddenPeers}台` : ""}
         </div>
       ) : null}
-      {!data.outside && data.portKinds.length > 0 && (
-        <div className="topo-node-ports">
-          {data.portKinds.map((kind, index) => (
-            <span key={kind} style={{ color: MEDIA_COLOR[mediaOf(kind)] }}>
-              {index > 0 && <span className="muted"> / </span>}
-              {kind}
-            </span>
-          ))}
-        </div>
-      )}
-      {/* シンプル表示では機器名だけを出す。現場で見る図に型番や保守状態が
-          載っていると、読み違いのもとになるため */}
+
       {data.severity && !data.outside && (
         <>
           <div className="topo-node-body">
             <div>
               {data.vendor} {data.model}
             </div>
-            <div className="muted">
-              {DEVICE_TYPE_LABEL[data.deviceType]}
-              {data.siteName ? ` / ${data.siteName}` : ""}
-            </div>
+            {data.serialNumber && <div className="muted">S/N {data.serialNumber}</div>}
             {data.mgmtIp && <div className="muted">{data.mgmtIp}</div>}
           </div>
-          <div className={`topo-node-foot sev-text-${data.severity}`}>
-            {SEVERITY_LABEL[data.severity]}
-            {data.interfaceCount > 0 && (
-              <span className="muted"> ・{data.interfaceCount}ポート</span>
-            )}
+          {/* ポートの種類。線のラベルを番号だけにしても、ここを見れば分かる。
+              2行ぶん場所を取っておき、足りている機器は空きにする */}
+          <div className="topo-node-ports">
+            {data.portKinds.map((kind, index) => (
+              <span key={kind} style={{ color: MEDIA_COLOR[mediaOf(kind)] }}>
+                {index > 0 && <span className="muted"> / </span>}
+                {kind}
+              </span>
+            ))}
+          </div>
+          <div className="topo-node-foot">
+            {data.statusLabel && <span className="muted">{data.statusLabel}</span>}
+            <span className={`sev-text-${data.severity}`}>{SEVERITY_LABEL[data.severity]}</span>
           </div>
         </>
       )}

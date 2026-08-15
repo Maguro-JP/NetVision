@@ -181,7 +181,7 @@ def test_old_sqlite_without_site_id_gains_the_column(tmp_path: Path):
     _upgrade(url)
     has_site, revision = _site_id_and_revision(url)
     assert has_site
-    assert revision == "c9f1a2b3d4e5"
+    assert revision == "d3a7c1e5b982"
 
 
 def test_existing_rows_stay_as_global_layout(tmp_path: Path):

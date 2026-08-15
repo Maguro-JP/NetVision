@@ -52,6 +52,24 @@ DEVICE_TYPE_NAMES: dict[str, str] = {
     "server": "サーバ",
     "other": "その他",
 }
+#: 台帳の稼働状態の呼び方
+DEVICE_STATUS_NAMES: dict[str, str] = {
+    "active": "稼働中",
+    "standby": "予備機",
+    "maintenance": "保守中",
+    "retired": "撤去済み",
+}
+#: 種別の記号。画面の TYPE_GLYPH と揃えること
+TYPE_GLYPH: dict[str, str] = {
+    "router": "◇",
+    "switch": "▭",
+    "firewall": "🛡",
+    "load_balancer": "⇄",
+    "wireless_ap": "((•))",
+    "wireless_controller": "◎",
+    "server": "▤",
+    "other": "▪",
+}
 SEVERITY_LABEL: dict[str, str] = {
     str(Severity.EXPIRED): "期限切れ",
     str(Severity.CRITICAL): "90日以内",
@@ -60,7 +78,7 @@ SEVERITY_LABEL: dict[str, str] = {
     str(Severity.UNKNOWN): "情報未登録",
 }
 
-NODE_W = 190.0
+NODE_W = 210.0
 # ポートの種類（GigabitEthernet など）を箱の中に1行入れる分の高さを含む。
 # 線のラベルを番号だけにしても、機器を見れば何のポートか分かるようにするため
 NODE_H = 78.0
@@ -69,10 +87,10 @@ LEGEND_H = 62.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
 # 箱の中の行送り（画面の .topo-node と同じ積み方）
-_ROW_SERIAL = 14.0
-_ROW_KINDS = 15.0
+_ROW_HEAD = 20.0
+_ROW_SUB = 15.0
 _ROW_BODY = 16.0
-_ROW_FOOT = 18.0
+_ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
@@ -629,45 +647,89 @@ def render_svg(
             )
             continue
 
+        # 対向は「どこへ出ているか」だけ。先はその拠点の図で追うので、
+        # 名前と拠点だけを破線の箱に出す
+        if node.outside:
+            where = node.site_name or "拠点未登録"
+            if node.hidden_peers:
+                where = f"{where} ・ほか{node.hidden_peers}台"
+            parts.append(
+                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{PEER_H:.0f}" '
+                f'rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/>'
+                f'<text x="{x + 12:.0f}" y="{y + 22:.0f}" font-size="12" fill="#4a5364">'
+                f"{_esc(TYPE_GLYPH.get(str(node.device_type), ''))}</text>"
+                f'<text x="{x + 30:.0f}" y="{y + 22:.0f}" font-size="12" font-weight="700" '
+                f'fill="#4a5364">{_esc(_clip(node.hostname, 20))}</text>'
+                f'<text x="{x + 12:.0f}" y="{y + 38:.0f}" font-size="10" fill="#7a828f">'
+                f"{_esc(_clip(where, 26))}</text></g>"
+            )
+            continue
+
         color = SEVERITY_COLOR.get(str(node.severity), SEVERITY_COLOR[str(Severity.UNKNOWN)])
+        # 背景は稼働状態。止まっているものは灰色寄りにして、稼働中と区別する
+        fill = "#f7f9fc" if str(node.status) == "active" else "#eceef1"
         parts.append(
             f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{nh:.0f}" '
-            f'rx="7" fill="#f7f9fc" stroke="{color}" stroke-width="2"/>'
+            f'rx="7" fill="{fill}" stroke="{color}" stroke-width="2"/>'
             # 状態が一目で分かるよう左端に色帯を置く（白黒印刷でも位置で区別できる）
             f'<rect x="{x:.0f}" y="{y:.0f}" width="5" height="{nh:.0f}" '
             f'rx="2" fill="{color}"/>'
         )
         # 中身は画面の箱と同じ順に積む。SVG だけ行が欠けると、図から拠点や
-        # 保守の状態が読めなくなり、貼った先で台帳を開き直すことになる
-        row_y = y + 22.0
-        parts.append(
-            f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="13" font-weight="700" '
-            f'fill="#1a1a1a">{_esc(_clip(node.hostname, 22))}</text>'
-        )
-        # 現場でラックの前に立つ人が照合するのはシリアル。網の段は図の並びで
-        # 分かるので、限られた行はこちらに使う
-        if node.serial_number:
-            row_y += _ROW_SERIAL
+        # 保守の状態が読めなくなり、貼った先で台帳を開き直すことになる。
+        # 上段は左に管理ID、右に種別
+        row_y = y + 18.0
+        type_name = DEVICE_TYPE_NAMES.get(str(node.device_type), "")
+        if node.code:
             parts.append(
-                f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="10" fill="#7a828f">'
-                f"S/N {_esc(_clip(node.serial_number, 22))}</text>"
+                f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="9" fill="#8a929e">'
+                f"{_esc(_clip(node.code, 16))}</text>"
             )
-        if node.port_kinds:
-            row_y += _ROW_KINDS
-            parts.append(_port_kinds_line(x + 14, row_y, node.port_kinds))
+        if type_name:
+            parts.append(
+                f'<text x="{x + nw - 12:.0f}" y="{row_y:.0f}" font-size="9" '
+                f'font-weight="700" fill="#8a929e" text-anchor="end">{_esc(type_name)}</text>'
+            )
+        # 機器名（無ければホスト名）。人が付けた呼び名があるときは下にホスト名
+        row_y += _ROW_HEAD
+        title = node.label or node.hostname
+        # 記号は別の text にする。名前だけを取り出せる方が、図を読み直す側
+        # （試験や外の道具）で扱いやすい
+        parts.append(
+            f'<text x="{x + 12:.0f}" y="{row_y:.0f}" font-size="12" fill="#4a5364">'
+            f"{_esc(TYPE_GLYPH.get(str(node.device_type), ''))}</text>"
+        )
+        parts.append(
+            f'<text x="{x + 30:.0f}" y="{row_y:.0f}" font-size="13" font-weight="700" '
+            f'fill="#1a1a1a">{_esc(_clip(title, 20))}</text>'
+        )
+        if node.label:
+            row_y += _ROW_SUB
+            parts.append(
+                f'<text x="{x + 28:.0f}" y="{row_y:.0f}" font-size="10" fill="#7a828f">'
+                f"{_esc(_clip(node.hostname, 24))}</text>"
+            )
         for line in _card_lines(node):
             row_y += _ROW_BODY
             parts.append(
                 f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="10" fill="#5a6270">'
-                f"{_esc(_clip(line, 26))}</text>"
+                f"{_esc(_clip(line, 28))}</text>"
             )
-        row_y += _ROW_FOOT
-        foot = SEVERITY_LABEL.get(str(node.severity), "")
-        if node.interface_count:
-            foot = f"{foot} ・{node.interface_count}ポート"
+        if node.port_kinds:
+            row_y += _ROW_KINDS
+            parts.append(_port_kinds_line(x + 14, row_y, node.port_kinds))
+        # 下段は右揃えで、稼働状態と保守状態
+        foot = " ・".join(
+            part
+            for part in (
+                DEVICE_STATUS_NAMES.get(str(node.status), ""),
+                SEVERITY_LABEL.get(str(node.severity), ""),
+            )
+            if part
+        )
         parts.append(
-            f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="11" font-weight="600" '
-            f'fill="{color}">{_esc(foot)}</text>'
+            f'<text x="{x + nw - 12:.0f}" y="{y + nh - 10:.0f}" font-size="10" '
+            f'font-weight="600" fill="{color}" text-anchor="end">{_esc(foot)}</text>'
         )
         parts.append("</g>")
 
@@ -1642,15 +1704,17 @@ def _parallel_index(graph: TopologyGraph) -> dict[int, float]:
 
 
 def _card_lines(node) -> list[str]:
-    """箱の本文。画面と同じ並びで、空の行は出さない。"""
+    """箱の本文。画面と同じ並びで、空の行は出さない。
+
+    種別と拠点は上段と枠で示すので、ここには入れない。現場で要るのは
+    型番・銘板（シリアル）・管理IP の3つ。
+    """
     lines: list[str] = []
     product = f"{node.vendor} {node.model}".strip()
     if product:
         lines.append(product)
-    kind = DEVICE_TYPE_NAMES.get(str(node.device_type), "")
-    where = " / ".join(part for part in (kind, node.site_name or "") if part)
-    if where:
-        lines.append(where)
+    if node.serial_number:
+        lines.append(f"S/N {node.serial_number}")
     if node.mgmt_ip:
         lines.append(node.mgmt_ip)
     return lines
@@ -1804,6 +1868,16 @@ def _port_label(
 
     text, index, rect = chosen or fallback  # type: ignore[misc]
     px, py = spots[index]
+    if chosen is None:
+        # どの候補も空いていなかった。線の外向きへ少しずつ逃がして、
+        # 空くところまで押し出す。丸い角の近くから出た線で起きやすい
+        for step in range(1, 9):
+            moved_x = px + ux * step * 6.0
+            moved_y = py + uy * step * 6.0
+            candidate = svglayout.text_rect(moved_x, moved_y - 3, text, _LABEL_FONT, anchor, angle)
+            if not placement.collides(candidate):
+                px, py, rect = moved_x, moved_y, candidate
+                break
     # 出力時に座標を丸める分だけ余裕を持たせる。ぎりぎりで置くと、
     # 丸めた結果わずかに重なることがある
     placement.add(rect.grow(1.0))
