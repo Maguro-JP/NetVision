@@ -189,24 +189,6 @@ export function heightFor(leftRightCount: number, base: number = DEFAULT_HEIGHT)
 }
 
 /**
- * 対向の中心が近くに散っているとき、箱を高くして口を寄せる案。
- * いまは貫通しやすいので assignAnchors では使わない。射影と DETAIL_HEIGHT で足りる。
- */
-export function heightToCoverPeers(
-  peerCenters: number[],
-  hubCenterY: number,
-  base: number,
-): number {
-  if (peerCenters.length === 0) return base;
-  const near = peerCenters.filter((c) => Math.abs(c - hubCenterY) <= base * 1.25);
-  if (near.length < 2) return base;
-  const top = Math.min(...near);
-  const bottom = Math.max(...near);
-  const needed = (bottom - top) / 0.84 + 24;
-  return Math.min(base * 2.2, Math.max(base, needed));
-}
-
-/**
  * 機器の箱のどの辺から線を出すか。
  *
  * 人が描くときの判断に合わせる。真下にいる相手へは下から出して上へ入れる。

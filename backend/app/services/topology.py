@@ -1324,20 +1324,6 @@ def _box_height(links: int, base: float | None = None) -> float:
     return min(_BOX_MAX_H, floor + (links - 3) * _BOX_GROW_H)
 
 
-def _height_to_cover_peers(
-    peer_centers: list[float], hub_center_y: float, base: float
-) -> float:
-    """近くの対向だけ覆う高さ。遠くまで覆うと箱が伸びて線が貫く。"""
-    if not peer_centers:
-        return base
-    near = [c for c in peer_centers if abs(c - hub_center_y) <= base * 1.25]
-    if len(near) < 2:
-        return base
-    span = max(near) - min(near)
-    needed = span / 0.84 + 24.0
-    return min(base * 2.2, max(base, needed))
-
-
 def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:
     """保存座標から引き出し辺を決める。画面の sideToward と同じ。"""
     dx, dy = tx - fx, ty - fy
