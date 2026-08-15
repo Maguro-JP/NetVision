@@ -1212,14 +1212,25 @@ def _cut_segment(
 
 
 def _cut_gaps(
-    wires: list[list[tuple[float, float]]], *, radius: float = 5.0
+    wires: list[list[tuple[float, float]]], *, radius: float = 5.0, end_keep: float = 24.0
 ) -> list[list[list[tuple[float, float]]]]:
-    """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。"""
+    """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。
+
+    機器の口のすぐ横で切ると、切れ端が口に張り付いて線が歪んで見える。
+    端点から end_keep 以内の交点は切らない。
+    """
     out: list[list[list[tuple[float, float]]]] = []
     earlier: list[tuple[tuple[float, float], tuple[float, float]]] = []
 
     def near(p: tuple[float, float], q: tuple[float, float]) -> bool:
         return abs(p[0] - q[0]) <= 0.5 and abs(p[1] - q[1]) <= 0.5
+
+    def away_from_ends(cross: tuple[float, float], wire: list[tuple[float, float]]) -> bool:
+        start, end = wire[0], wire[-1]
+        for tip in (start, end):
+            if abs(cross[0] - tip[0]) + abs(cross[1] - tip[1]) < end_keep:
+                return False
+        return True
 
     for wire in wires:
         pieces: list[list[tuple[float, float]]] = []
@@ -1229,6 +1240,7 @@ def _cut_gaps(
                 cross
                 for seg in earlier
                 if (cross := _interior_cross(a, b, seg[0], seg[1])) is not None
+                and away_from_ends(cross, wire)
             ]
             chunks = _cut_segment(a, b, holes, radius)
             for index, chunk in enumerate(chunks):
