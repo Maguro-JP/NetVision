@@ -216,8 +216,8 @@ def test_many_offices_stay_in_a_right_column(db_session):
     xs = {round(n.x) for n in offices}
     assert len(xs) == 1
     hub = next(n for n in graph.nodes if n.hostname == "ksi-br-rt-01")
-    # 左右から出すため COLUMN(400) 以上離す。通り道のぶんだけより少し広い
-    assert min(n.x for n in offices) - _visual_right(hub.x, 0) < 280
+    # 左右から出すため COLUMN(400) 以上離す。ポート名用のすき間で通り道より少し広い
+    assert min(n.x for n in offices) - _visual_right(hub.x, 0) < 360
     assert min(n.x for n in offices) - hub.x >= 400
 
 

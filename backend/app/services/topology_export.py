@@ -30,6 +30,7 @@ from app.services.topology import (
     _box_height,
     _box_width,
     _busiest_sides,
+    _DETAIL_HEIGHT,
     load_diagram,
 )
 
@@ -129,15 +130,16 @@ def render_svg(
 
     busiest_tb, busiest_lr = _busiest_sides(nodes, graph.edges)
 
-    def node_size(device_id: int) -> tuple[float, float]:
-        return (
-            _box_width(busiest_tb.get(device_id, 0)),
-            _box_height(busiest_lr.get(device_id, 0)),
-        )
+    # 画面と同じ: 詳細は中身分だけ高い箱。接続点の分母を合わせる。
+    base_h = NODE_H if simple else _DETAIL_HEIGHT
+    heights = {
+        n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes
+    }
 
     def display_box(node) -> tuple[float, float, float, float]:
         """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
-        w, h = node_size(node.device_id)
+        w = _box_width(busiest_tb.get(node.device_id, 0))
+        h = heights.get(node.device_id, base_h)
         shift_x = (w - NODE_W) / 2
         shift_y = (h - NODE_H) / 2
         return (node.x - shift_x, node.y - shift_y, w, h)
@@ -635,7 +637,7 @@ def _side_toward(
 
 def _anchor(box: tuple[float, float, float, float], side: str, t: float) -> tuple[float, float]:
     x, y, w, h = box
-    t = min(0.85, max(0.15, t))
+    t = min(0.92, max(0.08, t))
     if side == "right":
         return (x + w, y + h * t)
     if side == "left":
@@ -661,11 +663,15 @@ def _orthogonal_bus(
     sx, sy = source
     tx, ty = target
     if source_face == "right" and target_face == "left" and tx - sx > 40:
+        if abs(sy - ty) < 3:
+            return [(sx, sy), (tx, ty)]
         usable = max(0.0, tx - sx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx - inset - rank * pitch
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "left" and target_face == "right" and sx - tx > 40:
+        if abs(sy - ty) < 3:
+            return [(sx, sy), (tx, ty)]
         usable = max(0.0, sx - tx - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_x = tx + inset + rank * pitch
@@ -767,12 +773,31 @@ def _wire_path(
     routed = _route(start, end, obstacles)
     if _is_orthogonal(routed):
         candidates.append(routed)
-    # 箱を貫く線より、遠回りでも空いている縦横を採る。
-    # 同じ通れるなら、折れが少ない方を採る（対向のずれで遠回りしない）。
-    return min(
+    chosen = min(
         candidates,
         key=lambda route: (_residual(route, obstacles), len(route), _length(route)),
     )
+    # 左右に出して隣の箱を貫くときだけ、段のすき間経由（上下の口）を採る。
+    # 通れる候補があるときだけ差し替える（普段の扇は触らない）。
+    if (
+        _residual(chosen, obstacles) > 0
+        and src_side in ("left", "right")
+        and dst_side in ("left", "right")
+    ):
+        clear: list[list[tuple[float, float]]] = []
+        for alt_src, alt_dst in (("bottom", "top"), ("top", "bottom")):
+            alt_start = _anchor(src_box, alt_src, src_t)
+            alt_end = _anchor(dst_box, alt_dst, dst_t)
+            for alt in (
+                _orthogonal_bus(alt_start, alt_src, alt_end, alt_dst, rank, count),
+                _manhattan(alt_start, alt_end, alt_src, alt_dst),
+                _route(alt_start, alt_end, obstacles),
+            ):
+                if alt and _is_orthogonal(alt) and _residual(alt, obstacles) == 0:
+                    clear.append(alt)
+        if clear:
+            return min(clear, key=lambda route: (len(route), _length(route)))
+    return chosen
 
 
 def _manhattan(

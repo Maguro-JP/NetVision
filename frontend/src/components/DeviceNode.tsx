@@ -129,7 +129,10 @@ export default function DeviceNode({
     <div
       style={{
         ...(data.width ? { width: data.width } : {}),
-        ...(data.height ? { height: data.height, minHeight: data.height } : {}),
+        // 高さは接続点の計算と同じ値を必ず固定する。中身で伸びると口の位置が狂う。
+        ...(data.height
+          ? { height: data.height, minHeight: data.height, maxHeight: data.height, overflow: "hidden" }
+          : {}),
         ...(data.accent ? { borderColor: data.accent } : {}),
       }}
       className={

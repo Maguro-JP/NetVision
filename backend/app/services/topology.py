@@ -1288,6 +1288,8 @@ def _child_order(
 # 上下に多い → 幅、左右に多い → 高さ。向きを間違えると間隔だけ増えて被りが残る。
 _BOX_WIDTH = 190.0
 _BOX_HEIGHT = 78.0
+# 詳細表示の箱の高さ（frontend DETAIL_HEIGHT）。整頓・すき間は画面に合わせる
+_DETAIL_HEIGHT = 132.0
 _BOX_GROW = 55.0
 _BOX_GROW_H = 22.0
 _BOX_MAX = 620.0
@@ -1298,8 +1300,8 @@ _BUS_STACK = 36.0
 _BUS_INSET = 28.0
 # 対向の列は、箱の右端からこの距離以上。通り道より広く空けない
 _PEER_CLEAR_MIN = 120.0
-# 画面で隣り合う箱の見た目のすき間（マス目1つ）。保存座標の差ではない
-_VISUAL_CLEAR_X = 40.0
+# 画面で隣り合う箱の見た目のすき間。ポート名が両側から出るので広めに取る
+_VISUAL_CLEAR_X = 100.0
 _VISUAL_CLEAR_Y = 40.0
 # sideToward（画面）と同じ閾値
 _SAME_ROW = 60.0
@@ -1314,11 +1316,26 @@ def _box_width(links: int) -> float:
     return min(_BOX_MAX, _BOX_WIDTH + (links - 3) * _BOX_GROW)
 
 
-def _box_height(links: int) -> float:
+def _box_height(links: int, base: float | None = None) -> float:
     """左右の辺の最大結線本数から、画面上の箱高さを出す（frontend の heightFor と同じ）。"""
+    floor = _BOX_HEIGHT if base is None else base
     if links <= 3:
-        return _BOX_HEIGHT
-    return min(_BOX_MAX_H, _BOX_HEIGHT + (links - 3) * _BOX_GROW_H)
+        return floor
+    return min(_BOX_MAX_H, floor + (links - 3) * _BOX_GROW_H)
+
+
+def _height_to_cover_peers(
+    peer_centers: list[float], hub_center_y: float, base: float
+) -> float:
+    """近くの対向だけ覆う高さ。遠くまで覆うと箱が伸びて線が貫く。"""
+    if not peer_centers:
+        return base
+    near = [c for c in peer_centers if abs(c - hub_center_y) <= base * 1.25]
+    if len(near) < 2:
+        return base
+    span = max(near) - min(near)
+    needed = span / 0.84 + 24.0
+    return min(base * 2.2, max(base, needed))
 
 
 def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:
@@ -1386,15 +1403,19 @@ def _visual_right(stored_x: float, links: int) -> float:
 
 
 def _visual_top(stored_y: float, links: int) -> float:
-    """保存座標から、画面に見える上端を出す。links は左右辺の本数。"""
-    height = _box_height(links)
+    """保存座標から、画面に見える上端を出す。links は左右辺の本数。
+
+    すき間は詳細表示の箱（中身で伸びる）に合わせる。78 のままだと
+    詳細で箱どうしが被り、ポート名が潰れる。
+    """
+    height = _box_height(links, _DETAIL_HEIGHT)
     shift = (height - _BOX_HEIGHT) / 2
     return stored_y - shift
 
 
 def _visual_bottom(stored_y: float, links: int) -> float:
     """保存座標から、画面に見える下端を出す。links は左右辺の本数。"""
-    height = _box_height(links)
+    height = _box_height(links, _DETAIL_HEIGHT)
     shift = (height - _BOX_HEIGHT) / 2
     return stored_y - shift + height
 
@@ -1411,7 +1432,9 @@ def _min_stored_gap_x(links_left: int, links_right: int) -> float:
 
 def _min_stored_gap_y(links_above: int, links_below: int) -> float:
     """上下に並ぶ機器の、保存上端座標のあいだに最低限必要な差。links は左右辺。"""
-    return (_box_height(links_above) + _box_height(links_below)) / 2 + _VISUAL_CLEAR_Y
+    return (
+        _box_height(links_above, _DETAIL_HEIGHT) + _box_height(links_below, _DETAIL_HEIGHT)
+    ) / 2 + _VISUAL_CLEAR_Y
 
 
 def _lane_room(links: int) -> float:
@@ -1878,10 +1901,10 @@ LAYOUT_GRID = 40.0
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
-#: 箱（190）＋マス目1つ分。これより近いと重なって見える
-_MIN_GAP_X = 230.0
-#: 箱の高さ（約78）＋マス目1つ分
-_MIN_GAP_Y = 120.0
+#: 箱（190）＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
+_MIN_GAP_X = 300.0
+#: 詳細表示の箱（約 132）＋すき間。120 だと段どうしでポート名が被る
+_MIN_GAP_Y = 160.0
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

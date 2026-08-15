@@ -21,9 +21,9 @@ export interface PortEdgeData extends Record<string, unknown> {
 }
 
 /** ノード枠から、その先どのくらい離してラベルを置くか。 */
-export const PORT_LABEL_GAP = 18;
-/** 線に重ならないよう、線と垂直な向きへずらす幅。 */
-export const PORT_LABEL_SIDE = 9;
+export const PORT_LABEL_GAP = 14;
+/** 線に重ならないよう、線と垂直な向きへずらす幅。束の本数でさらに開く。 */
+export const PORT_LABEL_SIDE = 12;
 
 const DIRECTION: Record<Position, [number, number]> = {
   [Position.Top]: [0, -1],
@@ -82,9 +82,16 @@ export function orthogonalBusPath(input: {
   const sy = input.sourceY;
   const tx = input.targetX;
   const ty = input.targetY;
-  // 接続点が相手の高さに寄っている前提。ハブ側で一度重ねると折れが増えるだけなので、
-  // 出口から相手の高さへ直角に扇を開く（紙の構成図と同じ）。
+  // 接続点が相手の高さに寄っている前提。高さが揃えば横一直線。
+  // ハブ側で一度重ねると折れが増えるだけなので、出口から扇に開く。
   if (input.sourceFace === "right" && input.targetFace === "left" && tx - sx > 40) {
+    if (Math.abs(sy - ty) < 3) {
+      return {
+        path: `M ${sx},${sy} L ${tx},${ty}`,
+        labelX: (sx + tx) / 2,
+        labelY: sy,
+      };
+    }
     const usable = Math.max(0, tx - sx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busX = tx - inset - rank * pitch;
@@ -95,6 +102,13 @@ export function orthogonalBusPath(input: {
     };
   }
   if (input.sourceFace === "left" && input.targetFace === "right" && sx - tx > 40) {
+    if (Math.abs(sy - ty) < 3) {
+      return {
+        path: `M ${sx},${sy} L ${tx},${ty}`,
+        labelX: (sx + tx) / 2,
+        labelY: sy,
+      };
+    }
     const usable = Math.max(0, sx - tx - inset * 2);
     const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
     const busX = tx + inset + rank * pitch;
@@ -295,8 +309,9 @@ function PortLabel({
     x,
     y,
     position,
-    PORT_LABEL_GAP + Math.min(rank, 4) * 4,
-    PORT_LABEL_SIDE + rank * 11,
+    PORT_LABEL_GAP + Math.min(rank, 4) * 3,
+    // 偶数・奇数で線の上下（左右）へ振り、束のポート名が同じ帯に積もらない
+    (rank % 2 === 0 ? 1 : -1) * (PORT_LABEL_SIDE + Math.floor(rank / 2) * 14),
   );
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;

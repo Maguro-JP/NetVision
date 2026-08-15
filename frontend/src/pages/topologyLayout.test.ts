@@ -36,6 +36,7 @@ import {
   heightFor,
   DEFAULT_WIDTH,
   DEFAULT_HEIGHT,
+  DETAIL_HEIGHT,
 } from "./TopologyPage";
 
 function node(
@@ -43,6 +44,7 @@ function node(
   hostname: string,
   x: number,
   y: number,
+  outside = false,
 ): TopologyNode {
   return {
     device_id: id,
@@ -57,7 +59,7 @@ function node(
     port_kinds: [],
     x,
     y,
-    outside: false,
+    outside,
     hidden_peers: 0,
   } as unknown as TopologyNode;
 }
@@ -380,11 +382,17 @@ describe("箱幅・高さとポート名の画面座標", () => {
   });
 
   it("左右に多いときは高さを伸ばし、中心の高さを保つ", () => {
-    const height = heightFor(8)!;
+    const height = heightFor(8);
     const shiftY = shiftYFor(height);
     const stored = 200;
     const displayTop = stored - shiftY;
     expect(displayTop + height / 2).toBe(stored + DEFAULT_HEIGHT / 2);
+  });
+
+  it("詳細表示の基準高さは中身分だけ高い", () => {
+    expect(DETAIL_HEIGHT).toBeGreaterThan(DEFAULT_HEIGHT);
+    expect(heightFor(2, DETAIL_HEIGHT)).toBe(DETAIL_HEIGHT);
+    expect(heightFor(8, DETAIL_HEIGHT)).toBeGreaterThan(DETAIL_HEIGHT);
   });
 
   it("右辺のポート名は中央寄せせず、箱の外側基準で置く", () => {
@@ -404,11 +412,13 @@ describe("箱幅・高さとポート名の画面座標", () => {
       edges: peers.map((p, i) => link(100 + i, 1, p.device_id)),
       unplaced_count: 0,
     } as unknown as TopologyGraph;
-    const { busiestLR, busiestTB, faceHandles, lanes } = assignAnchors(graph);
+    const { busiestLR, busiestTB, faceHandles, heights, lanes } = assignAnchors(graph, {
+      simple: true,
+    });
     expect(busiestLR.get(1)).toBe(12);
     expect(busiestTB.get(1) ?? 0).toBe(0);
     expect(widthFor(busiestTB.get(1) ?? 0)).toBeUndefined();
-    const height = heightFor(12)!;
+    const height = heights.get(1)!;
     expect(height).toBeGreaterThan(DEFAULT_HEIGHT);
     const ts = faceHandles
       .get(1)!
@@ -424,5 +434,42 @@ describe("箱幅・高さとポート名の画面座標", () => {
     // 幅を広げない分、通り道は箱の間のすき間に収める
     const widest = Math.max(0, ...lanes.values());
     expect(widest).toBeLessThan(400 / 2);
+  });
+
+  it("詳細表示でも対向の高さへ口が寄り、中央から階段にしない", () => {
+    const hub = node(1, "edge-v", 0, 200);
+    const upper = node(2, "core-a", 500, 80);
+    const lower = node(3, "core-b", 500, 320);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, upper, lower],
+      edges: [link(10, 1, 2), link(11, 1, 3)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)!).toBeGreaterThanOrEqual(DETAIL_HEIGHT);
+    const rights = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "right")
+      .sort((a, b) => a.t - b.t);
+    expect(rights).toHaveLength(2);
+    // 上の対向は上側の口、下は下側。両方 0.5 付近に寄らない
+    expect(rights[0].t).toBeLessThan(0.4);
+    expect(rights[1].t).toBeGreaterThan(0.6);
+  });
+
+  it("同じ段の対向へは口の高さが揃い、他Hで中心がずれない", () => {
+    const hub = node(1, "sw-a", 0, 200);
+    const peer = node(2, "sw-b", 400, 200);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, peer],
+      edges: [link(10, 1, 2)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)).toBe(DETAIL_HEIGHT);
+    const right = faceHandles.get(1)!.find((h) => h.side === "right");
+    expect(right?.t).toBeCloseTo(0.5, 2);
   });
 });

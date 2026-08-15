@@ -161,7 +161,14 @@ const COLUMN = 400;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
 export const DEFAULT_WIDTH = 190;
+/** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
+/**
+ * 詳細表示の箱の高さ。中身（型番・IP・ポート種・保守）で伸びる分を見込む。
+ * ここを 78 のままにすると、接続点の計算だけ低い箱の話になり、画面では
+ * 中央付近から階段状に折れる。
+ */
+export const DETAIL_HEIGHT = 132;
 
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
@@ -172,13 +179,31 @@ export function widthFor(topBottomCount: number): number | undefined {
   return Math.min(620, DEFAULT_WIDTH + (topBottomCount - 3) * 55);
 }
 
-/** 左右の辺に来る本数から、箱の高さを決める。既定は 78px。
+/** 左右の辺に来る本数から、箱の高さを決める。
  *
  * 右辺・左辺に対向が何本も付くとき、幅を広げても縦の間隔は増えない。
  * 接続点とポート名が被るので、4本を超えたら1本あたり 22px 高くする。 */
-export function heightFor(leftRightCount: number): number | undefined {
-  if (leftRightCount <= 3) return undefined;
-  return Math.min(480, DEFAULT_HEIGHT + (leftRightCount - 3) * 22);
+export function heightFor(leftRightCount: number, base: number = DEFAULT_HEIGHT): number {
+  if (leftRightCount <= 3) return base;
+  return Math.min(480, base + (leftRightCount - 3) * 22);
+}
+
+/**
+ * 対向の中心が近くに散っているとき、箱を高くして口を寄せる案。
+ * いまは貫通しやすいので assignAnchors では使わない。射影と DETAIL_HEIGHT で足りる。
+ */
+export function heightToCoverPeers(
+  peerCenters: number[],
+  hubCenterY: number,
+  base: number,
+): number {
+  if (peerCenters.length === 0) return base;
+  const near = peerCenters.filter((c) => Math.abs(c - hubCenterY) <= base * 1.25);
+  if (near.length < 2) return base;
+  const top = Math.min(...near);
+  const bottom = Math.max(...near);
+  const needed = (bottom - top) / 0.84 + 24;
+  return Math.min(base * 2.2, Math.max(base, needed));
 }
 
 /**
@@ -208,7 +233,10 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
  * 同じ辺に複数本来るときは3か所に散らす。同じ点から出すと線が重なって、
  * どのポートがどれか分からなくなる。
  */
-export function assignAnchors(graph: TopologyGraph): {
+export function assignAnchors(
+  graph: TopologyGraph,
+  options: { simple?: boolean } = {},
+): {
   anchors: Map<number, { source: string; target: string }>;
   /** 上下の辺の最大本数。箱幅に使う */
   busiestTB: Map<number, number>;
@@ -216,11 +244,15 @@ export function assignAnchors(graph: TopologyGraph): {
   busiestLR: Map<number, number>;
   /** 互換: 1辺あたりの最大本数（TB/LR の大きい方） */
   busiest: Map<number, number>;
+  /** 機器ごとの描画高さ（接続点の分母と箱の高さ） */
+  heights: Map<number, number>;
   /** 機器ごとの接続点（辺の上の連続位置）。スロット固定にしない */
   faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
   lanes: Map<number, number>;
   laneRank: Map<number, { rank: number; count: number }>;
 } {
+  const simple = options.simple ?? false;
+  const baseHeight = simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT;
   const nodes = new Map(graph.nodes.map((n) => [n.device_id, n]));
   const out = new Map<number, { source: string; target: string }>();
 
@@ -270,18 +302,26 @@ export function assignAnchors(graph: TopologyGraph): {
     busiest.set(id, Math.max(busiestTB.get(id) ?? 0, busiestLR.get(id) ?? 0));
   }
 
-  const faceHeight = (deviceId: number) => heightFor(busiestLR.get(deviceId) ?? 0) ?? DEFAULT_HEIGHT;
-  const faceWidth = (deviceId: number) => widthFor(busiestTB.get(deviceId) ?? 0) ?? DEFAULT_WIDTH;
+  // 箱の高さ = 表示の実高さ + 左右の本数分。
+  // 対向の散らばりまで覆うと上の機器と箱が重なり、線が貫く。
+  const heights = new Map<number, number>();
+  for (const node of graph.nodes) {
+    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, baseHeight));
+  }
 
-  /** 相手の位置を辺へ射影した比率。接続点は辺の上で自由に動かす。 */
+  const faceHeight = (deviceId: number) => heights.get(deviceId) ?? baseHeight;
+  const faceWidth = (deviceId: number) =>
+    widthFor(busiestTB.get(deviceId) ?? 0) ?? DEFAULT_WIDTH;
+
+  /** 相手の中心を辺へ射影した比率。接続点は辺の上で自由に動かす。 */
   const idealT = (end: (typeof ends)[number]): number => {
     const here = nodes.get(end.device);
     const other = nodes.get(end.other);
     if (!here || !other) return 0.5;
     if (end.side === "left" || end.side === "right") {
       const height = faceHeight(end.device);
-      // 広げた箱は中心を保つので、射影も保存中心基準
-      const hereTop = here.y - shiftYFor(heightFor(busiestLR.get(end.device) ?? 0));
+      const hereTop = here.y - shiftYFor(height);
+      // other.y は保存上端。見た目の中心は DEFAULT_HEIGHT/2（高さ可変でも中心維持）
       return (other.y + DEFAULT_HEIGHT / 2 - hereTop) / height;
     }
     const width = faceWidth(end.device);
@@ -431,7 +471,7 @@ export function assignAnchors(graph: TopologyGraph): {
       });
   }
 
-  return { anchors: out, busiest, busiestTB, busiestLR, faceHandles, lanes, laneRank };
+  return { anchors: out, busiest, busiestTB, busiestLR, heights, faceHandles, lanes, laneRank };
 }
 
 /**
@@ -448,9 +488,10 @@ export function shiftFor(width: number | undefined): number {
   return width ? (width - DEFAULT_WIDTH) / 2 : 0;
 }
 
-/** 高さを広げたときの上方向へのずれ。中心の高さを保つ。 */
+/** 高さを広げたときの上方向へのずれ。中心の高さを保つ（基準は DEFAULT_HEIGHT）。 */
 export function shiftYFor(height: number | undefined): number {
-  return height ? (height - DEFAULT_HEIGHT) / 2 : 0;
+  if (!height || height <= DEFAULT_HEIGHT) return 0;
+  return (height - DEFAULT_HEIGHT) / 2;
 }
 
 /**
@@ -514,11 +555,14 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, busiestLR, faceHandles, lanes, laneRank } = assignAnchors(graph);
+  const { anchors, busiestTB, busiestLR, heights, faceHandles, lanes, laneRank } = assignAnchors(
+    graph,
+    { simple },
+  );
 
   const devices = graph.nodes.map((node) => {
     const width = widthFor(busiestTB.get(node.device_id) ?? 0);
-    const height = heightFor(busiestLR.get(node.device_id) ?? 0);
+    const height = heights.get(node.device_id) ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
     const shift = shiftFor(width);
     const shiftY = shiftYFor(height);
     return {

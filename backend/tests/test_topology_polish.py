@@ -38,7 +38,9 @@ def edge(
     )
 
 
-def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
+def node(
+    device_id: int, hostname: str, x: float, y: float, *, outside: bool = False
+) -> TopologyNodeView:
     return TopologyNodeView(
         device_id=device_id,
         hostname=hostname,
@@ -54,6 +56,7 @@ def node(device_id: int, hostname: str, x: float, y: float) -> TopologyNodeView:
         x=x,
         y=y,
         placed=True,
+        outside=outside,
     )
 
 
@@ -136,10 +139,10 @@ def test_near_overlap_within_budget_is_cleared():
     """上限内で空けられる近さなら、箱が重ならない間隔まで空ける。"""
     nodes = [
         node(1, "a", 0, 0),
-        node(2, "b", 180, 0),  # 230 まで 50。上限 80 以内
+        node(2, "b", 240, 0),  # 300 まで 60。上限 80 以内
     ]
     _polish_layout(nodes)
-    assert nodes[1].x - nodes[0].x >= 230
+    assert nodes[1].x - nodes[0].x >= 300
 
 
 def test_a_column_is_not_flattened_into_a_row():
@@ -168,8 +171,8 @@ def test_stacked_nodes_are_separated_in_one_polish():
     ]
     _polish_layout(nodes)
     xs = sorted(n.x for n in nodes)
-    assert xs[1] - xs[0] >= 230
-    assert xs[2] - xs[1] >= 230
+    assert xs[1] - xs[0] >= 300
+    assert xs[2] - xs[1] >= 300
     first = [(n.device_id, n.x, n.y) for n in nodes]
     _polish_layout(nodes)
     second = [(n.device_id, n.x, n.y) for n in nodes]
