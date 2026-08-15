@@ -41,6 +41,17 @@ SEVERITY_COLOR: dict[str, str] = {
     str(Severity.OK): "#2d8a4e",
     str(Severity.UNKNOWN): "#7a7a7a",
 }
+#: 機器の種別の呼び方。画面（DEVICE_TYPE_LABEL）と揃えること
+DEVICE_TYPE_NAMES: dict[str, str] = {
+    "router": "ルータ",
+    "switch": "スイッチ",
+    "firewall": "ファイアウォール",
+    "load_balancer": "ロードバランサ",
+    "wireless_ap": "無線AP",
+    "wireless_controller": "無線コントローラ",
+    "server": "サーバ",
+    "other": "その他",
+}
 SEVERITY_LABEL: dict[str, str] = {
     str(Severity.EXPIRED): "期限切れ",
     str(Severity.CRITICAL): "90日以内",
@@ -57,6 +68,11 @@ MARGIN = 48.0
 LEGEND_H = 62.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
+# 箱の中の行送り（画面の .topo-node と同じ積み方）
+_ROW_PLANE = 14.0
+_ROW_KINDS = 15.0
+_ROW_BODY = 16.0
+_ROW_FOOT = 18.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
@@ -621,22 +637,37 @@ def render_svg(
             f'<rect x="{x:.0f}" y="{y:.0f}" width="5" height="{nh:.0f}" '
             f'rx="2" fill="{color}"/>'
         )
+        # 中身は画面の箱と同じ順に積む。SVG だけ行が欠けると、図から拠点や
+        # 保守の状態が読めなくなり、貼った先で台帳を開き直すことになる
+        row_y = y + 22.0
         parts.append(
-            f'<text x="{x + 14:.0f}" y="{y + 22:.0f}" font-size="13" font-weight="700" '
+            f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="13" font-weight="700" '
             f'fill="#1a1a1a">{_esc(_clip(node.hostname, 22))}</text>'
         )
-        parts.append(
-            f'<text x="{x + 14:.0f}" y="{y + 38:.0f}" font-size="10" fill="#5a6270">'
-            f"{_esc(_clip(f'{node.vendor} {node.model}'.strip(), 26))}</text>"
-        )
-        detail = node.mgmt_ip or node.site_name or ""
-        if detail:
+        plane = PLANE_NAMES.get(str(node.plane or ""), "")
+        if plane:
+            row_y += _ROW_PLANE
             parts.append(
-                f'<text x="{x + 14:.0f}" y="{y + 52:.0f}" font-size="10" fill="#7a828f">'
-                f"{_esc(_clip(detail, 26))}</text>"
+                f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="10" fill="#7a828f">'
+                f"{_esc(plane)}</text>"
             )
         if node.port_kinds:
-            parts.append(_port_kinds_line(x + 14, y + 68, node.port_kinds))
+            row_y += _ROW_KINDS
+            parts.append(_port_kinds_line(x + 14, row_y, node.port_kinds))
+        for line in _card_lines(node):
+            row_y += _ROW_BODY
+            parts.append(
+                f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="10" fill="#5a6270">'
+                f"{_esc(_clip(line, 26))}</text>"
+            )
+        row_y += _ROW_FOOT
+        foot = SEVERITY_LABEL.get(str(node.severity), "")
+        if node.interface_count:
+            foot = f"{foot} ・{node.interface_count}ポート"
+        parts.append(
+            f'<text x="{x + 14:.0f}" y="{row_y:.0f}" font-size="11" font-weight="600" '
+            f'fill="{color}">{_esc(foot)}</text>'
+        )
         parts.append("</g>")
 
     if not simple:
@@ -1607,6 +1638,21 @@ def _parallel_index(graph: TopologyGraph) -> dict[int, float]:
         for index, edge_id in enumerate(members):
             out[edge_id] = (index - center) * _PARALLEL_GAP
     return out
+
+
+def _card_lines(node) -> list[str]:
+    """箱の本文。画面と同じ並びで、空の行は出さない。"""
+    lines: list[str] = []
+    product = f"{node.vendor} {node.model}".strip()
+    if product:
+        lines.append(product)
+    kind = DEVICE_TYPE_NAMES.get(str(node.device_type), "")
+    where = " / ".join(part for part in (kind, node.site_name or "") if part)
+    if where:
+        lines.append(where)
+    if node.mgmt_ip:
+        lines.append(node.mgmt_ip)
+    return lines
 
 
 def _peer_box(x: float, y: float, peer: _Peer, simple: bool) -> str:
