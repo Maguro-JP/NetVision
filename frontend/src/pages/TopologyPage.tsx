@@ -192,10 +192,13 @@ const BODY_ROWS = 3;
  * 出る可能性のある行を全部足した高さにしておけば、どの機器でも切れない。
  * 行数を保証するために、styles.css 側で各行の折り返しを止めてある。
  */
+/* ポート名が縦に積まれても重ならない間隔。
+   ラベルは font-size 10・line-height 1.2・上下の余白1px で 14px。
+   読みやすさのため 4px 空ける（styles.css の .topo-edge-label と合わせること） */
+const LABEL_PITCH = 18;
 /* 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
-   上下の辺は名前を横書きするので幅、左右の辺は行の高さで決まる */
+   上下の辺は名前を横書きするので名前の幅、左右の辺は行の高さで決まる */
 const BUNDLE_LABEL_W = 56;
-const BUNDLE_LABEL_H = 12;
 
 export const DETAIL_HEIGHT =
   PAD_Y + HEAD_ROW + PLANE_ROW + PORTS_ROW + BODY_ROW * BODY_ROWS + FOOT_ROW;
@@ -397,12 +400,13 @@ export function assignAnchors(
       .map((t, origin) => ({ origin, t: clamp(t), peer: peers[origin] }))
       .sort((a, b) => a.t - b.t || a.origin - b.origin);
     // ポート名が被らない間隔
-    const minimum = Math.max(0.06, 16 / Math.max(facePx, 1));
+    const minimum = Math.max(0.06, LABEL_PITCH / Math.max(facePx, 1));
     // 束を詰める間隔。上下の辺はポート名を横書きするので名前の幅がいる。
     // 左右の辺は行の高さで足りるので、ここまで詰められる
+    // 束でもポート名は1つずつ読むので、行の高さより詰めることはできない
     const bundle = horizontal
       ? Math.max(minimum, BUNDLE_LABEL_W / Math.max(facePx, 1))
-      : Math.max(0.035, BUNDLE_LABEL_H / Math.max(facePx, 1));
+      : minimum;
     const gapAt = (index: number) =>
       ordered[index].peer === ordered[index - 1].peer ? bundle : minimum;
 

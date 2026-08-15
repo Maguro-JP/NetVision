@@ -169,15 +169,19 @@ def test_along_line_never_renders_upside_down():
             assert -90 <= float(angle) <= 90, f"{angle} 度は逆さま"
 
 
-def test_manual_label_still_goes_in_the_middle():
-    """人が付けた線の名前はポート名とは性質が違うので、中央のまま。"""
+def test_manual_label_goes_in_the_middle_and_keeps_the_port_names():
+    """人が付けた線の名前は中央。両端のポート名はそのまま残す。
+
+    名前が付いた線ほど拠点間の幹線で、どのポートで受けているかを知りたい。
+    名前と引き換えにポート名が消えると、図から機器の設定へ辿れなくなる。
+    """
     graph = graph_of(0, 0, 400, 0)
     graph.edges[0].label = "本社⇔支社 専用線"
     svg = render_svg(graph)
 
     found = labels(svg)
     assert "本社⇔支社 専用線" in found
-    assert "Gi1/0/1" not in found
+    assert "Gi1/0/1" in found
 
 
 def test_device_box_carries_the_port_kind():

@@ -608,4 +608,29 @@ describe("箱幅・高さとポート名の画面座標", () => {
     expect(ts).toHaveLength(3);
     expect(ts[2] - ts[0]).toBeGreaterThan(0.5);
   });
+  it("同じ辺のポート名が、行の高さぶん離れて縦に並ぶ", () => {
+    // 1台のハブに、右側の列から5台がぶら下がる（ポート名が右辺に積もる）
+    const hub = node(1, "hub", 0, 400);
+    const peers = [2, 3, 4, 5, 6].map((id, index) =>
+      node(id, `peer-${id}`, 600, index * 160),
+    );
+    const graph = {
+      layer: "physical",
+      nodes: [hub, ...peers],
+      edges: peers.map((peer, index) => link(10 + index, 1, peer.device_id)),
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { faceHandles, heights } = assignAnchors(graph, { simple: false });
+    const height = heights.get(1)!;
+    const ys = faceHandles
+      .get(1)!
+      .filter((h) => h.side === "right")
+      .map((h) => h.t * height)
+      .sort((a, b) => a - b);
+    expect(ys).toHaveLength(5);
+    for (let index = 1; index < ys.length; index += 1) {
+      // ラベルは 10px / line-height 1.2 / 上下余白1px で 14px
+      expect(ys[index] - ys[index - 1]).toBeGreaterThanOrEqual(14);
+    }
+  });
 });

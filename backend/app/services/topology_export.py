@@ -57,10 +57,11 @@ MARGIN = 48.0
 LEGEND_H = 62.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
-# 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
-# 上下の辺は名前を横書きするので幅、左右の辺は行の高さで決まる
+# ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
+_LABEL_PITCH = 18.0
+# 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
+# 名前の幅がいる。左右の辺は行の高さ（_LABEL_PITCH）で決まる
 _BUNDLE_LABEL_W = 56.0
-_BUNDLE_LABEL_H = 12.0
 
 # 日本語が入るので、環境にありそうなものを順に並べる
 FONT = "'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif"
@@ -488,50 +489,47 @@ def render_svg(
             )
         x1, y1 = points[0]
         x2, y2 = points[-1]
+        # 人が付けた線の名前は中央に置く。両端のポート名はそのまま残す。
+        # 上（相手側）・中央（名前）・下（自分側）が縦に並んで読めるようにする
         if edge.label:
             parts.append(_center_label(*_path_middle(points), edge.label, placement))
-        else:
-            source = at[edge.source]
-            target = at[edge.target]
-            sw, sh = size_at[edge.source]
-            tw, th = size_at[edge.target]
-            source = at[edge.source]
-            target = at[edge.target]
-            sw, sh = size_at[edge.source]
-            tw, th = size_at[edge.target]
-            sx, sy = source[0] + sw / 2, source[1] + sh / 2
-            tx, ty = target[0] + tw / 2, target[1] + th / 2
-            parts.append(
-                _port_label(
-                    sx,
-                    sy,
-                    x1,
-                    y1,
-                    edge.source_interface,
-                    port_style,
-                    along_line,
-                    placement,
-                    half_w=sw / 2,
-                    half_h=sh / 2,
-                )
+        source = at[edge.source]
+        target = at[edge.target]
+        sw, sh = size_at[edge.source]
+        tw, th = size_at[edge.target]
+        sx, sy = source[0] + sw / 2, source[1] + sh / 2
+        tx, ty = target[0] + tw / 2, target[1] + th / 2
+        parts.append(
+            _port_label(
+                sx,
+                sy,
+                x1,
+                y1,
+                edge.source_interface,
+                port_style,
+                along_line,
+                placement,
+                half_w=sw / 2,
+                half_h=sh / 2,
             )
-            parts.append(
-                _port_label(
-                    tx,
-                    ty,
-                    x2,
-                    y2,
-                    edge.target_interface,
-                    port_style,
-                    along_line,
-                    placement,
-                    half_w=tw / 2,
-                    half_h=th / 2,
-                )
+        )
+        parts.append(
+            _port_label(
+                tx,
+                ty,
+                x2,
+                y2,
+                edge.target_interface,
+                port_style,
+                along_line,
+                placement,
+                half_w=tw / 2,
+                half_h=th / 2,
             )
-            for name in (edge.source_interface, edge.target_interface):
-                if name:
-                    used_media.add(portlabel.media_of(name))
+        )
+        for name in (edge.source_interface, edge.target_interface):
+            if name:
+                used_media.add(portlabel.media_of(name))
 
     # --- 絞り込みの外にいる対向（簡易表示） ---
     for peer_index, peer in enumerate(peers):
@@ -965,14 +963,11 @@ def _space_face_ts(
         ((origin, min(hi, max(lo, t)), peer_of[origin]) for origin, t in enumerate(ideals)),
         key=lambda item: (item[1], item[0]),
     )
-    minimum = max(0.06, 16.0 / max(face_px, 1.0))
+    minimum = max(0.06, _LABEL_PITCH / max(face_px, 1.0))
     # 束を詰める間隔。上下の辺はポート名を横書きするので、名前の幅がいる。
     # 左右の辺は行の高さで足りるので、ここまで詰められる
-    bundle = (
-        max(minimum, _BUNDLE_LABEL_W / max(face_px, 1.0))
-        if horizontal
-        else max(0.035, _BUNDLE_LABEL_H / max(face_px, 1.0))
-    )
+    # 束でもポート名は1つずつ読むので、行の高さより詰めることはできない
+    bundle = max(minimum, _BUNDLE_LABEL_W / max(face_px, 1.0)) if horizontal else minimum
     gaps = [
         bundle if ordered[index][2] == ordered[index - 1][2] else minimum for index in range(1, n)
     ]

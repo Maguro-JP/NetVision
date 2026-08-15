@@ -710,7 +710,9 @@ export default function PortLabeledEdge({
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       {!info.hideLabels && (
         <EdgeLabelRenderer>
-          {info.manualLabel ? (
+          {/* 人が付けた線の名前は中央に置く。両端のポート名はそのまま残し、
+              上（相手のポート）・中央（名前）・下（自分のポート）が縦に並ぶ */}
+          {info.manualLabel && (
             <div
               className="topo-edge-label center"
               style={{
@@ -720,36 +722,33 @@ export default function PortLabeledEdge({
             >
               {info.manualLabel}
             </div>
-          ) : (
-            <>
-              <PortLabel
-                name={info.sourceInterface ?? ""}
-                x={sourceX}
-                y={sourceY}
-                position={sourcePosition}
-                angle={angle}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-                color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                rank={info.laneRank ?? 0}
-              />
-              <PortLabel
-                name={info.targetInterface ?? ""}
-                x={targetX}
-                y={targetY}
-                position={targetPosition}
-                // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
-                // 線の反対側に出るので、機器が近くても重ならない
-                angle={angle + 180}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-                color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                rank={info.laneRank ?? 0}
-              />
-            </>
           )}
+          <PortLabel
+            name={info.sourceInterface ?? ""}
+            x={sourceX}
+            y={sourceY}
+            position={sourcePosition}
+            angle={angle}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+            color={typeof style?.stroke === "string" ? style.stroke : undefined}
+            rank={info.laneRank ?? 0}
+          />
+          <PortLabel
+            name={info.targetInterface ?? ""}
+            x={targetX}
+            y={targetY}
+            position={targetPosition}
+            // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
+            // 線の反対側に出るので、機器が近くても重ならない
+            angle={angle + 180}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+            color={typeof style?.stroke === "string" ? style.stroke : undefined}
+            rank={info.laneRank ?? 0}
+          />
           {info.warning && (
             <div
               className="topo-edge-label warning"
@@ -793,13 +792,15 @@ function PortLabel({
 }) {
   if (!name) return null;
 
+  // 引き出し口そのものがポート名の行の高さぶん離してあるので、ラベルは
+  // 線の同じ側へ同じ量だけ出す。1本ごとに上下へ振り分けると、同じ辺の
+  // ポート名が互い違いになって、上から順に読めなくなる
   const placed = portLabelPlacement(
     x,
     y,
     position,
     PORT_LABEL_GAP + Math.min(rank, 4) * 3,
-    // 偶数・奇数で線の上下（左右）へ振り、束のポート名が同じ帯に積もらない
-    (rank % 2 === 0 ? 1 : -1) * (PORT_LABEL_SIDE + Math.floor(rank / 2) * 14),
+    PORT_LABEL_SIDE,
   );
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;
