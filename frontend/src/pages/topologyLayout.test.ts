@@ -26,6 +26,7 @@ import {
   keepLocalPositions,
   shiftFor,
   sideToward,
+  siteNameOnCanvas,
   storedFromDisplay,
   placementFromClick,
   positionsToSave,
@@ -336,5 +337,15 @@ describe("図をクリックして機器を置く位置", () => {
   it("クリックした位置をそのまま使う", () => {
     expect(placementFromClick(23, 61)).toEqual({ x: 23, y: 61 });
     expect(placementFromClick(0, 0)).toEqual({ x: 0, y: 0 });
+  });
+});
+
+describe("シンプル表示の拠点名", () => {
+  it("対向はシンプルでも拠点名を残す", () => {
+    expect(siteNameOnCanvas({ outside: true, site_name: "西日本センター" }, true)).toBe(
+      "西日本センター",
+    );
+    expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, true)).toBeNull();
+    expect(siteNameOnCanvas({ outside: false, site_name: "関西支社" }, false)).toBe("関西支社");
   });
 });

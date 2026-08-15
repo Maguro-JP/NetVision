@@ -365,6 +365,17 @@ export function positionsToSave(
   return out;
 }
 
+/**
+ * 画面に出す拠点名。
+ * シンプル表示でも対向は拠点名を残す。無いと「拠点未登録」になり、出先が分からない。
+ */
+export function siteNameOnCanvas(
+  node: { outside?: boolean; site_name: string | null },
+  simple: boolean,
+): string | null {
+  return node.outside ? node.site_name : simple ? null : node.site_name;
+}
+
 function toFlow(
   graph: TopologyGraph,
   simple: boolean,
@@ -390,7 +401,7 @@ function toFlow(
       model: simple ? "" : node.model,
       deviceType: node.device_type,
       severity: simple ? null : node.severity,
-      siteName: simple ? null : node.site_name,
+      siteName: siteNameOnCanvas(node, simple),
       mgmtIp: simple ? null : node.mgmt_ip,
       interfaceCount: simple ? 0 : node.interface_count,
       portKinds: simple ? [] : node.port_kinds,
