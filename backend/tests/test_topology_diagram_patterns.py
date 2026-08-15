@@ -32,17 +32,20 @@ def _ok(graph, title: str, filename: str) -> None:
     findings = evaluate_site_diagram(graph)
     failed = [item.detail for item in findings if not item.ok]
     assert is_acceptable(findings), f"{title}: {failed}"
-    svg = render_svg(graph, title=title, style="simple")
-    svg_findings = evaluate_svg(svg, graph)
-    failed_svg = [item.detail for item in svg_findings if not item.ok]
-    assert is_acceptable(svg_findings), f"{title} SVG: {failed_svg}"
-    scored = score_diagram(graph, svg)
-    assert scored.total > 100, f"{title} {scored.total}点 {scored.parts}"
-    _write(filename, svg)
-    lines = [f"{title}\t{scored.total}"]
-    lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
-    _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
-    return scored
+    for style in ("simple", "detail"):
+        svg = render_svg(graph, title=title, style=style)
+        svg_findings = evaluate_svg(svg, graph)
+        failed_svg = [item.detail for item in svg_findings if not item.ok]
+        assert is_acceptable(svg_findings), f"{title} SVG({style}): {failed_svg}"
+        if style == "simple":
+            scored = score_diagram(graph, svg)
+            assert scored.total > 100, f"{title} {scored.total}点 {scored.parts}"
+            _write(filename, svg)
+            lines = [f"{title}\t{scored.total}"]
+            lines.extend(f"  {name}\t{value:.1f}" for name, value in scored.parts.items())
+            _write(filename.replace(".svg", ".score.txt"), "\n".join(lines) + "\n")
+            return scored
+    return None
 
 
 def test_branch_with_redundant_cores_and_offices(db_session):
@@ -228,18 +231,12 @@ def test_horizontal_orientation_is_still_readable(db_session):
         site_id=ids["osaka"],
         orientation="horizontal",
     )
-    svg = render_svg(graph, title="営業所 左右配置", style="simple")
-    _write("office-horizontal.svg", svg)
-    assert not any(
-        abs(a[0] - b[0]) > 8 and abs(a[1] - b[1]) > 8
-        for match in __import__("re").finditer(r'<polyline points="([^"]+)"', svg)
-        for pts in [
-            [(float(p.split(",")[0]), float(p.split(",")[1])) for p in match.group(1).split()]
-        ]
-        for a, b in zip(pts, pts[1:], strict=False)
-    )
+    _ok(graph, "営業所 左右配置", "office-horizontal.svg")
     placed = {n.hostname: n for n in graph.nodes}
     assert placed["east-core-rt-01"].x < placed["osaka-rt-01"].x < placed["osaka-sw-01"].x
+    # 箱幅より狭い間隔だと食い込む（左右配置の段ピッチ退行防止）
+    assert placed["osaka-sw-01"].x - placed["osaka-rt-01"].x >= 190
+    assert placed["osaka-rt-01"].x - placed["east-core-rt-01"].x >= 190
 
 
 def test_physical_and_l2_are_different_sheets(db_session):

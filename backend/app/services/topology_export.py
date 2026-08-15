@@ -671,11 +671,15 @@ def _orthogonal_bus(
         bus_x = tx + inset + rank * pitch
         return [(sx, sy), (bus_x, sy), (bus_x, ty), (tx, ty)]
     if source_face == "bottom" and target_face == "top" and ty - sy > 40:
+        if abs(sx - tx) < 3:
+            return [(sx, sy), (tx, ty)]
         usable = max(0.0, ty - sy - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty - inset - rank * pitch
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "bottom" and sy - ty > 40:
+        if abs(sx - tx) < 3:
+            return [(sx, sy), (tx, ty)]
         usable = max(0.0, sy - ty - inset * 2)
         pitch = min(gap, usable / steps) if steps else 0.0
         bus_y = ty + inset + rank * pitch
@@ -737,6 +741,130 @@ def _space_face_ts(ideals: list[float], face_px: float) -> list[float]:
     return result
 
 
+def _exits_outward(route: list[tuple[float, float]], face: str) -> bool:
+    """最初の辺が面の外側へ出ているか。内側へ戻る線は箱を貫く。"""
+    if len(route) < 2:
+        return False
+    x0, y0 = route[0]
+    x1, y1 = route[1]
+    if face == "left":
+        return x1 < x0 - 0.5
+    if face == "right":
+        return x1 > x0 + 0.5
+    if face == "top":
+        return y1 < y0 - 0.5
+    if face == "bottom":
+        return y1 > y0 + 0.5
+    return True
+
+
+def _arrives_from_outside(route: list[tuple[float, float]], face: str) -> bool:
+    """最後の辺が面の外側から来ているか。箱の中を通って辺へ着く線は貫き。"""
+    if len(route) < 2:
+        return False
+    x0, y0 = route[-1]
+    x1, y1 = route[-2]
+    if face == "left":
+        return x1 < x0 - 0.5
+    if face == "right":
+        return x1 > x0 + 0.5
+    if face == "top":
+        return y1 < y0 - 0.5
+    if face == "bottom":
+        return y1 > y0 + 0.5
+    return True
+
+
+def _xywh_bounds(box: tuple[float, float, float, float]) -> tuple[float, float, float, float]:
+    x, y, w, h = box
+    return (x, y, x + w, y + h)
+
+
+def _segment_pierces_box(
+    box: tuple[float, float, float, float], a: tuple[float, float], b: tuple[float, float]
+) -> bool:
+    """箱の内側を通るか。辺上の接続は貫きにしない。
+
+    長い線分だと固定サンプルが薄まり、箱の端をかすめる貫きを見逃す。
+    内側矩形との交差区間で判定する。
+    """
+    x1, y1, x2, y2 = box
+    pad = 4.0
+    ix1, iy1, ix2, iy2 = x1 + pad, y1 + pad, x2 - pad, y2 - pad
+    if ix2 <= ix1 or iy2 <= iy1:
+        return False
+    ax, ay = a
+    bx, by = b
+    dx, dy = bx - ax, by - ay
+    t0, t1 = 0.0, 1.0
+    for p, q in ((-dx, ax - ix1), (dx, ix2 - ax), (-dy, ay - iy1), (dy, iy2 - ay)):
+        if abs(p) < 1e-12:
+            if q < 0:
+                return False
+            continue
+        t = q / p
+        if p < 0:
+            t0 = max(t0, t)
+        else:
+            t1 = min(t1, t)
+        if t0 > t1:
+            return False
+    # 端点だけの接触は接続。内側を有限の長さで通るときだけ貫き。
+    return t1 - t0 > 1e-4 and t0 < 1.0 - 1e-9 and t1 > 1e-9
+
+
+def _route_pierce_count(
+    route: list[tuple[float, float]], boxes: list[tuple[float, float, float, float]]
+) -> int:
+    """端点の箱も含め、線が箱の中を通る回数。obstacles から端点を外すと見逃す。"""
+    return sum(
+        1
+        for a, b in zip(route, route[1:], strict=False)
+        for box in boxes
+        if _segment_pierces_box(box, a, b)
+    )
+
+
+def _ensure_outward(
+    route: list[tuple[float, float]], face: str, gap: float = 16.0
+) -> list[tuple[float, float]]:
+    """面から外へ出る一段を足す。辺に沿って先に動く経路を斜めにしない。"""
+    if len(route) < 2 or _exits_outward(route, face):
+        return route
+    x0, y0 = route[0]
+    x1, y1 = route[1]
+    if face == "left":
+        mid = (x0 - gap, y0)
+    elif face == "right":
+        mid = (x0 + gap, y0)
+    elif face == "top":
+        mid = (x0, y0 - gap)
+    elif face == "bottom":
+        mid = (x0, y0 + gap)
+    else:
+        return route
+    if face in ("left", "right"):
+        corner = (mid[0], y1)
+        if abs(x1 - x0) <= 0.5:
+            # 辺に沿って縦へ動いていた → 外へ出て同じ高さへ
+            rest = route[2:] if len(route) > 2 else []
+            points = [route[0], mid, corner, *rest]
+        else:
+            points = [route[0], mid, corner, *route[1:]]
+    else:
+        corner = (x1, mid[1])
+        if abs(y1 - y0) <= 0.5:
+            rest = route[2:] if len(route) > 2 else []
+            points = [route[0], mid, corner, *rest]
+        else:
+            points = [route[0], mid, corner, *route[1:]]
+    out = [points[0]]
+    for point in points[1:]:
+        if abs(point[0] - out[-1][0]) > 0.5 or abs(point[1] - out[-1][1]) > 0.5:
+            out.append(point)
+    return out if len(out) > 1 else route
+
+
 def _wire_path(
     src_box: tuple[float, float, float, float],
     dst_box: tuple[float, float, float, float],
@@ -755,43 +883,58 @@ def _wire_path(
         dst_t = _face_t(dst_box, dst_side, src_box)
     start = _anchor(src_box, src_side, src_t)
     end = _anchor(dst_box, dst_side, dst_t)
-    candidates: list[list[tuple[float, float]]] = []
+    candidates: list[tuple[str, str, list[tuple[float, float]]]] = []
+    pierce_boxes = [
+        _xywh_bounds(src_box),
+        _xywh_bounds(dst_box),
+        *((rect.x1, rect.y1, rect.x2, rect.y2) for rect in obstacles),
+    ]
+
+    def consider(face_s: str, face_t: str, route: list[tuple[float, float]] | None) -> None:
+        if not route or not _is_orthogonal(route):
+            return
+        fixed = _ensure_outward(route, face_s)
+        if _is_orthogonal(fixed):
+            candidates.append((face_s, face_t, fixed))
+
     bus = _orthogonal_bus(start, src_side, end, dst_side, rank, count)
-    if bus and _residual(bus, obstacles) == 0:
-        # 通れる扇ならそれを採る。直角の短い折れに負けて箱の縁を走るのを防ぐ。
-        return bus
     if bus:
-        candidates.append(bus)
-    manhattan = _manhattan(start, end, src_side, dst_side)
-    candidates.append(manhattan)
-    routed = _route(start, end, obstacles)
-    if _is_orthogonal(routed):
-        candidates.append(routed)
-    chosen = min(
-        candidates,
-        key=lambda route: (_residual(route, obstacles), len(route), _length(route)),
-    )
-    # 左右に出して隣の箱を貫くときだけ、段のすき間経由（上下の口）を採る。
-    # 通れる候補があるときだけ差し替える（普段の扇は触らない）。
-    if (
-        _residual(chosen, obstacles) > 0
-        and src_side in ("left", "right")
-        and dst_side in ("left", "right")
-    ):
-        clear: list[list[tuple[float, float]]] = []
+        bus = _ensure_outward(bus, src_side)
+        if (
+            _route_pierce_count(bus, pierce_boxes) == 0
+            and _exits_outward(bus, src_side)
+            and _arrives_from_outside(bus, dst_side)
+        ):
+            return bus
+    consider(src_side, dst_side, bus)
+    consider(src_side, dst_side, _manhattan(start, end, src_side, dst_side))
+    consider(src_side, dst_side, _route(start, end, obstacles))
+    # 左右に出して隣を貫くとき、段のすき間経由も試す
+    if src_side in ("left", "right") and dst_side in ("left", "right"):
         for alt_src, alt_dst in (("bottom", "top"), ("top", "bottom")):
             alt_start = _anchor(src_box, alt_src, src_t)
             alt_end = _anchor(dst_box, alt_dst, dst_t)
-            for alt in (
+            consider(
+                alt_src,
+                alt_dst,
                 _orthogonal_bus(alt_start, alt_src, alt_end, alt_dst, rank, count),
-                _manhattan(alt_start, alt_end, alt_src, alt_dst),
-                _route(alt_start, alt_end, obstacles),
-            ):
-                if alt and _is_orthogonal(alt) and _residual(alt, obstacles) == 0:
-                    clear.append(alt)
-        if clear:
-            return min(clear, key=lambda route: (len(route), _length(route)))
-    return chosen
+            )
+            consider(alt_src, alt_dst, _manhattan(alt_start, alt_end, alt_src, alt_dst))
+            consider(alt_src, alt_dst, _route(alt_start, alt_end, obstacles))
+
+    def score(item: tuple[str, str, list[tuple[float, float]]]) -> tuple:
+        face_s, face_t, route = item
+        return (
+            _route_pierce_count(route, pierce_boxes),
+            0 if _exits_outward(route, face_s) else 1,
+            0 if _arrives_from_outside(route, face_t) else 1,
+            len(route),
+            _length(route),
+        )
+
+    if not candidates:
+        return [start, end]
+    return min(candidates, key=score)[2]
 
 
 def _manhattan(

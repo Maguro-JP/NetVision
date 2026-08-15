@@ -19,7 +19,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { orthogonalBusPath, manhattanRoute, portLabelPlacement } from "../components/PortLabeledEdge";
+import { orthogonalBusPath, manhattanRoute, portLabelPlacement, routeWire, routePierceCount } from "../components/PortLabeledEdge";
 import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
@@ -279,6 +279,49 @@ describe("直交の通り道", () => {
       expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
     }
   });
+
+  it("途中の箱を貫く左右の線は下へ迂回する", () => {
+    const obstacle = { x1: 200, y1: 0, y2: 80, x2: 400 };
+    const routed = routeWire({
+      sourceX: 500,
+      sourceY: 40,
+      targetX: 100,
+      targetY: 40,
+      sourceFace: "left",
+      targetFace: "right",
+      rank: 0,
+      count: 1,
+      obstacles: [obstacle],
+      sourceBox: { x1: 500, y1: 0, x2: 690, y2: 80 },
+      targetBox: { x1: -90, y1: 0, x2: 100, y2: 80 },
+    });
+    expect(routed.path.includes("C ")).toBe(false);
+    const points = routed.path
+      .split(/[ML]\s*/)
+      .filter(Boolean)
+      .map((part) => {
+        const [x, y] = part.split(",").map(Number);
+        return { x, y };
+      });
+    expect(routePierceCount(points, [obstacle])).toBe(0);
+    // まっすぐ y=40 だと障害を貫くので、迂回で高さが変わる
+    expect(points.some((p) => p.y > 80 || p.y < 0)).toBe(true);
+  });
+
+  it("上下が揃っていれば縦一直線", () => {
+    const routed = orthogonalBusPath({
+      sourceX: 100,
+      sourceY: 0,
+      targetX: 100,
+      targetY: 120,
+      sourceFace: "bottom",
+      targetFace: "top",
+      rank: 0,
+      count: 1,
+    });
+    expect(routed).not.toBeNull();
+    expect(routed!.path).toBe("M 100,0 L 100,120");
+  });
 });
 
 describe("保存する座標", () => {
@@ -471,5 +514,25 @@ describe("箱幅・高さとポート名の画面座標", () => {
     expect(heights.get(1)).toBe(DETAIL_HEIGHT);
     const right = faceHandles.get(1)!.find((h) => h.side === "right");
     expect(right?.t).toBeCloseTo(0.5, 2);
+    // 口の画面 Y が対向中心と揃う（階段の元を潰す）
+    const shiftY = shiftYFor(heights.get(1)!);
+    const mouthY = hub.y - shiftY + right!.t * heights.get(1)!;
+    expect(mouthY).toBeCloseTo(peer.y + DEFAULT_HEIGHT / 2, 5);
+  });
+
+  it("詳細の箱高さと接続点の分母が一致する", () => {
+    const hub = node(1, "edge", 0, 100);
+    const peer = node(2, "core", 500, 100);
+    const graph = {
+      layer: "physical",
+      nodes: [hub, peer],
+      edges: [link(1, 1, 2)],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const { heights } = assignAnchors(graph, { simple: false });
+    expect(heights.get(1)).toBe(DETAIL_HEIGHT);
+    expect(heights.get(2)).toBe(DETAIL_HEIGHT);
+    const simple = assignAnchors(graph, { simple: true });
+    expect(simple.heights.get(1)).toBe(DEFAULT_HEIGHT);
   });
 });

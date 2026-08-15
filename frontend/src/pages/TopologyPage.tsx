@@ -613,6 +613,22 @@ function toFlow(
 
   const nodes = [...groups, ...devices];
 
+  const boxOf = new Map(
+    devices.map((node) => {
+      const width = node.data.width ?? DEFAULT_WIDTH;
+      const height = node.data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+      return [
+        Number(node.id),
+        {
+          x1: node.position.x,
+          y1: node.position.y,
+          x2: node.position.x + width,
+          y2: node.position.y + height,
+        },
+      ] as const;
+    }),
+  );
+
   const edges = graph.edges.map((edge) => ({
     id: String(edge.id),
     source: String(edge.source),
@@ -643,6 +659,11 @@ function toFlow(
       laneRank: laneRank.get(edge.id)?.rank ?? 0,
       laneCount: laneRank.get(edge.id)?.count ?? 1,
       warning: simple ? null : warningOf(edge),
+      sourceBox: boxOf.get(edge.source),
+      targetBox: boxOf.get(edge.target),
+      obstacles: [...boxOf.entries()]
+        .filter(([id]) => id !== edge.source && id !== edge.target)
+        .map(([, box]) => box),
     } satisfies PortEdgeData,
   }));
 

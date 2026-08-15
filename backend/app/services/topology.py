@@ -60,7 +60,8 @@ TIER_ORDER: dict[DeviceType, int] = {
 # 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
 # 広げすぎると開いた図が間延びして、構成図として読めない
 _X_SPACING = 240.0
-_Y_SPACING = 150.0
+# 詳細箱（132）＋すき間。180 はマス目丸めで 160 に落ちて段が食い込む
+_Y_SPACING = 200.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -1081,7 +1082,10 @@ def _compact(
         if device_id not in move:
             continue
         along = across.get(device_id, 0.0) * _X_SPACING
-        down = depth.get(device_id, 0) * _Y_SPACING
+        # 左右配置では段が進む方向が X。Y 用の 150 だと箱幅 190 より狭く食い込む。
+        # get_graph の初期配置（tier * _X_SPACING）と揃える。
+        depth_pitch = _X_SPACING if horizontal else _Y_SPACING
+        down = depth.get(device_id, 0) * depth_pitch
         node.x, node.y = (down, along) if horizontal else (along, down)
 
     if inside:
@@ -1093,6 +1097,46 @@ def _compact(
             horizontal=horizontal,
             world=world,
         )
+
+    if edges and move:
+        if inside is not None:
+            cohort = [
+                n
+                for n in everything.values()
+                if n.device_id in move or (n.device_id not in keep and not n.placed)
+            ]
+        else:
+            cohort = [n for n in tree_nodes if n.device_id in move]
+        _separate_grown_boxes(cohort, list(edges or []), horizontal=horizontal)
+
+
+def _separate_grown_boxes(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView],
+    *,
+    horizontal: bool,
+) -> None:
+    """広げた箱どうしが食い込まないよう、保存座標を離す。"""
+    if len(nodes) < 2:
+        return
+    busiest_tb, busiest_lr = _busiest_sides(nodes, edges)
+
+    def tb_of(node: TopologyNodeView) -> int:
+        return busiest_tb.get(node.device_id, 0)
+
+    def lr_of(node: TopologyNodeView) -> int:
+        return busiest_lr.get(node.device_id, 0)
+
+    origin = {node.device_id: (node.x, node.y) for node in nodes}
+    if horizontal:
+        _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_X, origins=origin, links_of=tb_of)
+        _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_Y, origins=origin, links_of=lr_of)
+    else:
+        _unstick_along(nodes, axis="x", min_gap=_MIN_GAP_X, origins=origin, links_of=tb_of)
+        _unstick_along(nodes, axis="y", min_gap=_MIN_GAP_Y, origins=origin, links_of=lr_of)
+    for node in nodes:
+        node.x = _snap_to_grid(node.x)
+        node.y = _snap_to_grid(node.y)
 
 
 def _rank_slots(
@@ -1505,6 +1549,7 @@ def _place_peers(
     left = min(_visual_left(node.x, tb_of(node)) for node in own)
     right = max(_visual_right(node.x, tb_of(node)) for node in own)
     top = min(node.y for node in own)
+    own_top = min(_visual_top(node.y, lr_of(node)) for node in own)
     middle = (left + right) / 2
     own_rank = min(rank.get(node.device_id, 0) for node in own)
     world_graph = world or graph
@@ -1563,9 +1608,15 @@ def _place_peers(
 
     above_rows = rows_of(above)
     flat_above = [node for row in above_rows for node in row]
+    # 上位は自拠点の見た目の上端より上へ。ハブが高さ方向に伸びていても食い込まない。
+    peer_h = _box_height(0, _DETAIL_HEIGHT)
+    above_y = own_top - _VISUAL_CLEAR_Y - (peer_h + _BOX_HEIGHT) / 2
+    if horizontal:
+        # swap 後に X になる距離。幅方向のすき間を確保する
+        above_y = top - _min_stored_gap_x(0, 0)
     for index, node in enumerate(flat_above):
         offset = (index - (len(flat_above) - 1) / 2) * _X_SPACING
-        node.x, node.y = middle + offset, top - _Y_SPACING
+        node.x, node.y = middle + offset, above_y
     _shift_centers_to(flat_above, middle)
 
     for index, node in enumerate(beside):
@@ -1588,14 +1639,17 @@ def _place_peers(
     own_centers = [node.x + _BOX_WIDTH / 2 for node in own]
     hub_center = sum(own_centers) / len(own_centers)
     column = max(column, hub_center + _COLUMN - _BOX_WIDTH / 2)
+    row_gap = _min_stored_gap_y(0, 0)
+    # 配下は右列。先頭行は自拠点の上端に揃え、下へ詳細箱が収まる間隔で積む。
+    # own_bottom から始めると図の下へ押し出され、紙の構成図と違う。
     for index, members in enumerate(below_rows):
-        y = top + index * (_Y_SPACING * 0.7)
+        y = top + index * row_gap
         for col, node in enumerate(members):
             node.x = column + col * _X_SPACING
             node.y = y
     _even_gaps(flat_above, axis="x", min_gap=_X_SPACING)
     heads = [row[0] for row in below_rows]
-    _even_gaps(heads, axis="y", min_gap=_Y_SPACING * 0.7)
+    _even_gaps(heads, axis="y", min_gap=row_gap)
     for row in below_rows:
         if not row:
             continue
@@ -1605,6 +1659,13 @@ def _place_peers(
     if horizontal:
         for node in above + beside + below:
             node.x, node.y = node.y, node.x
+        # swap 後、上位の Y は接続先に揃える。中央寄せのままだと詳細箱と角で食い込む。
+        for node in above:
+            anchor_id = attached.get(node.device_id)
+            if anchor_id is not None and anchor_id in by_id:
+                node.y = by_id[anchor_id].y
+            else:
+                node.y = own[0].y
 
 
 def _shift_centers_to(
