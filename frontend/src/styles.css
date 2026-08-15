@@ -458,18 +458,6 @@ button:disabled {
   overflow: hidden;
   position: relative;
 }
-/* 現場の構成図と同じ読み方。紙に箱と縦横の線 */
-.topo-canvas.diagram {
-  background: #f4f1ea;
-}
-.topo-canvas.diagram .react-flow__controls button {
-  background: #fff;
-  border-color: #cfc8bb;
-  fill: #2c2a26;
-}
-.topo-canvas.diagram .react-flow__minimap {
-  background: #efeae0;
-}
 .topo-canvas.placing .react-flow__pane {
   cursor: crosshair;
 }
@@ -572,53 +560,6 @@ button:disabled {
 }
 .topo-node.simple .topo-hostname {
   font-size: 15px;
-}
-.topo-node.simple.compact {
-  background: #ffffff;
-  color: #1a1a1a;
-  border: 1.6px solid #4a5364;
-  border-radius: 7px;
-  box-shadow: none;
-  padding: 18px 10px;
-}
-.topo-node.simple.compact .topo-hostname {
-  font-size: 14px;
-  color: #1a1a1a;
-}
-.topo-node.simple.compact .topo-node-head {
-  justify-content: center;
-  margin-bottom: 0;
-}
-.topo-node.simple.compact.outside {
-  background: #f7f4ee;
-  border-style: solid;
-  opacity: 1;
-}
-.topo-canvas.diagram .topo-node.simple.compact.type-firewall {
-  background: #f3e6e2;
-}
-.topo-canvas.diagram .topo-node.simple.compact.type-router {
-  background: #e7eef6;
-}
-.topo-canvas.diagram .topo-node.simple.compact.peer-up {
-  background: #e7eef6;
-}
-.topo-canvas.diagram .topo-node.simple.compact.peer-down {
-  background: #eef3ea;
-}
-.topo-node.simple.compact.outside .muted {
-  color: #5a6270;
-}
-.topo-canvas.diagram .react-flow__edge.topo-edge .react-flow__edge-path,
-.topo-canvas.diagram .react-flow__edge.topo-edge.confirmed .react-flow__edge-path,
-.topo-canvas.diagram .react-flow__edge.topo-edge.manual .react-flow__edge-path {
-  stroke: #4a5364;
-  stroke-width: 1.6;
-  stroke-dasharray: none;
-}
-.topo-canvas.diagram .topo-edge-label {
-  color: #2f6fb5;
-  background: #f4f1ea;
 }
 
 .topo-node-head {
