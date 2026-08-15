@@ -132,9 +132,7 @@ def render_svg(
 
     # 画面と同じ: 詳細は中身分だけ高い箱。接続点の分母を合わせる。
     base_h = NODE_H if simple else _DETAIL_HEIGHT
-    heights = {
-        n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes
-    }
+    heights = {n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes}
 
     def display_box(node) -> tuple[float, float, float, float]:
         """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
@@ -169,12 +167,8 @@ def render_svg(
     width = max_x - min_x + MARGIN * 2
     height = max_y - min_y + MARGIN * 2 + 34.0 + legend_h
 
-    at = {
-        n.device_id: (sized[n.device_id][0] + dx, sized[n.device_id][1] + dy) for n in nodes
-    }
-    size_at = {
-        n.device_id: (sized[n.device_id][2], sized[n.device_id][3]) for n in nodes
-    }
+    at = {n.device_id: (sized[n.device_id][0] + dx, sized[n.device_id][1] + dy) for n in nodes}
+    size_at = {n.device_id: (sized[n.device_id][2], sized[n.device_id][3]) for n in nodes}
     parts: list[str] = []
     # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
     used_media: set[Media] = set()
