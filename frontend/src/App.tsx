@@ -3,14 +3,20 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "./api/client";
+import WindowLink from "./components/WindowLink";
 
 /** メニューは「何をしたいか」で束ねる。項目が増えても探す範囲が変わらない。 */
-const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = [
+const NAV_GROUPS: {
+  label: string;
+  //: window を付けた項目は別ウィンドウで開く。開いたまま置いておく画面向け
+  items: { to: string; label: string; window?: string }[];
+}[] = [
   {
     label: "見る",
     items: [
       { to: "/dashboard", label: "ダッシュボード" },
-      { to: "/topology", label: "トポロジー図" },
+      // 図は開いたまま台帳や Config を見に行きたいので、別ウィンドウで出す
+      { to: "/topology", label: "トポロジー図", window: "netvision-topology" },
       // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
       { to: "/insights", label: "最適化の指摘" },
     ],
@@ -134,15 +140,21 @@ export default function App() {
                   {collapsed && <span className="nav-count">{group.items.length}</span>}
                 </button>
                 {!collapsed &&
-                  group.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
+                  group.items.map((item) =>
+                    item.window ? (
+                      <WindowLink key={item.to} to={item.to} name={item.window}>
+                        {item.label}
+                      </WindowLink>
+                    ) : (
+                      <NavLink
+                        key={item.to}
+                        to={item.to}
+                        className={({ isActive }) => (isActive ? "active" : "")}
+                      >
+                        {item.label}
+                      </NavLink>
+                    ),
+                  )}
               </div>
             );
           })}

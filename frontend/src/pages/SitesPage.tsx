@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Site } from "../api/types";
 import QueryError from "../components/QueryError";
+import WindowLink from "../components/WindowLink";
 
 type SiteForm = { code: string; name: string; address: string; notes: string };
 
@@ -215,13 +216,14 @@ export default function SitesPage() {
                   <td className="mono">{site.code ?? <span className="muted">—</span>}</td>
                   <td>
                     <Link to={`/devices?site_id=${site.id}`}>{site.name}</Link>{" "}
-                    <Link
+                    <WindowLink
                       to={`/topology?site=${site.id}`}
+                      name="netvision-topology"
                       className="muted"
-                      title="この拠点だけの構成図を開きます"
+                      title="この拠点だけの構成図を、別ウィンドウで開きます"
                     >
                       図で見る
-                    </Link>
+                    </WindowLink>
                   </td>
                   <td className="muted">{site.address ?? "—"}</td>
                   <td className="muted">{site.notes ?? "—"}</td>

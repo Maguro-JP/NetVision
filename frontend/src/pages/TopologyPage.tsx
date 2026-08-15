@@ -28,6 +28,7 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
+import WindowLink, { openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
   type PortEdgeData,
   type WireBox,
@@ -62,6 +63,9 @@ import {
 import { groupBox, updateGroupBounds } from "./topologyGroups";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
+
+/** 機器情報を出すウィンドウの名前。図の窓とは別に、1つを使い回す */
+const DEVICE_WINDOW = "netvision-device";
 const EDGE_TYPES = { port: PortLabeledEdge };
 
 const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
@@ -1034,7 +1038,7 @@ function TopologyEditor() {
     setEdges,
   ]);
 
-  // 機器をダブルクリックしたら、その機器の台帳を別タブで開く。
+  // 機器をダブルクリックしたら、その機器の台帳を別ウィンドウで開く。
   // 図から離れずに詳しく見たいので、いまの画面（配置・絞り込み）は残す。
   // React Flow の onNodeDoubleClick は選択のたびに要素が作り直されて
   // 取りこぼすため、図の入れ物で直接受ける
@@ -1051,7 +1055,7 @@ function TopologyEditor() {
       // 図の拡大（ダブルクリックで寄る）と取り合いになるので、ここで止める
       event.preventDefault();
       event.stopPropagation();
-      window.open(`/devices/${deviceId}`, "_blank", "noopener,noreferrer");
+      openInWindow(`/devices/${deviceId}`, DEVICE_WINDOW, 1100, 900);
     };
     // 取るのは capture 段階。図の拡大が先に受け取って伝播を止めてしまう
     box.addEventListener("dblclick", onDouble, true);
@@ -2066,17 +2070,15 @@ function TopologyEditor() {
                     <dd>{selectedDevice.interface_count}</dd>
                   </dl>
                   <div className="topo-selection-panel-row">
-                    <RouterLink to={`/devices/${selectedDevice.device_id}`}>
-                      機器情報を開く
-                    </RouterLink>
-                    <a
-                      href={`/devices/${selectedDevice.device_id}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      title="図を開いたまま、別のタブで見ます（機器をダブルクリックでも開きます）"
+                    <WindowLink
+                      to={`/devices/${selectedDevice.device_id}`}
+                      name={DEVICE_WINDOW}
+                      width={1100}
+                      height={900}
+                      title="図はそのままに、別ウィンドウで機器情報を開きます（機器をダブルクリックでも開きます）"
                     >
-                      別タブで開く
-                    </a>
+                      機器情報を開く
+                    </WindowLink>
                   </div>
                 </div>
               </Panel>

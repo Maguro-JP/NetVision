@@ -1,11 +1,11 @@
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Link as RouterLink } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { Site, TopologyGraph } from "../api/types";
 import { COASTLINE } from "../lib/coastline";
 import { BOUNDS, locate } from "../lib/japan";
+import WindowLink from "../components/WindowLink";
 
 /* ネットワークを立体で眺めるページ。
  *
@@ -839,7 +839,7 @@ export default function SpacePage() {
       <p className="muted">
         全体の形をつかむための遊びのページです。流れている光はランダムに出しているだけで、
         実際の通信量ではありません。どこがどこに繋がっているかを読むのは
-        <RouterLink to="/topology"> トポロジー図 </RouterLink>
+        <WindowLink to="/topology" name="netvision-topology"> トポロジー図 </WindowLink>
         の方が向いています。ドラッグで回す、Shift か右ボタンのドラッグで位置をずらす、
         ホイールで寄る／引く、です。引いているうちは拠点ごとの玉にまとまり、寄るとその中の
         機器が出ます。
