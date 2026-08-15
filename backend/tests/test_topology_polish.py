@@ -260,7 +260,7 @@ def test_busiest_matches_max_on_one_side_not_total():
     busiest = _busiest_side_links(nodes, edges)
     assert busiest[1] == 3
     assert _box_width(busiest[1]) == 190.0
-    assert _box_height(3) == 78.0
+    assert _box_height(3) == 78.0 + 22.0
 
 
 def test_shift_centers_uses_default_half_not_grown_width():
@@ -292,6 +292,7 @@ def test_polish_separates_wide_hub_from_neighbor():
 
 def test_box_height_grows_when_left_right_is_busy():
     """左右の辺に多いときは高さを伸ばす。幅を広げても縦の被りは消えない。"""
-    assert _box_height(3) == 78.0
-    assert _box_height(8) == 78.0 + 5 * 22.0
+    assert _box_height(2) == 78.0
+    assert _box_height(3) == 78.0 + 22.0
+    assert _box_height(8) == 78.0 + 6 * 22.0
     assert _box_width(8) == 190.0 + 5 * 55.0

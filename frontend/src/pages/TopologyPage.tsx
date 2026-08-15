@@ -184,8 +184,9 @@ export function widthFor(topBottomCount: number): number | undefined {
  * 右辺・左辺に対向が何本も付くとき、幅を広げても縦の間隔は増えない。
  * 接続点とポート名が被るので、4本を超えたら1本あたり 22px 高くする。 */
 export function heightFor(leftRightCount: number, base: number = DEFAULT_HEIGHT): number {
-  if (leftRightCount <= 3) return base;
-  return Math.min(480, base + (leftRightCount - 3) * 22);
+  // 3本でも辺に余裕が要る。2本まで既定、3本目から伸ばす（backend と同じ）。
+  if (leftRightCount <= 2) return base;
+  return Math.min(480, base + (leftRightCount - 2) * 22);
 }
 
 /**

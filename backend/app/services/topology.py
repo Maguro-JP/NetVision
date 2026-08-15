@@ -1415,9 +1415,10 @@ def _box_width(links: int) -> float:
 def _box_height(links: int, base: float | None = None) -> float:
     """左右の辺の最大結線本数から、画面上の箱高さを出す（frontend の heightFor と同じ）。"""
     floor = _BOX_HEIGHT if base is None else base
-    if links <= 3:
+    # 3本でも辺に余裕が要る。2本まで既定、3本目から伸ばす。
+    if links <= 2:
         return floor
-    return min(_BOX_MAX_H, floor + (links - 3) * _BOX_GROW_H)
+    return min(_BOX_MAX_H, floor + (links - 2) * _BOX_GROW_H)
 
 
 def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:

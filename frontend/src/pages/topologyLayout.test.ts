@@ -435,6 +435,7 @@ describe("箱幅・高さとポート名の画面座標", () => {
   it("詳細表示の基準高さは中身分だけ高い", () => {
     expect(DETAIL_HEIGHT).toBeGreaterThan(DEFAULT_HEIGHT);
     expect(heightFor(2, DETAIL_HEIGHT)).toBe(DETAIL_HEIGHT);
+    expect(heightFor(3, DETAIL_HEIGHT)).toBeGreaterThan(DETAIL_HEIGHT);
     expect(heightFor(8, DETAIL_HEIGHT)).toBeGreaterThan(DETAIL_HEIGHT);
   });
 
