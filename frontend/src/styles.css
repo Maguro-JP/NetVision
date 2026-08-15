@@ -450,8 +450,7 @@ button:disabled {
 
 /* --- トポロジー図 --- */
 .topo-canvas {
-  height: calc(100vh - 260px);
-  min-height: 560px;
+  height: 620px;
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 8px;

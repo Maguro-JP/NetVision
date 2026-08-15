@@ -279,7 +279,7 @@ def render_svg(
         pending.append((points, edge))
 
     gapped = _cut_gaps([item[0] for item in pending])
-    stroke = "#2f4d6a" if simple else "#8a94a6"
+    stroke = "#4a5364" if simple else "#8a94a6"
     for index, (points, edge) in enumerate(pending):
         dash = "" if (simple or edge.confirmed_both_ways) else ' stroke-dasharray="6 4"'
         for piece in gapped[index]:
