@@ -30,7 +30,6 @@ from app.services.topology import (
     TopologyGraph,
     _box_height,
     _box_width,
-    _busiest_sides,
     load_diagram,
 )
 
@@ -128,19 +127,51 @@ def render_svg(
     if not nodes:
         return _empty_svg(title, layer=graph.layer)
 
-    busiest_tb, busiest_lr = _busiest_sides(nodes, graph.edges)
-
-    # 画面と同じ: 詳細は中身分だけ高い箱。接続点の分母を合わせる。
+    # 画面の assignAnchors と同じ手順。
+    # 1) まず基準高さの箱で口を決め、2) 左右の本数で高さを伸ばす。
+    # sideToward のまま数えると、あとで上下へ付け替えた線まで左右本数に入り、
+    # 画面より高い箱になる。
     base_h = NODE_H if simple else _DETAIL_HEIGHT
+
+    def box_at(node, height: float, width: float) -> tuple[float, float, float, float]:
+        shift_x = (width - NODE_W) / 2
+        shift_y = (height - NODE_H) / 2
+        return (node.x - shift_x, node.y - shift_y, width, height)
+
+    provisional = {n.device_id: box_at(n, base_h, NODE_W) for n in nodes}
+    per_side: dict[tuple[int, str], int] = {}
+    for edge in graph.edges:
+        if edge.source not in provisional or edge.target not in provisional:
+            continue
+        others = [
+            _xywh_bounds(provisional[device_id])
+            for device_id in provisional
+            if device_id not in (edge.source, edge.target)
+        ]
+        src_side, dst_side = _faces_for_edge(
+            provisional[edge.source],
+            provisional[edge.target],
+            others,
+            src_side=edge.source_side,
+            dst_side=edge.target_side,
+        )
+        per_side[(edge.source, src_side)] = per_side.get((edge.source, src_side), 0) + 1
+        per_side[(edge.target, dst_side)] = per_side.get((edge.target, dst_side), 0) + 1
+    busiest_tb: dict[int, int] = {}
+    busiest_lr: dict[int, int] = {}
+    for (device_id, side), count in per_side.items():
+        if side in ("left", "right"):
+            busiest_lr[device_id] = max(busiest_lr.get(device_id, 0), count)
+        else:
+            busiest_tb[device_id] = max(busiest_tb.get(device_id, 0), count)
+
     heights = {n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes}
 
     def display_box(node) -> tuple[float, float, float, float]:
         """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
         w = _box_width(busiest_tb.get(node.device_id, 0))
         h = heights.get(node.device_id, base_h)
-        shift_x = (w - NODE_W) / 2
-        shift_y = (h - NODE_H) / 2
-        return (node.x - shift_x, node.y - shift_y, w, h)
+        return box_at(node, h, w)
 
     sized = {n.device_id: display_box(n) for n in nodes}
 
