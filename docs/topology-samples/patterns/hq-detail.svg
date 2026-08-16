@@ -1,88 +1,88 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="986" height="1173" viewBox="0 0 986 1173" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="986" height="1129" viewBox="0 0 986 1129" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">本社 物理構成</text>
-<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 18:11 JST 時点 / レイヤ: physical / 7台 8本</text>
-<polyline points="313,463 313,562" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="306.0" y="474.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
-<text class="port-label" x="320.0" y="545.0" font-size="10" fill="#5a6270" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">port1</text>
-<polyline points="225,703 225,719 241,719 241,722" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="198.9" y="683.6" font-size="10" fill="#5a6270" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">port2</text>
-<text class="port-label" x="267.1" y="735.4" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/24</text>
-<polyline points="401,703 401,719 385,719 385,722" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="427.1" y="683.6" font-size="10" fill="#5a6270" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">port3</text>
-<text class="port-label" x="358.9" y="735.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/23</text>
-<polyline points="258,778 368,778" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="268.9" y="780.6" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
-<text class="port-label" x="359.1" y="766.7" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
-<polyline points="258,807 368,807" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="266.9" y="812.3" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
-<text class="port-label" x="357.1" y="798.4" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
-<polyline points="153,863 153,922" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="146.0" y="874.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
-<text class="port-label" x="160.0" y="905.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<polyline points="418,352 700,352 700,392 728,392" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="429.8" y="352.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<text class="port-label" x="716.2" y="386.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
-<polyline points="313,322 313,223" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="320.0" y="305.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
-<text class="port-label" x="306.0" y="234.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
-<g><rect x="208" y="322" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="322" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="406" y="340" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
-<text x="220" y="360" font-size="12" fill="#4a5364">◇</text>
-<text x="238" y="360" font-size="13" font-weight="700" fill="#1a1a1a">edge-rt-01</text>
-<text x="222" y="376" font-size="10" fill="#5a6270">Juniper MX204</text>
-<text x="222" y="391" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
-<text x="406" y="453" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 18:55 JST 時点 / レイヤ: physical / 7台 8本</text>
+<polyline points="313,419 313,518" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="306.0" y="430.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="320.0" y="501.0" font-size="10" fill="#5a6270" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">port1</text>
+<polyline points="225,659 225,675 241,675 241,678" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="198.9" y="639.6" font-size="10" fill="#5a6270" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">port2</text>
+<text class="port-label" x="267.1" y="691.4" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/24</text>
+<polyline points="401,659 401,675 385,675 385,678" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="427.1" y="639.6" font-size="10" fill="#5a6270" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">port3</text>
+<text class="port-label" x="358.9" y="691.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/23</text>
+<polyline points="258,734 368,734" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="268.9" y="736.6" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
+<text class="port-label" x="359.1" y="722.7" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
+<polyline points="258,763 368,763" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="266.9" y="768.3" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
+<text class="port-label" x="357.1" y="754.4" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
+<polyline points="153,819 153,878" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="146.0" y="830.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
+<text class="port-label" x="160.0" y="861.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<polyline points="418,308 700,308 700,331 728,331" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="429.8" y="308.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="716.8" y="323.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<polyline points="313,278 313,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="320.0" y="261.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<text class="port-label" x="306.0" y="146.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<g><rect x="208" y="278" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="278" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="406" y="296" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
+<text x="220" y="316" font-size="12" fill="#4a5364">◇</text>
+<text x="238" y="316" font-size="13" font-weight="700" fill="#1a1a1a">edge-rt-01</text>
+<text x="222" y="332" font-size="10" fill="#5a6270">Juniper MX204</text>
+<text x="222" y="347" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
+<text x="406" y="409" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="728" y="282" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="740" y="304" font-size="12" fill="#4a5364">◇</text><text x="758" y="304" font-size="12" font-weight="700" fill="#4a5364">east-core-rt-01</text><text x="740" y="320" font-size="10" fill="#7a828f">東日本センター</text></g>
-<g><rect x="208" y="82" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="220" y="104" font-size="12" fill="#4a5364">◇</text><text x="238" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-01</text><text x="220" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
-<g><rect x="208" y="562" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="562" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="406" y="580" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ファイアウォール</text>
-<text x="220" y="600" font-size="12" fill="#4a5364">🛡</text>
-<text x="238" y="600" font-size="13" font-weight="700" fill="#1a1a1a">fw-01</text>
-<text x="222" y="616" font-size="10" fill="#5a6270">Fortinet FortiGate-100F</text>
-<text x="222" y="631" font-size="9"><tspan fill="#5a6270">port</tspan></text>
-<text x="406" y="693" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<g><rect x="728" y="282" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="740" y="304" font-size="12" fill="#4a5364">◇</text><text x="758" y="304" font-size="12" font-weight="700" fill="#4a5364">east-core-rt-01</text><text x="740" y="320" font-size="10" fill="#7a828f">東日本センター</text></g>
+<g><rect x="208" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="220" y="104" font-size="12" fill="#4a5364">◇</text><text x="238" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-01</text><text x="220" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
+<g><rect x="208" y="518" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="518" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="406" y="536" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ファイアウォール</text>
+<text x="220" y="556" font-size="12" fill="#4a5364">🛡</text>
+<text x="238" y="556" font-size="13" font-weight="700" fill="#1a1a1a">fw-01</text>
+<text x="222" y="572" font-size="10" fill="#5a6270">Fortinet FortiGate-100F</text>
+<text x="222" y="587" font-size="9"><tspan fill="#5a6270">port</tspan></text>
+<text x="406" y="649" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="48" y="722" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="722" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="246" y="740" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
-<text x="60" y="760" font-size="12" fill="#4a5364">▭</text>
-<text x="78" y="760" font-size="13" font-weight="700" fill="#1a1a1a">core-sw-01</text>
-<text x="62" y="776" font-size="10" fill="#5a6270">Cisco C9500</text>
-<text x="62" y="791" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan><tspan fill="#2d8a4e"> / TenGigabitEthernet</tspan></text>
-<text x="246" y="853" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<g><rect x="48" y="678" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="678" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="246" y="696" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
+<text x="60" y="716" font-size="12" fill="#4a5364">▭</text>
+<text x="78" y="716" font-size="13" font-weight="700" fill="#1a1a1a">core-sw-01</text>
+<text x="62" y="732" font-size="10" fill="#5a6270">Cisco C9500</text>
+<text x="62" y="747" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan><tspan fill="#2d8a4e"> / TenGigabitEthernet</tspan></text>
+<text x="246" y="809" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="368" y="722" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="368" y="722" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="566" y="740" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
-<text x="380" y="760" font-size="12" fill="#4a5364">▭</text>
-<text x="398" y="760" font-size="13" font-weight="700" fill="#1a1a1a">core-sw-02</text>
-<text x="382" y="776" font-size="10" fill="#5a6270">Cisco C9500</text>
-<text x="382" y="791" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan><tspan fill="#2d8a4e"> / TenGigabitEthernet</tspan></text>
-<text x="566" y="853" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<g><rect x="368" y="678" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="368" y="678" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="566" y="696" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
+<text x="380" y="716" font-size="12" fill="#4a5364">▭</text>
+<text x="398" y="716" font-size="13" font-weight="700" fill="#1a1a1a">core-sw-02</text>
+<text x="382" y="732" font-size="10" fill="#5a6270">Cisco C9500</text>
+<text x="382" y="747" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan><tspan fill="#2d8a4e"> / TenGigabitEthernet</tspan></text>
+<text x="566" y="809" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="48" y="922" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="922" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="246" y="940" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
-<text x="60" y="960" font-size="12" fill="#4a5364">▭</text>
-<text x="78" y="960" font-size="13" font-weight="700" fill="#1a1a1a">acc-sw-01</text>
-<text x="62" y="976" font-size="10" fill="#5a6270">Cisco C2960</text>
-<text x="62" y="991" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
-<text x="246" y="1053" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<g><rect x="48" y="878" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="878" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="246" y="896" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
+<text x="60" y="916" font-size="12" fill="#4a5364">▭</text>
+<text x="78" y="916" font-size="13" font-weight="700" fill="#1a1a1a">acc-sw-01</text>
+<text x="62" y="932" font-size="10" fill="#5a6270">Cisco C2960</text>
+<text x="62" y="947" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+<text x="246" y="1009" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<line x1="48" y1="1109" x2="938" y2="1109" stroke="#dfe3ea" stroke-width="1"/>
-<text x="48" y="1125" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
-<rect x="144" y="1116" width="10" height="10" rx="2" fill="#c0392b"/>
-<text x="159" y="1125" font-size="10" fill="#4a4a4a">期限切れ</text>
-<rect x="210" y="1116" width="10" height="10" rx="2" fill="#e07b39"/>
-<text x="225" y="1125" font-size="10" fill="#4a4a4a">90日以内</text>
-<rect x="287" y="1116" width="10" height="10" rx="2" fill="#c9a227"/>
-<text x="302" y="1125" font-size="10" fill="#4a4a4a">1年以内</text>
-<rect x="353" y="1116" width="10" height="10" rx="2" fill="#2d8a4e"/>
-<text x="368" y="1125" font-size="10" fill="#4a4a4a">余裕あり</text>
-<rect x="419" y="1116" width="10" height="10" rx="2" fill="#7a7a7a"/>
-<text x="434" y="1125" font-size="10" fill="#4a4a4a">情報未登録</text>
-<text x="48" y="1145" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
-<text x="298" y="1145" font-size="10" fill="#6b6b6b">ポート種別</text>
-<text x="358" y="1145" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
-<text x="392" y="1145" font-size="10" fill="#2d8a4e" font-weight="700">10G</text>
-<text x="434" y="1145" font-size="10" fill="#5a6270" font-weight="700">その他</text>
+<line x1="48" y1="1065" x2="938" y2="1065" stroke="#dfe3ea" stroke-width="1"/>
+<text x="48" y="1081" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
+<rect x="144" y="1072" width="10" height="10" rx="2" fill="#c0392b"/>
+<text x="159" y="1081" font-size="10" fill="#4a4a4a">期限切れ</text>
+<rect x="210" y="1072" width="10" height="10" rx="2" fill="#e07b39"/>
+<text x="225" y="1081" font-size="10" fill="#4a4a4a">90日以内</text>
+<rect x="287" y="1072" width="10" height="10" rx="2" fill="#c9a227"/>
+<text x="302" y="1081" font-size="10" fill="#4a4a4a">1年以内</text>
+<rect x="353" y="1072" width="10" height="10" rx="2" fill="#2d8a4e"/>
+<text x="368" y="1081" font-size="10" fill="#4a4a4a">余裕あり</text>
+<rect x="419" y="1072" width="10" height="10" rx="2" fill="#7a7a7a"/>
+<text x="434" y="1081" font-size="10" fill="#4a4a4a">情報未登録</text>
+<text x="48" y="1101" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
+<text x="298" y="1101" font-size="10" fill="#6b6b6b">ポート種別</text>
+<text x="358" y="1101" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
+<text x="392" y="1101" font-size="10" fill="#2d8a4e" font-weight="700">10G</text>
+<text x="434" y="1101" font-size="10" fill="#5a6270" font-weight="700">その他</text>
 </svg>

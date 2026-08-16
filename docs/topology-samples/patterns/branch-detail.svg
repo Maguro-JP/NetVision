@@ -1,48 +1,48 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1186" height="839" viewBox="0 0 1186 839" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1186" height="751" viewBox="0 0 1186 751" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 物理構成</text>
-<text x="1138" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 18:11 JST 時点 / レイヤ: physical / 6台 5本</text>
-<polyline points="225,322 225,251 241,251 241,223" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="221.4" y="307.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
-<text class="port-label" x="237.8" y="240.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<polyline points="401,322 401,251 385,251 385,223" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="404.6" y="307.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
-<text class="port-label" x="388.2" y="240.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<polyline points="608,392 418,392" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="598.0" y="382.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
-<text class="port-label" x="428.0" y="396.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<polyline points="945,463 945,729 401,729 401,463" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="948.2" y="480.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
-<text class="port-label" x="397.8" y="480.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<polyline points="608,573 446,573 446,452 418,452" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="602.7" y="559.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
-<text class="port-label" x="423.3" y="459.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
-<g><rect x="48" y="82" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="60" y="104" font-size="12" fill="#4a5364">◇</text><text x="78" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-01</text><text x="60" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
-<g><rect x="368" y="82" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="380" y="104" font-size="12" fill="#4a5364">◇</text><text x="398" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-02</text><text x="380" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
-<g><rect x="208" y="322" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="322" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="406" y="340" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
-<text x="220" y="360" font-size="12" fill="#4a5364">◇</text>
-<text x="238" y="360" font-size="13" font-weight="700" fill="#1a1a1a">ksi-br-rt-01</text>
-<text x="222" y="376" font-size="10" fill="#5a6270">Cisco ISR4451-X</text>
-<text x="222" y="391" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
-<text x="406" y="453" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<text x="1138" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 18:55 JST 時点 / レイヤ: physical / 6台 5本</text>
+<polyline points="225,278 225,163 241,163 241,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="221.4" y="263.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="245.6" y="152.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<polyline points="401,278 401,163 385,163 385,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="404.6" y="263.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="380.4" y="152.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<polyline points="608,348 418,348" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="598.0" y="338.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="428.0" y="352.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<polyline points="945,375 945,641 401,641 401,419" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="940.4" y="392.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="397.8" y="436.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<polyline points="608,566 446,566 446,408 418,408" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="599.7" y="554.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="423.3" y="415.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<g><rect x="48" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="60" y="104" font-size="12" fill="#4a5364">◇</text><text x="78" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-01</text><text x="60" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
+<g><rect x="368" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="380" y="104" font-size="12" fill="#4a5364">◇</text><text x="398" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-02</text><text x="380" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
+<g><rect x="208" y="278" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="278" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="406" y="296" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
+<text x="220" y="316" font-size="12" fill="#4a5364">◇</text>
+<text x="238" y="316" font-size="13" font-weight="700" fill="#1a1a1a">ksi-br-rt-01</text>
+<text x="222" y="332" font-size="10" fill="#5a6270">Cisco ISR4451-X</text>
+<text x="222" y="347" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+<text x="406" y="409" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="608" y="322" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="620" y="344" font-size="12" fill="#4a5364">◇</text><text x="638" y="344" font-size="12" font-weight="700" fill="#4a5364">kyoto-rt-01</text><text x="620" y="360" font-size="10" fill="#7a828f">京都府営業所</text></g>
-<g><rect x="928" y="322" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="940" y="344" font-size="12" fill="#4a5364">◇</text><text x="958" y="344" font-size="12" font-weight="700" fill="#4a5364">kyoto-rt-02</text><text x="940" y="360" font-size="10" fill="#7a828f">京都府営業所</text></g>
-<g><rect x="608" y="562" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="620" y="584" font-size="12" fill="#4a5364">◇</text><text x="638" y="584" font-size="12" font-weight="700" fill="#4a5364">nara-rt-01</text><text x="620" y="600" font-size="10" fill="#7a828f">奈良県営業所</text></g>
-<line x1="48" y1="775" x2="1138" y2="775" stroke="#dfe3ea" stroke-width="1"/>
-<text x="48" y="791" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
-<rect x="144" y="782" width="10" height="10" rx="2" fill="#c0392b"/>
-<text x="159" y="791" font-size="10" fill="#4a4a4a">期限切れ</text>
-<rect x="210" y="782" width="10" height="10" rx="2" fill="#e07b39"/>
-<text x="225" y="791" font-size="10" fill="#4a4a4a">90日以内</text>
-<rect x="287" y="782" width="10" height="10" rx="2" fill="#c9a227"/>
-<text x="302" y="791" font-size="10" fill="#4a4a4a">1年以内</text>
-<rect x="353" y="782" width="10" height="10" rx="2" fill="#2d8a4e"/>
-<text x="368" y="791" font-size="10" fill="#4a4a4a">余裕あり</text>
-<rect x="419" y="782" width="10" height="10" rx="2" fill="#7a7a7a"/>
-<text x="434" y="791" font-size="10" fill="#4a4a4a">情報未登録</text>
-<text x="48" y="811" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
-<text x="298" y="811" font-size="10" fill="#6b6b6b">ポート種別</text>
-<text x="358" y="811" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
+<g><rect x="608" y="322" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="620" y="344" font-size="12" fill="#4a5364">◇</text><text x="638" y="344" font-size="12" font-weight="700" fill="#4a5364">kyoto-rt-01</text><text x="620" y="360" font-size="10" fill="#7a828f">京都府営業所</text></g>
+<g><rect x="928" y="322" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="940" y="344" font-size="12" fill="#4a5364">◇</text><text x="958" y="344" font-size="12" font-weight="700" fill="#4a5364">kyoto-rt-02</text><text x="940" y="360" font-size="10" fill="#7a828f">京都府営業所</text></g>
+<g><rect x="608" y="562" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="620" y="584" font-size="12" fill="#4a5364">◇</text><text x="638" y="584" font-size="12" font-weight="700" fill="#4a5364">nara-rt-01</text><text x="620" y="600" font-size="10" fill="#7a828f">奈良県営業所</text></g>
+<line x1="48" y1="687" x2="1138" y2="687" stroke="#dfe3ea" stroke-width="1"/>
+<text x="48" y="703" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
+<rect x="144" y="694" width="10" height="10" rx="2" fill="#c0392b"/>
+<text x="159" y="703" font-size="10" fill="#4a4a4a">期限切れ</text>
+<rect x="210" y="694" width="10" height="10" rx="2" fill="#e07b39"/>
+<text x="225" y="703" font-size="10" fill="#4a4a4a">90日以内</text>
+<rect x="287" y="694" width="10" height="10" rx="2" fill="#c9a227"/>
+<text x="302" y="703" font-size="10" fill="#4a4a4a">1年以内</text>
+<rect x="353" y="694" width="10" height="10" rx="2" fill="#2d8a4e"/>
+<text x="368" y="703" font-size="10" fill="#4a4a4a">余裕あり</text>
+<rect x="419" y="694" width="10" height="10" rx="2" fill="#7a7a7a"/>
+<text x="434" y="703" font-size="10" fill="#4a4a4a">情報未登録</text>
+<text x="48" y="723" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
+<text x="298" y="723" font-size="10" fill="#6b6b6b">ポート種別</text>
+<text x="358" y="723" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
 </svg>

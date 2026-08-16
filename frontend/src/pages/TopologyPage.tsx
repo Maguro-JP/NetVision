@@ -199,6 +199,14 @@ const BUNDLE_LABEL_W = 56;
 export const DETAIL_HEIGHT =
   PAD_Y + TOP_ROW + HEAD_ROW + SUB_ROW + BODY_ROW * BODY_ROWS + PORTS_ROW + FOOT_ROW;
 
+/**
+ * 対向（絞り込みの外）の箱の高さ。中身は名前と拠点名の2行だけ。
+ *
+ * 自拠点と同じ大きさにすると、図の中で主役と脇役の区別が付かない。
+ * 引き出し口はこの高さを分母にするので、描く箱と同じ値を使うこと。
+ */
+export const OUTSIDE_HEIGHT = PAD_Y + HEAD_ROW + SUB_ROW;
+
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
  * 上辺・下辺の引き出しが詰まるとポート名が横に被るので、
@@ -346,7 +354,9 @@ export function assignAnchors(
   // 対向の散らばりまで覆うと上の機器と箱が重なり、線が貫く。
   const heights = new Map<number, number>();
   for (const node of graph.nodes) {
-    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, baseHeight));
+    // 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    const base = !simple && node.outside ? OUTSIDE_HEIGHT : baseHeight;
+    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, base));
   }
 
   const faceHeight = (deviceId: number) => heights.get(deviceId) ?? baseHeight;

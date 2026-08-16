@@ -88,6 +88,8 @@ LEGEND_H = 62.0
 MAX_BENDS = 2
 #: 「線に沿わせる」で傾けてよい角度の幅（度）。縦横から離れたら水平に置く
 _SLANT_LIMIT = 12.0
+#: 対向（絞り込みの外）の箱の高さ。名前と拠点名の2行ぶん（画面の OUTSIDE_HEIGHT）
+OUTSIDE_H = 53.0
 # 箱の中の行送り（画面の .topo-node と同じ積み方）
 _ROW_HEAD = 20.0
 _ROW_SUB = 15.0
@@ -208,7 +210,14 @@ def render_svg(
         else:
             busiest_tb[device_id] = max(busiest_tb.get(device_id, 0), count)
 
-    heights = {n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes}
+    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    heights = {
+        n.device_id: _box_height(
+            busiest_lr.get(n.device_id, 0),
+            OUTSIDE_H if (n.outside and not simple) else base_h,
+        )
+        for n in nodes
+    }
 
     def display_box(node) -> tuple[float, float, float, float]:
         """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
@@ -654,7 +663,7 @@ def render_svg(
         if node.outside:
             where = node.site_name or "拠点未登録"
             parts.append(
-                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{PEER_H:.0f}" '
+                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{nh:.0f}" '
                 f'rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/>'
                 f'<text x="{x + 12:.0f}" y="{y + 22:.0f}" font-size="12" fill="#4a5364">'
                 f"{_esc(TYPE_GLYPH.get(str(node.device_type), ''))}</text>"

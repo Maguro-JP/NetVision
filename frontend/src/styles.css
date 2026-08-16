@@ -745,6 +745,8 @@ button:disabled {
 }
 .topo-edge-label.port {
   font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
   /* 回転させても中心がずれないように */
   transform-origin: center center;
 }
