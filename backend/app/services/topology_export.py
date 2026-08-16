@@ -86,6 +86,8 @@ MARGIN = 48.0
 LEGEND_H = 62.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
+#: 「線に沿わせる」で傾けてよい角度の幅（度）。縦横から離れたら水平に置く
+_SLANT_LIMIT = 12.0
 # 箱の中の行送り（画面の .topo-node と同じ積み方）
 _ROW_HEAD = 20.0
 _ROW_SUB = 15.0
@@ -716,7 +718,13 @@ def render_svg(
         if node.port_kinds:
             row_y += _ROW_KINDS
             parts.append(_port_kinds_line(x + 14, row_y, node.port_kinds))
-        # 下段は右揃えで、稼働状態と保守状態
+        # 下段は、左に管理IP、右に稼働状態と保守状態。
+        # IPv4 は最長でも収まる。IPv6 は入りきらないので略す
+        if node.mgmt_ip:
+            parts.append(
+                f'<text x="{x + 14:.0f}" y="{y + nh - 10:.0f}" font-size="10" '
+                f'fill="#7a828f">{_esc(_clip(node.mgmt_ip, 17))}</text>'
+            )
         foot = " ・".join(
             part
             for part in (
@@ -1704,8 +1712,7 @@ def _parallel_index(graph: TopologyGraph) -> dict[int, float]:
 def _card_lines(node) -> list[str]:
     """箱の本文。画面と同じ並びで、空の行は出さない。
 
-    種別と拠点は上段と枠で示すので、ここには入れない。現場で要るのは
-    型番・銘板（シリアル）・管理IP の3つ。
+    種別と拠点は上段と枠で示し、管理IPは下段へ回すので、ここには入れない。
     """
     lines: list[str] = []
     product = f"{node.vendor} {node.model}".strip()
@@ -1713,8 +1720,6 @@ def _card_lines(node) -> list[str]:
         lines.append(product)
     if node.serial_number:
         lines.append(f"S/N {node.serial_number}")
-    if node.mgmt_ip:
-        lines.append(node.mgmt_ip)
     return lines
 
 
@@ -1808,6 +1813,12 @@ def _port_label(
         if flipped:
             angle += -180 if angle > 0 else 180
         anchor = "end" if flipped else "start"
+        # 斜めの文字は読みにくいうえ、囲む四角が大きくなって置き場所を潰す。
+        # 図の線は縦横で引くので、斜めになるのは例外的な経路のときだけ。
+        # そのときは沿わせずに水平で置く
+        if _SLANT_LIMIT < abs(angle) < 90 - _SLANT_LIMIT:
+            angle = 0.0
+            anchor = "start" if ux > 0.2 else ("end" if ux < -0.2 else "middle")
     else:
         angle = 0.0
         # 線が右向きならラベルは右へ、左向きなら左へ出す
@@ -1851,18 +1862,34 @@ def _port_label(
 
     # 置けないときは文字を短くする。重ねるくらいなら略した方がまし。
     # 略した場合は元の名前を title に入れて、画面で開けば読めるようにする
-    chosen: tuple[str, int, svglayout.Rect] | None = None
-    fallback: tuple[str, int, svglayout.Rect] | None = None
-    for text in _label_variants(name, style):
-        rects = [
-            svglayout.text_rect(px, py - 3, text, _LABEL_FONT, anchor, angle) for px, py in spots
-        ]
-        index, fits = placement.choose(rects)
-        if fits:
-            chosen = (text, index, rects[index])
-            break
-        if fallback is None:
-            fallback = (text, index, rects[index])
+    def try_place(
+        text_angle: float, text_anchor: str
+    ) -> tuple[tuple[str, int, svglayout.Rect] | None, tuple[str, int, svglayout.Rect] | None]:
+        first: tuple[str, int, svglayout.Rect] | None = None
+        for text in _label_variants(name, style):
+            rects = [
+                svglayout.text_rect(px, py - 3, text, _LABEL_FONT, text_anchor, text_angle)
+                for px, py in spots
+            ]
+            index, fits = placement.choose(rects)
+            if fits:
+                return (text, index, rects[index]), first
+            if first is None:
+                first = (text, index, rects[index])
+        return None, first
+
+    chosen, fallback = try_place(angle, anchor)
+    if chosen is None and angle:
+        # 斜めの文字は、囲む四角が大きくなって置き場所が見つからないことがある。
+        # 傾けるのは読みやすさのためなので、置けないなら水平に戻す方がまし
+        flat_anchor = "start" if ux > 0.2 else ("end" if ux < -0.2 else "middle")
+        flat, flat_fallback = try_place(0.0, flat_anchor)
+        if flat is not None:
+            chosen, angle, anchor = flat, 0.0, flat_anchor
+        elif flat_fallback is not None and fallback is not None:
+            # どちらも置けないなら、はみ出しの少ない方を採る
+            if placement.penalty(flat_fallback[2]) < placement.penalty(fallback[2]):
+                fallback, angle, anchor = flat_fallback, 0.0, flat_anchor
 
     text, index, rect = chosen or fallback  # type: ignore[misc]
     px, py = spots[index]

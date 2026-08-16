@@ -63,7 +63,7 @@ TIER_ORDER: dict[DeviceType, int] = {
 # 下回らないようにここも見直すこと
 _X_SPACING = 340.0
 # 詳細箱＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
-_Y_SPACING = 240.0
+_Y_SPACING = 220.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -1478,7 +1478,7 @@ _BOX_HEIGHT = 78.0
 # 詳細表示の箱の高さ（frontend DETAIL_HEIGHT）。整頓・すき間は画面に合わせる。
 # 中身がいちばん多い機器（段・ポート種・型番・拠点・管理IP・保守状態）でも
 # 行が枠から切れないところまで取ってある
-_DETAIL_HEIGHT = 157.0
+_DETAIL_HEIGHT = 141.0
 _BOX_GROW = 55.0
 _BOX_GROW_H = 22.0
 _BOX_MAX = 620.0
@@ -2100,7 +2100,7 @@ _POLISH_MAX_MOVE = 80.0
 #: 箱＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
 _MIN_GAP_X = 340.0
 #: 詳細表示の箱＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
-_MIN_GAP_Y = 232.0
+_MIN_GAP_Y = 216.0
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

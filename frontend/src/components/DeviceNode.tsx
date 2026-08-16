@@ -204,7 +204,6 @@ export default function DeviceNode({
               {data.vendor} {data.model}
             </div>
             {data.serialNumber && <div className="muted">S/N {data.serialNumber}</div>}
-            {data.mgmtIp && <div className="muted">{data.mgmtIp}</div>}
           </div>
           {/* ポートの種類。線のラベルを番号だけにしても、ここを見れば分かる。
               2行ぶん場所を取っておき、足りている機器は空きにする */}
@@ -216,9 +215,16 @@ export default function DeviceNode({
               </span>
             ))}
           </div>
+          {/* 下段。左に管理IP、右に稼働状態と保守状態。
+              IPv4 は最長でも収まる。IPv6 は入りきらないので省略して吹き出しで読む */}
           <div className="topo-node-foot">
-            {data.statusLabel && <span className="muted">{data.statusLabel}</span>}
-            <span className={`sev-text-${data.severity}`}>{SEVERITY_LABEL[data.severity]}</span>
+            <span className="topo-node-ip muted" title={data.mgmtIp ?? ""}>
+              {data.mgmtIp ?? ""}
+            </span>
+            <span className="topo-node-state">
+              {data.statusLabel && <span className="muted">{data.statusLabel} </span>}
+              <span className={`sev-text-${data.severity}`}>{SEVERITY_LABEL[data.severity]}</span>
+            </span>
           </div>
         </>
       )}

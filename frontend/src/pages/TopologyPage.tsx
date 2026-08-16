@@ -179,10 +179,10 @@ const TOP_ROW = 14;
 const HEAD_ROW = 22;
 /** ホスト名の行（機器名を出しているときだけ埋まる） */
 const SUB_ROW = 15;
-/** 型番 / シリアル / 管理IP の各行 */
+/** 型番 / シリアル の各行。管理IPは下段へ回した */
 const BODY_ROW = 16;
 /** 本文の最大行数 */
-const BODY_ROWS = 3;
+const BODY_ROWS = 2;
 /** ポート種別。長い名前が続くので2行ぶん取り、余れば空きにする */
 const PORTS_ROW = 26;
 /** 稼働状態と保守状態の行 */
