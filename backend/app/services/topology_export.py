@@ -1797,7 +1797,7 @@ def _port_kinds_line(x: float, y: float, kinds: list[str]) -> str:
 # ノード枠から、その先どのくらい離してラベルを置くか
 _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
-_SIDE_OFFSET = 7.0
+_SIDE_OFFSET = 11.0
 _LABEL_FONT = 10.0
 # 同じ機器同士を結ぶ線を、何 px ずつ離して描くか
 _PARALLEL_GAP = 11.0

@@ -1,31 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="866" height="1648" viewBox="0 0 866 1648" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 配下6拠点</text>
-<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 19:18 JST 時点 / 9台 8本</text>
+<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:30 JST 時点 / 9台 8本</text>
 <polyline points="225,278 225,188 241,188 241,160" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="222.3" y="263.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
-<text class="port-label" x="243.1" y="177.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="225.1" y="260.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="245.9" y="171.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
 <polyline points="401,278 401,188 385,188 385,160" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="403.7" y="263.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
-<text class="port-label" x="382.9" y="177.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="400.9" y="260.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="380.1" y="171.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
 <polyline points="418,291 580,291 580,361 608,361" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="430.2" y="288.6" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/1</text>
-<text class="port-label" x="598.0" y="351.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="432.4" y="291.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/1</text>
+<text class="port-label" x="598.0" y="347.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <polyline points="418,319 580,319 580,568 608,568" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="429.9" y="319.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/2</text>
-<text class="port-label" x="600.5" y="555.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="431.4" y="322.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/2</text>
+<text class="port-label" x="601.7" y="551.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <polyline points="418,347 580,347 580,808 608,808" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="428.8" y="349.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/3</text>
-<text class="port-label" x="600.5" y="795.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="429.4" y="353.6" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/3</text>
+<text class="port-label" x="601.7" y="791.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <polyline points="418,375 580,375 580,1048 608,1048" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="427.0" y="380.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/4</text>
-<text class="port-label" x="600.5" y="1035.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="426.5" y="384.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/4</text>
+<text class="port-label" x="601.7" y="1031.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <polyline points="418,403 580,403 580,1288 608,1288" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="424.7" y="410.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/5</text>
-<text class="port-label" x="600.5" y="1275.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="423.2" y="413.8" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/5</text>
+<text class="port-label" x="601.7" y="1271.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <polyline points="418,431 580,431 580,1528 608,1528" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="422.5" y="439.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/6</text>
-<text class="port-label" x="600.5" y="1515.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<text class="port-label" x="408.1" y="460.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/6</text>
+<text class="port-label" x="601.7" y="1511.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
 <g><rect x="208" y="278" width="210" height="166" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="313" y="366" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">ksi-br-rt-01</text></g>
 <g><rect x="48" y="82" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="153" y="121" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-01</text><text x="153" y="139" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>
 <g><rect x="368" y="82" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="473" y="121" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-02</text><text x="473" y="139" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>

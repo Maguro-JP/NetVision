@@ -1,31 +1,31 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="986" height="1129" viewBox="0 0 986 1129" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">本社 物理構成</text>
-<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 19:18 JST 時点 / レイヤ: physical / 7台 8本</text>
+<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:30 JST 時点 / レイヤ: physical / 7台 8本</text>
 <polyline points="313,419 313,518" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="306.0" y="430.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
-<text class="port-label" x="320.0" y="501.0" font-size="10" fill="#5a6270" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">port1</text>
+<text class="port-label" x="302.0" y="430.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="324.0" y="501.0" font-size="10" fill="#5a6270" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">port1</text>
 <polyline points="225,659 225,675 241,675 241,678" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="198.9" y="639.6" font-size="10" fill="#5a6270" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">port2</text>
-<text class="port-label" x="267.1" y="691.4" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/24</text>
+<text class="port-label" x="223.9" y="670.8" font-size="10" fill="#5a6270" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">port2</text>
+<text class="port-label" x="262.7" y="685.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/24</text>
 <polyline points="401,659 401,675 385,675 385,678" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="427.1" y="639.6" font-size="10" fill="#5a6270" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">port3</text>
-<text class="port-label" x="358.9" y="691.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/23</text>
+<text class="port-label" x="402.1" y="670.8" font-size="10" fill="#5a6270" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">port3</text>
+<text class="port-label" x="363.3" y="685.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/23</text>
 <polyline points="258,734 368,734" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="268.9" y="736.6" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
-<text class="port-label" x="359.1" y="722.7" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
+<text class="port-label" x="269.4" y="740.5" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
+<text class="port-label" x="359.6" y="718.7" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
 <polyline points="258,763 368,763" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="266.9" y="768.3" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
-<text class="port-label" x="357.1" y="754.4" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
+<text class="port-label" x="266.4" y="772.3" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
+<text class="port-label" x="356.6" y="750.5" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
 <polyline points="153,819 153,878" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="146.0" y="830.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
-<text class="port-label" x="160.0" y="861.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
+<text class="port-label" x="142.0" y="830.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
+<text class="port-label" x="164.0" y="861.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <polyline points="418,308 700,308 700,331 728,331" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="429.8" y="308.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<text class="port-label" x="716.8" y="323.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="431.3" y="312.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="715.9" y="319.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
 <polyline points="313,278 313,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="320.0" y="261.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
-<text class="port-label" x="306.0" y="146.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="324.0" y="261.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<text class="port-label" x="302.0" y="146.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
 <g><rect x="208" y="278" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="208" y="278" width="5" height="141" rx="2" fill="#7a7a7a"/>
 <text x="406" y="296" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
 <text x="220" y="316" font-size="12" fill="#4a5364">◇</text>

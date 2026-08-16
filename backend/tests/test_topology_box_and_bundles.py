@@ -105,3 +105,11 @@ def test_port_order_matches_the_screen_rule():
     ).read_text(encoding="utf-8")
     assert "export function comparePortNames" in source
     assert "comparePortNames(a.port, b.port)" in source
+
+
+def test_a_port_name_clears_its_own_wire():
+    """ポート名は線の上に乗らない。線を跨ぐと、細い線も文字も読みにくい。"""
+    from app.services.topology_export import _LABEL_FONT, _SIDE_OFFSET
+
+    # 文字の高さの半分ぶん離れていないと、線が文字の真ん中を通る
+    assert _SIDE_OFFSET >= _LABEL_FONT / 2 + 3
