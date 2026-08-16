@@ -30,6 +30,7 @@ import DeviceNode, {
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
 import WindowLink, { deviceWindow, openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
+  PORT_LABEL_SIDE,
   type PortEdgeData,
   type WireBox,
   facesForEdge,
@@ -165,6 +166,9 @@ const TIER = 100;
 const COLUMN = 400;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
+/** ポート名1行が要る高さ。これより近い線どうしは、名前を逃がさないと重なる。 */
+const PORT_LABEL_ROW = PORT_LABEL_SIDE + 2;
+
 export const DEFAULT_WIDTH = 210;
 /** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
@@ -296,6 +300,8 @@ export function assignAnchors(
   faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
   lanes: Map<number, number>;
   laneRank: Map<number, { rank: number; count: number }>;
+  /** ポート名を線の反対側へ逃がす端。「結線id:機器id」 */
+  flipped: Set<string>;
 } {
   const simple = options.simple ?? false;
   const baseHeight = simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT;
@@ -519,6 +525,7 @@ export function assignAnchors(
     comparePortNames(a.port, b.port) || a.edge - b.edge;
 
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
+  const flipped = new Set<string>(); // ポート名を逃がす端（辺 + 機器）
   const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
   for (const [, members] of groups) {
     const side = members[0].side;
@@ -546,6 +553,20 @@ export function assignAnchors(
       list.push({ id, side: end.side, t });
     });
     faceHandles.set(device, list);
+
+    // 隣の線が近すぎるところは、ポート名を線の反対側へ逃がす。ブリッジのように
+    // 2本を寄せて張るところは、全部を同じ側へ出すと必ず文字がぶつかる。
+    // 近い組だけ互い違いにすれば、離れているところの読み順は崩れない。
+    let escaped = false;
+    members.forEach((end, index) => {
+      if (index === 0) {
+        escaped = false;
+        return;
+      }
+      const apart = Math.abs(spaced[index] - spaced[index - 1]) * facePx;
+      escaped = apart < PORT_LABEL_ROW ? !escaped : false;
+      if (escaped) flipped.add(`${end.edge}:${end.device}`);
+    });
   }
 
   for (const edge of graph.edges) {
@@ -610,7 +631,17 @@ export function assignAnchors(
       });
   }
 
-  return { anchors: out, busiest, busiestTB, busiestLR, heights, faceHandles, lanes, laneRank };
+  return {
+    anchors: out,
+    busiest,
+    busiestTB,
+    busiestLR,
+    heights,
+    faceHandles,
+    lanes,
+    laneRank,
+    flipped,
+  };
 }
 
 /**
@@ -694,7 +725,7 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank } = assignAnchors(
+  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } = assignAnchors(
     graph,
     { simple },
   );
@@ -821,6 +852,8 @@ function toFlow(
       laneRank: laneRank.get(edge.id)?.rank ?? 0,
       laneCount: laneRank.get(edge.id)?.count ?? 1,
       warning: simple ? null : warningOf(edge),
+      sourceFlip: flipped.has(`${edge.id}:${edge.source}`),
+      targetFlip: flipped.has(`${edge.id}:${edge.target}`),
       sourceBox: boxOf.get(edge.source),
       targetBox: boxOf.get(edge.target),
       obstacles: [...boxOf.entries()]

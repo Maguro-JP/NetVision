@@ -645,3 +645,22 @@ describe("comparePortNames", () => {
     expect(comparePortNames("Eth1", "Gi0/1")).toBeLessThan(0);
   });
 });
+
+describe("ポート名の逃がし", () => {
+  it("隣の線が近いと、線の反対側へ出す", () => {
+    const near = portLabelPlacement(100, 100, Position.Right, 14, 12, true);
+    const normal = portLabelPlacement(100, 100, Position.Right, 14, 12, false);
+    // 通常は線の下、逃がしたものは線の上
+    expect(normal.y).toBeGreaterThan(100);
+    expect(near.y).toBeLessThan(100);
+    // 線に沿った向きは変えない。どちらの機器のポートかが分からなくなる
+    expect(near.x).toBe(normal.x);
+  });
+
+  it("上下の辺は左右へ逃がせないので、1行外へ出す", () => {
+    const near = portLabelPlacement(100, 100, Position.Bottom, 14, 12, true);
+    const normal = portLabelPlacement(100, 100, Position.Bottom, 14, 12, false);
+    expect(near.y).toBeGreaterThan(normal.y);
+    expect(near.anchor).toBe(normal.anchor);
+  });
+});

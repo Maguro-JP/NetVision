@@ -25,6 +25,9 @@ export interface PortEdgeData extends Record<string, unknown> {
   laneRank?: number;
   laneCount?: number;
   warning: string | null;
+  /** 隣の線が近すぎる端。ポート名を線の反対側（上下の辺なら1行外）へ逃がす */
+  sourceFlip?: boolean;
+  targetFlip?: boolean;
   /** 自分以外の機器の箱。線が貫かないよう迂回する */
   obstacles?: WireBox[];
   sourceBox?: WireBox;
@@ -55,13 +58,19 @@ export function portLabelPlacement(
   position: Position,
   gap: number = PORT_LABEL_GAP,
   side: number = PORT_LABEL_SIDE,
+  flip: boolean = false,
 ): { x: number; y: number; anchor: string } {
   const [dx, dy] = DIRECTION[position] ?? [0, 0];
   // 左右の辺は、どちらの辺から出ていても同じ向き（下）へずらす。
-  // 辺ごとに向きを変えると、向かい合う機器のポート名が同じ高さに並んで重なる
-  const across = dx !== 0 ? Math.abs(side) : dx * side;
+  // 辺ごとに向きを変えると、向かい合う機器のポート名が同じ高さに並んで重なる。
+  // ただし隣の線が近すぎるときだけは、上へ逃がす（flip）。ブリッジのように
+  // 2本を寄せて張るところは、下に揃えると必ず文字がぶつかる
+  const across = dx !== 0 ? (flip ? -Math.abs(side) : Math.abs(side)) : dx * side;
+  // 上下の辺は左右へ逃がせない（線に沿って読むため）。代わりに1行ぶん外へ
+  // 出して、隣のポート名と段違いにする
+  const rows = dx === 0 && flip ? gap + PORT_LABEL_SIDE : gap;
   const px = x + dx * gap - dy * side;
-  const py = y + dy * gap + across;
+  const py = y + dy * rows + across;
   // 上下へ出すときは、線の左右どちらへ寄せたかに合わせて文字を伸ばす。
   // 中央寄せにすると、上から出た線と下から出た線のポート名が同じ幅を取り合い、
   // 段の間が狭いところで必ず重なる
@@ -743,6 +752,7 @@ export default function PortLabeledEdge({
           )}
           <PortLabel
             name={info.sourceInterface ?? ""}
+            flip={info.sourceFlip ?? false}
             x={sourceX}
             y={sourceY}
             position={sourcePosition}
@@ -756,6 +766,7 @@ export default function PortLabeledEdge({
           />
           <PortLabel
             name={info.targetInterface ?? ""}
+            flip={info.targetFlip ?? false}
             x={targetX}
             y={targetY}
             position={targetPosition}
@@ -817,6 +828,7 @@ function PortLabel({
   color,
   maxWidth,
   gap = PORT_LABEL_GAP,
+  flip = false,
 }: {
   name: string;
   x: number;
@@ -831,6 +843,8 @@ function PortLabel({
   maxWidth?: number;
   /** 箱から離す量。狭い通路では詰める */
   gap?: number;
+  /** 隣の線が近いときの逃がし */
+  flip?: boolean;
 }) {
   if (!name) return null;
 
@@ -839,7 +853,7 @@ function PortLabel({
   // ポート名が互い違いになって、上から順に読めなくなる
   // 口そのものがポート名の行の高さぶん離してあるので、線に沿って押し出す必要は
   // ない。押し出すと、短い線では両端のポート名が中央で出会って重なる
-  const placed = portLabelPlacement(x, y, position, gap, PORT_LABEL_SIDE);
+  const placed = portLabelPlacement(x, y, position, gap, PORT_LABEL_SIDE, flip);
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;
   // 上下逆さまの文字は読めないので、半回転させて向きを揃える
