@@ -179,9 +179,7 @@ def render_svg(
         # 外側の枠（フロアや部屋）は自分では機器を持たないことがある。
         # 中の枠が残るなら外枠も残す。外枠が落ちたときは、中の枠を親無しにする
         trimmed = {
-            group.id: replace(
-                group, device_ids=[i for i in group.device_ids if i in keep]
-            )
+            group.id: replace(group, device_ids=[i for i in group.device_ids if i in keep])
             for group in everything.groups
         }
         alive = {gid for gid, group in trimmed.items() if group.device_ids}
@@ -387,9 +385,7 @@ def render_svg(
             f'fill="{_esc(group.color)}">{_esc(label)}</text>'
         )
         # 枠の名前も埋まっている場所として登録する。しないとポート名が上に乗る
-        placement.add(
-            svglayout.text_rect(gx + 10, gy + 16 - 3, label, 11.0, "start", 0.0).grow(2)
-        )
+        placement.add(svglayout.text_rect(gx + 10, gy + 16 - 3, label, 11.0, "start", 0.0).grow(2))
         for child in children.get(group.id, []):
             _draw(child, depth + 1)
 

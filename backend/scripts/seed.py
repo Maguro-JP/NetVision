@@ -352,9 +352,7 @@ def _seed(force: bool) -> None:
         # 現場の単位（ラック）と、意味の単位（出口まわり）を入れ、さらに
         # 部屋・フロアの枠で囲む。機材がどこに置いてあるかが図だけで分かる
         floor = topology.create_group(db, "physical", "本社ビル 3F", [])
-        machine_room = topology.create_group(
-            db, "physical", "301 マシン室", [], parent_id=floor.id
-        )
+        machine_room = topology.create_group(db, "physical", "301 マシン室", [], parent_id=floor.id)
         topology.create_group(
             db,
             "physical",

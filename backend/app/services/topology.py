@@ -681,13 +681,13 @@ GROUP_COLORS = [
 
 def _next_group_color(db: Session, layer: str) -> str:
     """その図で、いま使っていない色を選ぶ。"""
-    used = set(
-        db.scalars(select(TopologyGroup.color).where(TopologyGroup.layer == layer)).all()
-    )
+    used = set(db.scalars(select(TopologyGroup.color).where(TopologyGroup.layer == layer)).all())
     for color in GROUP_COLORS:
         if color not in used:
             return color
     return GROUP_COLORS[len(used) % len(GROUP_COLORS)]
+
+
 PLANE_NAMES = {
     PLANE_BACKBONE: "コア網",
     PLANE_METRO: "メトロ／集約",
@@ -811,8 +811,7 @@ def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
             at = row.parent_id
     # 外側の枠が図から外れている場合は、中の枠を親無しにする
     groups = [
-        item if item.parent_id in kept else replace(item, parent_id=None)
-        for item in kept.values()
+        item if item.parent_id in kept else replace(item, parent_id=None) for item in kept.values()
     ]
     graph.groups = groups
     _pull_groups_together(graph.nodes, groups, graph.edges)
