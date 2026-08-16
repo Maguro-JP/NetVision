@@ -11,6 +11,7 @@ type FormState = Record<string, string>;
 
 const EMPTY: FormState = {
   hostname: "",
+  label: "",
   code: "",
   vendor: "",
   model: "",
@@ -141,6 +142,16 @@ export default function DeviceFormPage() {
       >
         <div className="form-grid">
           {text("hostname", "ホスト名 *", "text", { required: true, autoFocus: true })}
+          <div className="field">
+            <label htmlFor="label">機器名</label>
+            <input
+              id="label"
+              value={form.label}
+              onChange={set("label")}
+              placeholder="現場での呼び名（任意）"
+              title="「本社コア1号機」など、人が付けた名前。空ならホスト名で呼びます"
+            />
+          </div>
           <div className="field">
             <label htmlFor="code">管理ID</label>
             <input

@@ -31,6 +31,7 @@ from app.services.configparse import normalize_hostname
 DEVICE_FIELDS = (
     "code",
     "hostname",
+    "label",
     "vendor",
     "model",
     "serial_number",
@@ -73,6 +74,7 @@ FIELD_LABELS: dict[str, str] = {
     "device_id": "内部ID",
     "code": "管理ID",
     "hostname": "ホスト名",
+    "label": "機器名",
     "vendor": "ベンダー",
     "model": "型番",
     "serial_number": "シリアル番号",
@@ -122,13 +124,23 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "assetid",
         "assettag",
     ),
+    "label": (
+        "label",
+        "機器名",
+        "機器名称",
+        "名称",
+        "呼称",
+        "表示名",
+        "devicename",
+        "displayname",
+    ),
+    # 「機器名」「名称」は label（人が付けた名称）に振る。ホスト名は機械の名前で、
+    # 現場の呼び名と食い違うことがあるので、同じ列として扱わない
     "hostname": (
         "hostname",
         "host",
         "ホスト名",
-        "機器名",
         "装置名",
-        "名称",
         "デバイス名",
         "nodename",
     ),

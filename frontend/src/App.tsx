@@ -42,6 +42,10 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
     ],
   },
   {
+    label: "設定",
+    items: [{ to: "/settings", label: "画面の設定" }],
+  },
+  {
     label: "取り込み・資料",
     items: [
       { to: "/configs", label: "Configの取り込み" },

@@ -325,7 +325,7 @@ def test_many_peers_are_spread_out_instead_of_overlapping(db_session):
 
 def test_peers_clear_a_wide_hub_box(db_session):
     """左右に結線が多い箱は高さが伸びる。対向は右端より右に置く。"""
-    from app.services.topology import _box_height, _box_width, _visual_right
+    from app.services.topology import _BOX_WIDTH, _box_height, _box_width, _visual_right
 
     site = Site(name="拠点", address="")
     db_session.add(site)
@@ -382,7 +382,7 @@ def test_peers_clear_a_wide_hub_box(db_session):
     # 右辺に多いので幅は既定、高さが伸びる。対向は見た目の右端より右。
     box_right = _visual_right(hub_node.x, 0)
     assert peer_node.x > box_right + 100
-    assert _box_width(0) == 190.0
+    assert _box_width(0) == _BOX_WIDTH
     assert _box_height(9) > _box_height(3)
 
 

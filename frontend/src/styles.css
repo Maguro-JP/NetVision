@@ -497,12 +497,29 @@ button:disabled {
 .topo-selection-panel .toolbar {
   gap: 6px;
 }
+.topo-device-facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 10px;
+  margin: 6px 0 4px;
+  font-size: 12px;
+}
+.topo-device-facts dt {
+  color: var(--muted);
+}
+.topo-device-facts dd {
+  margin: 0;
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .topo-selection-panel select {
   max-width: 120px;
 }
 
 .topo-node {
-  width: 190px;
+  width: 210px;
   background: var(--panel-2);
   border: 1px solid var(--border);
   border-left: 4px solid var(--sev-unknown);
@@ -510,15 +527,22 @@ button:disabled {
   padding: 8px 10px;
   font-size: 12px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 40%);
+  display: flex;
+  flex-direction: column;
 }
-/* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、
-   相手は輪郭を破線にして控えめに出す */
+/* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、相手は輪郭を破線にして
+   控えめに出す。中身は名前と拠点だけで、先はその拠点の図で追う */
 .topo-node.outside {
   border: 1px dashed var(--border);
   border-left: 4px dashed var(--border);
   background: transparent;
   box-shadow: none;
   opacity: 0.85;
+  cursor: pointer;
+}
+.topo-node.outside:hover {
+  border-color: var(--accent);
+  opacity: 1;
 }
 .topo-node.selected {
   outline: 2px solid var(--accent);
@@ -539,6 +563,7 @@ button:disabled {
   padding: 6px 10px;
   letter-spacing: 0.02em;
 }
+/* 枠と左の帯は保守状態。白黒で刷っても位置で区別できるよう帯は残す */
 .topo-node.sev-expired {
   border-left-color: var(--sev-expired);
 }
@@ -551,6 +576,12 @@ button:disabled {
 .topo-node.sev-ok {
   border-left-color: var(--sev-ok);
 }
+/* 背景は稼働状態。止まっているものは灰色寄りにして、稼働中と見分ける */
+.topo-node.run-standby,
+.topo-node.run-maintenance,
+.topo-node.run-retired {
+  background: color-mix(in srgb, var(--sev-unknown) 16%, var(--panel-2));
+}
 /* シンプル表示。機器名だけを大きく出し、状態の色は付けない */
 .topo-node.simple {
   border-left-color: var(--border);
@@ -561,40 +592,93 @@ button:disabled {
   font-size: 15px;
 }
 
-.topo-node-head {
+/* 上段。左に管理ID、右に種別。名前の行を1行まるごと使えるようにする */
+.topo-node-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+  min-width: 0;
+}
+.topo-code,
+.topo-type {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.topo-type {
+  font-weight: 700;
+}
 
+.topo-node-head {
   display: flex;
   gap: 6px;
-  align-items: center;
-  margin-bottom: 4px;
+  align-items: baseline;
+  min-width: 0;
 }
 .topo-glyph {
   font-size: 14px;
   color: var(--accent);
 }
+/* 長い機器名や型番でも行数を増やさない。箱の高さは行数から決めてあり、
+   折り返すとその分だけ下の行が枠から切れる */
 .topo-hostname {
   font-weight: 700;
-  font-size: 13px;
-}
-.topo-plane {
-  font-size: 10px;
-  padding: 0 2px 4px;
-}
-.topo-node-body {
-  line-height: 1.45;
-}
-/* ポートの種類。線のラベルを短くしても、ここを見れば何のポートか分かる */
-.topo-node-ports {
-  margin-top: 3px;
-  font-size: 10px;
-  font-weight: 600;
-  white-space: nowrap;
+  font-size: 14px;
   overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
-.topo-node-foot {
-  margin-top: 5px;
+/* 機器名の下のホスト名。対向ではここに拠点名が入る */
+.topo-node-sub {
+  height: 15px;
+  padding-left: 20px;
   font-size: 11px;
+  line-height: 15px;
+  color: var(--muted);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.topo-node-body {
+  margin-top: 3px;
+  line-height: 16px;
+}
+.topo-node-body > div {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* ポートの種類。線のラベルを短くしても、ここを見れば何のポートか分かる。
+   2行ぶん取っておき、足りている機器は空きにする */
+.topo-node-ports {
+  margin-top: 3px;
+  height: 26px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 13px;
+  overflow: hidden;
+}
+/* 下段。左に管理IP、右に稼働状態と保守状態 */
+.topo-node-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 10px;
+  line-height: 16px;
+}
+.topo-node-ip {
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.topo-node-state {
+  white-space: nowrap;
 }
 .sev-text-expired {
   color: var(--sev-expired);
@@ -670,8 +754,7 @@ button:disabled {
 .topo-edge-label.warning {
   color: var(--sev-critical);
   font-weight: 700;
-  /* ポート名と重ならないよう、線の中央から少し下げる */
-  margin-top: 16px;
+  /* 逃がす向きは線ごとに違うので、位置は PortLabeledEdge が決める */
 }
 /* 引き出し口は編集中だけ見せる。常に出ていると図が点だらけになる */
 .react-flow__handle {
@@ -1173,4 +1256,137 @@ button:disabled {
 }
 .migration-page .error {
   margin-top: 16px;
+}
+
+/* 設定。選ぶものが少ないので、1つずつ説明を添えて縦に並べる */
+.settings-card {
+  max-width: 720px;
+  margin-bottom: 16px;
+}
+.settings-card h2 {
+  font-size: 15px;
+  margin: 0 0 6px;
+}
+.settings-choices {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+}
+.settings-choice {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 8px;
+  align-items: center;
+  cursor: pointer;
+}
+.settings-choice input {
+  grid-row: span 2;
+}
+.settings-choice .muted {
+  font-size: 12px;
+  grid-column: 2;
+}
+
+/* 出力の窓。印刷プレビューのような画面なので、メニューを出さず図に幅を使う */
+.export-window {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  padding: 12px 16px 16px;
+  gap: 10px;
+}
+.export-head {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.export-head-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.export-head-text strong {
+  font-size: 16px;
+}
+.export-head-text .muted {
+  font-size: 12px;
+}
+/* 保存は迷わせない。この窓でいちばんやりたいことなので、色を付けて
+   ほかのボタンより一段大きくする。何が落ちてくるかも書いてある */
+a.button.export-save {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 11px 20px;
+  font-size: 15px;
+  font-weight: 700;
+  color: #ffffff;
+  background: var(--sev-ok);
+  border-color: color-mix(in srgb, var(--sev-ok) 70%, #000);
+  box-shadow: 0 2px 10px color-mix(in srgb, var(--sev-ok) 35%, transparent);
+}
+a.button.export-save:hover {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--sev-ok) 85%, #ffffff);
+  border-color: var(--sev-ok);
+  box-shadow: 0 3px 14px color-mix(in srgb, var(--sev-ok) 50%, transparent);
+}
+a.button.export-save:active {
+  transform: translateY(1px);
+  box-shadow: none;
+}
+a.button.export-save:focus-visible {
+  outline: 2px solid #ffffff;
+  outline-offset: 2px;
+}
+.export-save-icon {
+  font-size: 20px;
+  line-height: 1;
+}
+.export-save-file {
+  display: block;
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.85;
+}
+/* 保存を目立たせるため、切り替えのタブは控えめにする。
+   選んでいるものだけ色を付ける */
+.export-kinds button {
+  font-weight: 600;
+}
+.export-kinds {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.export-note {
+  margin: 0;
+  font-size: 12px;
+}
+/* 下見は残りの高さを全部使う。図は大きく見たい */
+.export-preview {
+  flex: 1;
+  min-height: 240px;
+  background: #ffffff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px;
+  overflow: auto;
+}
+.export-preview img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+.export-sheets {
+  max-width: 520px;
+  flex: none;
+}
+/* 結線表の下見も、窓の高さいっぱいまで使って多く見せる */
+.export-window .export-rows {
+  flex: 1;
+  overflow: auto;
 }

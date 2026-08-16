@@ -1,8 +1,8 @@
-本社 物理構成	175.8
+本社 物理構成	175.1
   readable	96.0
   center	20.0
   even	12.0
-  tight	7.8
+  tight	7.1
   corridor	12.0
   wires	18.0
   labels	10.0

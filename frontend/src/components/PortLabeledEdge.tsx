@@ -35,6 +35,10 @@ export interface PortEdgeData extends Record<string, unknown> {
 export const PORT_LABEL_GAP = 14;
 /** 線に重ならないよう、線と垂直な向きへずらす幅。束の本数でさらに開く。 */
 export const PORT_LABEL_SIDE = 12;
+/** 警告（VLAN の食い違いなど）を線の反対側へ出す量。ポート名と別の帯にする。 */
+export const WARNING_SIDE = 30;
+/** この長さを超える警告は、線の脇には印だけ出す（中身はパネルと title で読む） */
+export const WARNING_INLINE_MAX = 8;
 
 const DIRECTION: Record<Position, [number, number]> = {
   [Position.Top]: [0, -1],
@@ -704,13 +708,23 @@ export default function PortLabeledEdge({
   const labelX = routed.labelX;
   const labelY = routed.labelY;
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
+  // 警告はポート名と別の帯へ出す。ポート名の側（portLabelPlacement）と符号が逆。
+  // 縦の線では、警告の文字を中央寄せにすると左右へ伸びてポート名に乗るので、
+  // 線の横に置いて外側へ伸ばす
+  const span = Math.hypot(targetX - sourceX, targetY - sourceY) || 1;
+  const upright = Math.abs(targetY - sourceY) >= Math.abs(targetX - sourceX);
+  const warnDx = ((targetY - sourceY) / span) * WARNING_SIDE;
+  const warnDy = (-(targetX - sourceX) / span) * WARNING_SIDE;
+  const warnAnchor = upright ? (warnDx >= 0 ? "0%, -50%" : "-100%, -50%") : "-50%, -50%";
 
   return (
     <>
       <BaseEdge id={id} path={path} markerEnd={markerEnd} style={style} />
       {!info.hideLabels && (
         <EdgeLabelRenderer>
-          {info.manualLabel ? (
+          {/* 人が付けた線の名前は中央に置く。両端のポート名はそのまま残し、
+              上（相手のポート）・中央（名前）・下（自分のポート）が縦に並ぶ */}
+          {info.manualLabel && (
             <div
               className="topo-edge-label center"
               style={{
@@ -720,45 +734,49 @@ export default function PortLabeledEdge({
             >
               {info.manualLabel}
             </div>
-          ) : (
-            <>
-              <PortLabel
-                name={info.sourceInterface ?? ""}
-                x={sourceX}
-                y={sourceY}
-                position={sourcePosition}
-                angle={angle}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-                color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                rank={info.laneRank ?? 0}
-              />
-              <PortLabel
-                name={info.targetInterface ?? ""}
-                x={targetX}
-                y={targetY}
-                position={targetPosition}
-                // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
-                // 線の反対側に出るので、機器が近くても重ならない
-                angle={angle + 180}
-                style={info.portStyle ?? "short"}
-                alongLine={info.alongLine ?? false}
-                opacity={style?.opacity}
-                color={typeof style?.stroke === "string" ? style.stroke : undefined}
-                rank={info.laneRank ?? 0}
-              />
-            </>
           )}
+          <PortLabel
+            name={info.sourceInterface ?? ""}
+            x={sourceX}
+            y={sourceY}
+            position={sourcePosition}
+            angle={angle}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+            color={typeof style?.stroke === "string" ? style.stroke : undefined}
+            rank={info.laneRank ?? 0}
+          />
+          <PortLabel
+            name={info.targetInterface ?? ""}
+            x={targetX}
+            y={targetY}
+            position={targetPosition}
+            // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
+            // 線の反対側に出るので、機器が近くても重ならない
+            angle={angle + 180}
+            style={info.portStyle ?? "short"}
+            alongLine={info.alongLine ?? false}
+            opacity={style?.opacity}
+            color={typeof style?.stroke === "string" ? style.stroke : undefined}
+            rank={info.laneRank ?? 0}
+          />
           {info.warning && (
             <div
               className="topo-edge-label warning"
               style={{
-                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
+                // ポート名は線の片側に並べてある。警告は反対側へ出す。
+                // 線に沿って下へずらすだけだと、隣の線のポート名に乗る
+                transform:
+                  `translate(${warnAnchor}) ` +
+                  `translate(${labelX + warnDx}px, ${labelY + warnDy}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
+              title={info.warning}
             >
-              ⚠ {info.warning}
+              {/* 長い警告を線の脇に広げると、必ずどこかのポート名に乗る。
+                  印だけ出し、中身は線を選んだときのパネルとここの title で読む */}
+              {info.warning.length > WARNING_INLINE_MAX ? "⚠" : `⚠ ${info.warning}`}
             </div>
           )}
         </EdgeLabelRenderer>
@@ -793,13 +811,15 @@ function PortLabel({
 }) {
   if (!name) return null;
 
+  // 引き出し口そのものがポート名の行の高さぶん離してあるので、ラベルは
+  // 線の同じ側へ同じ量だけ出す。1本ごとに上下へ振り分けると、同じ辺の
+  // ポート名が互い違いになって、上から順に読めなくなる
   const placed = portLabelPlacement(
     x,
     y,
     position,
     PORT_LABEL_GAP + Math.min(rank, 4) * 3,
-    // 偶数・奇数で線の上下（左右）へ振り、束のポート名が同じ帯に積もらない
-    (rank % 2 === 0 ? 1 : -1) * (PORT_LABEL_SIDE + Math.floor(rank / 2) * 14),
+    PORT_LABEL_SIDE,
   );
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;

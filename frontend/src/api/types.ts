@@ -33,6 +33,8 @@ export interface Device {
   hostname: string;
   /** 人が決める管理ID。社内台帳の番号など */
   code: string | null;
+  /** 人が付けた機器の名称。空ならホスト名で呼ぶ */
+  label: string | null;
   vendor: string;
   model: string;
   serial_number: string | null;
@@ -231,6 +233,12 @@ export interface TopologyNode {
   hidden_peers: number;
   /** 対向の向き。up=上位 / down=配下 / side=横 */
   peer_kind?: "up" | "down" | "side" | null;
+  /** 現場で機器を特定する手がかり。図の箱に出す */
+  serial_number: string | null;
+  /** 人が付けた機器の名称。空ならホスト名で呼ぶ */
+  label: string | null;
+  /** 人が決めた管理ID */
+  code: string | null;
   /** キャリア網の段。backbone / metro / access */
   plane?: "backbone" | "metro" | "access";
 }

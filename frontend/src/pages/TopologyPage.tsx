@@ -28,12 +28,13 @@ import DeviceNode, {
   type Side,
 } from "../components/DeviceNode";
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
+import WindowLink, { deviceWindow, openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
   type PortEdgeData,
   type WireBox,
   facesForEdge,
 } from "../components/PortLabeledEdge";
-import { DEVICE_TYPE_LABEL } from "../lib/format";
+import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
 import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
 import {
   DEFAULT_TYPE_COLOR,
@@ -164,15 +165,39 @@ const TIER = 100;
 const COLUMN = 400;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
-export const DEFAULT_WIDTH = 190;
+export const DEFAULT_WIDTH = 210;
 /** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
-/**
- * 詳細表示の箱の高さ。中身（型番・IP・ポート種・保守）で伸びる分を見込む。
- * ここを 78 のままにすると、接続点の計算だけ低い箱の話になり、画面では
- * 中央付近から階段状に折れる。
- */
-export const DETAIL_HEIGHT = 132;
+/* 詳細表示の箱の中身。1行あたりの高さ（styles.css の指定と合わせること）。
+   高さは接続点の分母でもあるので、機器ごとに変えると同じ辺の口が機器ごとに
+   ずれる。いちばん行数の多い機器に合わせて、全部同じ高さで設計する。 */
+/** .topo-node の上下パディング */
+const PAD_Y = 16;
+/** 管理IDと種別の上段 */
+const TOP_ROW = 14;
+/** 機器名の行 */
+const HEAD_ROW = 22;
+/** ホスト名の行（機器名を出しているときだけ埋まる） */
+const SUB_ROW = 15;
+/** 型番 / シリアル の各行。管理IPは下段へ回した */
+const BODY_ROW = 16;
+/** 本文の最大行数 */
+const BODY_ROWS = 2;
+/** ポート種別。長い名前が続くので2行ぶん取り、余れば空きにする */
+const PORTS_ROW = 26;
+/** 稼働状態と保守状態の行 */
+const FOOT_ROW = 16;
+
+/* ポート名が縦に積まれても重ならない間隔。
+   ラベルは font-size 10・line-height 1.2・上下の余白1px で 14px。
+   読みやすさのため 4px 空ける（styles.css の .topo-edge-label と合わせること） */
+const LABEL_PITCH = 18;
+/* 同じ相手への束をどこまで詰められるか。ポート名が読める間隔まで。
+   上下の辺は名前を横書きするので名前の幅で決まる */
+const BUNDLE_LABEL_W = 56;
+
+export const DETAIL_HEIGHT =
+  PAD_Y + TOP_ROW + HEAD_ROW + SUB_ROW + BODY_ROW * BODY_ROWS + PORTS_ROW + FOOT_ROW;
 
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
@@ -345,51 +370,98 @@ export function assignAnchors(
   };
 
   /**
-   * 同じ辺の接続点を広げる。
-   * 対向が箱の外にいると射影が端に潰れるので、そのときは辺全体へ均等に振る。
-   * ポート名が被らないよう、最低でも約 16px 相当の間隔を取る。
+   * 同じ辺の接続点を並べる。
+   *
+   * 相手の方角へ寄せた位置（射影）を軸に、ポート名が被らないだけの間隔を
+   * 空けて並べる。辺いっぱいに散らすと、真っ直ぐ引けるはずの線まで箱の端へ
+   * 寄り、要らない折れができる。必要な幅だけ使い、残りは中央へ寄せる。
+   *
+   * 同じ相手へ何本も張っている束（ブリッジやポートチャネル）は、間隔を詰めて
+   * 隣どうしに置く。1本ずつ等間隔に離すと、どれが同じ相手行きか分からない。
    */
-  const spaceTs = (ideals: number[], facePx: number): number[] => {
+  const spaceTs = (
+    ideals: number[],
+    peers: number[],
+    facePx: number,
+    horizontal: boolean,
+  ): number[] => {
     if (ideals.length === 0) return [];
     const lo = 0.08;
     const hi = 0.92;
     const n = ideals.length;
-    if (n === 1) {
-      return [Math.min(hi, Math.max(lo, ideals[0]))];
-    }
+    const clamp = (t: number) => Math.min(hi, Math.max(lo, t));
+    if (n === 1) return [clamp(ideals[0])];
+
     const ordered = ideals
-      .map((t, origin) => ({ origin, t: Math.min(hi, Math.max(lo, t)) }))
+      .map((t, origin) => ({ origin, t: clamp(t), peer: peers[origin] }))
       .sort((a, b) => a.t - b.t || a.origin - b.origin);
-    const minimum = Math.max(0.06, 16 / Math.max(facePx, 1));
-    const idealSpan = ordered[ordered.length - 1].t - ordered[0].t;
-    const need = minimum * (n - 1);
-    // 射影が端に潰れている（対向がみな箱の外）→ 辺をフルに使う。折れの元を消す。
-    if (idealSpan < need * 0.85) {
-      const even = ordered.map((_, index) => lo + (index * (hi - lo)) / (n - 1));
-      const result = ideals.map(() => 0.5);
+    // ポート名が被らない間隔
+    const minimum = Math.max(0.06, LABEL_PITCH / Math.max(facePx, 1));
+    // 束を詰める間隔。上下の辺はポート名を横書きするので名前の幅がいる。
+    // 左右の辺は行の高さで足りるので、ここまで詰められる
+    // 束でもポート名は1つずつ読むので、行の高さより詰めることはできない
+    const bundle = horizontal
+      ? Math.max(minimum, BUNDLE_LABEL_W / Math.max(facePx, 1))
+      : minimum;
+    const gapAt = (index: number) =>
+      ordered[index].peer === ordered[index - 1].peer ? bundle : minimum;
+
+    const gaps: number[] = [];
+    for (let index = 1; index < n; index += 1) gaps.push(gapAt(index));
+    const need = gaps.reduce((sum, gap) => sum + gap, 0);
+    const idealSpan = ordered[n - 1].t - ordered[0].t;
+    const result = ideals.map(() => 0.5);
+
+    // 同じ相手へ何本も張っている束は、必要な幅だけ使って射影のまん中に固める。
+    // 辺いっぱいに散らすと、真っ直ぐ引ける線まで箱の端へ寄り、束のうちどれが
+    // 同じ相手行きなのかも分からなくなる
+    if (ordered.every((item) => item.peer === ordered[0].peer)) {
+      if (need >= hi - lo) {
+        // どう詰めても収まらない。せめて等間隔にして被りを最小にする
+        ordered.forEach((item, index) => {
+          result[item.origin] = lo + (index * (hi - lo)) / (n - 1);
+        });
+        return result;
+      }
+      const wanted = ordered.reduce((sum, item) => sum + item.t, 0) / n;
+      const center = Math.min(hi - need / 2, Math.max(lo + need / 2, wanted));
+      let at = center - need / 2;
       ordered.forEach((item, index) => {
-        result[item.origin] = even[index];
+        if (index) at += gaps[index - 1];
+        result[item.origin] = at;
       });
       return result;
     }
+
+    // 相手がばらばらなのに射影が端に潰れている（対向がみな箱の外）。
+    // どれがどこ行きかは辺の上の順で読むしかないので、辺全体へ均等に振る
+    if (idealSpan < need * 0.85) {
+      ordered.forEach((item, index) => {
+        result[item.origin] = lo + (index * (hi - lo)) / (n - 1);
+      });
+      return result;
+    }
+
+    // 射影の順を保ったまま、足りない間隔だけ押し広げる
     const spaced = ordered.map((item) => item.t);
-    for (let index = 1; index < spaced.length; index += 1) {
-      if (spaced[index] - spaced[index - 1] < minimum) {
-        spaced[index] = spaced[index - 1] + minimum;
+    for (let index = 1; index < n; index += 1) {
+      const room = gaps[index - 1];
+      if (spaced[index] - spaced[index - 1] < room) {
+        spaced[index] = spaced[index - 1] + room;
       }
     }
-    if (spaced[spaced.length - 1] > hi) {
-      const shift = spaced[spaced.length - 1] - hi;
-      for (let index = 0; index < spaced.length; index += 1) {
-        spaced[index] = Math.max(lo, spaced[index] - shift);
+    if (spaced[n - 1] > hi) {
+      const back = spaced[n - 1] - hi;
+      for (let index = 0; index < n; index += 1) {
+        spaced[index] = Math.max(lo, spaced[index] - back);
       }
-      for (let index = 1; index < spaced.length; index += 1) {
-        if (spaced[index] - spaced[index - 1] < minimum) {
-          spaced[index] = spaced[index - 1] + minimum;
+      for (let index = 1; index < n; index += 1) {
+        const room = gaps[index - 1];
+        if (spaced[index] - spaced[index - 1] < room) {
+          spaced[index] = spaced[index - 1] + room;
         }
       }
     }
-    const result = ideals.map(() => 0.5);
     ordered.forEach((item, index) => {
       result[item.origin] = spaced[index];
     });
@@ -411,7 +483,9 @@ export function assignAnchors(
       side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
     const spaced = spaceTs(
       members.map((end) => idealT(end)),
+      members.map((end) => end.other),
       facePx,
+      side === "top" || side === "bottom",
     );
     const list = faceHandles.get(device) ?? [];
     members.forEach((end, index) => {
@@ -588,6 +662,8 @@ function toFlow(
     zIndex: node.outside ? 0 : 2,
     data: {
       hostname: node.hostname,
+      label: simple ? null : node.label,
+      code: simple ? null : node.code,
       vendor: simple ? "" : node.vendor,
       model: simple ? "" : node.model,
       deviceType: node.device_type,
@@ -605,7 +681,10 @@ function toFlow(
       shiftY,
       faceHandles: faceHandles.get(node.device_id),
       accent: options.colors.types[node.device_type],
-      planeLabel: node.plane ? (PLANE_LABEL[node.plane] ?? node.plane) : undefined,
+      serialNumber: simple ? null : node.serial_number,
+      statusLabel: simple ? null : DEVICE_STATUS_LABEL[node.status],
+      runState: simple ? null : node.status,
+      typeLabel: simple ? null : DEVICE_TYPE_LABEL[node.device_type],
     } satisfies DeviceNodeData,
     draggable: options.editable,
     };
@@ -823,6 +902,7 @@ function TopologyEditor() {
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const instance = useRef<ReactFlowInstance<Node<DeviceNodeData | GroupFrameData>> | null>(null);
+  const canvas = useRef<HTMLDivElement | null>(null);
   // ドラッグの過程。保存は基準から動いた機器だけ送る
   const historyRef = useRef<EditHistory | null>(null);
   const [historyTick, setHistoryTick] = useState(0);
@@ -955,6 +1035,30 @@ function TopologyEditor() {
     setEdges,
   ]);
 
+  // 機器をダブルクリックしたら、その機器の台帳を別ウィンドウで開く。
+  // 図から離れずに詳しく見たいので、いまの画面（配置・絞り込み）は残す。
+  // React Flow の onNodeDoubleClick は選択のたびに要素が作り直されて
+  // 取りこぼすため、図の入れ物で直接受ける
+  useEffect(() => {
+    const box = canvas.current;
+    if (!box) return;
+    const onDouble = (event: globalThis.MouseEvent) => {
+      const target = event.target as HTMLElement | null;
+      const node = target?.closest?.(".react-flow__node") as HTMLElement | null;
+      const id = node?.dataset.id;
+      if (!id || id.startsWith("g-")) return;
+      const deviceId = Number(id);
+      if (!Number.isFinite(deviceId)) return;
+      // 図の拡大（ダブルクリックで寄る）と取り合いになるので、ここで止める
+      event.preventDefault();
+      event.stopPropagation();
+      openInWindow(`/devices/${deviceId}`, deviceWindow(deviceId), 1100, 900);
+    };
+    // 取るのは capture 段階。図の拡大が先に受け取って伝播を止めてしまう
+    box.addEventListener("dblclick", onDouble, true);
+    return () => box.removeEventListener("dblclick", onDouble, true);
+  }, []);
+
   useEffect(() => {
     shouldFit.current = true;
   }, [layer, selectedSite, appliedSearch, orientation, scope]);
@@ -978,8 +1082,11 @@ function TopologyEditor() {
     if (appliedSearch.trim()) next.set("q", appliedSearch.trim());
     if (selectedVrf) next.set("vrf", selectedVrf);
     if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
+    // 中身が同じなら書かない。書くたびに location が変わり、その変化で
+    // この効果がまた走って、描き直しが止まらなくなる
+    if (next.toString() === params.toString()) return;
     setParams(next, { replace: true });
-  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, setParams]);
+  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, params, setParams]);
 
   const refresh = async ({ takeLayout = true }: { takeLayout?: boolean } = {}) => {
     // 取り直してから画面を作り直す。以前はキャッシュの古いグラフで
@@ -1439,7 +1546,45 @@ function TopologyEditor() {
     return (Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).filter((type) => found.has(type));
   }, [graph]);
 
+  // 選択が変わったときの処理は、毎回作り直すと React Flow の中で
+  // 効果が回り続け、図全体の描き直しが止まらなくなる（操作も取りこぼす）
+  const handleSelectionChange = useCallback(
+    ({ nodes: picked }: { nodes: Node<DeviceNodeData | GroupFrameData>[] }) => {
+      const devices = picked.filter((node) => node.type !== "group");
+      const frame = picked.find((node) => node.type === "group");
+      setSelectedDeviceIds(
+        devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
+      );
+      setSelectedGroupId(frame ? ((frame.data as GroupFrameData).groupId ?? null) : null);
+      if (picked.length > 0) setSelectedEdge(null);
+    },
+    [],
+  );
+
+  // 出力の画面へ、いまの絞り込みと見せ方をそのまま渡す。
+  // 画面と出したものが 食い違わないようにする
+  const exportQuery = (() => {
+    const next = new URLSearchParams();
+    next.set("layer", layer);
+    if (selectedSite !== "") next.set("site", String(selectedSite));
+    if (appliedSearch.trim()) next.set("q", appliedSearch.trim());
+    if (scope) next.set("scope", scope);
+    if (simple) next.set("style", "simple");
+    if (portStyle) next.set("port_style", portStyle);
+    if (alongLine) next.set("along_line", "true");
+    if (orientation) next.set("orientation", orientation);
+    if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
+    if (selectedVrf) next.set("vrf", selectedVrf);
+    return `?${next.toString()}`;
+  })();
+
   const selectedGroup = graph?.groups?.find((group) => group.id === selectedGroupId);
+  // 1台だけ選んでいるときは、その機器の要点を図の上に出す。
+  // 台帳を開きに行かなくても、いま見ている図の中で確かめられるようにする
+  const selectedDevice =
+    selectedDeviceIds.length === 1
+      ? graph?.nodes.find((node) => node.device_id === selectedDeviceIds[0])
+      : undefined;
 
   const usedMedia = useMemo(() => {
     const found = new Set<Media>();
@@ -1724,32 +1869,18 @@ function TopologyEditor() {
           />{" "}
           線に沿わせる
         </label>
-        <a
+        {/* 出力は1つにまとめる。何が出るのか分からないままファイルが落ちてくる
+            のを避けるため、別ウィンドウで中身を見てから選ぶ */}
+        <WindowLink
           className="button"
-          href={api.topologyExportUrl(layer, {
-            vlan: selectedVlans.length === 1 ? selectedVlans[0] : undefined,
-            vrf: selectedVrf || undefined,
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            style: simple ? "simple" : undefined,
-            port_style: portStyle,
-            along_line: alongLine ? "true" : undefined,
-            orientation,
-          })}
-          title="設計書や報告書に貼れるベクタ形式で書き出します（Word / PowerPoint にそのまま挿入できます）"
+          to={`/export${exportQuery}`}
+          name="netvision-export"
+          width={1200}
+          height={900}
+          title="図・Excel・結線表・ポート一覧を、中身を見てから選んで保存します"
         >
-          図をファイルに出す（SVG{simple ? " / シンプル" : ""}）
-        </a>
-        {/* Excel はまとめて1つ。ボタンを分けるより、開けば全部入っている方が配りやすい */}
-        <a
-          className="button"
-          href={api.workbookUrl(layer, {
-            site_id: selectedSite === "" ? undefined : selectedSite,
-            scope,
-          })}
-          title="構成図（セルの罫線で描いた図）・結線表・ポート一覧を1つの Excel で出します。図は手元で直せます"
-        >
-          Excel で出す（図＋表）
-        </a>
+          出力する
+        </WindowLink>
         <RouterLink to="/configs">
           <button>Config を取り込む</button>
         </RouterLink>
@@ -1803,7 +1934,7 @@ function TopologyEditor() {
         </div>
       )}
 
-      <div className={`topo-canvas${placing ? " placing" : ""}`}>
+      <div className={`topo-canvas${placing ? " placing" : ""}`} ref={canvas}>
         {tooWide ? (
           // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
           // それでも見たい人のために、出す手段は残しておく
@@ -1882,17 +2013,7 @@ function TopologyEditor() {
             edgesReconnectable={editable}
             onEdgeClick={(_, edge) => setSelectedEdge(edge)}
             onPaneClick={onPaneClick}
-            onSelectionChange={({ nodes: picked }) => {
-              const devices = picked.filter((node) => node.type !== "group");
-              const frame = picked.find((node) => node.type === "group");
-              setSelectedDeviceIds(
-                devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
-              );
-              setSelectedGroupId(
-                frame ? ((frame.data as GroupFrameData).groupId ?? null) : null,
-              );
-              if (picked.length > 0) setSelectedEdge(null);
-            }}
+            onSelectionChange={handleSelectionChange}
             onInit={(flow) => {
               instance.current = flow;
               if (shouldFit.current) {
@@ -1914,6 +2035,54 @@ function TopologyEditor() {
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
             <MiniMap pannable zoomable className="topo-minimap" />
+            {selectedDevice && !selectedGroup && !selectedEdge && (
+              <Panel position="top-right" className="topo-selection-panel">
+                <div className="topo-selection-panel-body">
+                  <div className="topo-selection-panel-row">
+                    <span className="topo-selection-panel-label" title="選択中の機器">
+                      {selectedDevice.hostname}
+                    </span>
+                    <button
+                      type="button"
+                      className="topo-selection-panel-close"
+                      onClick={() => setSelectedDeviceIds([])}
+                      title="選択を解除"
+                    >
+                      ×
+                    </button>
+                  </div>
+                  <dl className="topo-device-facts">
+                    <dt>種別</dt>
+                    <dd>{DEVICE_TYPE_LABEL[selectedDevice.device_type]}</dd>
+                    <dt>拠点</dt>
+                    <dd>{selectedDevice.site_name ?? "未登録"}</dd>
+                    <dt>型番</dt>
+                    <dd>
+                      {`${selectedDevice.vendor} ${selectedDevice.model}`.trim() || "未登録"}
+                    </dd>
+                    <dt>管理IP</dt>
+                    <dd>{selectedDevice.mgmt_ip ?? "未登録"}</dd>
+                    <dt>保守</dt>
+                    <dd className={`sev-text-${selectedDevice.severity}`}>
+                      {SEVERITY_LABEL[selectedDevice.severity]}
+                    </dd>
+                    <dt>ポート</dt>
+                    <dd>{selectedDevice.interface_count}</dd>
+                  </dl>
+                  <div className="topo-selection-panel-row">
+                    <WindowLink
+                      to={`/devices/${selectedDevice.device_id}`}
+                      name={deviceWindow(selectedDevice.device_id)}
+                      width={1100}
+                      height={900}
+                      title="図はそのままに、別ウィンドウで機器情報を開きます（機器をダブルクリックでも開きます）"
+                    >
+                      機器情報を開く
+                    </WindowLink>
+                  </div>
+                </div>
+              </Panel>
+            )}
             {selectedGroup && (
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
@@ -1984,6 +2153,12 @@ function TopologyEditor() {
                         ? ` ${selectedEdgeData.target_interface}`
                         : ""}
                     </span>
+                    {/* 図の上は印だけのことがあるので、中身はここで読む */}
+                    {warningOf(selectedEdgeData) && (
+                      <span className="sev-text-critical">
+                        ⚠ {warningOf(selectedEdgeData)}
+                      </span>
+                    )}
                     {editable && layer !== "logical" ? (
                       <>
                         <button

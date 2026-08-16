@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router-dom";
 
+import WindowLink, { deviceWindow } from "./WindowLink";
 import type { Device } from "../api/types";
 import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, formatDate, formatRemaining } from "../lib/format";
 import SeverityBadge from "./SeverityBadge";
@@ -118,7 +119,15 @@ export default function DeviceTable({
               )}
             </td>
             <td className="nowrap">
-              <Link to={`/devices/${d.id}`}>{d.hostname}</Link>
+              <WindowLink
+                to={`/devices/${d.id}`}
+                name={deviceWindow(d.id)}
+                width={1100}
+                height={900}
+                title="機器情報を開きます（開き方は設定で変えられます）"
+              >
+                {d.hostname}
+              </WindowLink>
               {d.code && (
                 <div className="muted mono" title="管理ID">
                   {d.code}

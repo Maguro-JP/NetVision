@@ -57,10 +57,12 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱（190x78）に加えて、ポート名を置く余白を見込む。
-# 広げすぎると開いた図が間延びして、構成図として読めない
-_X_SPACING = 300.0
-# 詳細箱（132）＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
+# 自動配置の間隔。機器の箱に加えて、ポート名を置く余白を見込む。
+# 広げすぎると開いた図が間延びして、構成図として読めない。
+# 箱の大きさ（_BOX_WIDTH / _DETAIL_HEIGHT）を変えたら、_min_stored_gap_* を
+# 下回らないようにここも見直すこと
+_X_SPACING = 340.0
+# 詳細箱＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
 _Y_SPACING = 220.0
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
@@ -114,6 +116,12 @@ class TopologyNodeView:
     peer_kind: str | None = None
     # キャリア網の段。backbone=コア網 / metro=メトロ / access=アクセス
     plane: str = "access"
+    # 現場で機器を特定する手がかり。ラックの前で見るのは名前ではなく銘板
+    serial_number: str | None = None
+    # 人が付けた機器の名称。空ならホスト名で呼ぶ
+    label: str | None = None
+    # 人が決めた管理ID
+    code: str | None = None
 
 
 @dataclass
@@ -301,6 +309,9 @@ def get_graph(
                 site_id=device.site_id,
                 site_name=device.site.name if device.site else None,
                 mgmt_ip=device.mgmt_ip,
+                serial_number=device.serial_number,
+                label=device.label,
+                code=device.code,
                 severity=evaluate(device).overall_severity,
                 interface_count=interface_counts.get(device.id, 0),
                 x=x,
@@ -722,6 +733,12 @@ def load_diagram(
     return attach_groups(db, graph)
 
 
+#: 同じ段とみなす高さの幅。枠のメンバーを並べ替えるときの段の分け方
+_ROW_TOLERANCE = 60.0
+#: 並べ替えた段で、隣の箱との間に最低限空ける見た目のすき間
+_GROUP_ROW_CLEAR = 24.0
+
+
 def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
     """今見えている機器が属する枠だけを図に載せる。"""
     visible = {node.device_id for node in graph.nodes}
@@ -747,7 +764,83 @@ def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
             )
         )
     graph.groups = groups
+    _pull_groups_together(graph.nodes, groups, graph.edges)
     return graph
+
+
+def _pull_groups_together(
+    nodes: list[TopologyNodeView],
+    groups: list[TopologyGroupView],
+    edges: list[TopologyEdgeView] | None = None,
+) -> None:
+    """同じ枠の機器を、自動配置の段の中で隣どうしに並べ替える。
+
+    枠は「ここはひとまとまり」という人の意思なので、その中に関係の無い機器が
+    挟まると枠が伸びて、囲んだ意味が無くなる。
+
+    触るのは自動で置いた機器だけ。人が動かした位置は意思なので動かさない。
+    段（同じ高さの並び）の中で、順番だけ入れ替える。箱の幅は結線の本数で
+    変わるので、並べ直したあとに隣どうしの間隔を取り直す。
+    """
+    if not groups:
+        return
+    group_of: dict[int, int] = {}
+    for index, group in enumerate(groups):
+        for device_id in group.device_ids:
+            group_of.setdefault(device_id, index)
+    if not group_of:
+        return
+
+    rows: dict[float, list[TopologyNodeView]] = defaultdict(list)
+    for node in nodes:
+        rows[round(node.y / _ROW_TOLERANCE)].append(node)
+
+    for row in rows.values():
+        if len(row) < 3:
+            continue
+        # 人が置いた機器が混ざる段は触らない。並べ替えるとその意思を壊す
+        if any(node.placed for node in row):
+            continue
+        row.sort(key=lambda node: (node.x, node.device_id))
+        spots = [node.x for node in row]
+
+        # 左から順に並べ直す。枠の機器に当たったら、その枠の残りをその場で
+        # 続けて出す。枠に入っていない機器は元の順のまま
+        ordered: list[TopologyNodeView] = []
+        done: set[int] = set()
+        members: dict[int, list[TopologyNodeView]] = defaultdict(list)
+        for node in row:
+            key = group_of.get(node.device_id)
+            if key is not None:
+                members[key].append(node)
+        for node in row:
+            if node.device_id in done:
+                continue
+            key = group_of.get(node.device_id)
+            if key is None:
+                ordered.append(node)
+                done.add(node.device_id)
+                continue
+            for member in members[key]:
+                if member.device_id not in done:
+                    ordered.append(member)
+                    done.add(member.device_id)
+
+        # 箱の幅は上下の辺の本数で変わる。並べ替えたあとの隣どうしで
+        # 取り直さないと、広い箱が狭い場所に来て食い込む
+        busiest_tb, _ = _busiest_sides(row, list(edges or []))
+        at = spots[0]
+        for index, node in enumerate(ordered):
+            if index:
+                previous = ordered[index - 1]
+                # 元の並びの間隔をまず使い、広い箱が来たときだけ押し出す
+                at = max(
+                    spots[index],
+                    _visual_right(previous.x, busiest_tb.get(previous.device_id, 0))
+                    + _GROUP_ROW_CLEAR
+                    + (_box_width(busiest_tb.get(node.device_id, 0)) - _BOX_WIDTH) / 2,
+                )
+            node.x = at
 
 
 def create_group(
@@ -1380,10 +1473,12 @@ def _child_order(
 # 機器の箱は、結線が多いほど広がる（画面側の widthFor / heightFor と同じ規則）。
 # 数え方は「1辺あたりの最大本数」。総本数ではない。
 # 上下に多い → 幅、左右に多い → 高さ。向きを間違えると間隔だけ増えて被りが残る。
-_BOX_WIDTH = 190.0
+_BOX_WIDTH = 210.0
 _BOX_HEIGHT = 78.0
-# 詳細表示の箱の高さ（frontend DETAIL_HEIGHT）。整頓・すき間は画面に合わせる
-_DETAIL_HEIGHT = 132.0
+# 詳細表示の箱の高さ（frontend DETAIL_HEIGHT）。整頓・すき間は画面に合わせる。
+# 中身がいちばん多い機器（段・ポート種・型番・拠点・管理IP・保守状態）でも
+# 行が枠から切れないところまで取ってある
+_DETAIL_HEIGHT = 141.0
 _BOX_GROW = 55.0
 _BOX_GROW_H = 22.0
 _BOX_MAX = 620.0
@@ -1397,7 +1492,8 @@ _PEER_CLEAR_MIN = 120.0
 # 画面で隣り合う箱の見た目のすき間。ポート名が両側から出るので広めに取る
 # 14+文字幅が両側なので 100 だとラベルが箱の間で潰れる
 _VISUAL_CLEAR_X = 120.0
-# 詳細箱＋バスの inset（28）が縦に入るよう、40 だと口が潰れて階段になる
+# 詳細箱＋バスの inset（28）が縦に入るよう、40 だと口が潰れて階段になる。
+# ここは箱と箱の実際のすき間で、ポート名が入る場所でもある。狭めない
 _VISUAL_CLEAR_Y = 72.0
 # sideToward（画面）と同じ閾値
 _SAME_ROW = 60.0
@@ -2001,10 +2097,10 @@ LAYOUT_GRID = 40.0
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
-#: 箱（190）＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
-_MIN_GAP_X = 300.0
-#: 詳細表示の箱（約 132）＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
-_MIN_GAP_Y = 204.0
+#: 箱＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
+_MIN_GAP_X = 340.0
+#: 詳細表示の箱＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
+_MIN_GAP_Y = 216.0
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

@@ -11,6 +11,8 @@ class DeviceBase(BaseModel):
     hostname: str = Field(min_length=1, max_length=120)
     #: 人が決める管理ID。社内台帳の番号など。空は未設定
     code: str | None = Field(default=None, max_length=80)
+    #: 人が付ける機器の名称。空ならホスト名で呼ぶ
+    label: str | None = Field(default=None, max_length=120)
     vendor: str = Field(min_length=1, max_length=80)
     model: str = Field(min_length=1, max_length=120)
     serial_number: str | None = None
@@ -63,6 +65,7 @@ class DeviceUpdate(BaseModel):
 
     hostname: str | None = Field(default=None, min_length=1, max_length=120)
     code: str | None = Field(default=None, max_length=80)
+    label: str | None = Field(default=None, max_length=120)
     vendor: str | None = Field(default=None, min_length=1, max_length=80)
     model: str | None = Field(default=None, min_length=1, max_length=120)
     serial_number: str | None = None
