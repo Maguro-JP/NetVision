@@ -1304,6 +1304,22 @@ function TopologyEditor() {
     },
   });
 
+  const encloseRacks = useMutation({
+    mutationFn: () =>
+      api.groupsFromRacks(
+        layer,
+        (graph?.nodes ?? []).map((node) => node.device_id),
+      ),
+    onSuccess: async (created) => {
+      setNotice(
+        created.length
+          ? `ラックごとの枠を ${created.length} 個作りました`
+          : "囲めるラックがありません（ラック名が入っている機器が要ります）",
+      );
+      await refresh({ takeLayout: false });
+    },
+  });
+
   const enclosePlanes = useMutation({
     mutationFn: () =>
       api.groupsFromPlanes(
@@ -1818,6 +1834,13 @@ function TopologyEditor() {
               title="見えている機器を拠点ごとに枠へ入れます。既にある枠は触りません"
             >
               拠点ごとに枠
+            </button>
+            <button
+              onClick={() => encloseRacks.mutate()}
+              disabled={!graph?.nodes.length || encloseRacks.isPending}
+              title="見えている機器をラックごとに枠へ入れます。ラック名が入っている機器だけが対象です"
+            >
+              ラックごとに枠
             </button>
             <button
               onClick={() => enclosePlanes.mutate()}

@@ -655,11 +655,13 @@ def _rank_root(
 PLANE_BACKBONE = "backbone"
 PLANE_METRO = "metro"
 PLANE_ACCESS = "access"
+#: 枠の色。暗い画面でも輪郭とラベルが読める明るさにする。
+#: 印刷（白地）でも沈まないよう、中間の明度に寄せてある
 PLANE_COLORS = {
-    PLANE_BACKBONE: "#2f4d6a",
-    PLANE_METRO: "#4a7a58",
-    PLANE_ACCESS: "#8a6a3a",
-    "custom": "#5a7a9a",
+    PLANE_BACKBONE: "#6f9fd0",
+    PLANE_METRO: "#7fbf8f",
+    PLANE_ACCESS: "#d0a367",
+    "custom": "#93b4d6",
 }
 PLANE_NAMES = {
     PLANE_BACKBONE: "コア網",
@@ -958,6 +960,36 @@ def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[To
                 db,
                 layer,
                 name,
+                [device.id for device in members],
+                plane="custom",
+                color=PLANE_COLORS["custom"],
+            )
+        )
+    return created
+
+
+def groups_from_racks(db: Session, layer: str, device_ids: list[int]) -> list[TopologyGroupView]:
+    """見えている機器をラックごとに枠へ入れる。既にある枠は触らない。
+
+    現場では「どのラックの何番」で機器を探す。図の上でも同じ単位でまとまって
+    いれば、図と現物の行き来がしやすい。ラック名が空の機器は枠に入れない。
+    """
+    if not device_ids:
+        return []
+    devices = list(db.scalars(select(Device).where(Device.id.in_(device_ids))))
+    taken = _grouped_device_ids(db, layer)
+    by_rack: dict[str, list[Device]] = {}
+    for device in devices:
+        if device.id in taken or not (device.rack or "").strip():
+            continue
+        by_rack.setdefault(device.rack.strip(), []).append(device)
+    created: list[TopologyGroupView] = []
+    for rack, members in sorted(by_rack.items()):
+        created.append(
+            create_group(
+                db,
+                layer,
+                f"ラック {rack}",
                 [device.id for device in members],
                 plane="custom",
                 color=PLANE_COLORS["custom"],
@@ -1417,6 +1449,25 @@ def _rank_slots(
     return across
 
 
+def _series_order(names: list[str]) -> list[str] | None:
+    """同じ名前の連番なら、番号の若い順に並べた名前を返す。連番でなければ None。
+
+    現場は「01 が左」で読む。ポート番号順に置くと、実機の配線の都合で
+    02 が左に来ることがあり、図としては読みにくい。
+    """
+    if len(names) < 2:
+        return None
+    parts: list[tuple[str, int, str]] = []
+    for name in names:
+        match = re.fullmatch(r"(.*?)(\d+)", name.strip())
+        if not match:
+            return None
+        parts.append((match.group(1), int(match.group(2)), name))
+    if len({prefix for prefix, _, _ in parts}) != 1:
+        return None
+    return [name for _, _, name in sorted(parts, key=lambda item: item[1])]
+
+
 def _child_order(
     parent_id: int,
     candidates: list[int],
@@ -1429,6 +1480,8 @@ def _child_order(
     """配下の左右の順。
 
     初期配置はポート番号順。実機の並びと線が交差しないことの両方に効く。
+    ただし、同じ名前の連番（sw-01, sw-02 …）が並ぶときは番号順にする。
+    図は左上ほど上位・左ほど若い番号、という読み方をされるため。
     最適化は、人が置いた左右を意思として残し、その間に未配置をポート順で入れる。
     """
     if not candidates:
@@ -1440,7 +1493,12 @@ def _child_order(
             by_id[device_id].hostname,
         )
 
-    ideal = sorted(candidates, key=by_port)
+    series = _series_order([by_id[device_id].hostname for device_id in candidates])
+    if series is not None:
+        rank = {name: index for index, name in enumerate(series)}
+        ideal = sorted(candidates, key=lambda i: (rank[by_id[i].hostname], by_port(i)))
+    else:
+        ideal = sorted(candidates, key=by_port)
     if not polish:
         return ideal
 

@@ -547,8 +547,9 @@ button:disabled {
 .topo-node.selected {
   outline: 2px solid var(--accent);
 }
+/* 機器を囲む枠。図の背景に沈まないよう、輪郭と見出しをはっきり出す */
 .topo-group {
-  border: 1.6px dashed;
+  border: 2px dashed;
   border-radius: 10px;
   pointer-events: all;
   box-sizing: border-box;
@@ -557,11 +558,19 @@ button:disabled {
   border-style: solid;
   outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
 }
+/* 枠の見出し。図の線や箱に紛れないよう、枠の色で塗った札にする */
 .topo-group-label {
+  display: inline-block;
+  margin: 5px 0 0 8px;
+  padding: 2px 8px;
+  border-radius: 6px;
+  background: currentColor;
   font-size: 11px;
   font-weight: 700;
-  padding: 6px 10px;
   letter-spacing: 0.02em;
+}
+.topo-group-label span {
+  color: #10161d;
 }
 /* 枠と左の帯は保守状態。白黒で刷っても位置で区別できるよう帯は残す */
 .topo-node.sev-expired {

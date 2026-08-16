@@ -300,3 +300,21 @@ def test_box_height_grows_when_left_right_is_busy():
     assert _box_height(3) == 78.0 + 22.0
     assert _box_height(8) == 78.0 + 6 * 22.0
     assert _box_width(8) == _BOX_WIDTH + 5 * 55.0
+
+
+def test_same_name_series_goes_left_to_right_by_number():
+    """同じ名前の連番は、番号の若い順に左から並べる。
+
+    図は左上ほど上位、左ほど若い番号という読み方をされる。実機のポート順が
+    逆でも、図としては 01 を左に置く。
+    """
+    from app.services.topology import _series_order
+
+    assert _series_order(["a-sw-02", "a-sw-01", "a-sw-10"]) == [
+        "a-sw-01",
+        "a-sw-02",
+        "a-sw-10",
+    ]
+    # 名前の系列がそろっていなければ触らない（ポート順のまま）
+    assert _series_order(["core-rt-01", "acc-sw-01"]) is None
+    assert _series_order(["hub"]) is None

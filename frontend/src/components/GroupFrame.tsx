@@ -25,12 +25,14 @@ export default function GroupFrame({
         width: data.width,
         height: data.height,
         borderColor: data.color,
-        background: `${data.color}18`,
+        background: `${data.color}14`,
       }}
     >
       <div className="topo-group-label" style={{ color: data.color }}>
-        {data.label}
-        {data.plane !== "custom" ? ` · ${PLANE_LABEL[data.plane] ?? data.plane}` : ""}
+        <span>
+          {data.label}
+          {data.plane !== "custom" ? ` · ${PLANE_LABEL[data.plane] ?? data.plane}` : ""}
+        </span>
       </div>
     </div>
   );

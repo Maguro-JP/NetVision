@@ -439,6 +439,11 @@ export const api = {
       `/topology/groups/from-sites${query({ layer, device_ids: deviceIds.join(",") })}`,
       { method: "POST" },
     ),
+  groupsFromRacks: (layer: string, deviceIds: number[]) =>
+    request<TopologyGroup[]>(
+      `/topology/groups/from-racks${query({ layer, device_ids: deviceIds.join(",") })}`,
+      { method: "POST" },
+    ),
   groupsFromPlanes: (layer: string, deviceIds: number[]) =>
     request<TopologyGroup[]>(
       `/topology/groups/from-planes${query({ layer, device_ids: deviceIds.join(",") })}`,
