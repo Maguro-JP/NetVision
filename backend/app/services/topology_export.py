@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from math import atan2, cos, degrees, sin
 from xml.sax.saxutils import escape
@@ -103,6 +104,20 @@ _BUNDLE_LABEL_W = 56.0
 
 # 日本語が入るので、環境にありそうなものを順に並べる
 FONT = "'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif"
+
+
+def _port_key(name: str | None) -> tuple:
+    """ポート名を現場の並び順で比べるための鍵。
+
+    文字の順だと Gi0/10 が Gi0/2 より前に来る。数字の並びは数として比べると、
+    機器の面板と同じ順になる。画面（TopologyPage の comparePortNames）と同じ規則。
+    """
+    if not name:
+        return ()
+    return tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.findall(r"\d+|\D+", name.lower())
+    )
 
 
 def _esc(value: object) -> str:
@@ -345,7 +360,7 @@ def render_svg(
     ]
 
     sides: dict[int, tuple[str, str]] = {}
-    groups: dict[tuple[int, str], list[tuple[float, int]]] = {}
+    groups: dict[tuple[int, str], list[tuple[float, tuple, int]]] = {}
     boxes_by_id = {
         n.device_id: (
             at[n.device_id][0],
@@ -376,8 +391,12 @@ def render_svg(
         sides[edge.id] = (src_side, dst_side)
         src_along = dst_box[1] if src_side in ("left", "right") else dst_box[0]
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
-        groups.setdefault((edge.source, src_side), []).append((src_along, edge.id))
-        groups.setdefault((edge.target, dst_side), []).append((dst_along, edge.id))
+        groups.setdefault((edge.source, src_side), []).append(
+            (src_along, _port_key(edge.source_interface), edge.id)
+        )
+        groups.setdefault((edge.target, dst_side), []).append(
+            (dst_along, _port_key(edge.target_interface), edge.id)
+        )
 
     # 図の外の対向へ出る線も、同じ辺の口を分け合う。辺の中央に固定したままだと、
     # 同じ辺から出ている結線と重なり、線どうしが交差する。
@@ -397,7 +416,7 @@ def render_svg(
         side = _side_toward(anchor_box, peer_box)
         peer_sides[key] = side
         along = peer_box[1] if side in ("left", "right") else peer_box[0]
-        groups.setdefault((peer.anchor, side), []).append((along, key))
+        groups.setdefault((peer.anchor, side), []).append((along, (), key))
 
     lane_rank: dict[int, tuple[int, int]] = {}
     face_t: dict[tuple[int, str, int], float] = {}
@@ -408,7 +427,7 @@ def render_svg(
         ideals: list[float] = []
         # 同じ相手行きの束を詰めて置くため、辺ごとの相手を控える
         opposite: list[int] = []
-        for _, edge_id in members:
+        for _, _, edge_id in members:
             if edge_id < 0:
                 ideals.append(_face_t(box, side, peer_boxes_by_key[edge_id]))
                 opposite.append(edge_id)
@@ -417,7 +436,7 @@ def render_svg(
             other_id = edge.target if edge.source == device_id else edge.source
             ideals.append(_face_t(box, side, boxes_by_id[other_id]))
             opposite.append(other_id)
-        for index, (_, edge_id) in enumerate(members):
+        for index, (_, _, edge_id) in enumerate(members):
             lane_rank[edge_id] = (index, len(members))
         vertical_face = side in ("left", "right")
         spaced = _space_face_ts(
@@ -426,7 +445,7 @@ def render_svg(
             opposite,
             horizontal=not vertical_face,
         )
-        for (_, edge_id), t in zip(members, spaced, strict=False):
+        for (_, _, edge_id), t in zip(members, spaced, strict=False):
             face_t[(device_id, side, edge_id)] = t
 
     # --- 結線（ノードより先に描いて背面に回す） ---

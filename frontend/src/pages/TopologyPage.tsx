@@ -247,6 +247,32 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
 }
 
 /**
+ * ポート名を現場の並び順で比べる。
+ *
+ * 文字の順だと Gi0/10 が Gi0/2 より前に来てしまう。数字の並びは数として、
+ * 間の文字はそのまま比べると、機器の面板と同じ順になる。
+ */
+export function comparePortNames(a: string, b: string): number {
+  const parts = (name: string) =>
+    name.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const left = parts(a);
+  const right = parts(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const x = left[i];
+    const y = right[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const bothNumbers = /^\d/.test(x) && /^\d/.test(y);
+    if (bothNumbers) {
+      if (Number(x) !== Number(y)) return Number(x) - Number(y);
+      continue;
+    }
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
  * 各結線の引き出し口を決める。
  *
  * 人が指定していれば従い、していなければ位置関係から選ぶ。
@@ -296,7 +322,13 @@ export function assignAnchors(
       y2: node.y - sy + h,
     };
   };
-  const ends: { edge: number; device: number; side: Side; other: number }[] = [];
+  const ends: {
+    edge: number;
+    device: number;
+    side: Side;
+    other: number;
+    port: string;
+  }[] = [];
   for (const edge of graph.edges) {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
@@ -315,12 +347,14 @@ export function assignAnchors(
       device: edge.source,
       side: faces.sourceFace,
       other: edge.target,
+      port: edge.source_interface ?? "",
     });
     ends.push({
       edge: edge.id,
       device: edge.target,
       side: faces.targetFace,
       other: edge.source,
+      port: edge.target_interface ?? "",
     });
   }
 
@@ -478,6 +512,12 @@ export function assignAnchors(
     return result;
   };
 
+  // 同じ相手への束は、相手の位置では順が決まらない。ここでポート名の順に並べる。
+  // 若い番号を上（上下の辺なら左）に置くと、現場の感覚どおり左上が上位になり、
+  // 両端で同じ順になるので束の中で線が交差しない。
+  const inFace = (a: (typeof ends)[number], b: (typeof ends)[number]) =>
+    comparePortNames(a.port, b.port) || a.edge - b.edge;
+
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
   const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
   for (const [, members] of groups) {
@@ -488,7 +528,7 @@ export function assignAnchors(
       if (!node) return 0;
       return side === "top" || side === "bottom" ? node.x : node.y;
     };
-    members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
+    members.sort((a, b) => along(a.other) - along(b.other) || inFace(a, b));
     const facePx =
       side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
     const spaced = spaceTs(
@@ -561,7 +601,7 @@ export function assignAnchors(
       room >= fitMin ? Math.min(LANE_GAP, room / steps) : Math.max(0, room / steps);
 
     [...members]
-      .sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge)
+      .sort((a, b) => along(a.other) - along(b.other) || inFace(a, b))
       .forEach((end, index) => {
         if (!lanes.has(end.edge)) {
           lanes.set(end.edge, index * gap);

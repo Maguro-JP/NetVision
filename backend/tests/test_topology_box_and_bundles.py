@@ -88,3 +88,20 @@ def test_order_follows_the_projection():
     """並びは相手の方角どおり。入れ替わると線が交差する。"""
     spaced = _space_face_ts([0.2, 0.5, 0.8], 190.0, [1, 2, 3])
     assert spaced == sorted(spaced)
+
+
+def test_port_order_puts_the_lowest_number_first():
+    """束の中の並びはポート番号順。若い番号が上（左）に来る。"""
+    from app.services.topology_export import _port_key
+
+    names = ["Gi0/10", "Gi0/2", "Gi0/1"]
+    assert sorted(names, key=_port_key) == ["Gi0/1", "Gi0/2", "Gi0/10"]
+
+
+def test_port_order_matches_the_screen_rule():
+    """画面と同じ規則であること。ずれると図と画面で束の並びが食い違う。"""
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "TopologyPage.tsx"
+    ).read_text(encoding="utf-8")
+    assert "export function comparePortNames" in source
+    assert "comparePortNames(a.port, b.port)" in source

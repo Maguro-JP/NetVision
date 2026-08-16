@@ -24,6 +24,7 @@ import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
+  comparePortNames,
   keepLocalPositions,
   shiftFor,
   shiftYFor,
@@ -632,5 +633,15 @@ describe("箱幅・高さとポート名の画面座標", () => {
       // ラベルは 10px / line-height 1.2 / 上下余白1px で 14px
       expect(ys[index] - ys[index - 1]).toBeGreaterThanOrEqual(14);
     }
+  });
+});
+describe("comparePortNames", () => {
+  it("番号は数として比べる（Gi0/2 が Gi0/10 より先）", () => {
+    const names = ["Gi0/10", "Gi0/2", "Gi0/1"];
+    expect([...names].sort(comparePortNames)).toEqual(["Gi0/1", "Gi0/2", "Gi0/10"]);
+  });
+
+  it("接頭辞が違えば名前の順", () => {
+    expect(comparePortNames("Eth1", "Gi0/1")).toBeLessThan(0);
   });
 });
