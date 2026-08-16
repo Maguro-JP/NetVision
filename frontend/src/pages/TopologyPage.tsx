@@ -30,7 +30,6 @@ import DeviceNode, {
 import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
 import WindowLink, { deviceWindow, openInWindow } from "../components/WindowLink";
 import PortLabeledEdge, {
-  PORT_LABEL_SIDE,
   type PortEdgeData,
   type WireBox,
   facesForEdge,
@@ -166,9 +165,6 @@ const TIER = 100;
 const COLUMN = 400;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
-/** ポート名1行が要る高さ。これより近い線どうしは、名前を逃がさないと重なる。 */
-const PORT_LABEL_ROW = PORT_LABEL_SIDE + 2;
-
 export const DEFAULT_WIDTH = 210;
 /** シンプル表示（機器名だけ）の箱の高さ。 */
 export const DEFAULT_HEIGHT = 78;
@@ -554,19 +550,27 @@ export function assignAnchors(
     });
     faceHandles.set(device, list);
 
-    // 隣の線が近すぎるところは、ポート名を線の反対側へ逃がす。ブリッジのように
-    // 2本を寄せて張るところは、全部を同じ側へ出すと必ず文字がぶつかる。
-    // 近い組だけ互い違いにすれば、離れているところの読み順は崩れない。
-    let escaped = false;
-    members.forEach((end, index) => {
-      if (index === 0) {
-        escaped = false;
-        return;
-      }
-      const apart = Math.abs(spaced[index] - spaced[index - 1]) * facePx;
-      escaped = apart < PORT_LABEL_ROW ? !escaped : false;
-      if (escaped) flipped.add(`${end.edge}:${end.device}`);
-    });
+    // ポート名は既定で線の下に出す。上下に振り分けると、同じ辺の名前を
+    // 上から順に読めない。
+    //
+    // ただしチャネルのように同じ相手へ2本だけ張るところは、上の線の名前を
+    // 上、下の線の名前を下に出して、線の束を文字で挟む。2本の間に名前が
+    // 挟まると、どちらの線のものか分からない。
+    //
+    // 3本以上を挟むと真ん中の行き場が無く、釣り合いも崩れるので全部下に出す。
+    const sameP = new Map<number, (typeof members)[number][]>();
+    for (const end of members) {
+      (sameP.get(end.other) ?? sameP.set(end.other, []).get(end.other)!).push(end);
+    }
+    for (const pair of sameP.values()) {
+      if (pair.length !== 2) continue;
+      const [top] = pair.slice().sort((a, b) => {
+        const ta = spaced[members.indexOf(a)];
+        const tb = spaced[members.indexOf(b)];
+        return ta - tb;
+      });
+      flipped.add(`${top.edge}:${top.device}`);
+    }
   }
 
   for (const edge of graph.edges) {

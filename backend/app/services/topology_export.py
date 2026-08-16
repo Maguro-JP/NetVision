@@ -448,6 +448,40 @@ def render_svg(
         for (_, _, edge_id), t in zip(members, spaced, strict=False):
             face_t[(device_id, side, edge_id)] = t
 
+    # 線のどちら側にポート名を出すかを、結線ごとに先に決める。
+    #
+    #   ・既定は下。上下に振り分けると、同じ辺のポート名を上から順に読めない
+    #   ・チャネルのように2本を寄せて張るところは、上の線の名前を上、下の線の
+    #     名前を下に出して、線の束を文字で挟む。名前が2本の間に挟まると、
+    #     どちらの線のものか分からない
+    #   ・3本以上を挟むと真ん中の行き場が無く、釣り合いも崩れる。全部下に出す
+    #
+    # 両端で同じ側にするのが肝心で、片側だけ上にすると、水平な線でも文字が
+    # 斜めに並び、左下から右上へ上っているように見える。
+    label_side: dict[int, str] = {}
+    same_peer: dict[tuple[int, int], list[int]] = {}
+    for edge in graph.edges:
+        if edge.source not in at or edge.target not in at:
+            continue
+        src_side, _ = sides.get(edge.id, ("right", "left"))
+        if src_side not in ("left", "right"):
+            continue
+        pair = (min(edge.source, edge.target), max(edge.source, edge.target))
+        same_peer.setdefault(pair, []).append(edge.id)
+    for edge_ids in same_peer.values():
+        if len(edge_ids) == 2:
+            top, bottom = sorted(
+                edge_ids,
+                key=lambda edge_id: face_t.get(
+                    (edge_by_id[edge_id].source, sides[edge_id][0], edge_id), 0.5
+                ),
+            )
+            label_side[top] = "up"
+            label_side[bottom] = "down"
+        else:
+            for edge_id in edge_ids:
+                label_side[edge_id] = "down"
+
     # --- 結線（ノードより先に描いて背面に回す） ---
     pending: list[tuple[list[tuple[float, float]], object]] = []
     # 引き直し用に、その結線を引いたときの条件を控える
@@ -575,6 +609,7 @@ def render_svg(
                 placement,
                 half_w=sw / 2,
                 half_h=sh / 2,
+                prefer=label_side.get(edge.id),
             )
         )
         parts.append(
@@ -589,6 +624,7 @@ def render_svg(
                 placement,
                 half_w=tw / 2,
                 half_h=th / 2,
+                prefer=label_side.get(edge.id),
             )
         )
         for name in (edge.source_interface, edge.target_interface):
@@ -1815,6 +1851,7 @@ def _port_label(
     *,
     half_w: float | None = None,
     half_h: float | None = None,
+    prefer: str | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -1866,21 +1903,33 @@ def _port_label(
     # 中心→出口だけの距離だと limit が短く追加候補を置けない。
     # 出口の先（枠の外）へ出す候補を、線に沿って必ず数点足す。
     exit_at = _exit_distance(ux, uy, half_w=half_w, half_h=half_h)
+    # 線のどちら側へ出すかは、結線ごとに先に決めてある。ここでは、その側の候補を
+    # 先に試すだけにする。両端で側が食い違うと、水平な線でも文字が斜めに並び、
+    # 左下から右上へ上っているように見えてしまう
+    want = 0.0
+    if prefer and abs(ux) > 0.2:
+        want = (1.0 if ux > 0 else -1.0) * (1.0 if prefer == "down" else -1.0)
+    ordered = _candidate_offsets(base, max(limit, base + 1))
+    if want:
+        ordered.sort(key=lambda item: 0 if item[2] == want else 1)
     spots = [
         (
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(base, max(limit, base + 1))
+        for step, offset, side in ordered
     ]
+    extra = [
+        (_SIDE_OFFSET, 1.0),
+        (_SIDE_OFFSET, -1.0),
+        (_SIDE_OFFSET + 11.0, 1.0),
+        (_SIDE_OFFSET + 11.0, -1.0),
+    ]
+    if want:
+        extra.sort(key=lambda item: 0 if item[1] == want else 1)
     for outward in (6.0, 14.0, 24.0):
         along = exit_at + _LABEL_GAP + outward
-        for offset, side in (
-            (_SIDE_OFFSET, 1.0),
-            (_SIDE_OFFSET, -1.0),
-            (_SIDE_OFFSET + 11.0, 1.0),
-            (_SIDE_OFFSET + 11.0, -1.0),
-        ):
+        for offset, side in extra:
             spots.append(
                 (
                     x1 + ux * along - uy * offset * side,

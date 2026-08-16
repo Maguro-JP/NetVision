@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1186" height="751" viewBox="0 0 1186 751" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 物理構成</text>
-<text x="1138" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:30 JST 時点 / レイヤ: physical / 6台 5本</text>
+<text x="1138" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:46 JST 時点 / レイヤ: physical / 6台 5本</text>
 <polyline points="225,278 225,163 241,163 241,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="223.9" y="260.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="244.4" y="155.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
@@ -9,13 +9,13 @@
 <text class="port-label" x="402.1" y="260.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="381.6" y="155.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <polyline points="608,348 418,348" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="598.0" y="334.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="598.0" y="356.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="428.0" y="356.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <polyline points="945,375 945,641 401,641 401,419" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="941.6" y="395.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="402.1" y="430.8" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <polyline points="608,566 446,566 446,408 418,408" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="600.5" y="550.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
+<text class="port-label" x="595.9" y="571.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0</text>
 <text class="port-label" x="421.3" y="419.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <g><rect x="48" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="60" y="104" font-size="12" fill="#4a5364">◇</text><text x="78" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-01</text><text x="60" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>
 <g><rect x="368" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="380" y="104" font-size="12" fill="#4a5364">◇</text><text x="398" y="104" font-size="12" font-weight="700" fill="#4a5364">west-core-rt-02</text><text x="380" y="120" font-size="10" fill="#7a828f">西日本センター</text></g>

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="986" height="1129" viewBox="0 0 986 1129" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">本社 物理構成</text>
-<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:30 JST 時点 / レイヤ: physical / 7台 8本</text>
+<text x="938" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 20:46 JST 時点 / レイヤ: physical / 7台 8本</text>
 <polyline points="313,419 313,518" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="302.0" y="430.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
 <text class="port-label" x="324.0" y="501.0" font-size="10" fill="#5a6270" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">port1</text>
@@ -12,17 +12,17 @@
 <text class="port-label" x="402.1" y="670.8" font-size="10" fill="#5a6270" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">port3</text>
 <text class="port-label" x="363.3" y="685.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/23</text>
 <polyline points="258,734 368,734" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="269.4" y="740.5" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
+<text class="port-label" x="266.4" y="718.7" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
 <text class="port-label" x="359.6" y="718.7" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/1</text>
 <polyline points="258,763 368,763" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="266.4" y="772.3" font-size="10" fill="#2d8a4e" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
-<text class="port-label" x="356.6" y="750.5" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
+<text class="port-label" x="359.6" y="772.3" font-size="10" fill="#2d8a4e" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Te1/1/2</text>
 <polyline points="153,819 153,878" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="142.0" y="830.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
 <text class="port-label" x="164.0" y="861.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>
 <polyline points="418,308 700,308 700,331 728,331" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="431.3" y="312.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<text class="port-label" x="715.9" y="319.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="720.5" y="340.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
 <polyline points="313,278 313,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="324.0" y="261.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
 <text class="port-label" x="302.0" y="146.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
