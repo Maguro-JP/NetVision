@@ -683,6 +683,7 @@ function toFlow(
       accent: options.colors.types[node.device_type],
       serialNumber: simple ? null : node.serial_number,
       statusLabel: simple ? null : DEVICE_STATUS_LABEL[node.status],
+      runState: simple ? null : node.status,
       typeLabel: simple ? null : DEVICE_TYPE_LABEL[node.device_type],
     } satisfies DeviceNodeData,
     draggable: options.editable,

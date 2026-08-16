@@ -50,6 +50,8 @@ export interface DeviceNodeData extends Record<string, unknown> {
   serialNumber?: string | null;
   /** 台帳の稼働状態（稼働中 / 予備機 / 保守中）。右下に小さく出す */
   statusLabel?: string | null;
+  /** 稼働状態の値。背景の色分けに使う（active / standby / maintenance / retired） */
+  runState?: string | null;
   /** 種別の呼び名。右上に小さく出す */
   typeLabel?: string | null;
 }
@@ -145,6 +147,7 @@ export default function DeviceNode({
       }}
       className={
         `topo-node ${data.severity && !data.outside ? `sev-${data.severity}` : "simple"} ` +
+        (data.runState && !data.outside ? `run-${data.runState} ` : "") +
         (data.outside ? "outside " : "") +
         (data.editable ? "editable " : "") +
         (selected ? "selected" : "")

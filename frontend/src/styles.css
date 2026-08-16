@@ -527,15 +527,22 @@ button:disabled {
   padding: 8px 10px;
   font-size: 12px;
   box-shadow: 0 2px 6px rgb(0 0 0 / 40%);
+  display: flex;
+  flex-direction: column;
 }
-/* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、
-   相手は輪郭を破線にして控えめに出す */
+/* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、相手は輪郭を破線にして
+   控えめに出す。中身は名前と拠点だけで、先はその拠点の図で追う */
 .topo-node.outside {
   border: 1px dashed var(--border);
   border-left: 4px dashed var(--border);
   background: transparent;
   box-shadow: none;
   opacity: 0.85;
+  cursor: pointer;
+}
+.topo-node.outside:hover {
+  border-color: var(--accent);
+  opacity: 1;
 }
 .topo-node.selected {
   outline: 2px solid var(--accent);
@@ -556,6 +563,7 @@ button:disabled {
   padding: 6px 10px;
   letter-spacing: 0.02em;
 }
+/* 枠と左の帯は保守状態。白黒で刷っても位置で区別できるよう帯は残す */
 .topo-node.sev-expired {
   border-left-color: var(--sev-expired);
 }
@@ -568,6 +576,12 @@ button:disabled {
 .topo-node.sev-ok {
   border-left-color: var(--sev-ok);
 }
+/* 背景は稼働状態。止まっているものは灰色寄りにして、稼働中と見分ける */
+.topo-node.run-standby,
+.topo-node.run-maintenance,
+.topo-node.run-retired {
+  background: color-mix(in srgb, var(--sev-unknown) 16%, var(--panel-2));
+}
 /* シンプル表示。機器名だけを大きく出し、状態の色は付けない */
 .topo-node.simple {
   border-left-color: var(--border);
@@ -578,12 +592,30 @@ button:disabled {
   font-size: 15px;
 }
 
-.topo-node-head {
+/* 上段。左に管理ID、右に種別。名前の行を1行まるごと使えるようにする */
+.topo-node-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 10px;
+  line-height: 1.4;
+  color: var(--muted);
+  min-width: 0;
+}
+.topo-code,
+.topo-type {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.topo-type {
+  font-weight: 700;
+}
 
+.topo-node-head {
   display: flex;
   gap: 6px;
-  align-items: center;
-  margin-bottom: 4px;
+  align-items: baseline;
   min-width: 0;
 }
 .topo-glyph {
@@ -594,31 +626,59 @@ button:disabled {
    折り返すとその分だけ下の行が枠から切れる */
 .topo-hostname {
   font-weight: 700;
-  font-size: 13px;
+  font-size: 14px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+/* 機器名の下のホスト名。対向ではここに拠点名が入る */
+.topo-node-sub {
+  height: 15px;
+  padding-left: 20px;
+  font-size: 11px;
+  line-height: 15px;
+  color: var(--muted);
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 .topo-node-body {
-  line-height: 1.3;
+  margin-top: 3px;
+  line-height: 16px;
 }
 .topo-node-body > div {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
 }
-/* ポートの種類。線のラベルを短くしても、ここを見れば何のポートか分かる */
+/* ポートの種類。線のラベルを短くしても、ここを見れば何のポートか分かる。
+   2行ぶん取っておき、足りている機器は空きにする */
 .topo-node-ports {
   margin-top: 3px;
+  height: 26px;
   font-size: 10px;
   font-weight: 600;
-  white-space: nowrap;
+  line-height: 13px;
   overflow: hidden;
+}
+/* 下段。左に管理IP、右に稼働状態と保守状態 */
+.topo-node-foot {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 8px;
+  margin-top: auto;
+  font-size: 10px;
+  line-height: 16px;
+}
+.topo-node-ip {
+  font-variant-numeric: tabular-nums;
+  overflow: hidden;
+  white-space: nowrap;
   text-overflow: ellipsis;
 }
-.topo-node-foot {
-  margin-top: 5px;
-  font-size: 11px;
+.topo-node-state {
+  white-space: nowrap;
 }
 .sev-text-expired {
   color: var(--sev-expired);
