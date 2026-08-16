@@ -25,6 +25,9 @@ export interface PortEdgeData extends Record<string, unknown> {
   laneRank?: number;
   laneCount?: number;
   warning: string | null;
+  /** 隣の線が近すぎる端。ポート名を線の反対側（上下の辺なら1行外）へ逃がす */
+  sourceFlip?: boolean;
+  targetFlip?: boolean;
   /** 自分以外の機器の箱。線が貫かないよう迂回する */
   obstacles?: WireBox[];
   sourceBox?: WireBox;
@@ -35,10 +38,6 @@ export interface PortEdgeData extends Record<string, unknown> {
 export const PORT_LABEL_GAP = 14;
 /** 線に重ならないよう、線と垂直な向きへずらす幅。束の本数でさらに開く。 */
 export const PORT_LABEL_SIDE = 12;
-/** 警告（VLAN の食い違いなど）を線の反対側へ出す量。ポート名と別の帯にする。 */
-export const WARNING_SIDE = 30;
-/** この長さを超える警告は、線の脇には印だけ出す（中身はパネルと title で読む） */
-export const WARNING_INLINE_MAX = 8;
 
 const DIRECTION: Record<Position, [number, number]> = {
   [Position.Top]: [0, -1],
@@ -59,18 +58,30 @@ export function portLabelPlacement(
   position: Position,
   gap: number = PORT_LABEL_GAP,
   side: number = PORT_LABEL_SIDE,
+  flip: boolean = false,
 ): { x: number; y: number; anchor: string } {
   const [dx, dy] = DIRECTION[position] ?? [0, 0];
+  // 左右の辺は、どちらの辺から出ていても同じ向き（下）へずらす。
+  // 辺ごとに向きを変えると、向かい合う機器のポート名が同じ高さに並んで重なる。
+  // ただし隣の線が近すぎるときだけは、上へ逃がす（flip）。ブリッジのように
+  // 2本を寄せて張るところは、下に揃えると必ず文字がぶつかる
+  const across = dx !== 0 ? (flip ? -Math.abs(side) : Math.abs(side)) : dx * side;
+  // 上下の辺は左右へ逃がせない（線に沿って読むため）。代わりに1行ぶん外へ
+  // 出して、隣のポート名と段違いにする
+  const rows = dx === 0 && flip ? gap + PORT_LABEL_SIDE : gap;
   const px = x + dx * gap - dy * side;
-  const py = y + dy * gap + dx * side;
+  const py = y + dy * rows + across;
+  // 上下へ出すときは、線の左右どちらへ寄せたかに合わせて文字を伸ばす。
+  // 中央寄せにすると、上から出た線と下から出た線のポート名が同じ幅を取り合い、
+  // 段の間が狭いところで必ず重なる
   const anchor =
     position === Position.Right
       ? "0%, -50%"
       : position === Position.Left
         ? "-100%, -50%"
         : position === Position.Bottom
-          ? "-50%, 0%"
-          : "-50%, -100%";
+          ? "-100%, 0%"
+          : "0%, -100%";
   return { x: px, y: py, anchor };
 }
 
@@ -708,14 +719,18 @@ export default function PortLabeledEdge({
   const labelX = routed.labelX;
   const labelY = routed.labelY;
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
-  // 警告はポート名と別の帯へ出す。ポート名の側（portLabelPlacement）と符号が逆。
-  // 縦の線では、警告の文字を中央寄せにすると左右へ伸びてポート名に乗るので、
-  // 線の横に置いて外側へ伸ばす
-  const span = Math.hypot(targetX - sourceX, targetY - sourceY) || 1;
-  const upright = Math.abs(targetY - sourceY) >= Math.abs(targetX - sourceX);
-  const warnDx = ((targetY - sourceY) / span) * WARNING_SIDE;
-  const warnDy = (-(targetX - sourceX) / span) * WARNING_SIDE;
-  const warnAnchor = upright ? (warnDx >= 0 ? "0%, -50%" : "-100%, -50%") : "-50%, -50%";
+  // 左右の辺どうしを結ぶ線では、両端のポート名が箱の間の通路を分け合う。
+  // 半分を超えると必ず出会うので、そこで切って吹き出しで読ませる
+  const corridor =
+    sourcePosition === Position.Left || sourcePosition === Position.Right
+      ? Math.abs(targetX - sourceX)
+      : 0;
+  // 通路が狭いときは、箱から離す量も詰める。離したままだと名前が置けない
+  const sideGap = corridor && corridor < 160 ? 8 : PORT_LABEL_GAP;
+  // 通路の半分から、箱との間だけを引く。文字の余白は箱の中に含まれる
+  const sideRoom = corridor ? Math.max(24, corridor / 2 - sideGap - 2) : undefined;
+  // 警告は線のまん中に、印だけ置く。ポート名は線の左右へ出してあるので、
+  // 線の上そのものが空いている。文字まで出すと必ずどちらかのポート名に乗る
 
   return (
     <>
@@ -737,21 +752,26 @@ export default function PortLabeledEdge({
           )}
           <PortLabel
             name={info.sourceInterface ?? ""}
+            flip={info.sourceFlip ?? false}
             x={sourceX}
             y={sourceY}
             position={sourcePosition}
+            maxWidth={sideRoom}
+            gap={sideGap}
             angle={angle}
             style={info.portStyle ?? "short"}
             alongLine={info.alongLine ?? false}
             opacity={style?.opacity}
             color={typeof style?.stroke === "string" ? style.stroke : undefined}
-            rank={info.laneRank ?? 0}
           />
           <PortLabel
             name={info.targetInterface ?? ""}
+            flip={info.targetFlip ?? false}
             x={targetX}
             y={targetY}
             position={targetPosition}
+            maxWidth={sideRoom}
+            gap={sideGap}
             // 相手側から見た向き。ずらす向きが反転して、2つのラベルが
             // 線の反対側に出るので、機器が近くても重ならない
             angle={angle + 180}
@@ -759,30 +779,41 @@ export default function PortLabeledEdge({
             alongLine={info.alongLine ?? false}
             opacity={style?.opacity}
             color={typeof style?.stroke === "string" ? style.stroke : undefined}
-            rank={info.laneRank ?? 0}
           />
           {info.warning && (
             <div
               className="topo-edge-label warning"
               style={{
-                // ポート名は線の片側に並べてある。警告は反対側へ出す。
-                // 線に沿って下へずらすだけだと、隣の線のポート名に乗る
-                transform:
-                  `translate(${warnAnchor}) ` +
-                  `translate(${labelX + warnDx}px, ${labelY + warnDy}px)`,
+                // 警告は線のまん中に置く。ポート名は線の左右へ出してあるので、
+                // 線の上そのものが空いている
+                transform: `translate(-50%, -50%) translate(${labelX}px, ${labelY}px)`,
                 ...(style?.opacity ? { opacity: style.opacity } : {}),
               }}
               title={info.warning}
             >
-              {/* 長い警告を線の脇に広げると、必ずどこかのポート名に乗る。
-                  印だけ出し、中身は線を選んだときのパネルとここの title で読む */}
-              {info.warning.length > WARNING_INLINE_MAX ? "⚠" : `⚠ ${info.warning}`}
+              {/* 文字まで出すと必ずどこかのポート名に乗る。印だけ出し、
+                  中身は線を選んだときのパネルとここの吹き出しで読む */}
+              ⚠
             </div>
           )}
         </EdgeLabelRenderer>
       )}
     </>
   );
+}
+
+/**
+ * 置ける幅に収まる書き方を選ぶ。
+ *
+ * 箱の間が狭いところでは、略記でも収まらず「Te…」のように切れてしまう。
+ * それなら番号だけ（1/1/1）の方が、どのポートかを言い当てられる。
+ */
+function shortEnough(name: string, style: PortStyle, maxWidth?: number): string {
+  const text = formatPort(name, style);
+  if (!maxWidth) return text;
+  // 10px の文字は1文字あたり約6px。左右の余白 4px ずつを差し引いて測る
+  if (text.length * 6 <= maxWidth - 8) return text;
+  return formatPort(name, "number");
 }
 
 function PortLabel({
@@ -795,7 +826,9 @@ function PortLabel({
   alongLine,
   opacity,
   color,
-  rank = 0,
+  maxWidth,
+  gap = PORT_LABEL_GAP,
+  flip = false,
 }: {
   name: string;
   x: number;
@@ -806,21 +839,21 @@ function PortLabel({
   alongLine: boolean;
   opacity?: number | string;
   color?: string;
-  /** 同じ辺の束の順。ポート名を線と垂直方向へずらして被りを減らす */
-  rank?: number;
+  /** 置ける幅の上限。狭い通路では名前を切って重なりを防ぐ */
+  maxWidth?: number;
+  /** 箱から離す量。狭い通路では詰める */
+  gap?: number;
+  /** 隣の線が近いときの逃がし */
+  flip?: boolean;
 }) {
   if (!name) return null;
 
   // 引き出し口そのものがポート名の行の高さぶん離してあるので、ラベルは
   // 線の同じ側へ同じ量だけ出す。1本ごとに上下へ振り分けると、同じ辺の
   // ポート名が互い違いになって、上から順に読めなくなる
-  const placed = portLabelPlacement(
-    x,
-    y,
-    position,
-    PORT_LABEL_GAP + Math.min(rank, 4) * 3,
-    PORT_LABEL_SIDE,
-  );
+  // 口そのものがポート名の行の高さぶん離してあるので、線に沿って押し出す必要は
+  // ない。押し出すと、短い線では両端のポート名が中央で出会って重なる
+  const placed = portLabelPlacement(x, y, position, gap, PORT_LABEL_SIDE, flip);
   const normalized = ((angle + 180) % 360) - 180;
   const flipped = normalized > 90 || normalized <= -90;
   // 上下逆さまの文字は読めないので、半回転させて向きを揃える
@@ -832,11 +865,12 @@ function PortLabel({
       style={{
         transform: `translate(${placed.anchor}) translate(${placed.x}px, ${placed.y}px) rotate(${rotation}deg)`,
         color: color ?? MEDIA_COLOR[mediaOf(name)],
+        ...(maxWidth ? { maxWidth } : {}),
         ...(opacity ? { opacity } : {}),
       }}
       title={name}
     >
-      {formatPort(name, style)}
+      {shortEnough(name, style, maxWidth)}
     </div>
   );
 }

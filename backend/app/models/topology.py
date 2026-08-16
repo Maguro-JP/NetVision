@@ -200,6 +200,11 @@ class TopologyGroup(Base):
     # backbone = コア網 / metro = メトロ・集約 / access = アクセス / custom = 任意
     plane: Mapped[str] = mapped_column(String(20), default="custom")
     color: Mapped[str] = mapped_column(String(16), default="#5a7a9a")
+    # 外側の枠。ラックを部屋やフロアの枠で囲むときに使う。
+    # 親を消しても中の枠は残す（ラックの枠まで巻き添えで消えるのを避ける）
+    parent_id: Mapped[int | None] = mapped_column(
+        ForeignKey("topology_groups.id", ondelete="SET NULL"), nullable=True, index=True
+    )
 
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(

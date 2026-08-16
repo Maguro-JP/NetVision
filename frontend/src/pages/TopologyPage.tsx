@@ -60,7 +60,7 @@ import {
   undo as undoHistory,
   type EditHistory,
 } from "./topologyEditHistory";
-import { groupBox, updateGroupBounds } from "./topologyGroups";
+import { groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -199,6 +199,14 @@ const BUNDLE_LABEL_W = 56;
 export const DETAIL_HEIGHT =
   PAD_Y + TOP_ROW + HEAD_ROW + SUB_ROW + BODY_ROW * BODY_ROWS + PORTS_ROW + FOOT_ROW;
 
+/**
+ * 対向（絞り込みの外）の箱の高さ。中身は名前と拠点名の2行だけ。
+ *
+ * 自拠点と同じ大きさにすると、図の中で主役と脇役の区別が付かない。
+ * 引き出し口はこの高さを分母にするので、描く箱と同じ値を使うこと。
+ */
+export const OUTSIDE_HEIGHT = PAD_Y + HEAD_ROW + SUB_ROW;
+
 /** 上下の辺に来る本数から、箱の幅を決める。既定は 190px。
  *
  * 上辺・下辺の引き出しが詰まるとポート名が横に被るので、
@@ -239,6 +247,32 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
 }
 
 /**
+ * ポート名を現場の並び順で比べる。
+ *
+ * 文字の順だと Gi0/10 が Gi0/2 より前に来てしまう。数字の並びは数として、
+ * 間の文字はそのまま比べると、機器の面板と同じ順になる。
+ */
+export function comparePortNames(a: string, b: string): number {
+  const parts = (name: string) =>
+    name.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const left = parts(a);
+  const right = parts(b);
+  for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
+    const x = left[i];
+    const y = right[i];
+    if (x === undefined) return -1;
+    if (y === undefined) return 1;
+    const bothNumbers = /^\d/.test(x) && /^\d/.test(y);
+    if (bothNumbers) {
+      if (Number(x) !== Number(y)) return Number(x) - Number(y);
+      continue;
+    }
+    if (x !== y) return x < y ? -1 : 1;
+  }
+  return 0;
+}
+
+/**
  * 各結線の引き出し口を決める。
  *
  * 人が指定していれば従い、していなければ位置関係から選ぶ。
@@ -262,6 +296,8 @@ export function assignAnchors(
   faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
   lanes: Map<number, number>;
   laneRank: Map<number, { rank: number; count: number }>;
+  /** ポート名を線の反対側へ逃がす端。「結線id:機器id」 */
+  flipped: Set<string>;
 } {
   const simple = options.simple ?? false;
   const baseHeight = simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT;
@@ -288,7 +324,13 @@ export function assignAnchors(
       y2: node.y - sy + h,
     };
   };
-  const ends: { edge: number; device: number; side: Side; other: number }[] = [];
+  const ends: {
+    edge: number;
+    device: number;
+    side: Side;
+    other: number;
+    port: string;
+  }[] = [];
   for (const edge of graph.edges) {
     const source = nodes.get(edge.source);
     const target = nodes.get(edge.target);
@@ -307,12 +349,14 @@ export function assignAnchors(
       device: edge.source,
       side: faces.sourceFace,
       other: edge.target,
+      port: edge.source_interface ?? "",
     });
     ends.push({
       edge: edge.id,
       device: edge.target,
       side: faces.targetFace,
       other: edge.source,
+      port: edge.target_interface ?? "",
     });
   }
 
@@ -346,7 +390,9 @@ export function assignAnchors(
   // 対向の散らばりまで覆うと上の機器と箱が重なり、線が貫く。
   const heights = new Map<number, number>();
   for (const node of graph.nodes) {
-    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, baseHeight));
+    // 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    const base = !simple && node.outside ? OUTSIDE_HEIGHT : baseHeight;
+    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, base));
   }
 
   const faceHeight = (deviceId: number) => heights.get(deviceId) ?? baseHeight;
@@ -468,7 +514,14 @@ export function assignAnchors(
     return result;
   };
 
+  // 同じ相手への束は、相手の位置では順が決まらない。ここでポート名の順に並べる。
+  // 若い番号を上（上下の辺なら左）に置くと、現場の感覚どおり左上が上位になり、
+  // 両端で同じ順になるので束の中で線が交差しない。
+  const inFace = (a: (typeof ends)[number], b: (typeof ends)[number]) =>
+    comparePortNames(a.port, b.port) || a.edge - b.edge;
+
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
+  const flipped = new Set<string>(); // ポート名を逃がす端（辺 + 機器）
   const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
   for (const [, members] of groups) {
     const side = members[0].side;
@@ -478,7 +531,7 @@ export function assignAnchors(
       if (!node) return 0;
       return side === "top" || side === "bottom" ? node.x : node.y;
     };
-    members.sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge);
+    members.sort((a, b) => along(a.other) - along(b.other) || inFace(a, b));
     const facePx =
       side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
     const spaced = spaceTs(
@@ -496,6 +549,28 @@ export function assignAnchors(
       list.push({ id, side: end.side, t });
     });
     faceHandles.set(device, list);
+
+    // ポート名は既定で線の下に出す。上下に振り分けると、同じ辺の名前を
+    // 上から順に読めない。
+    //
+    // ただしチャネルのように同じ相手へ2本だけ張るところは、上の線の名前を
+    // 上、下の線の名前を下に出して、線の束を文字で挟む。2本の間に名前が
+    // 挟まると、どちらの線のものか分からない。
+    //
+    // 3本以上を挟むと真ん中の行き場が無く、釣り合いも崩れるので全部下に出す。
+    const sameP = new Map<number, (typeof members)[number][]>();
+    for (const end of members) {
+      (sameP.get(end.other) ?? sameP.set(end.other, []).get(end.other)!).push(end);
+    }
+    for (const pair of sameP.values()) {
+      if (pair.length !== 2) continue;
+      const [top] = pair.slice().sort((a, b) => {
+        const ta = spaced[members.indexOf(a)];
+        const tb = spaced[members.indexOf(b)];
+        return ta - tb;
+      });
+      flipped.add(`${top.edge}:${top.device}`);
+    }
   }
 
   for (const edge of graph.edges) {
@@ -551,7 +626,7 @@ export function assignAnchors(
       room >= fitMin ? Math.min(LANE_GAP, room / steps) : Math.max(0, room / steps);
 
     [...members]
-      .sort((a, b) => along(a.other) - along(b.other) || a.edge - b.edge)
+      .sort((a, b) => along(a.other) - along(b.other) || inFace(a, b))
       .forEach((end, index) => {
         if (!lanes.has(end.edge)) {
           lanes.set(end.edge, index * gap);
@@ -560,7 +635,17 @@ export function assignAnchors(
       });
   }
 
-  return { anchors: out, busiest, busiestTB, busiestLR, heights, faceHandles, lanes, laneRank };
+  return {
+    anchors: out,
+    busiest,
+    busiestTB,
+    busiestLR,
+    heights,
+    faceHandles,
+    lanes,
+    laneRank,
+    flipped,
+  };
 }
 
 /**
@@ -644,7 +729,7 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank } = assignAnchors(
+  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } = assignAnchors(
     graph,
     { simple },
   );
@@ -690,23 +775,34 @@ function toFlow(
     };
   });
 
-  const groups = (graph.groups ?? []).flatMap((group) => {
-    const members = devices.filter((node) => group.device_ids.includes(Number(node.id)));
-    const box = groupBox(
-      members.map((node) => ({
+  const deviceBox = new Map(
+    devices.map((node) => [
+      Number(node.id),
+      {
         x: node.position.x,
         y: node.position.y,
-        width: node.data.width,
-        height: node.data.height,
-      })),
-    );
+        width: node.data.width ?? DEFAULT_WIDTH,
+        height: node.data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT),
+      },
+    ]),
+  );
+  const specs = (graph.groups ?? []).map((group) => ({
+    id: group.id,
+    parentId: group.parent_id ?? null,
+    deviceIds: group.device_ids,
+  }));
+  const boxes = groupBoxes(specs, deviceBox);
+  const groups = (graph.groups ?? []).flatMap((group) => {
+    const box = boxes.get(group.id);
     if (!box) return [];
+    // 外側の枠ほど先に（背面に）描く。順が逆だと内側の枠の名前が隠れる
+    const depth = groupDepth(specs, group.id);
     return [
       {
         id: groupNodeId(group),
         type: "group" as const,
         position: { x: box.x, y: box.y },
-        zIndex: 0,
+        zIndex: Math.min(depth, 1),
         selectable: true,
         draggable: false,
         connectable: false,
@@ -717,11 +813,13 @@ function toFlow(
           width: box.width,
           height: box.height,
           groupId: group.id,
+          parentId: group.parent_id ?? null,
           deviceIds: group.device_ids,
         } satisfies GroupFrameData,
       },
     ];
   });
+  groups.sort((a, b) => a.zIndex - b.zIndex);
 
   const nodes = [...groups, ...devices];
 
@@ -771,6 +869,8 @@ function toFlow(
       laneRank: laneRank.get(edge.id)?.rank ?? 0,
       laneCount: laneRank.get(edge.id)?.count ?? 1,
       warning: simple ? null : warningOf(edge),
+      sourceFlip: flipped.has(`${edge.id}:${edge.source}`),
+      targetFlip: flipped.has(`${edge.id}:${edge.target}`),
       sourceBox: boxOf.get(edge.source),
       targetBox: boxOf.get(edge.target),
       obstacles: [...boxOf.entries()]
@@ -991,6 +1091,9 @@ function TopologyEditor() {
       });
 
       flow.nodes.forEach((n) => {
+        // 枠は機器ではないので、絞り込みの対象にならない。薄くすると
+        // ラックや部屋の枠が消え、どこに置いてある機材なのか分からなくなる
+        if (n.type === "group") return;
         if (matches.has(n.id)) return;
         n.style = { ...(n.style ?? {}), opacity: neighbours.has(n.id) ? 0.55 : 0.15 };
       });
@@ -1294,6 +1397,22 @@ function TopologyEditor() {
     },
   });
 
+  const encloseRacks = useMutation({
+    mutationFn: () =>
+      api.groupsFromRacks(
+        layer,
+        (graph?.nodes ?? []).map((node) => node.device_id),
+      ),
+    onSuccess: async (created) => {
+      setNotice(
+        created.length
+          ? `ラックごとの枠を ${created.length} 個作りました`
+          : "囲めるラックがありません（ラック名が入っている機器が要ります）",
+      );
+      await refresh({ takeLayout: false });
+    },
+  });
+
   const enclosePlanes = useMutation({
     mutationFn: () =>
       api.groupsFromPlanes(
@@ -1311,7 +1430,13 @@ function TopologyEditor() {
   });
 
   const patchGroup = useMutation({
-    mutationFn: (body: { name?: string; plane?: string; color?: string }) =>
+    mutationFn: (body: {
+      name?: string;
+      plane?: string;
+      color?: string;
+      parent_id?: number | null;
+      clear_parent?: boolean;
+    }) =>
       api.updateTopologyGroup(selectedGroupId!, body),
     onSuccess: async () => {
       await refresh({ takeLayout: false });
@@ -1810,6 +1935,13 @@ function TopologyEditor() {
               拠点ごとに枠
             </button>
             <button
+              onClick={() => encloseRacks.mutate()}
+              disabled={!graph?.nodes.length || encloseRacks.isPending}
+              title="見えている機器をラックごとに枠へ入れます。ラック名が入っている機器だけが対象です"
+            >
+              ラックごとに枠
+            </button>
+            <button
               onClick={() => enclosePlanes.mutate()}
               disabled={!graph?.nodes.length || enclosePlanes.isPending}
               title="見えている機器をコア網／メトロ／アクセスの段ごとに枠へ入れます。既にある枠は触りません"
@@ -2116,6 +2248,24 @@ function TopologyEditor() {
                       onChange={(event) => patchGroup.mutate({ color: event.target.value })}
                       title="枠の色"
                     />
+                    <select
+                      value={selectedGroup.parent_id ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (!value) patchGroup.mutate({ clear_parent: true });
+                        else patchGroup.mutate({ parent_id: Number(value) });
+                      }}
+                      title="外側の枠。フロアや部屋の枠でこの枠を囲みます"
+                    >
+                      <option value="">外側の枠なし</option>
+                      {(graph?.groups ?? [])
+                        .filter((item) => item.id !== selectedGroup.id)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} の中
+                          </option>
+                        ))}
+                    </select>
                     {editable && (
                       <button
                         className="danger"

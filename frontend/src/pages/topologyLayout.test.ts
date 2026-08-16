@@ -24,6 +24,7 @@ import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
+  comparePortNames,
   keepLocalPositions,
   shiftFor,
   shiftYFor,
@@ -632,5 +633,34 @@ describe("箱幅・高さとポート名の画面座標", () => {
       // ラベルは 10px / line-height 1.2 / 上下余白1px で 14px
       expect(ys[index] - ys[index - 1]).toBeGreaterThanOrEqual(14);
     }
+  });
+});
+describe("comparePortNames", () => {
+  it("番号は数として比べる（Gi0/2 が Gi0/10 より先）", () => {
+    const names = ["Gi0/10", "Gi0/2", "Gi0/1"];
+    expect([...names].sort(comparePortNames)).toEqual(["Gi0/1", "Gi0/2", "Gi0/10"]);
+  });
+
+  it("接頭辞が違えば名前の順", () => {
+    expect(comparePortNames("Eth1", "Gi0/1")).toBeLessThan(0);
+  });
+});
+
+describe("ポート名の逃がし", () => {
+  it("隣の線が近いと、線の反対側へ出す", () => {
+    const near = portLabelPlacement(100, 100, Position.Right, 14, 12, true);
+    const normal = portLabelPlacement(100, 100, Position.Right, 14, 12, false);
+    // 通常は線の下、逃がしたものは線の上
+    expect(normal.y).toBeGreaterThan(100);
+    expect(near.y).toBeLessThan(100);
+    // 線に沿った向きは変えない。どちらの機器のポートかが分からなくなる
+    expect(near.x).toBe(normal.x);
+  });
+
+  it("上下の辺は左右へ逃がせないので、1行外へ出す", () => {
+    const near = portLabelPlacement(100, 100, Position.Bottom, 14, 12, true);
+    const normal = portLabelPlacement(100, 100, Position.Bottom, 14, 12, false);
+    expect(near.y).toBeGreaterThan(normal.y);
+    expect(near.anchor).toBe(normal.anchor);
   });
 });

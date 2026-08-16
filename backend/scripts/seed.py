@@ -25,6 +25,7 @@ from app.models import (
 )
 from app.models.change_log import ChangeSource
 from app.models.topology import Interface, Link, LinkOrigin
+from app.services import topology
 from app.services.audit import audit_context
 from app.services.configparse import normalize
 from scripts.seed_wan import seed_wan
@@ -64,6 +65,8 @@ def _seed(force: bool) -> None:
         devices = [
             Device(
                 hostname="core-sw-01",
+                code="NW-00101",
+                label="本社コア1号機",
                 vendor="Cisco",
                 model="C9500-40X",
                 serial_number="FOC2401A001",
@@ -80,6 +83,8 @@ def _seed(force: bool) -> None:
             ),
             Device(
                 hostname="core-sw-02",
+                code="NW-00102",
+                label="本社コア2号機",
                 vendor="Cisco",
                 model="C9500-40X",
                 serial_number="FOC2401A002",
@@ -95,6 +100,8 @@ def _seed(force: bool) -> None:
             ),
             Device(
                 hostname="edge-rt-01",
+                code="NW-00001",
+                label="本社出口ルータ",
                 vendor="Juniper",
                 model="MX204",
                 serial_number="JN1234ABC",
@@ -109,6 +116,8 @@ def _seed(force: bool) -> None:
             ),
             Device(
                 hostname="fw-01",
+                code="NW-00002",
+                label="本社ファイアウォール",
                 vendor="Fortinet",
                 model="FortiGate-100F",
                 serial_number="FG100F0001",
@@ -122,6 +131,7 @@ def _seed(force: bool) -> None:
             ),
             Device(
                 hostname="acc-sw-01",
+                code="NW-00201",
                 vendor="Cisco",
                 model="C2960X-48TS-L",
                 device_type=DeviceType.SWITCH,
@@ -135,6 +145,7 @@ def _seed(force: bool) -> None:
             ),
             Device(
                 hostname="wlc-01",
+                code="NW-00301",
                 vendor="Cisco",
                 model="C9800-L-C-K9",
                 device_type=DeviceType.WIRELESS_CONTROLLER,
@@ -334,6 +345,34 @@ def _seed(force: bool) -> None:
                     ("core-sw-01", "KOKYAKU", "65000:200", "顧客提供系"),
                 ]
             ]
+        )
+        db.commit()
+
+        # 図の枠。機能があっても、デモに1つも無いと気づけない。
+        # 現場の単位（ラック）と、意味の単位（出口まわり）を入れ、さらに
+        # 部屋・フロアの枠で囲む。機材がどこに置いてあるかが図だけで分かる
+        floor = topology.create_group(db, "physical", "本社ビル 3F", [])
+        machine_room = topology.create_group(db, "physical", "301 マシン室", [], parent_id=floor.id)
+        topology.create_group(
+            db,
+            "physical",
+            "ラック A-01",
+            [by_host["core-sw-01"].id],
+            parent_id=machine_room.id,
+        )
+        topology.create_group(
+            db,
+            "physical",
+            "ラック A-02",
+            [by_host["core-sw-02"].id],
+            parent_id=machine_room.id,
+        )
+        topology.create_group(
+            db,
+            "physical",
+            "出口まわり",
+            [by_host["edge-rt-01"].id, by_host["fw-01"].id],
+            parent_id=floor.id,
         )
         db.commit()
 

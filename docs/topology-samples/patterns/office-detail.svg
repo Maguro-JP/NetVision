@@ -1,43 +1,43 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="306" height="813" viewBox="0 0 306 813" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="306" height="769" viewBox="0 0 306 769" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">営業所 物理構成</text>
-<text x="258" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 18:11 JST 時点 / レイヤ: physical / 3台 2本</text>
-<polyline points="153,322 153,223" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="160.0" y="305.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/0</title>GE0/0</text>
-<text class="port-label" x="146.0" y="234.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<polyline points="153,463 153,562" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="146.0" y="474.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/1</title>GE0/1</text>
-<text class="port-label" x="160.0" y="545.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigabitEthernet1/0/25</title>Gi1/0/25</text>
-<g><rect x="48" y="82" width="210" height="40" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="60" y="104" font-size="12" fill="#4a5364">◇</text><text x="78" y="104" font-size="12" font-weight="700" fill="#4a5364">east-core-rt-01</text><text x="60" y="120" font-size="10" fill="#7a828f">東日本センター</text></g>
-<g><rect x="48" y="322" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="322" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="246" y="340" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
-<text x="60" y="360" font-size="12" fill="#4a5364">◇</text>
-<text x="78" y="360" font-size="13" font-weight="700" fill="#1a1a1a">osaka-rt-01</text>
-<text x="62" y="376" font-size="10" fill="#5a6270">NEC IX2215</text>
-<text x="62" y="391" font-size="9"><tspan fill="#2f6fb5">GigaEthernet</tspan></text>
-<text x="246" y="453" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<text x="258" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-16 21:15 JST 時点 / レイヤ: physical / 3台 2本</text>
+<polyline points="153,278 153,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="164.0" y="261.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/0</title>GE0/0</text>
+<text class="port-label" x="142.0" y="146.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="153,419 153,518" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
+<text class="port-label" x="142.0" y="430.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigaEthernet0/1</title>GE0/1</text>
+<text class="port-label" x="164.0" y="501.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>GigabitEthernet1/0/25</title>Gi1/0/25</text>
+<g><rect x="48" y="82" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="60" y="104" font-size="12" fill="#4a5364">◇</text><text x="78" y="104" font-size="12" font-weight="700" fill="#4a5364">east-core-rt-01</text><text x="60" y="120" font-size="10" fill="#7a828f">東日本センター</text></g>
+<g><rect x="48" y="278" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="278" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="246" y="296" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルータ</text>
+<text x="60" y="316" font-size="12" fill="#4a5364">◇</text>
+<text x="78" y="316" font-size="13" font-weight="700" fill="#1a1a1a">osaka-rt-01</text>
+<text x="62" y="332" font-size="10" fill="#5a6270">NEC IX2215</text>
+<text x="62" y="347" font-size="9"><tspan fill="#2f6fb5">GigaEthernet</tspan></text>
+<text x="246" y="409" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="48" y="562" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="562" width="5" height="141" rx="2" fill="#7a7a7a"/>
-<text x="246" y="580" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
-<text x="60" y="600" font-size="12" fill="#4a5364">▭</text>
-<text x="78" y="600" font-size="13" font-weight="700" fill="#1a1a1a">osaka-sw-01</text>
-<text x="62" y="616" font-size="10" fill="#5a6270">NEC QX-S5528P</text>
-<text x="62" y="631" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
-<text x="246" y="693" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
+<g><rect x="48" y="518" width="210" height="141" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="518" width="5" height="141" rx="2" fill="#7a7a7a"/>
+<text x="246" y="536" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">スイッチ</text>
+<text x="60" y="556" font-size="12" fill="#4a5364">▭</text>
+<text x="78" y="556" font-size="13" font-weight="700" fill="#1a1a1a">osaka-sw-01</text>
+<text x="62" y="572" font-size="10" fill="#5a6270">NEC QX-S5528P</text>
+<text x="62" y="587" font-size="9"><tspan fill="#2f6fb5">GigabitEthernet</tspan></text>
+<text x="246" y="649" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<line x1="48" y1="749" x2="258" y2="749" stroke="#dfe3ea" stroke-width="1"/>
-<text x="48" y="765" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
-<rect x="144" y="756" width="10" height="10" rx="2" fill="#c0392b"/>
-<text x="159" y="765" font-size="10" fill="#4a4a4a">期限切れ</text>
-<rect x="210" y="756" width="10" height="10" rx="2" fill="#e07b39"/>
-<text x="225" y="765" font-size="10" fill="#4a4a4a">90日以内</text>
-<rect x="287" y="756" width="10" height="10" rx="2" fill="#c9a227"/>
-<text x="302" y="765" font-size="10" fill="#4a4a4a">1年以内</text>
-<rect x="353" y="756" width="10" height="10" rx="2" fill="#2d8a4e"/>
-<text x="368" y="765" font-size="10" fill="#4a4a4a">余裕あり</text>
-<rect x="419" y="756" width="10" height="10" rx="2" fill="#7a7a7a"/>
-<text x="434" y="765" font-size="10" fill="#4a4a4a">情報未登録</text>
-<text x="48" y="785" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
-<text x="298" y="785" font-size="10" fill="#6b6b6b">ポート種別</text>
-<text x="358" y="785" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
+<line x1="48" y1="705" x2="258" y2="705" stroke="#dfe3ea" stroke-width="1"/>
+<text x="48" y="721" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
+<rect x="144" y="712" width="10" height="10" rx="2" fill="#c0392b"/>
+<text x="159" y="721" font-size="10" fill="#4a4a4a">期限切れ</text>
+<rect x="210" y="712" width="10" height="10" rx="2" fill="#e07b39"/>
+<text x="225" y="721" font-size="10" fill="#4a4a4a">90日以内</text>
+<rect x="287" y="712" width="10" height="10" rx="2" fill="#c9a227"/>
+<text x="302" y="721" font-size="10" fill="#4a4a4a">1年以内</text>
+<rect x="353" y="712" width="10" height="10" rx="2" fill="#2d8a4e"/>
+<text x="368" y="721" font-size="10" fill="#4a4a4a">余裕あり</text>
+<rect x="419" y="712" width="10" height="10" rx="2" fill="#7a7a7a"/>
+<text x="434" y="721" font-size="10" fill="#4a4a4a">情報未登録</text>
+<text x="48" y="741" font-size="10" fill="#6b6b6b">実線 = 両側の機器から確認できた結線 / 破線 = 片側のみ</text>
+<text x="298" y="741" font-size="10" fill="#6b6b6b">ポート種別</text>
+<text x="358" y="741" font-size="10" fill="#2f6fb5" font-weight="700">1G</text>
 </svg>

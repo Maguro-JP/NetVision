@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import ceil
 
 from sqlalchemy import func, select
@@ -154,6 +154,8 @@ class TopologyGroupView:
     plane: str
     color: str
     device_ids: list[int]
+    #: 外側の枠。ラックを部屋やフロアで囲むときに入る
+    parent_id: int | None = None
 
 
 @dataclass
@@ -655,12 +657,37 @@ def _rank_root(
 PLANE_BACKBONE = "backbone"
 PLANE_METRO = "metro"
 PLANE_ACCESS = "access"
+#: 枠の色。暗い画面でも輪郭とラベルが読める明るさにする。
+#: 印刷（白地）でも沈まないよう、中間の明度に寄せてある
 PLANE_COLORS = {
-    PLANE_BACKBONE: "#2f4d6a",
-    PLANE_METRO: "#4a7a58",
-    PLANE_ACCESS: "#8a6a3a",
-    "custom": "#5a7a9a",
+    PLANE_BACKBONE: "#4f86c6",
+    PLANE_METRO: "#3f9e6b",
+    PLANE_ACCESS: "#c47f2a",
+    "custom": "#5b8ac0",
 }
+
+# 任意の枠に順番に配る色。全部同じ色だと、枠が2つ以上あるときに
+# どこからどこまでが1つの枠なのか、線を目で追わないと分からない。
+# 入れ子にしたとき外側と内側が別の色になるよう、隣り合う色は離してある
+GROUP_COLORS = [
+    "#5b8ac0",  # 青
+    "#3f9e6b",  # 緑
+    "#c47f2a",  # 橙
+    "#8a6fc0",  # 紫
+    "#c05b7a",  # 赤紫
+    "#3f9aa0",  # 青緑
+]
+
+
+def _next_group_color(db: Session, layer: str) -> str:
+    """その図で、いま使っていない色を選ぶ。"""
+    used = set(db.scalars(select(TopologyGroup.color).where(TopologyGroup.layer == layer)).all())
+    for color in GROUP_COLORS:
+        if color not in used:
+            return color
+    return GROUP_COLORS[len(used) % len(GROUP_COLORS)]
+
+
 PLANE_NAMES = {
     PLANE_BACKBONE: "コア網",
     PLANE_METRO: "メトロ／集約",
@@ -749,20 +776,43 @@ def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
             .where(TopologyGroup.layer == graph.layer)
         )
     )
-    groups: list[TopologyGroupView] = []
+    # 外側の枠（フロアや部屋）は、自分では機器を持たず中の枠だけを囲むことがある。
+    # 「見えている機器を持つ枠だけ」で切ると、その外枠が図から消えてしまう。
+    # 中の枠が残るなら外枠も残す。
+    kept: dict[int, TopologyGroupView] = {}
+    parent_of = {row.id: row.parent_id for row in rows}
     for row in rows:
         ids = [member.device_id for member in row.members if member.device_id in visible]
         if not ids:
             continue
-        groups.append(
-            TopologyGroupView(
+        kept[row.id] = TopologyGroupView(
+            id=row.id,
+            name=row.name,
+            plane=row.plane,
+            color=row.color,
+            device_ids=ids,
+            parent_id=row.parent_id,
+        )
+    by_id = {row.id: row for row in rows}
+    for group_id in list(kept):
+        at = parent_of.get(group_id)
+        while at is not None and at not in kept:
+            row = by_id.get(at)
+            if row is None:
+                break
+            kept[at] = TopologyGroupView(
                 id=row.id,
                 name=row.name,
                 plane=row.plane,
                 color=row.color,
-                device_ids=ids,
+                device_ids=[],
+                parent_id=row.parent_id,
             )
-        )
+            at = row.parent_id
+    # 外側の枠が図から外れている場合は、中の枠を親無しにする
+    groups = [
+        item if item.parent_id in kept else replace(item, parent_id=None) for item in kept.values()
+    ]
     graph.groups = groups
     _pull_groups_together(graph.nodes, groups, graph.edges)
     return graph
@@ -851,25 +901,37 @@ def create_group(
     *,
     plane: str = "custom",
     color: str | None = None,
+    parent_id: int | None = None,
 ) -> TopologyGroupView:
     """選んだ機器を枠で囲む。"""
+    # 部屋やフロアの枠は、自分では機器を持たず中の枠だけを囲むことがある。
+    # 機器を必須にすると、そういう外枠を作れない
     wanted = list(dict.fromkeys(device_ids))
-    if len(wanted) < 1:
-        raise ValueError("枠に入れる機器が無い")
-    hue = color or PLANE_COLORS.get(plane, PLANE_COLORS["custom"])
-    row = TopologyGroup(layer=layer, name=name.strip() or "枠", plane=plane, color=hue)
+    if plane == "custom":
+        hue = color or _next_group_color(db, layer)
+    else:
+        hue = color or PLANE_COLORS.get(plane, PLANE_COLORS["custom"])
+    row = TopologyGroup(
+        layer=layer,
+        name=name.strip() or "枠",
+        plane=plane,
+        color=hue,
+        parent_id=parent_id,
+    )
     db.add(row)
     db.flush()
     for device_id in wanted:
         db.add(TopologyGroupMember(group_id=row.id, device_id=device_id))
     db.commit()
-    db.refresh(row)
+    # メンバーは枠を作ったあとに足すので、読み直さないと空のまま残る
+    db.refresh(row, ["members"])
     return TopologyGroupView(
         id=row.id,
         name=row.name,
         plane=row.plane,
         color=row.color,
         device_ids=wanted,
+        parent_id=row.parent_id,
     )
 
 
@@ -881,10 +943,18 @@ def update_group(
     plane: str | None = None,
     color: str | None = None,
     device_ids: list[int] | None = None,
+    parent_id: int | None = None,
+    clear_parent: bool = False,
 ) -> TopologyGroupView | None:
     row = db.get(TopologyGroup, group_id)
     if row is None:
         return None
+    if clear_parent:
+        row.parent_id = None
+    elif parent_id is not None:
+        if _would_loop(db, group_id, parent_id):
+            raise ValueError("その枠を外側にすると、枠が輪になってしまいます")
+        row.parent_id = parent_id
     if name is not None:
         row.name = name.strip() or row.name
     if plane is not None:
@@ -907,7 +977,24 @@ def update_group(
         plane=row.plane,
         color=row.color,
         device_ids=[member.device_id for member in row.members],
+        parent_id=row.parent_id,
     )
+
+
+def _would_loop(db: Session, group_id: int, parent_id: int) -> bool:
+    """その枠を外側にすると、たどっていくうちに自分へ戻ってこないか。
+
+    輪になった枠は、大きさを決めるときに終わらない。作らせない。
+    """
+    seen = {group_id}
+    at: int | None = parent_id
+    while at is not None:
+        if at in seen:
+            return True
+        seen.add(at)
+        row = db.get(TopologyGroup, at)
+        at = row.parent_id if row else None
+    return False
 
 
 def delete_group(db: Session, group_id: int) -> bool:
@@ -958,6 +1045,36 @@ def groups_from_sites(db: Session, layer: str, device_ids: list[int]) -> list[To
                 db,
                 layer,
                 name,
+                [device.id for device in members],
+                plane="custom",
+                color=PLANE_COLORS["custom"],
+            )
+        )
+    return created
+
+
+def groups_from_racks(db: Session, layer: str, device_ids: list[int]) -> list[TopologyGroupView]:
+    """見えている機器をラックごとに枠へ入れる。既にある枠は触らない。
+
+    現場では「どのラックの何番」で機器を探す。図の上でも同じ単位でまとまって
+    いれば、図と現物の行き来がしやすい。ラック名が空の機器は枠に入れない。
+    """
+    if not device_ids:
+        return []
+    devices = list(db.scalars(select(Device).where(Device.id.in_(device_ids))))
+    taken = _grouped_device_ids(db, layer)
+    by_rack: dict[str, list[Device]] = {}
+    for device in devices:
+        if device.id in taken or not (device.rack or "").strip():
+            continue
+        by_rack.setdefault(device.rack.strip(), []).append(device)
+    created: list[TopologyGroupView] = []
+    for rack, members in sorted(by_rack.items()):
+        created.append(
+            create_group(
+                db,
+                layer,
+                f"ラック {rack}",
                 [device.id for device in members],
                 plane="custom",
                 color=PLANE_COLORS["custom"],
@@ -1417,6 +1534,25 @@ def _rank_slots(
     return across
 
 
+def _series_order(names: list[str]) -> list[str] | None:
+    """同じ名前の連番なら、番号の若い順に並べた名前を返す。連番でなければ None。
+
+    現場は「01 が左」で読む。ポート番号順に置くと、実機の配線の都合で
+    02 が左に来ることがあり、図としては読みにくい。
+    """
+    if len(names) < 2:
+        return None
+    parts: list[tuple[str, int, str]] = []
+    for name in names:
+        match = re.fullmatch(r"(.*?)(\d+)", name.strip())
+        if not match:
+            return None
+        parts.append((match.group(1), int(match.group(2)), name))
+    if len({prefix for prefix, _, _ in parts}) != 1:
+        return None
+    return [name for _, _, name in sorted(parts, key=lambda item: item[1])]
+
+
 def _child_order(
     parent_id: int,
     candidates: list[int],
@@ -1429,6 +1565,8 @@ def _child_order(
     """配下の左右の順。
 
     初期配置はポート番号順。実機の並びと線が交差しないことの両方に効く。
+    ただし、同じ名前の連番（sw-01, sw-02 …）が並ぶときは番号順にする。
+    図は左上ほど上位・左ほど若い番号、という読み方をされるため。
     最適化は、人が置いた左右を意思として残し、その間に未配置をポート順で入れる。
     """
     if not candidates:
@@ -1440,7 +1578,12 @@ def _child_order(
             by_id[device_id].hostname,
         )
 
-    ideal = sorted(candidates, key=by_port)
+    series = _series_order([by_id[device_id].hostname for device_id in candidates])
+    if series is not None:
+        rank = {name: index for index, name in enumerate(series)}
+        ideal = sorted(candidates, key=lambda i: (rank[by_id[i].hostname], by_port(i)))
+    else:
+        ideal = sorted(candidates, key=by_port)
     if not polish:
         return ideal
 

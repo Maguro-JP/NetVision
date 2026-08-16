@@ -94,6 +94,7 @@ def create_group(body: GroupCreate, db: DbSession) -> TopologyGroupRead:
             body.device_ids,
             plane=body.plane,
             color=body.color,
+            parent_id=body.parent_id,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -128,16 +129,35 @@ def groups_from_planes(
     ]
 
 
+@router.post("/groups/from-racks", response_model=list[TopologyGroupRead])
+def groups_from_racks(
+    db: DbSession,
+    layer: str = Query(default=service.DEFAULT_LAYER),
+    device_ids: str = Query(default="", description="カンマ区切りの機器ID"),
+) -> list[TopologyGroupRead]:
+    """見えている機器をラックごとの枠にする。"""
+    ids = [int(part) for part in device_ids.split(",") if part.strip().isdigit()]
+    return [
+        TopologyGroupRead.model_validate(item, from_attributes=True)
+        for item in service.groups_from_racks(db, layer, ids)
+    ]
+
+
 @router.patch("/groups/{group_id}", response_model=TopologyGroupRead)
 def update_group(group_id: int, body: GroupUpdate, db: DbSession) -> TopologyGroupRead:
-    group = service.update_group(
-        db,
-        group_id,
-        name=body.name,
-        plane=body.plane,
-        color=body.color,
-        device_ids=body.device_ids,
-    )
+    try:
+        group = service.update_group(
+            db,
+            group_id,
+            name=body.name,
+            plane=body.plane,
+            color=body.color,
+            device_ids=body.device_ids,
+            parent_id=body.parent_id,
+            clear_parent=body.clear_parent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "枠が見つかりません")
     return TopologyGroupRead.model_validate(group, from_attributes=True)

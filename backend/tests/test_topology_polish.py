@@ -300,3 +300,70 @@ def test_box_height_grows_when_left_right_is_busy():
     assert _box_height(3) == 78.0 + 22.0
     assert _box_height(8) == 78.0 + 6 * 22.0
     assert _box_width(8) == _BOX_WIDTH + 5 * 55.0
+
+
+def test_same_name_series_goes_left_to_right_by_number():
+    """同じ名前の連番は、番号の若い順に左から並べる。
+
+    図は左上ほど上位、左ほど若い番号という読み方をされる。実機のポート順が
+    逆でも、図としては 01 を左に置く。
+    """
+    from app.services.topology import _series_order
+
+    assert _series_order(["a-sw-02", "a-sw-01", "a-sw-10"]) == [
+        "a-sw-01",
+        "a-sw-02",
+        "a-sw-10",
+    ]
+    # 名前の系列がそろっていなければ触らない（ポート順のまま）
+    assert _series_order(["core-rt-01", "acc-sw-01"]) is None
+    assert _series_order(["hub"]) is None
+
+
+def test_an_outer_frame_survives_even_without_devices_of_its_own(db_session):
+    """フロアの枠は中の枠だけを囲む。機器を持たないからと消してはいけない。"""
+    from app.models import DeviceType
+    from app.services import topology
+    from tests.test_topology_layers import _device, _link
+
+    sw = _device(db_session, "core-sw-01", DeviceType.SWITCH)
+    other = _device(db_session, "acc-sw-01", DeviceType.SWITCH)
+    _link(db_session, sw, "Gi1/0/1", other, "Gi0/1")
+    db_session.commit()
+    floor = topology.create_group(db_session, "physical", "本社ビル 3F", [])
+    topology.create_group(db_session, "physical", "ラック A-01", [sw.id], parent_id=floor.id)
+
+    graph = topology.load_diagram(db_session, "physical")
+    names = {group.name: group for group in graph.groups}
+    assert "本社ビル 3F" in names, names
+    assert names["ラック A-01"].parent_id == floor.id
+
+
+def test_a_frame_cannot_be_put_inside_itself(db_session):
+    """枠が輪になると、大きさを決めるときに終わらない。作らせない。"""
+    import pytest
+
+    from app.models import DeviceType
+    from app.services import topology
+    from tests.test_topology_layers import _device
+
+    sw = _device(db_session, "core-sw-01", DeviceType.SWITCH)
+    db_session.commit()
+    outer = topology.create_group(db_session, "physical", "3F", [sw.id])
+    inner = topology.create_group(db_session, "physical", "301", [sw.id], parent_id=outer.id)
+    with pytest.raises(ValueError):
+        topology.update_group(db_session, outer.id, parent_id=inner.id)
+
+
+def test_new_frames_get_different_colors(db_session):
+    """枠が2つ以上あるとき、同じ色だとどこまでが1つの枠か分からない。"""
+    from app.models import DeviceType
+    from app.services import topology
+    from tests.test_topology_layers import _device
+
+    a = _device(db_session, "sw-a", DeviceType.SWITCH)
+    b = _device(db_session, "sw-b", DeviceType.SWITCH)
+    db_session.commit()
+    first = topology.create_group(db_session, "physical", "枠1", [a.id])
+    second = topology.create_group(db_session, "physical", "枠2", [b.id])
+    assert first.color != second.color

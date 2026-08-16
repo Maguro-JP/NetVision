@@ -15,6 +15,7 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, replace
 from math import atan2, cos, degrees, sin
 from xml.sax.saxutils import escape
@@ -88,6 +89,8 @@ LEGEND_H = 62.0
 MAX_BENDS = 2
 #: 「線に沿わせる」で傾けてよい角度の幅（度）。縦横から離れたら水平に置く
 _SLANT_LIMIT = 12.0
+#: 対向（絞り込みの外）の箱の高さ。名前と拠点名の2行ぶん（画面の OUTSIDE_HEIGHT）
+OUTSIDE_H = 53.0
 # 箱の中の行送り（画面の .topo-node と同じ積み方）
 _ROW_HEAD = 20.0
 _ROW_SUB = 15.0
@@ -95,12 +98,29 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
+# 枠の内側に取る余白と、名前の行の高さ
+_GROUP_PAD = 18.0
+_GROUP_HEAD = 8.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
 # 名前の幅がいる。左右の辺は行の高さ（_LABEL_PITCH）で決まる
 _BUNDLE_LABEL_W = 56.0
 
 # 日本語が入るので、環境にありそうなものを順に並べる
 FONT = "'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif"
+
+
+def _port_key(name: str | None) -> tuple:
+    """ポート名を現場の並び順で比べるための鍵。
+
+    文字の順だと Gi0/10 が Gi0/2 より前に来る。数字の並びは数として比べると、
+    機器の面板と同じ順になる。画面（TopologyPage の comparePortNames）と同じ規則。
+    """
+    if not name:
+        return ()
+    return tuple(
+        (0, int(part), "") if part.isdigit() else (1, 0, part)
+        for part in re.findall(r"\d+|\D+", name.lower())
+    )
 
 
 def _esc(value: object) -> str:
@@ -156,11 +176,23 @@ def render_svg(
         # 絞り込みの外に出た相手を、簡易表示で残す。
         # 線ごと消すと、上位への接続が「無い」ように見えてしまう
         peers = _boundary_peers(everything, keep) if show_peers else []
-        groups = []
-        for group in everything.groups:
-            ids = [device_id for device_id in group.device_ids if device_id in keep]
-            if ids:
-                groups.append(replace(group, device_ids=ids))
+        # 外側の枠（フロアや部屋）は自分では機器を持たないことがある。
+        # 中の枠が残るなら外枠も残す。外枠が落ちたときは、中の枠を親無しにする
+        trimmed = {
+            group.id: replace(group, device_ids=[i for i in group.device_ids if i in keep])
+            for group in everything.groups
+        }
+        alive = {gid for gid, group in trimmed.items() if group.device_ids}
+        for gid in list(alive):
+            at_id = trimmed[gid].parent_id
+            while at_id is not None and at_id in trimmed and at_id not in alive:
+                alive.add(at_id)
+                at_id = trimmed[at_id].parent_id
+        groups = [
+            group if group.parent_id in alive else replace(group, parent_id=None)
+            for gid, group in trimmed.items()
+            if gid in alive
+        ]
         graph = TopologyGraph(
             layer=graph.layer,
             nodes=nodes,
@@ -208,7 +240,14 @@ def render_svg(
         else:
             busiest_tb[device_id] = max(busiest_tb.get(device_id, 0), count)
 
-    heights = {n.device_id: _box_height(busiest_lr.get(n.device_id, 0), base_h) for n in nodes}
+    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    heights = {
+        n.device_id: _box_height(
+            busiest_lr.get(n.device_id, 0),
+            OUTSIDE_H if (n.outside and not simple) else base_h,
+        )
+        for n in nodes
+    }
 
     def display_box(node) -> tuple[float, float, float, float]:
         """保存左上を、広げた箱の中心が保たれる画面座標の箱へ。"""
@@ -299,24 +338,59 @@ def render_svg(
             f"{_esc(scope)} / {_esc(counts)}</text>"
         )
 
+    # 枠は内側から大きさを決め、外側（フロアや部屋）はその外を回る。
+    # 外枠を先に描いて背面へ置かないと、内側の枠の名前が隠れる。
+    group_box: dict[int, tuple[float, float, float, float]] = {}
+    children: dict[int | None, list] = {}
     for group in graph.groups:
-        members = [(at[i], size_at[i]) for i in group.device_ids if i in at]
-        if not members:
-            continue
-        gx = min(pos[0] for pos, _ in members) - 18
-        gy = min(pos[1] for pos, _ in members) - 26
-        gw = max(pos[0] + size[0] for pos, size in members) - gx + 18
-        gh = max(pos[1] + size[1] for pos, size in members) - gy + 18
+        children.setdefault(group.parent_id, []).append(group)
+
+    def _box_of(group) -> tuple[float, float, float, float] | None:
+        if group.id in group_box:
+            return group_box[group.id]
+        spots: list[tuple[float, float, float, float]] = []
+        for device_id in group.device_ids:
+            if device_id in at:
+                pos, size = at[device_id], size_at[device_id]
+                spots.append((pos[0], pos[1], pos[0] + size[0], pos[1] + size[1]))
+        for child in children.get(group.id, []):
+            inner = _box_of(child)
+            if inner:
+                spots.append(inner)
+        if not spots:
+            return None
+        box = (
+            min(item[0] for item in spots) - _GROUP_PAD,
+            min(item[1] for item in spots) - _GROUP_PAD - _GROUP_HEAD,
+            max(item[2] for item in spots) + _GROUP_PAD,
+            max(item[3] for item in spots) + _GROUP_PAD,
+        )
+        group_box[group.id] = box
+        return box
+
+    def _draw(group, depth: int) -> None:
+        box = _box_of(group)
+        if box is None:
+            return
+        gx, gy, gx2, gy2 = box
         label = group.name
         if group.plane and group.plane != "custom":
             label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
         parts.append(
-            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gw:.0f}" height="{gh:.0f}" rx="10" '
-            f'fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" stroke-width="1.6" '
-            f'stroke-dasharray="6 4"/>'
-            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" fill="{_esc(group.color)}">'
-            f"{_esc(label)}</text>"
+            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
+            f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
+            f'stroke-width="1.6" stroke-dasharray="6 4"/>'
+            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '
+            f'paint-order="stroke" stroke="#ffffff" stroke-width="3" '
+            f'fill="{_esc(group.color)}">{_esc(label)}</text>'
         )
+        # 枠の名前も埋まっている場所として登録する。しないとポート名が上に乗る
+        placement.add(svglayout.text_rect(gx + 10, gy + 16 - 3, label, 11.0, "start", 0.0).grow(2))
+        for child in children.get(group.id, []):
+            _draw(child, depth + 1)
+
+    for group in children.get(None, []):
+        _draw(group, 0)
 
     # 同じ機器同士を何本も結んでいる場合（LAG など）に、線を平行にずらすための番号。
     # 中心同士を直線で結ぶだけだと完全に重なって1本に見える
@@ -336,7 +410,7 @@ def render_svg(
     ]
 
     sides: dict[int, tuple[str, str]] = {}
-    groups: dict[tuple[int, str], list[tuple[float, int]]] = {}
+    groups: dict[tuple[int, str], list[tuple[float, tuple, int]]] = {}
     boxes_by_id = {
         n.device_id: (
             at[n.device_id][0],
@@ -367,8 +441,12 @@ def render_svg(
         sides[edge.id] = (src_side, dst_side)
         src_along = dst_box[1] if src_side in ("left", "right") else dst_box[0]
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
-        groups.setdefault((edge.source, src_side), []).append((src_along, edge.id))
-        groups.setdefault((edge.target, dst_side), []).append((dst_along, edge.id))
+        groups.setdefault((edge.source, src_side), []).append(
+            (src_along, _port_key(edge.source_interface), edge.id)
+        )
+        groups.setdefault((edge.target, dst_side), []).append(
+            (dst_along, _port_key(edge.target_interface), edge.id)
+        )
 
     # 図の外の対向へ出る線も、同じ辺の口を分け合う。辺の中央に固定したままだと、
     # 同じ辺から出ている結線と重なり、線どうしが交差する。
@@ -388,7 +466,7 @@ def render_svg(
         side = _side_toward(anchor_box, peer_box)
         peer_sides[key] = side
         along = peer_box[1] if side in ("left", "right") else peer_box[0]
-        groups.setdefault((peer.anchor, side), []).append((along, key))
+        groups.setdefault((peer.anchor, side), []).append((along, (), key))
 
     lane_rank: dict[int, tuple[int, int]] = {}
     face_t: dict[tuple[int, str, int], float] = {}
@@ -399,7 +477,7 @@ def render_svg(
         ideals: list[float] = []
         # 同じ相手行きの束を詰めて置くため、辺ごとの相手を控える
         opposite: list[int] = []
-        for _, edge_id in members:
+        for _, _, edge_id in members:
             if edge_id < 0:
                 ideals.append(_face_t(box, side, peer_boxes_by_key[edge_id]))
                 opposite.append(edge_id)
@@ -408,7 +486,7 @@ def render_svg(
             other_id = edge.target if edge.source == device_id else edge.source
             ideals.append(_face_t(box, side, boxes_by_id[other_id]))
             opposite.append(other_id)
-        for index, (_, edge_id) in enumerate(members):
+        for index, (_, _, edge_id) in enumerate(members):
             lane_rank[edge_id] = (index, len(members))
         vertical_face = side in ("left", "right")
         spaced = _space_face_ts(
@@ -417,8 +495,42 @@ def render_svg(
             opposite,
             horizontal=not vertical_face,
         )
-        for (_, edge_id), t in zip(members, spaced, strict=False):
+        for (_, _, edge_id), t in zip(members, spaced, strict=False):
             face_t[(device_id, side, edge_id)] = t
+
+    # 線のどちら側にポート名を出すかを、結線ごとに先に決める。
+    #
+    #   ・既定は下。上下に振り分けると、同じ辺のポート名を上から順に読めない
+    #   ・チャネルのように2本を寄せて張るところは、上の線の名前を上、下の線の
+    #     名前を下に出して、線の束を文字で挟む。名前が2本の間に挟まると、
+    #     どちらの線のものか分からない
+    #   ・3本以上を挟むと真ん中の行き場が無く、釣り合いも崩れる。全部下に出す
+    #
+    # 両端で同じ側にするのが肝心で、片側だけ上にすると、水平な線でも文字が
+    # 斜めに並び、左下から右上へ上っているように見える。
+    label_side: dict[int, str] = {}
+    same_peer: dict[tuple[int, int], list[int]] = {}
+    for edge in graph.edges:
+        if edge.source not in at or edge.target not in at:
+            continue
+        src_side, _ = sides.get(edge.id, ("right", "left"))
+        if src_side not in ("left", "right"):
+            continue
+        pair = (min(edge.source, edge.target), max(edge.source, edge.target))
+        same_peer.setdefault(pair, []).append(edge.id)
+    for edge_ids in same_peer.values():
+        if len(edge_ids) == 2:
+            top, bottom = sorted(
+                edge_ids,
+                key=lambda edge_id: face_t.get(
+                    (edge_by_id[edge_id].source, sides[edge_id][0], edge_id), 0.5
+                ),
+            )
+            label_side[top] = "up"
+            label_side[bottom] = "down"
+        else:
+            for edge_id in edge_ids:
+                label_side[edge_id] = "down"
 
     # --- 結線（ノードより先に描いて背面に回す） ---
     pending: list[tuple[list[tuple[float, float]], object]] = []
@@ -547,6 +659,7 @@ def render_svg(
                 placement,
                 half_w=sw / 2,
                 half_h=sh / 2,
+                prefer=label_side.get(edge.id),
             )
         )
         parts.append(
@@ -561,6 +674,7 @@ def render_svg(
                 placement,
                 half_w=tw / 2,
                 half_h=th / 2,
+                prefer=label_side.get(edge.id),
             )
         )
         for name in (edge.source_interface, edge.target_interface):
@@ -654,7 +768,7 @@ def render_svg(
         if node.outside:
             where = node.site_name or "拠点未登録"
             parts.append(
-                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{PEER_H:.0f}" '
+                f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{nh:.0f}" '
                 f'rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/>'
                 f'<text x="{x + 12:.0f}" y="{y + 22:.0f}" font-size="12" fill="#4a5364">'
                 f"{_esc(TYPE_GLYPH.get(str(node.device_type), ''))}</text>"
@@ -1769,7 +1883,7 @@ def _port_kinds_line(x: float, y: float, kinds: list[str]) -> str:
 # ノード枠から、その先どのくらい離してラベルを置くか
 _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
-_SIDE_OFFSET = 7.0
+_SIDE_OFFSET = 11.0
 _LABEL_FONT = 10.0
 # 同じ機器同士を結ぶ線を、何 px ずつ離して描くか
 _PARALLEL_GAP = 11.0
@@ -1787,6 +1901,7 @@ def _port_label(
     *,
     half_w: float | None = None,
     half_h: float | None = None,
+    prefer: str | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -1838,21 +1953,33 @@ def _port_label(
     # 中心→出口だけの距離だと limit が短く追加候補を置けない。
     # 出口の先（枠の外）へ出す候補を、線に沿って必ず数点足す。
     exit_at = _exit_distance(ux, uy, half_w=half_w, half_h=half_h)
+    # 線のどちら側へ出すかは、結線ごとに先に決めてある。ここでは、その側の候補を
+    # 先に試すだけにする。両端で側が食い違うと、水平な線でも文字が斜めに並び、
+    # 左下から右上へ上っているように見えてしまう
+    want = 0.0
+    if prefer and abs(ux) > 0.2:
+        want = (1.0 if ux > 0 else -1.0) * (1.0 if prefer == "down" else -1.0)
+    ordered = _candidate_offsets(base, max(limit, base + 1))
+    if want:
+        ordered.sort(key=lambda item: 0 if item[2] == want else 1)
     spots = [
         (
             x1 + ux * (base + step) - uy * offset * side,
             y1 + uy * (base + step) + ux * offset * side,
         )
-        for step, offset, side in _candidate_offsets(base, max(limit, base + 1))
+        for step, offset, side in ordered
     ]
+    extra = [
+        (_SIDE_OFFSET, 1.0),
+        (_SIDE_OFFSET, -1.0),
+        (_SIDE_OFFSET + 11.0, 1.0),
+        (_SIDE_OFFSET + 11.0, -1.0),
+    ]
+    if want:
+        extra.sort(key=lambda item: 0 if item[1] == want else 1)
     for outward in (6.0, 14.0, 24.0):
         along = exit_at + _LABEL_GAP + outward
-        for offset, side in (
-            (_SIDE_OFFSET, 1.0),
-            (_SIDE_OFFSET, -1.0),
-            (_SIDE_OFFSET + 11.0, 1.0),
-            (_SIDE_OFFSET + 11.0, -1.0),
-        ):
+        for offset, side in extra:
             spots.append(
                 (
                     x1 + ux * along - uy * offset * side,

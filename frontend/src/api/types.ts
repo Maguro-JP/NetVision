@@ -249,6 +249,8 @@ export interface TopologyGroup {
   plane: "backbone" | "metro" | "access" | "custom";
   color: string;
   device_ids: number[];
+  /** 外側の枠（フロアや部屋）。無ければ null */
+  parent_id: number | null;
 }
 
 export interface TopologyVlan {
