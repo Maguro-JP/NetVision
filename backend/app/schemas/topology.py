@@ -187,6 +187,8 @@ class TopologyGroupRead(BaseModel):
     plane: str
     color: str
     device_ids: list[int]
+    #: 外側の枠（フロアや部屋）。無ければ null
+    parent_id: int | None = None
 
 
 class TopologyEdgeRead(BaseModel):
@@ -296,9 +298,12 @@ class RebuildResult(BaseModel):
 class GroupCreate(BaseModel):
     layer: str = "physical"
     name: str = Field(min_length=1, max_length=120)
-    device_ids: list[int]
+    #: 空でもよい。部屋やフロアの枠は、中の枠だけを囲むことがある
+    device_ids: list[int] = []
     plane: str = "custom"
     color: str | None = Field(default=None, max_length=16)
+    #: 外側の枠。ラックを部屋やフロアで囲むときに指定する
+    parent_id: int | None = None
 
 
 class GroupUpdate(BaseModel):
@@ -308,3 +313,6 @@ class GroupUpdate(BaseModel):
     plane: str | None = None
     color: str | None = Field(default=None, max_length=16)
     device_ids: list[int] | None = None
+    parent_id: int | None = None
+    #: 外側の枠を外す。parent_id を null にするのと区別するために持つ
+    clear_parent: bool = False

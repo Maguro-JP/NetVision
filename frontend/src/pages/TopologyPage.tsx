@@ -60,7 +60,7 @@ import {
   undo as undoHistory,
   type EditHistory,
 } from "./topologyEditHistory";
-import { groupBox, updateGroupBounds } from "./topologyGroups";
+import { groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -775,23 +775,34 @@ function toFlow(
     };
   });
 
-  const groups = (graph.groups ?? []).flatMap((group) => {
-    const members = devices.filter((node) => group.device_ids.includes(Number(node.id)));
-    const box = groupBox(
-      members.map((node) => ({
+  const deviceBox = new Map(
+    devices.map((node) => [
+      Number(node.id),
+      {
         x: node.position.x,
         y: node.position.y,
-        width: node.data.width,
-        height: node.data.height,
-      })),
-    );
+        width: node.data.width ?? DEFAULT_WIDTH,
+        height: node.data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT),
+      },
+    ]),
+  );
+  const specs = (graph.groups ?? []).map((group) => ({
+    id: group.id,
+    parentId: group.parent_id ?? null,
+    deviceIds: group.device_ids,
+  }));
+  const boxes = groupBoxes(specs, deviceBox);
+  const groups = (graph.groups ?? []).flatMap((group) => {
+    const box = boxes.get(group.id);
     if (!box) return [];
+    // 外側の枠ほど先に（背面に）描く。順が逆だと内側の枠の名前が隠れる
+    const depth = groupDepth(specs, group.id);
     return [
       {
         id: groupNodeId(group),
         type: "group" as const,
         position: { x: box.x, y: box.y },
-        zIndex: 0,
+        zIndex: Math.min(depth, 1),
         selectable: true,
         draggable: false,
         connectable: false,
@@ -802,11 +813,13 @@ function toFlow(
           width: box.width,
           height: box.height,
           groupId: group.id,
+          parentId: group.parent_id ?? null,
           deviceIds: group.device_ids,
         } satisfies GroupFrameData,
       },
     ];
   });
+  groups.sort((a, b) => a.zIndex - b.zIndex);
 
   const nodes = [...groups, ...devices];
 
@@ -1078,6 +1091,9 @@ function TopologyEditor() {
       });
 
       flow.nodes.forEach((n) => {
+        // 枠は機器ではないので、絞り込みの対象にならない。薄くすると
+        // ラックや部屋の枠が消え、どこに置いてある機材なのか分からなくなる
+        if (n.type === "group") return;
         if (matches.has(n.id)) return;
         n.style = { ...(n.style ?? {}), opacity: neighbours.has(n.id) ? 0.55 : 0.15 };
       });
@@ -1414,7 +1430,13 @@ function TopologyEditor() {
   });
 
   const patchGroup = useMutation({
-    mutationFn: (body: { name?: string; plane?: string; color?: string }) =>
+    mutationFn: (body: {
+      name?: string;
+      plane?: string;
+      color?: string;
+      parent_id?: number | null;
+      clear_parent?: boolean;
+    }) =>
       api.updateTopologyGroup(selectedGroupId!, body),
     onSuccess: async () => {
       await refresh({ takeLayout: false });
@@ -2226,6 +2248,24 @@ function TopologyEditor() {
                       onChange={(event) => patchGroup.mutate({ color: event.target.value })}
                       title="枠の色"
                     />
+                    <select
+                      value={selectedGroup.parent_id ?? ""}
+                      onChange={(event) => {
+                        const value = event.target.value;
+                        if (!value) patchGroup.mutate({ clear_parent: true });
+                        else patchGroup.mutate({ parent_id: Number(value) });
+                      }}
+                      title="外側の枠。フロアや部屋の枠でこの枠を囲みます"
+                    >
+                      <option value="">外側の枠なし</option>
+                      {(graph?.groups ?? [])
+                        .filter((item) => item.id !== selectedGroup.id)
+                        .map((item) => (
+                          <option key={item.id} value={item.id}>
+                            {item.name} の中
+                          </option>
+                        ))}
+                    </select>
                     {editable && (
                       <button
                         className="danger"

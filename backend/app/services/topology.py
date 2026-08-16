@@ -22,7 +22,7 @@ from __future__ import annotations
 
 import re
 from collections import defaultdict
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from math import ceil
 
 from sqlalchemy import func, select
@@ -154,6 +154,8 @@ class TopologyGroupView:
     plane: str
     color: str
     device_ids: list[int]
+    #: 外側の枠。ラックを部屋やフロアで囲むときに入る
+    parent_id: int | None = None
 
 
 @dataclass
@@ -658,11 +660,34 @@ PLANE_ACCESS = "access"
 #: 枠の色。暗い画面でも輪郭とラベルが読める明るさにする。
 #: 印刷（白地）でも沈まないよう、中間の明度に寄せてある
 PLANE_COLORS = {
-    PLANE_BACKBONE: "#6f9fd0",
-    PLANE_METRO: "#7fbf8f",
-    PLANE_ACCESS: "#d0a367",
-    "custom": "#93b4d6",
+    PLANE_BACKBONE: "#4f86c6",
+    PLANE_METRO: "#3f9e6b",
+    PLANE_ACCESS: "#c47f2a",
+    "custom": "#5b8ac0",
 }
+
+# 任意の枠に順番に配る色。全部同じ色だと、枠が2つ以上あるときに
+# どこからどこまでが1つの枠なのか、線を目で追わないと分からない。
+# 入れ子にしたとき外側と内側が別の色になるよう、隣り合う色は離してある
+GROUP_COLORS = [
+    "#5b8ac0",  # 青
+    "#3f9e6b",  # 緑
+    "#c47f2a",  # 橙
+    "#8a6fc0",  # 紫
+    "#c05b7a",  # 赤紫
+    "#3f9aa0",  # 青緑
+]
+
+
+def _next_group_color(db: Session, layer: str) -> str:
+    """その図で、いま使っていない色を選ぶ。"""
+    used = set(
+        db.scalars(select(TopologyGroup.color).where(TopologyGroup.layer == layer)).all()
+    )
+    for color in GROUP_COLORS:
+        if color not in used:
+            return color
+    return GROUP_COLORS[len(used) % len(GROUP_COLORS)]
 PLANE_NAMES = {
     PLANE_BACKBONE: "コア網",
     PLANE_METRO: "メトロ／集約",
@@ -751,20 +776,44 @@ def attach_groups(db: Session, graph: TopologyGraph) -> TopologyGraph:
             .where(TopologyGroup.layer == graph.layer)
         )
     )
-    groups: list[TopologyGroupView] = []
+    # 外側の枠（フロアや部屋）は、自分では機器を持たず中の枠だけを囲むことがある。
+    # 「見えている機器を持つ枠だけ」で切ると、その外枠が図から消えてしまう。
+    # 中の枠が残るなら外枠も残す。
+    kept: dict[int, TopologyGroupView] = {}
+    parent_of = {row.id: row.parent_id for row in rows}
     for row in rows:
         ids = [member.device_id for member in row.members if member.device_id in visible]
         if not ids:
             continue
-        groups.append(
-            TopologyGroupView(
+        kept[row.id] = TopologyGroupView(
+            id=row.id,
+            name=row.name,
+            plane=row.plane,
+            color=row.color,
+            device_ids=ids,
+            parent_id=row.parent_id,
+        )
+    by_id = {row.id: row for row in rows}
+    for group_id in list(kept):
+        at = parent_of.get(group_id)
+        while at is not None and at not in kept:
+            row = by_id.get(at)
+            if row is None:
+                break
+            kept[at] = TopologyGroupView(
                 id=row.id,
                 name=row.name,
                 plane=row.plane,
                 color=row.color,
-                device_ids=ids,
+                device_ids=[],
+                parent_id=row.parent_id,
             )
-        )
+            at = row.parent_id
+    # 外側の枠が図から外れている場合は、中の枠を親無しにする
+    groups = [
+        item if item.parent_id in kept else replace(item, parent_id=None)
+        for item in kept.values()
+    ]
     graph.groups = groups
     _pull_groups_together(graph.nodes, groups, graph.edges)
     return graph
@@ -853,25 +902,37 @@ def create_group(
     *,
     plane: str = "custom",
     color: str | None = None,
+    parent_id: int | None = None,
 ) -> TopologyGroupView:
     """選んだ機器を枠で囲む。"""
+    # 部屋やフロアの枠は、自分では機器を持たず中の枠だけを囲むことがある。
+    # 機器を必須にすると、そういう外枠を作れない
     wanted = list(dict.fromkeys(device_ids))
-    if len(wanted) < 1:
-        raise ValueError("枠に入れる機器が無い")
-    hue = color or PLANE_COLORS.get(plane, PLANE_COLORS["custom"])
-    row = TopologyGroup(layer=layer, name=name.strip() or "枠", plane=plane, color=hue)
+    if plane == "custom":
+        hue = color or _next_group_color(db, layer)
+    else:
+        hue = color or PLANE_COLORS.get(plane, PLANE_COLORS["custom"])
+    row = TopologyGroup(
+        layer=layer,
+        name=name.strip() or "枠",
+        plane=plane,
+        color=hue,
+        parent_id=parent_id,
+    )
     db.add(row)
     db.flush()
     for device_id in wanted:
         db.add(TopologyGroupMember(group_id=row.id, device_id=device_id))
     db.commit()
-    db.refresh(row)
+    # メンバーは枠を作ったあとに足すので、読み直さないと空のまま残る
+    db.refresh(row, ["members"])
     return TopologyGroupView(
         id=row.id,
         name=row.name,
         plane=row.plane,
         color=row.color,
         device_ids=wanted,
+        parent_id=row.parent_id,
     )
 
 
@@ -883,10 +944,18 @@ def update_group(
     plane: str | None = None,
     color: str | None = None,
     device_ids: list[int] | None = None,
+    parent_id: int | None = None,
+    clear_parent: bool = False,
 ) -> TopologyGroupView | None:
     row = db.get(TopologyGroup, group_id)
     if row is None:
         return None
+    if clear_parent:
+        row.parent_id = None
+    elif parent_id is not None:
+        if _would_loop(db, group_id, parent_id):
+            raise ValueError("その枠を外側にすると、枠が輪になってしまいます")
+        row.parent_id = parent_id
     if name is not None:
         row.name = name.strip() or row.name
     if plane is not None:
@@ -909,7 +978,24 @@ def update_group(
         plane=row.plane,
         color=row.color,
         device_ids=[member.device_id for member in row.members],
+        parent_id=row.parent_id,
     )
+
+
+def _would_loop(db: Session, group_id: int, parent_id: int) -> bool:
+    """その枠を外側にすると、たどっていくうちに自分へ戻ってこないか。
+
+    輪になった枠は、大きさを決めるときに終わらない。作らせない。
+    """
+    seen = {group_id}
+    at: int | None = parent_id
+    while at is not None:
+        if at in seen:
+            return True
+        seen.add(at)
+        row = db.get(TopologyGroup, at)
+        at = row.parent_id if row else None
+    return False
 
 
 def delete_group(db: Session, group_id: int) -> bool:

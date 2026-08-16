@@ -98,6 +98,9 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
+# 枠の内側に取る余白と、名前の行の高さ
+_GROUP_PAD = 18.0
+_GROUP_HEAD = 8.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
 # 名前の幅がいる。左右の辺は行の高さ（_LABEL_PITCH）で決まる
 _BUNDLE_LABEL_W = 56.0
@@ -173,11 +176,25 @@ def render_svg(
         # 絞り込みの外に出た相手を、簡易表示で残す。
         # 線ごと消すと、上位への接続が「無い」ように見えてしまう
         peers = _boundary_peers(everything, keep) if show_peers else []
-        groups = []
-        for group in everything.groups:
-            ids = [device_id for device_id in group.device_ids if device_id in keep]
-            if ids:
-                groups.append(replace(group, device_ids=ids))
+        # 外側の枠（フロアや部屋）は自分では機器を持たないことがある。
+        # 中の枠が残るなら外枠も残す。外枠が落ちたときは、中の枠を親無しにする
+        trimmed = {
+            group.id: replace(
+                group, device_ids=[i for i in group.device_ids if i in keep]
+            )
+            for group in everything.groups
+        }
+        alive = {gid for gid, group in trimmed.items() if group.device_ids}
+        for gid in list(alive):
+            at_id = trimmed[gid].parent_id
+            while at_id is not None and at_id in trimmed and at_id not in alive:
+                alive.add(at_id)
+                at_id = trimmed[at_id].parent_id
+        groups = [
+            group if group.parent_id in alive else replace(group, parent_id=None)
+            for gid, group in trimmed.items()
+            if gid in alive
+        ]
         graph = TopologyGraph(
             layer=graph.layer,
             nodes=nodes,
@@ -323,24 +340,61 @@ def render_svg(
             f"{_esc(scope)} / {_esc(counts)}</text>"
         )
 
+    # 枠は内側から大きさを決め、外側（フロアや部屋）はその外を回る。
+    # 外枠を先に描いて背面へ置かないと、内側の枠の名前が隠れる。
+    group_box: dict[int, tuple[float, float, float, float]] = {}
+    children: dict[int | None, list] = {}
     for group in graph.groups:
-        members = [(at[i], size_at[i]) for i in group.device_ids if i in at]
-        if not members:
-            continue
-        gx = min(pos[0] for pos, _ in members) - 18
-        gy = min(pos[1] for pos, _ in members) - 26
-        gw = max(pos[0] + size[0] for pos, size in members) - gx + 18
-        gh = max(pos[1] + size[1] for pos, size in members) - gy + 18
+        children.setdefault(group.parent_id, []).append(group)
+
+    def _box_of(group) -> tuple[float, float, float, float] | None:
+        if group.id in group_box:
+            return group_box[group.id]
+        spots: list[tuple[float, float, float, float]] = []
+        for device_id in group.device_ids:
+            if device_id in at:
+                pos, size = at[device_id], size_at[device_id]
+                spots.append((pos[0], pos[1], pos[0] + size[0], pos[1] + size[1]))
+        for child in children.get(group.id, []):
+            inner = _box_of(child)
+            if inner:
+                spots.append(inner)
+        if not spots:
+            return None
+        box = (
+            min(item[0] for item in spots) - _GROUP_PAD,
+            min(item[1] for item in spots) - _GROUP_PAD - _GROUP_HEAD,
+            max(item[2] for item in spots) + _GROUP_PAD,
+            max(item[3] for item in spots) + _GROUP_PAD,
+        )
+        group_box[group.id] = box
+        return box
+
+    def _draw(group, depth: int) -> None:
+        box = _box_of(group)
+        if box is None:
+            return
+        gx, gy, gx2, gy2 = box
         label = group.name
         if group.plane and group.plane != "custom":
             label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
         parts.append(
-            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gw:.0f}" height="{gh:.0f}" rx="10" '
-            f'fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" stroke-width="1.6" '
-            f'stroke-dasharray="6 4"/>'
-            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" fill="{_esc(group.color)}">'
-            f"{_esc(label)}</text>"
+            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
+            f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
+            f'stroke-width="1.6" stroke-dasharray="6 4"/>'
+            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '
+            f'paint-order="stroke" stroke="#ffffff" stroke-width="3" '
+            f'fill="{_esc(group.color)}">{_esc(label)}</text>'
         )
+        # 枠の名前も埋まっている場所として登録する。しないとポート名が上に乗る
+        placement.add(
+            svglayout.text_rect(gx + 10, gy + 16 - 3, label, 11.0, "start", 0.0).grow(2)
+        )
+        for child in children.get(group.id, []):
+            _draw(child, depth + 1)
+
+    for group in children.get(None, []):
+        _draw(group, 0)
 
     # 同じ機器同士を何本も結んでいる場合（LAG など）に、線を平行にずらすための番号。
     # 中心同士を直線で結ぶだけだと完全に重なって1本に見える

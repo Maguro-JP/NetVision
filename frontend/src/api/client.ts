@@ -419,6 +419,7 @@ export const api = {
     device_ids: number[];
     plane?: string;
     color?: string;
+    parent_id?: number | null;
   }) =>
     request<TopologyGroup>("/topology/groups", {
       method: "POST",
@@ -426,7 +427,14 @@ export const api = {
     }),
   updateTopologyGroup: (
     id: number,
-    body: { name?: string; plane?: string; color?: string; device_ids?: number[] },
+    body: {
+      name?: string;
+      plane?: string;
+      color?: string;
+      device_ids?: number[];
+      parent_id?: number | null;
+      clear_parent?: boolean;
+    },
   ) =>
     request<TopologyGroup>(`/topology/groups/${id}`, {
       method: "PATCH",

@@ -349,24 +349,32 @@ def _seed(force: bool) -> None:
         db.commit()
 
         # 図の枠。機能があっても、デモに1つも無いと気づけない。
-        # 現場の単位（ラック）と、意味の単位（出口まわり）を1つずつ入れておく
+        # 現場の単位（ラック）と、意味の単位（出口まわり）を入れ、さらに
+        # 部屋・フロアの枠で囲む。機材がどこに置いてあるかが図だけで分かる
+        floor = topology.create_group(db, "physical", "本社ビル 3F", [])
+        machine_room = topology.create_group(
+            db, "physical", "301 マシン室", [], parent_id=floor.id
+        )
         topology.create_group(
             db,
             "physical",
             "ラック A-01",
             [by_host["core-sw-01"].id],
+            parent_id=machine_room.id,
         )
         topology.create_group(
             db,
             "physical",
             "ラック A-02",
             [by_host["core-sw-02"].id],
+            parent_id=machine_room.id,
         )
         topology.create_group(
             db,
             "physical",
             "出口まわり",
             [by_host["edge-rt-01"].id, by_host["fw-01"].id],
+            parent_id=floor.id,
         )
         db.commit()
 

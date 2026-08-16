@@ -94,6 +94,7 @@ def create_group(body: GroupCreate, db: DbSession) -> TopologyGroupRead:
             body.device_ids,
             plane=body.plane,
             color=body.color,
+            parent_id=body.parent_id,
         )
     except ValueError as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
@@ -144,14 +145,19 @@ def groups_from_racks(
 
 @router.patch("/groups/{group_id}", response_model=TopologyGroupRead)
 def update_group(group_id: int, body: GroupUpdate, db: DbSession) -> TopologyGroupRead:
-    group = service.update_group(
-        db,
-        group_id,
-        name=body.name,
-        plane=body.plane,
-        color=body.color,
-        device_ids=body.device_ids,
-    )
+    try:
+        group = service.update_group(
+            db,
+            group_id,
+            name=body.name,
+            plane=body.plane,
+            color=body.color,
+            device_ids=body.device_ids,
+            parent_id=body.parent_id,
+            clear_parent=body.clear_parent,
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, str(exc)) from exc
     if group is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "枠が見つかりません")
     return TopologyGroupRead.model_validate(group, from_attributes=True)
