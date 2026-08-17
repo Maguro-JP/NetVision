@@ -101,7 +101,7 @@ def _seed(force: bool) -> None:
             Device(
                 hostname="edge-rt-01",
                 code="NW-00001",
-                label="本社出口ルータ",
+                label="本社出口ルーター",
                 vendor="Juniper",
                 model="MX204",
                 serial_number="JN1234ABC",
@@ -276,7 +276,7 @@ def _seed(force: bool) -> None:
             [
                 Vlan(
                     vlan_id=10,
-                    name="全社ユーザ",
+                    name="全社ユーザー",
                     purpose="社員端末（有線）",
                     owner="情報システム部",
                     subnet="10.10.0.0/16",
@@ -311,7 +311,7 @@ def _seed(force: bool) -> None:
             ("acc-sw-01", "GigabitEthernet0/10", "access", 10, None, None, None),
             ("core-sw-02", "GigabitEthernet1/0/10", "trunk", None, 1, "30,40", None),
             ("wlc-01", "GigabitEthernet1", "trunk", None, 999, "30,40", None),
-            # L3 図用。ルータ〜FW の点対点に IP を付けておく
+            # L3 図用。ルーター〜FW の点対点に IP を付けておく
             ("edge-rt-01", "ge-0/0/0", None, None, None, None, "10.255.0.1/30"),
             ("fw-01", "port1", None, None, None, None, "10.255.0.2/30"),
             ("fw-01", "port2", None, None, None, None, "10.255.0.5/30"),
@@ -335,7 +335,7 @@ def _seed(force: bool) -> None:
             ]
         )
 
-        # VRF。ルータの中を社内系と顧客系に分けている想定
+        # VRF。ルーターの中を社内系と顧客系に分けている想定
         db.add_all(
             [
                 DeviceVrf(device_id=by_host[host].id, name=name, rd=rd, description=description)

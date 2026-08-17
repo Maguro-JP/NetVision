@@ -76,11 +76,11 @@ def test_vlan_name_falls_back_to_something_the_device_accepts(client):
     実機の VLAN 名に日本語は入らない。そのまま出すと投入時に弾かれる。
     """
     device = make_device(client, "sw-01", "Cisco", "C9300-48P")
-    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザ"})
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザー"})
 
     body = design(client, device)["body"]
     assert "vlan 10" in body
-    assert "全社ユーザ" not in body
+    assert "全社ユーザー" not in body
     assert "name VLAN10" in body
 
 

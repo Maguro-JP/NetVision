@@ -8,14 +8,17 @@ import SeverityBadge from "./SeverityBadge";
 
 /** 列。並び順は見る頻度の順で、状態を左に置く。
  *
- * 一覧を開いて最初に見るのは「困っている機器はどれか」で、ホスト名はその次。
+ * 一覧を開いて最初に見るのは「困っている機器はどれか」で、機器の名前はその次。
  * 状態が右端にあると、横に長い表を目で往復することになる。
+ *
+ * 状態の欄には、保守の状態・運用の状態・新着をまとめて置く。どれも
+ * 「いまこの機器はどういう扱いか」の話で、別の列に散らすと目が行き来する。
  */
 const COLUMNS = [
   "status",
+  "operation",
   "hostname",
   "type",
-  "operation",
   "product",
   "site",
   "version",
@@ -26,8 +29,8 @@ const COLUMNS = [
 export type DeviceColumn = (typeof COLUMNS)[number];
 
 const HEADINGS: Record<DeviceColumn, string> = {
-  status: "状態",
-  hostname: "ホスト名",
+  status: "保守",
+  hostname: "管理ID / ホスト名",
   type: "種別",
   operation: "運用",
   product: "メーカー / 型番",
@@ -118,7 +121,19 @@ export default function DeviceTable({
                 </span>
               )}
             </td>
+            <td className="muted nowrap">
+              {DEVICE_STATUS_LABEL[d.status]}
+              {/* 新着は運用の隣に置く。名前の下に足すと、機器の名前が3行になる */}
+              {isNew(d) && <span className="badge new">New</span>}
+            </td>
             <td className="nowrap">
+              {/* 管理IDが人の決めた番号で、ホスト名は機械の名前。
+                  台帳を追うときは管理IDから探すので、上に置く */}
+              {d.code ? (
+                <div className="mono muted" title="管理ID">
+                  {d.code}
+                </div>
+              ) : null}
               <WindowLink
                 to={`/devices/${d.id}`}
                 name={deviceWindow(d.id)}
@@ -128,15 +143,8 @@ export default function DeviceTable({
               >
                 {d.hostname}
               </WindowLink>
-              {d.code && (
-                <div className="muted mono" title="管理ID">
-                  {d.code}
-                </div>
-              )}
-              {isNew(d) && <span className="badge new">New</span>}
             </td>
             <td>{DEVICE_TYPE_LABEL[d.device_type]}</td>
-            <td className="muted nowrap">{DEVICE_STATUS_LABEL[d.status]}</td>
             <td>
               {d.vendor || <Blank label="メーカー" />} / {d.model || <Blank label="型番" />}
             </td>

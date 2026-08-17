@@ -10,6 +10,8 @@ class ImportFieldInfo(BaseModel):
     label: str
     required: bool
     aliases: list[str]
+    #: 決まった書き方しか受け付けない項目の候補（種別・状態）。空なら自由入力
+    choices: list[str] = []
 
 
 class ImportRowIssue(BaseModel):

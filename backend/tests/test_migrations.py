@@ -90,7 +90,7 @@ def test_every_table_accepts_a_row(migrated: str):
             {"d": device_id},
         )
         conn.execute(
-            text("INSERT INTO vlans (vlan_id, name) VALUES (10, '全社ユーザ')"),
+            text("INSERT INTO vlans (vlan_id, name) VALUES (10, '全社ユーザー')"),
         )
         conn.execute(
             text("INSERT INTO device_vrfs (device_id, name) VALUES (:d, 'SHANAI')"),

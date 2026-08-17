@@ -104,7 +104,7 @@ class TopologyNodeView:
     placed: bool  # 保存済みの位置か、自動配置か
     # この機器に載っている VLAN。定義されているものと、トランクで通しているものの合計
     vlans: list[int] = field(default_factory=list)
-    vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルータ
+    vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルーター
     # この機器で図に出てくるポートの種類（GigabitEthernet など）。
     # 線のラベルを番号だけにしても、ここを見れば何のポートか分かるようにするため
     port_kinds: list[str] = field(default_factory=list)
@@ -377,7 +377,7 @@ def _shrink_to(graph: TopologyGraph, edges: list[TopologyEdgeView]) -> TopologyG
 def _as_l2(graph: TopologyGraph) -> TopologyGraph:
     """VLAN が載っている結線だけを残す。
 
-    物理図の WAN 線（ルータ同士で VLAN が無い）は出さない。スイッチ間の
+    物理図の WAN 線（ルーター同士で VLAN が無い）は出さない。スイッチ間の
     トランクやアクセスが残るので、「どこまで同じ VLAN が伸びているか」が読める。
 
     人が手で引いた線（manual）は、VLAN がまだ付いていなくても残す。
@@ -397,7 +397,7 @@ def _as_l2(graph: TopologyGraph) -> TopologyGraph:
 def _as_l3(graph: TopologyGraph, ports: dict[tuple[int, str], Interface]) -> TopologyGraph:
     """セグメント（L3）の結線だけを残す。
 
-    - ルータ / FW / LB どうしの物理結線
+    - ルーター / FW / LB どうしの物理結線
     - 両端のポートに IP が付いている結線（点対点のルート）
     - VRF が付いている結線
     - 人が手で引いた線（manual）
@@ -577,7 +577,7 @@ def network_rank(db: Session) -> dict[int, int]:
 def hierarchy_rank(graph) -> dict[int, int]:
     """網全体の「上位からの遠さ」。小さいほど上位。
 
-    繋がっている本数では上下は決まらない。支社ルータは配下の拠点が多いぶん
+    繋がっている本数では上下は決まらない。支社ルーターは配下の拠点が多いぶん
     本数が多くなり、センターより上に見えてしまう。
 
     代わりに、結線の端から端を見て上を決める。相手が多い（星型）ときは
@@ -2746,7 +2746,7 @@ class VrfView:
 
 
 def vrf_summary(db: Session) -> list[VrfView]:
-    """機器の中に切られた仮想ルータを、名前ごとにまとめて返す。
+    """機器の中に切られた仮想ルーターを、名前ごとにまとめて返す。
 
     同じ VRF 名が複数台にあるのが普通（拠点をまたいで同じ VRF を延ばす）ので、
     名前を軸にする。RD が機器ごとに食い違っていれば印を付ける。

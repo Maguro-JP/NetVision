@@ -71,7 +71,7 @@ def build_fleet(db) -> None:
                 )
             )
 
-    # 型番の製品マスタから EoL を引く機器（機器側は空）
+    # 型番の製品マスターから EoL を引く機器（機器側は空）
     db.add(ProductReference(vendor="NEC", model="IX2215", eol_date=TODAY - timedelta(days=10)))
     db.add(
         Device(
@@ -136,7 +136,7 @@ def test_retired_devices_are_not_alerted(db_session):
 
 
 def test_product_reference_supplies_the_eol(db_session):
-    """機器に EoL が無くても、型番の製品マスタから引けること。"""
+    """機器に EoL が無くても、型番の製品マスターから引けること。"""
     build_fleet(db_session)
     names = {
         d.hostname

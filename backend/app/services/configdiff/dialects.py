@@ -152,7 +152,7 @@ _CISCO = Dialect(
         ),
         RiskRule(
             re.compile(r"^\s*no\s+ip(?:v6)?\s+access-list\b", re.I),
-            "ACL を作り直します。消してから入れ直すまでの間、フィルタが効きません",
+            "ACL を作り直します。消してから入れ直すまでの間、フィルターが効きません",
         ),
         RiskRule(
             re.compile(r"^\s*no\s+(?:username|aaa|line\s+vty|snmp-server)\b", re.I),

@@ -15,7 +15,7 @@ export type DeviceStatus = "active" | "standby" | "maintenance" | "retired";
 export interface LifecycleStatus {
   effective_eos_date: string | null;
   effective_eol_date: string | null;
-  /** "device" = 機器個別の入力 / "product" = 型番の製品マスタ / null = 未登録 */
+  /** "device" = 機器個別の入力 / "product" = 型番の製品マスター / null = 未登録 */
   eol_source: "device" | "product" | null;
   maintenance_end: string | null;
   days_to_maintenance_end: number | null;
@@ -91,6 +91,8 @@ export interface ImportField {
   label: string;
   required: boolean;
   aliases: string[];
+  /** 決まった書き方しか受け付けない項目の候補（種別・状態）。空なら自由入力 */
+  choices: string[];
 }
 
 export type ImportRowAction = "create" | "update" | "skip" | "error";

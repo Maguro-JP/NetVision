@@ -43,9 +43,9 @@ def parse(text: str) -> ParsedConfig:
 
 
 def _parse_vdoms(text: str, parsed: ParsedConfig) -> None:
-    """VDOM を仮想ルータとして扱う。
+    """VDOM を仮想ルーターとして扱う。
 
-    FortiGate で「1台の中にルータを分ける」のは VDOM なので、他ベンダーの
+    FortiGate で「1台の中にルーターを分ける」のは VDOM なので、他ベンダーの
     VRF と同じ列に並べておいた方が、機器をまたいで見るときに揃う。
     """
     in_vdom = False

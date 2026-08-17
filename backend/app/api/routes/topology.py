@@ -249,7 +249,7 @@ def adopt_observed_vlans(db: DbSession, overwrite: bool = False) -> dict[str, in
 
 @router.get("/vrfs", response_model=list[VrfRead])
 def list_vrfs(db: DbSession) -> list[VrfRead]:
-    """機器の中に切られた仮想ルータを、名前ごとにまとめて返す。"""
+    """機器の中に切られた仮想ルーターを、名前ごとにまとめて返す。"""
     return service.vrf_summary(db)
 
 

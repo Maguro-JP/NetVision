@@ -279,7 +279,7 @@ def _nec_ix(plan: DesignInput) -> str:
             lines.append(f"! 例) interface GigaEthernet0.{vlan.vlan_id} / vlan-id {vlan.vlan_id}")
         lines.append("!")
 
-    lines.append(f"! 経路制御・NAT・IPsec・フィルタ: {TODO}")
+    lines.append(f"! 経路制御・NAT・IPsec・フィルター: {TODO}")
     return "\n".join(lines) + "\n"
 
 

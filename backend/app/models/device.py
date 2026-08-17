@@ -98,7 +98,7 @@ class Device(Base):
         """
         return [label for name, label in self.REQUIRED_FIELDS if not getattr(self, name, None)]
 
-    # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスタに正規化してある。
+    # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスターに正規化してある。
     # 台帳の表記ゆれ（cisco / Cisco）を吸収するため、大文字小文字を無視して突き合わせる。
     product: Mapped[ProductReference | None] = relationship(
         primaryjoin=lambda: and_(

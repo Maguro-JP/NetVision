@@ -93,7 +93,7 @@ def _layout(
         tier.setdefault(node.device_id, 7)
 
     # 隣接関係を作り、上位から幅優先でたどって木にする。
-    # 段（種別）だけで親を決めると、拠点ルータ→支社ルータのような
+    # 段（種別）だけで親を決めると、拠点ルーター→支社ルーターのような
     # 同じ種別が縦に並ぶ構成が全部ばらばらの根になってしまう
     neighbours: dict[int, list[int]] = {}
     port_between: dict[tuple[int, int], str] = {}
@@ -112,7 +112,7 @@ def _layout(
         (n.device_id for n in graph.nodes),
         key=lambda device_id: (
             # 網全体で見た「上位からの遠さ」。本数で決めると、配下の多い
-            # 支社ルータがセンターより上に来てしまう
+            # 支社ルーターがセンターより上に来てしまう
             (rank or {}).get(device_id, 0),
             tier[device_id],
             nodes[device_id].hostname,

@@ -162,8 +162,10 @@ export default function DeviceFormPage() {
               title="プロジェクトで使っている機器の番号。空でも登録できます"
             />
           </div>
-          {text("vendor", "ベンダー *", "text", { required: true })}
-          {text("model", "型番 *", "text", { required: true })}
+          {/* ベンダーと型番は Config を読ませれば埋まる。台帳を起こす時点で
+              必須にすると、名前だけ分かっている機器を登録できない */}
+          {text("vendor", "ベンダー")}
+          {text("model", "型番")}
           {text("serial_number", "シリアル番号")}
 
           <div className="field">
@@ -175,6 +177,11 @@ export default function DeviceFormPage() {
                 </option>
               ))}
             </select>
+            {/* 取り込みの CSV でも同じ言葉を書く。ここに並べておけば、
+                何を書けばよいのかを台帳の画面だけで確かめられる */}
+            <span className="hint muted">
+              取り込みでは {Object.values(DEVICE_TYPE_LABEL).join(" / ")} と書きます
+            </span>
           </div>
           <div className="field">
             <label htmlFor="status">状態</label>

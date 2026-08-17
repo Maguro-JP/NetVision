@@ -135,7 +135,7 @@ const LAYERS = [
   {
     value: "l3",
     label: "L3 (セグメント)",
-    hint: "ルータ同士や IP 付きの結線。ルーティングの段",
+    hint: "ルーター同士や IP 付きの結線。ルーティングの段",
   },
 ];
 
@@ -883,7 +883,7 @@ function toFlow(
 }
 
 /**
- * 表示の切り替えで、人が動かした位置をサーバの古い値で上書きしない。
+ * 表示の切り替えで、人が動かした位置をサーバーの古い値で上書きしない。
  *
  * 編集のオンオフやポート名の出し方を変えるたびに、取得済みのグラフから
  * ノードを作り直していた。未保存の移動がそこで消え、「突然ロールバックした」
@@ -1122,7 +1122,7 @@ function TopologyEditor() {
     }
     setEdges(flow.edges);
     // 未保存の移動は消さない。以前はここで dirty を落としていたため、
-    // 表示を切り替えただけで「保存済み」に見え、位置もサーバの古い値に戻った
+    // 表示を切り替えただけで「保存済み」に見え、位置もサーバーの古い値に戻った
   }, [
     graph,
     selectedVlans,
@@ -1860,7 +1860,7 @@ function TopologyEditor() {
               className="primary"
               disabled={!dirty || save.isPending}
               onClick={() => save.mutate()}
-              title="編集した配置をサーバに残します"
+              title="編集した配置をサーバーに残します"
             >
               {dirty ? "配置を保存" : "保存済み"}
             </button>
@@ -2097,7 +2097,7 @@ function TopologyEditor() {
               <>
                 <p>L3 の結線がありません。</p>
                 <p className="muted">
-                  ルータ同士の結線や、両端に IP が付いたポートがあるとここに出ます。
+                  ルーター同士の結線や、両端に IP が付いたポートがあるとここに出ます。
                 </p>
               </>
             ) : layer === "logical" ? (
@@ -2418,7 +2418,7 @@ function TopologyEditor() {
         {(vrfs ?? []).length > 0 && (
           <div className="vlan-filter">
             <div className="vlan-filter-head">
-              <strong>VRF（仮想ルータ）で絞り込む</strong>
+              <strong>VRF（仮想ルーター）で絞り込む</strong>
               <span className="muted">同じ線で繋がって見えても、VRF が違えば通信できません</span>
               <select value={selectedVrf} onChange={(e) => setSelectedVrf(e.target.value)}>
                 <option value="">すべて</option>

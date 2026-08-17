@@ -9,13 +9,13 @@ export const SEVERITY_LABEL: Record<Severity, string> = {
 };
 
 export const DEVICE_TYPE_LABEL: Record<DeviceType, string> = {
-  router: "ルータ",
+  router: "ルーター",
   switch: "スイッチ",
   firewall: "ファイアウォール",
-  load_balancer: "ロードバランサ",
+  load_balancer: "ロードバランサー",
   wireless_ap: "無線AP",
-  wireless_controller: "無線コントローラ",
-  server: "サーバ",
+  wireless_controller: "無線コントローラー",
+  server: "サーバー",
   other: "その他",
 };
 

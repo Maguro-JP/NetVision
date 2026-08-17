@@ -14,7 +14,7 @@ from tests.conftest import API
 CSV_HEADER = "ホスト名,メーカー,型式,機器種別,状態,OSバージョン,設置場所,ラック番号,導入年月日,サポート終了日,保守会社,保守開始日,保守期限,年額\n"  # noqa: E501
 CSV_ROWS = (
     'core-sw-01,Cisco,C9500-40X,L3SW,稼働中,17.09.04a,本社DC,A-01,2021/4/1,2030/2/25,ネットワン,2024/4/1,2027/3/31,"480,000"\n'  # noqa: E501
-    "edge-rt-01,Juniper,MX204,ルータ,撤去済み,21.4R3-S5,大阪支社,,2019年10月1日,2026/9/19,Juniper Care,2023/10/1,2026/10/4,720000\n"  # noqa: E501
+    "edge-rt-01,Juniper,MX204,ルーター,撤去済み,21.4R3-S5,大阪支社,,2019年10月1日,2026/9/19,Juniper Care,2023/10/1,2026/10/4,720000\n"  # noqa: E501
 )
 
 
@@ -50,7 +50,7 @@ def test_export_csv_contains_all_devices(client):
     assert core["型番"] == "C9500-40X"
     assert core["種別"] == "スイッチ"
     assert core["状態"] == "稼働中"
-    assert core["拠点"] == "本社DC"
+    assert core["拠点名"] == "本社DC"
     assert core["導入日"] == "2021/04/01"
     assert core["保守終了日"] == "2027/03/31"
     assert core["保守年額"] == "480000.0"
@@ -153,10 +153,10 @@ def test_export_xlsx(client):
     assert sheet.freeze_panes == "A2"
 
     headers = [c.value for c in sheet[1]]
-    # 先頭は内部ID。書き出して直して戻すとき、この列で同じ機器だと分かる
-    assert headers[0] == "内部ID"
-    assert headers[1] == "管理ID"
-    assert "拠点ID" in headers
+    # 人が読む列から並べる。戻すとき用の内部IDは後ろ
+    assert headers[0] == "管理ID"
+    assert "内部ID（書き出した行を戻すとき用）" in headers
+    assert "拠点ID（任意）" in headers
     assert "ホスト名" in headers
 
     values = dict(zip(headers, [c.value for c in sheet[2]], strict=False))
@@ -168,8 +168,8 @@ def test_export_xlsx(client):
 def test_export_empty_database_returns_headers_only(client):
     headers, rows = read_csv(client.get(f"{API}/export/devices.csv").text)
     assert rows == []
-    # 先頭は内部ID。書き出して直して戻すとき、この列で同じ機器だと分かる
-    assert headers[0] == "内部ID"
-    assert headers[1] == "管理ID"
-    assert "拠点ID" in headers
+    # 人が読む列から並べる。戻すとき用の内部IDは後ろ
+    assert headers[0] == "管理ID"
+    assert "内部ID（書き出した行を戻すとき用）" in headers
+    assert "拠点ID（任意）" in headers
     assert "ホスト名" in headers

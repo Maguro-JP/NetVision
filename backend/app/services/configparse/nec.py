@@ -2,7 +2,7 @@
 
 NEC は系統が2つあり、書式がまったく違うので分けて扱う。
 
-- IX シリーズ（IX2000 / IX3000）… 自社系のルータ。`device-name` でホスト名、
+- IX シリーズ（IX2000 / IX3000）… 自社系のルーター。`device-name` でホスト名、
   インターフェースは `GigaEthernet0.0` のようにサブインターフェース番号まで含む
 - QX シリーズ（QX-S）… H3C Comware ベースのスイッチ。機器名は `sysname`
   （`hostname` ではない）。否定は `no` ではなく `undo`。running-config
@@ -181,7 +181,7 @@ def _parse_ix(text: str) -> ParsedConfig:
 
 
 def _parse_ix_vrfs(text: str, parsed: ParsedConfig) -> None:
-    """IX の VRF（VRF-lite）を読む。ルータの中に経路表を分けて持つ機能。"""
+    """IX の VRF（VRF-lite）を読む。ルーターの中に経路表を分けて持つ機能。"""
     current: ParsedVrf | None = None
     for raw in text.splitlines():
         match = _IX_VRF_DEF.match(raw)

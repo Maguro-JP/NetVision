@@ -85,7 +85,7 @@ export default function DeviceListPage() {
     queryFn: api.listSites,
   });
   // 全件は取りに行かない。16万台の環境では1ページ分でも全件読み込むと
-  // 10秒かかっていた（絞り込みも件数も、いまはサーバ側で済ませている）
+  // 10秒かかっていた（絞り込みも件数も、いまはサーバー側で済ませている）
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["devices", filters, page],
     queryFn: () => api.listDevicePage({ ...filters, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
@@ -148,8 +148,8 @@ export default function DeviceListPage() {
       <ColumnChoiceFilter
         value={statusValue}
         choices={statusChoices}
-        placeholder="状態を探す…"
-        title="状態で絞り込む。文字を打つと候補が減ります"
+        placeholder="保守を探す…"
+        title="保守・EoL の状態で絞り込む。文字を打つと候補が減ります"
         onChange={(next) => {
           const updated = new URLSearchParams(params);
           updated.delete("severity");
@@ -164,7 +164,7 @@ export default function DeviceListPage() {
     hostname: (
       <ColumnTextFilter
         value={params.get("hostname") ?? ""}
-        placeholder="ホスト名…"
+        placeholder="管理ID・ホスト名…"
         title="ホスト名に含む文字で絞り込む"
         onChange={(next) => setTextFilter("hostname", next)}
       />

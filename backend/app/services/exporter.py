@@ -35,12 +35,12 @@ SEVERITY_LABELS: dict[Severity, str] = {
 # 取り込み時に受け付ける日本語表記のうち、書き出しで使う代表表記を逆引きする
 _TYPE_LABELS = {
     "switch": "スイッチ",
-    "router": "ルータ",
+    "router": "ルーター",
     "firewall": "ファイアウォール",
-    "load_balancer": "ロードバランサ",
+    "load_balancer": "ロードバランサー",
     "wireless_ap": "無線AP",
-    "wireless_controller": "無線コントローラ",
-    "server": "サーバ",
+    "wireless_controller": "無線コントローラー",
+    "server": "サーバー",
     "other": "その他",
 }
 _STATUS_LABELS = {

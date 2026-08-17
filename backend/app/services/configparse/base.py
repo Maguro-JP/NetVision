@@ -69,7 +69,7 @@ class ParsedInterface:
 
 @dataclass
 class ParsedVrf:
-    """機器の中に切った仮想ルータ（VRF / VPN インスタンス / VDOM）。
+    """機器の中に切った仮想ルーター（VRF / VPN インスタンス / VDOM）。
 
     経路表が分かれるので、同じ図に見えていても VRF が違えば通信できない。
     「繋がっているのに通らない」の原因になりやすいところなので、明示的に持つ。

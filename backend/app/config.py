@@ -27,7 +27,7 @@ class Settings(BaseSettings):
     cors_origins: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
     # 画面や書き出しに出す時刻の地域。DB には UTC で持ち、見せるときだけ変換する。
-    # サーバの時計が UTC でも、資料に載る「◯◯時点」は使う人の時刻でなければ意味が無い。
+    # サーバーの時計が UTC でも、資料に載る「◯◯時点」は使う人の時刻でなければ意味が無い。
     display_timezone: str = "Asia/Tokyo"
 
     # 互換のため残している。空の DB は起動時に表を作る。

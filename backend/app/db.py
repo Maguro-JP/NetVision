@@ -15,7 +15,7 @@ class Base(DeclarativeBase):
 def make_engine(url: str) -> Engine:
     """DB エンジンを作る。SQLite はノートPCの1台運用向けに調整する。
 
-    サーバの Postgres が理想でも、導入テストと1人での運用は自分のPCで
+    サーバーの Postgres が理想でも、導入テストと1人での運用は自分のPCで
     行う。そこで WAL と待ち時間を入れないと、取り込み中に画面が止まる。
     """
     backend = make_url(url).get_backend_name()
@@ -50,7 +50,7 @@ SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False
 
 
 def get_db() -> Iterator[Session]:
-    # 起動時に Alembic で表を最新にする。サーバレスでは lifespan が
+    # 起動時に Alembic で表を最新にする。サーバーレスでは lifespan が
     # 走る保証が無いため、最初の DB 利用でも同じ処理を見る。
     from app.bootstrap import ensure_ready
 

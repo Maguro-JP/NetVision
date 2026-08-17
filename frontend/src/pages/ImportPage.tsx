@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api, type ImportKeyField } from "../api/client";
+import type { ImportField } from "../api/types";
 import LinkSheetImport from "../components/LinkSheetImport";
 import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
@@ -55,6 +56,14 @@ function formatElapsed(seconds: number): string {
  * キーにする方がホスト名より安全で分かりやすい。書き出したファイルに
  * 「内部ID」列がある場合は、キーよりそちらが優先される。
  */
+/** その列に書ける値の候補。種別のように決まっているものだけ返す。 */
+function choicesOf(fields: ImportField[] | undefined, field: string | undefined): string | null {
+  if (!field) return null;
+  const found = fields?.find((item) => item.name === field);
+  if (!found || found.choices.length === 0) return null;
+  return found.choices.join(" / ");
+}
+
 export default function ImportPage() {
   const queryClient = useQueryClient();
   const [file, setFile] = useState<File | null>(null);
@@ -348,6 +357,13 @@ export default function ImportPage() {
                         </option>
                       ))}
                     </select>
+                    {/* 決まった書き方しか受け付けない項目は、その場で候補を出す。
+                        「種別」に何を書けばよいのか、列を選んだあとに分かる */}
+                    {choicesOf(fields, mapping[column] ?? result.mapping[column]) && (
+                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                        書き方: {choicesOf(fields, mapping[column] ?? result.mapping[column])}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}

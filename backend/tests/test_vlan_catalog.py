@@ -34,10 +34,10 @@ def upload(client, body: str = CONFIG, name: str = "acc-sw-01.txt"):
 
 def test_catalog_name_is_used_for_display(client):
     upload(client)
-    client.put(f"{API}/topology/vlans/catalog/20", json={"name": "サーバセグメント"})
+    client.put(f"{API}/topology/vlans/catalog/20", json={"name": "サーバーセグメント"})
 
     vlans = {v["vlan_id"]: v for v in client.get(f"{API}/topology/vlans").json()}
-    assert vlans[20]["name"] == "サーバセグメント"
+    assert vlans[20]["name"] == "サーバーセグメント"
     # 実機に書いてある名前も残す。食い違いは「機器側が古い」という情報になる
     assert vlans[20]["observed_names"] == ["SRV"]
     assert vlans[20]["in_catalog"] is True
@@ -48,13 +48,13 @@ def test_catalog_survives_reimport(client):
     upload(client)
     client.put(
         f"{API}/topology/vlans/catalog/10",
-        json={"name": "全社ユーザ", "purpose": "社員端末", "owner": "情シス"},
+        json={"name": "全社ユーザー", "purpose": "社員端末", "owner": "情シス"},
     )
 
     upload(client)  # もう一度同じ Config を取り込む
 
     vlans = {v["vlan_id"]: v for v in client.get(f"{API}/topology/vlans").json()}
-    assert vlans[10]["name"] == "全社ユーザ"
+    assert vlans[10]["name"] == "全社ユーザー"
     assert vlans[10]["purpose"] == "社員端末"
     assert vlans[10]["owner"] == "情シス"
 
@@ -80,19 +80,19 @@ def test_vlan_on_a_device_but_not_in_the_catalog_is_flagged(client):
 def test_adopt_creates_drafts_without_overwriting_written_entries(client):
     """実機の名前で下書きを作る。既に人が書いた行は触らない。"""
     upload(client)
-    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザ"})
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザー"})
 
     result = client.post(f"{API}/topology/vlans/catalog/adopt").json()
     assert result["created"] == 1  # VLAN 20 だけが作られる
 
     catalog = {v["vlan_id"]: v for v in client.get(f"{API}/topology/vlans/catalog").json()}
-    assert catalog[10]["name"] == "全社ユーザ"  # 上書きしない
+    assert catalog[10]["name"] == "全社ユーザー"  # 上書きしない
     assert catalog[20]["name"] == "SRV"
 
 
 def test_adopt_can_overwrite_when_asked(client):
     upload(client)
-    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザ"})
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザー"})
 
     client.post(f"{API}/topology/vlans/catalog/adopt", params={"overwrite": "true"})
     catalog = {v["vlan_id"]: v for v in client.get(f"{API}/topology/vlans/catalog").json()}
@@ -102,7 +102,7 @@ def test_adopt_can_overwrite_when_asked(client):
 def test_deleting_a_catalog_entry_leaves_the_device_alone(client):
     """台帳から消すのは「用途の記録を消す」だけ。実機の設定には触らない。"""
     upload(client)
-    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザ"})
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "全社ユーザー"})
 
     assert client.delete(f"{API}/topology/vlans/catalog/10").status_code == 204
 

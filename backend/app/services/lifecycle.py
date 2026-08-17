@@ -63,7 +63,7 @@ def worst(*severities: Severity) -> Severity:
 class LifecycleStatus:
     """1台の機器のライフサイクル評価結果。API のレスポンスにそのまま載る。"""
 
-    # 実際に判定へ使った日付と、その出どころ（機器個別の入力か、型番の製品マスタか）
+    # 実際に判定へ使った日付と、その出どころ（機器個別の入力か、型番の製品マスターか）
     effective_eos_date: date | None
     effective_eol_date: date | None
     eol_source: str | None
@@ -85,7 +85,7 @@ def evaluate(device: Device, today: date | None = None) -> LifecycleStatus:
     ends = [c.end_date for c in device.contracts if c.end_date is not None]
     maintenance_end = max(ends) if ends else None
 
-    # 機器個別の入力を優先し、無ければ型番の製品マスタを使う。
+    # 機器個別の入力を優先し、無ければ型番の製品マスターを使う。
     # 個体の事情（特別な延長保守など）を上書きできる余地を残すため。
     product = getattr(device, "product", None)
     eos_date = device.eos_date or (product.eos_date if product else None)

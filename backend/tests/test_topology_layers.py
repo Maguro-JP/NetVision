@@ -52,7 +52,7 @@ def _port(db, device: Device, name: str, **kwargs) -> Interface:
 
 
 def test_l2_keeps_vlan_links_and_drops_plain_wan(db_session):
-    """L2 は VLAN が載っている線だけ。ルータ同士の素の WAN は出さない。"""
+    """L2 は VLAN が載っている線だけ。ルーター同士の素の WAN は出さない。"""
     core = _device(db_session, "core-sw", DeviceType.SWITCH)
     acc = _device(db_session, "acc-sw", DeviceType.SWITCH)
     edge = _device(db_session, "edge-rt", DeviceType.ROUTER)
@@ -118,7 +118,7 @@ def test_l3_keeps_manual_links_even_without_ip(db_session):
 
 
 def test_l3_keeps_router_links_and_drops_switch_trunks(db_session):
-    """L3 はルータ同士（や IP 付き）。スイッチ間トランクは L2 側。"""
+    """L3 はルーター同士（や IP 付き）。スイッチ間トランクは L2 側。"""
     edge = _device(db_session, "edge-rt", DeviceType.ROUTER)
     fw = _device(db_session, "fw-01", DeviceType.FIREWALL)
     core = _device(db_session, "core-sw", DeviceType.SWITCH)

@@ -151,8 +151,8 @@ export function humanizeHttpError(status: number, fallback: string): string {
   if (status === 404) return "見つかりませんでした。削除されたか、アドレスが違う可能性があります";
   if (status === 409) return "他の操作と衝突しました。画面を読み直してからやり直してください";
   if (status === 413)
-    return "ファイルが大きすぎます。CSV に分けるか、サーバの NETVISION_MAX_IMPORT_BYTES を確認してください";
-  if (status >= 500) return "サーバで問題が起きました。しばらくしてからやり直してください";
+    return "ファイルが大きすぎます。CSV に分けるか、サーバーの NETVISION_MAX_IMPORT_BYTES を確認してください";
+  if (status >= 500) return "サーバーで問題が起きました。しばらくしてからやり直してください";
   return fallback;
 }
 
@@ -380,7 +380,7 @@ export const api = {
   listInterfaces: (deviceId: number) =>
     request<NetworkInterface[]>(`/configs/devices/${deviceId}/interfaces`),
 
-  // --- トポロジ ---
+  // --- トポロジー ---
   getTopology: (
     layer: string,
     includeRetired = false,

@@ -1,5 +1,5 @@
 @echo off
-rem NetVision を起動する（Windows）。閉じるとサーバも止まります。
+rem NetVision を起動する（Windows）。閉じるとサーバーも止まります。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist

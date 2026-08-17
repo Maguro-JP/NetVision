@@ -54,7 +54,7 @@ def test_document_with_file_is_stored(client):
 
 
 def test_document_without_file_is_allowed(client):
-    """実体が無く、URL だけの登録もできる（社内サーバ参照など）。"""
+    """実体が無く、URL だけの登録もできる（社内サーバー参照など）。"""
     body = add_document(client, source_url="https://cisco.com/doc").json()
 
     assert body["has_file"] is False
