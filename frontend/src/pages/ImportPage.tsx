@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api, type ImportKeyField } from "../api/client";
 import type { ImportField } from "../api/types";
 import LinkSheetImport from "../components/LinkSheetImport";
+import WindowLink from "../components/WindowLink";
 import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
 
@@ -74,6 +75,13 @@ export default function ImportPage() {
   const [elapsedSec, setElapsedSec] = useState(0);
 
   const { data: fields } = useQuery({ queryKey: ["importFields"], queryFn: api.importFields });
+  // 台帳に機器があるかどうかで、渡すべき下敷きが変わる。
+  // 空ならひな形、入っているなら「いまの台帳を書き出したもの」が正しい下敷きになる
+  const { data: ledger } = useQuery({
+    queryKey: ["devicesExist"],
+    queryFn: () => api.listDevicePage({ limit: 1 }),
+  });
+  const hasDevices = (ledger?.total ?? 0) > 0;
 
   const run = useMutation({
     mutationFn: (commit: boolean) =>
@@ -212,11 +220,36 @@ export default function ImportPage() {
           </select>
         </div>
         <div className="field">
-          <label>テンプレート</label>
-          <a href={api.importTemplateUrl}>記入用CSVをダウンロード</a>
-          <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
-            管理ID列付きです。社内の番号を入れてから取り込むと、あとから直しやすいです。
-          </p>
+          <label>下敷きにするファイル</label>
+          {hasDevices ? (
+            <>
+              {/* 台帳が入っているなら、ひな形より「いまの台帳」を直す方が確実。
+                  内部IDと管理IDが入った状態で出るので、同じ機器として戻せる */}
+              <WindowLink
+                className="button"
+                to="/export"
+                name="netvision-export"
+                width={1200}
+                height={900}
+                title="いまの機器一覧を書き出します。直してそのまま取り込み直せます"
+              >
+                いまの機器一覧を書き出す（{(ledger?.total ?? 0).toLocaleString()} 件）
+              </WindowLink>
+              <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+                書き出したファイルを直して取り込むのが確実です。内部IDと管理IDが入った
+                ままなので、ホスト名を変えても同じ機器として直せます。
+                <br />
+                <a href={api.importTemplateUrl}>空のひな形（記入用CSV）</a>も使えます。
+              </p>
+            </>
+          ) : (
+            <>
+              <a href={api.importTemplateUrl}>記入用CSVをダウンロード</a>
+              <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+                管理ID列付きです。社内の番号を入れてから取り込むと、あとから直しやすいです。
+              </p>
+            </>
+          )}
         </div>
       </div>
 
