@@ -1029,14 +1029,14 @@ def _apply_values(
         key = str(site_code).strip()
         site = site_cache.get(key)
         if site is not None and site_name:
-            # 拠点IDだけで起こした拠点は、IDをそのまま名前にしてある。
-            # 後から名前の入った台帳を取り込んだときに、名前を入れてやる。
-            # すでに人が付けた名前がある拠点は、機器の台帳からは書き換えない
-            if site.name == site.code:
-                new_name = str(site_name).strip()
-                if new_name and new_name != site.name:
-                    site.name = new_name
-                    site_cache[new_name] = site
+            # 拠点IDが同じなら同じ拠点。名前はその拠点の呼び名なので、
+            # 違う名前で来たら書き換える。打ち間違いを直す手段が
+            # 拠点の台帳しか無いと、機器の台帳を直しても直らない
+            new_name = str(site_name).strip()
+            if new_name and new_name != site.name:
+                site_cache.pop(site.name, None)
+                site.name = new_name
+                site_cache[new_name] = site
         if site is None:
             # 拠点IDは人が決めるものなので、無いときは名前なしで起こさずエラーにする
             # （呼び出し側の issues に載せるのは難しいので、ここでは名前列があれば併用）

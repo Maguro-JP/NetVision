@@ -559,11 +559,7 @@ def test_a_device_can_be_registered_with_only_a_hostname(client):
 
 
 def test_a_site_made_from_its_code_gets_its_name_later(client):
-    """拠点IDだけで起こした拠点に、後から名前の入った台帳が来たら名前を入れる。
-
-    IDをそのまま名前にしてあるだけなので、名前が分かった時点で置き換える。
-    人が付けた名前がある拠点は、機器の台帳からは書き換えない。
-    """
+    """拠点IDだけで起こした拠点に、後から名前の入った台帳が来たら名前を入れる。"""
     upload(client, "ホスト名,拠点ID（任意）\na-sw,TOK-DC1\n", path="/import/devices")
     sites = client.get(f"{API}/sites").json()
     assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "TOK-DC1")]
@@ -576,11 +572,37 @@ def test_a_site_made_from_its_code_gets_its_name_later(client):
     sites = client.get(f"{API}/sites").json()
     assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "東京データセンター")]
 
-    # 名前が付いたあとは、機器の台帳から書き換えない
+
+def test_a_site_name_can_be_fixed_by_importing_with_its_code(client):
+    """拠点IDが同じなら同じ拠点。名前が違えば直す。
+
+    打ち間違いを直す手段が拠点の台帳しか無いと、機器の台帳を直しても
+    直らない、という行き止まりになる。
+    """
     upload(
         client,
-        "ホスト名,拠点名,拠点ID（任意）\na-sw,まちがえた名前,TOK-DC1\n",
+        "ホスト名,拠点名,拠点ID（任意）\nb-sw,大阪支者,OSA-1\n",
+        path="/import/devices",
+    )
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\nb-sw,大阪支社,OSA-1\n",
         path="/import/devices",
     )
     sites = client.get(f"{API}/sites").json()
-    assert sites[0]["name"] == "東京データセンター"
+    assert [(s["code"], s["name"]) for s in sites] == [("OSA-1", "大阪支社")]
+    devices = client.get(f"{API}/devices").json()
+    assert devices[0]["site_name"] == "大阪支社"
+
+
+def test_without_a_code_a_new_name_means_a_new_site(client):
+    """拠点IDが無いときは、名前がその拠点そのもの。別の名前は別の拠点になる。
+
+    機器は新しい拠点へ移る。元の拠点は残るので、要らなければ拠点の台帳で消す。
+    """
+    upload(client, "ホスト名,拠点名\nc-sw,本社DG\n", path="/import/devices")
+    upload(client, "ホスト名,拠点名\nc-sw,本社DC\n", path="/import/devices")
+    devices = client.get(f"{API}/devices").json()
+    assert devices[0]["site_name"] == "本社DC"
+    names = {s["name"] for s in client.get(f"{API}/sites").json()}
+    assert names == {"本社DC", "本社DG"}
