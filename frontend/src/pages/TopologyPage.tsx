@@ -2114,10 +2114,51 @@ function TopologyEditor() {
                   )}
                 </p>
               </>
+            ) : (stats?.device_count ?? 0) > 0 ? (
+              <>
+                {/* 台帳に機器があるのに図が空なら、絞り込みが効いている。
+                    「機器を置いてください」とだけ言われても、何が起きているのか
+                    分からない。効いている条件をそのまま出す */}
+                <p>
+                  いまの絞り込みでは、出せる機器がありません（台帳には{" "}
+                  {stats?.device_count.toLocaleString()} 台あります）。
+                </p>
+                <p className="muted">
+                  効いている条件:{" "}
+                  {[
+                    selectedSite !== ""
+                      ? `拠点「${sites?.find((s) => s.id === selectedSite)?.name ?? selectedSite}」`
+                      : null,
+                    appliedSearch ? `探す言葉「${appliedSearch}」` : null,
+                    selectedVlans.length > 0 ? `VLAN ${selectedVlans.join(", ")}` : null,
+                    selectedVrf ? `VRF「${selectedVrf}」` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ") || "なし（撤去済みの機器は図に出しません）"}
+                </p>
+                <div className="actions">
+                  <button
+                    onClick={() => {
+                      setSelectedSite("");
+                      setSearch("");
+                      setAppliedSearch("");
+                      setSelectedVlans([]);
+                      setSelectedVrf("");
+                    }}
+                  >
+                    絞り込みを外して全部見る
+                  </button>
+                </div>
+              </>
             ) : (
               <>
-                表示できる機器がありません。編集中に「機器を置く」から図へ枠を置けます。台帳から
-                登録しても出ます。
+                <p>台帳に機器がありません。</p>
+                <p className="muted">
+                  「台帳の取り込み」で機器一覧の CSV を入れるか、「Config の取り込み」で
+                  Config を読ませると出ます。結線表だけ先に入れておくこともできます
+                  （機器を登録した時点で線が繋がります）。編集中なら「機器を置く」から
+                  図の上に直接置くこともできます。
+                </p>
               </>
             )}
           </div>
