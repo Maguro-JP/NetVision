@@ -62,6 +62,10 @@ mkdir -p "$STAGE"/{python,lib,backend,frontend,docs}
 
 cp -r "$REPO/backend/app" "$STAGE/backend/app"
 cp -r "$REPO/backend/scripts" "$STAGE/backend/scripts"
+# 表を作る手順（マイグレーション）も持ち込む。これが無いと、初回起動で
+# DB を作れずに落ちる
+cp -r "$REPO/backend/alembic" "$STAGE/backend/alembic"
+cp "$REPO/backend/alembic.ini" "$STAGE/backend/"
 cp -r "$REPO/frontend/dist" "$STAGE/frontend/dist"
 cp "$REPO/docs/INSTALL.md" "$REPO/docs/OPERATIONS.md" "$STAGE/docs/" 2>/dev/null || true
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
@@ -107,7 +111,7 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
 "$PY" -m pip install --quiet --target "$STAGE/lib" \
   --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
   --implementation cp --abi "$PY_TAG" \
-  fastapi sqlalchemy pydantic pydantic-settings python-dateutil \
+  fastapi sqlalchemy alembic pydantic pydantic-settings python-dateutil \
   openpyxl python-multipart jinja2 uvicorn
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 

@@ -54,6 +54,21 @@ def ensure_ready() -> None:
                 # 列は揃っていて版の記録だけ無い。データの形は変わらないのでここで付ける
                 apply_schema()
         _ready = True
+    except ModuleNotFoundError as exc:
+        if exc.name == "alembic":
+            # 持ち出し用の一式に Alembic が入っていないと、ここで初めて分かる。
+            # 追跡情報だけ出しても、受け取った人には何を足せばよいか伝わらない
+            logger.error(
+                "表を作る仕組み（Alembic）が見つかりません。"
+                "配布物の作り方が古い可能性があります。"
+                "lib フォルダに alembic と mako、backend フォルダに "
+                "alembic.ini と alembic を入れた一式を作り直してください"
+            )
+        else:
+            logger.exception("起動時のスキーマ適用に失敗しました")
+        if settings.demo_mode:
+            return
+        raise
     except Exception:
         logger.exception("起動時のスキーマ適用に失敗しました")
         # デモ（Vercel プレビュー）は画面が真っ白になる方が困るので落とさない。
