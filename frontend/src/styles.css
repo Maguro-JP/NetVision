@@ -60,6 +60,15 @@ a:hover {
   padding: 20px 0;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* 設定を一番下へ落とすため、項目の並びに高さを持たせる */
+.nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .layout.collapsed .sidebar {
   display: none;
@@ -325,6 +334,21 @@ td.wrap {
 .badge.site-closed {
   background: var(--sev-expired);
   color: #fff;
+}
+
+/* 別ウィンドウで開いた画面。メニューを出さず、中身に幅を全部渡す */
+.layout.bare {
+  display: block;
+}
+.layout.bare .main {
+  margin-left: 0;
+  padding: 20px 24px;
+}
+/* 設定はメニューの一番下。上の並びと切り離して置く */
+.nav-settings {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
 }
 
 .toolbar {

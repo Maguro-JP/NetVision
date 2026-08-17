@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "./api/client";
+import { WINDOW_FLAG } from "./components/WindowLink";
 
 /** メニューは「何をしたいか」で束ねる。項目が増えても探す範囲が変わらない。 */
 const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = [
@@ -42,10 +43,6 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
     ],
   },
   {
-    label: "設定",
-    items: [{ to: "/settings", label: "画面の設定" }],
-  },
-  {
     label: "取り込み・資料",
     items: [
       { to: "/configs", label: "Configの取り込み" },
@@ -76,10 +73,21 @@ function readList(key: string): string[] {
   }
 }
 
+/**
+ * 別ウィンドウで開かれた画面か。
+ *
+ * 1台を見るためだけの窓にメニューを出しても押す相手がいないし、幅も取る。
+ * 印は開くときに URL へ付ける（WindowLink）。
+ */
+function isOwnWindow(search: string): boolean {
+  return new URLSearchParams(search).get(WINDOW_FLAG) === "1";
+}
+
 export default function App() {
   // プレビュー環境かどうか。データが消えることを黙っていると事故のもとになる
   const { data: meta } = useQuery({ queryKey: ["meta"], queryFn: () => api.meta() });
   const location = useLocation();
+  const bare = isOwnWindow(location.search);
 
   // 常時表示。画面が狭くても閉じずに出したままにする
   const [pinned, setPinned] = useState(() => localStorage.getItem(PIN_KEY) === "true");
@@ -112,6 +120,17 @@ export default function App() {
     setFolded((current) =>
       current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
     );
+
+  if (bare) {
+    // 印刷プレビューのような窓。中身だけを出す
+    return (
+      <div className="layout bare">
+        <main className="main">
+          <Outlet />
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className={`layout ${open ? "" : "collapsed"} ${pinned ? "pinned" : ""}`}>
@@ -150,6 +169,15 @@ export default function App() {
               </div>
             );
           })}
+          {/* 設定は毎日押すものではない。一番下に歯車で置き、
+              上の台帳・図の並びを邪魔しない */}
+          <NavLink
+            to="/settings"
+            className={({ isActive }) => `nav-settings ${isActive ? "active" : ""}`}
+            title="画面の設定"
+          >
+            <span aria-hidden="true">⚙</span> 設定
+          </NavLink>
         </nav>
       </aside>
 
