@@ -32,6 +32,8 @@ def test_offline_bundles_carry_the_schema_steps():
         assert "alembic.ini" in body, script.name
         assert "alembic" in body, script.name
         # ライブラリとして入れているか（コピーだけでは動かない）
-        assert "sqlalchemy alembic" in body or '"sqlalchemy", "alembic"' in body or (
-            "pyproject.toml" in body
+        assert (
+            "sqlalchemy alembic" in body
+            or '"sqlalchemy", "alembic"' in body
+            or ("pyproject.toml" in body)
         ), script.name
