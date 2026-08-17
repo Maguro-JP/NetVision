@@ -1,4 +1,8 @@
+from datetime import date
+
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.models import SiteStatus
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -14,6 +18,10 @@ class SiteBase(BaseModel):
     code: str | None = Field(default=None, max_length=80)
     name: str = Field(min_length=1, max_length=120)
     address: str | None = None
+    #: いまどういう状態か。閉鎖しても機器は残す
+    status: SiteStatus = SiteStatus.ACTIVE
+    opened_on: date | None = None
+    closed_on: date | None = None
     notes: str | None = None
 
     @field_validator("code", mode="before")
@@ -32,6 +40,9 @@ class SiteUpdate(BaseModel):
     code: str | None = Field(default=None, max_length=80)
     name: str | None = Field(default=None, min_length=1, max_length=120)
     address: str | None = None
+    status: SiteStatus | None = None
+    opened_on: date | None = None
+    closed_on: date | None = None
     notes: str | None = None
 
     @field_validator("code", mode="before")

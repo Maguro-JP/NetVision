@@ -307,6 +307,26 @@ td.wrap {
   color: #fff;
 }
 
+/* 拠点の状態。稼働中は数が多いので目立たせず、休みと閉鎖だけ色を付ける */
+.badge.site-active {
+  /* 大半はこれなので、色で埋め尽くさない。休みと閉鎖だけが目に入るようにする */
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+}
+.badge.site-planned {
+  background: var(--sev-unknown);
+  color: #fff;
+}
+.badge.site-suspended {
+  background: var(--sev-warning);
+}
+.badge.site-closed {
+  background: var(--sev-expired);
+  color: #fff;
+}
+
 .toolbar {
   display: flex;
   gap: 8px;

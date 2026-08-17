@@ -1,4 +1,4 @@
-import type { DeviceStatus, DeviceType, Severity } from "../api/types";
+import type { DeviceStatus, DeviceType, Severity, SiteStatus } from "../api/types";
 
 export const SEVERITY_LABEL: Record<Severity, string> = {
   expired: "期限切れ",
@@ -17,6 +17,13 @@ export const DEVICE_TYPE_LABEL: Record<DeviceType, string> = {
   wireless_controller: "無線コントローラー",
   server: "サーバー",
   other: "その他",
+};
+
+export const SITE_STATUS_LABEL: Record<SiteStatus, string> = {
+  active: "稼働中",
+  planned: "開設予定",
+  suspended: "一時閉鎖",
+  closed: "閉鎖・閉店",
 };
 
 export const DEVICE_STATUS_LABEL: Record<DeviceStatus, string> = {

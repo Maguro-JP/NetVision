@@ -13,7 +13,7 @@ from app.models.reference import (
 )
 from app.models.remediation import Remediation, RemediationKind
 from app.models.scenario import Scenario, ScenarioAction, ScenarioItem, ScenarioStatus
-from app.models.site import Site
+from app.models.site import Site, SiteStatus
 from app.models.topology import (
     ConfigSnapshot,
     ConfigSource,
@@ -67,4 +67,5 @@ __all__ = [
     "PendingLink",
     "Vlan",
     "Site",
+    "SiteStatus",
 ]

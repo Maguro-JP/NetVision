@@ -3,18 +3,38 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { Site } from "../api/types";
+import type { Site, SiteStatus } from "../api/types";
 import QueryError from "../components/QueryError";
+import { SITE_STATUS_LABEL, formatDate } from "../lib/format";
 
-type SiteForm = { code: string; name: string; address: string; notes: string };
+type SiteForm = {
+  code: string;
+  name: string;
+  address: string;
+  status: SiteStatus;
+  opened_on: string;
+  closed_on: string;
+  notes: string;
+};
 
-const EMPTY: SiteForm = { code: "", name: "", address: "", notes: "" };
+const EMPTY: SiteForm = {
+  code: "",
+  name: "",
+  address: "",
+  status: "active",
+  opened_on: "",
+  closed_on: "",
+  notes: "",
+};
 
 function toForm(site: Site): SiteForm {
   return {
     code: site.code ?? "",
     name: site.name,
     address: site.address ?? "",
+    status: site.status,
+    opened_on: site.opened_on ?? "",
+    closed_on: site.closed_on ?? "",
     notes: site.notes ?? "",
   };
 }
@@ -24,6 +44,9 @@ function toPayload(form: SiteForm): Partial<Site> {
     code: form.code.trim() || null,
     name: form.name.trim(),
     address: form.address.trim() || null,
+    status: form.status,
+    opened_on: form.opened_on || null,
+    closed_on: form.closed_on || null,
     notes: form.notes.trim() || null,
   };
 }
@@ -111,6 +134,21 @@ export default function SitesPage() {
             />
           </div>
           <div className="field">
+            <label htmlFor="new-site-status">状態</label>
+            <select
+              id="new-site-status"
+              value={form.status}
+              onChange={(e) => setForm({ ...form, status: e.target.value as SiteStatus })}
+              title="閉鎖・閉店にしても機器は残ります（引き上げの棚卸しに使います）"
+            >
+              {Object.entries(SITE_STATUS_LABEL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
             <label htmlFor="new-site-name">拠点名 *</label>
             <input
               id="new-site-name"
@@ -155,8 +193,10 @@ export default function SitesPage() {
           <thead>
             <tr>
               <th>拠点ID</th>
+              <th>状態</th>
               <th>拠点名</th>
               <th>住所</th>
+              <th>開設 / 閉鎖</th>
               <th>メモ</th>
               <th>機器数</th>
               <th />
@@ -175,6 +215,21 @@ export default function SitesPage() {
                     />
                   </td>
                   <td>
+                    <select
+                      value={draft.status}
+                      onChange={(e) =>
+                        setDraft({ ...draft, status: e.target.value as SiteStatus })
+                      }
+                      aria-label="状態"
+                    >
+                      {Object.entries(SITE_STATUS_LABEL).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </td>
+                  <td>
                     <input
                       value={draft.name}
                       onChange={(e) => setDraft({ ...draft, name: e.target.value })}
@@ -187,6 +242,21 @@ export default function SitesPage() {
                       value={draft.address}
                       onChange={(e) => setDraft({ ...draft, address: e.target.value })}
                       aria-label="住所"
+                      placeholder="移転したら書き換えます"
+                    />
+                  </td>
+                  <td className="nowrap">
+                    <input
+                      type="date"
+                      value={draft.opened_on}
+                      onChange={(e) => setDraft({ ...draft, opened_on: e.target.value })}
+                      aria-label="開設日"
+                    />
+                    <input
+                      type="date"
+                      value={draft.closed_on}
+                      onChange={(e) => setDraft({ ...draft, closed_on: e.target.value })}
+                      aria-label="閉鎖日"
                     />
                   </td>
                   <td>
@@ -213,6 +283,11 @@ export default function SitesPage() {
               ) : (
                 <tr key={site.id}>
                   <td className="mono">{site.code ?? <span className="muted">—</span>}</td>
+                  <td className="nowrap">
+                    <span className={`badge site-${site.status}`}>
+                      {SITE_STATUS_LABEL[site.status]}
+                    </span>
+                  </td>
                   <td>
                     <Link to={`/devices?site_id=${site.id}`}>{site.name}</Link>{" "}
                     <Link
@@ -224,6 +299,9 @@ export default function SitesPage() {
                     </Link>
                   </td>
                   <td className="muted">{site.address ?? "—"}</td>
+                  <td className="muted nowrap">
+                    {formatDate(site.opened_on)} / {formatDate(site.closed_on)}
+                  </td>
                   <td className="muted">{site.notes ?? "—"}</td>
                   <td className="num">{site.device_count}</td>
                   <td className="nowrap">

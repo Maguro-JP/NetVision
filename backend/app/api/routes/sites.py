@@ -19,6 +19,9 @@ def _to_read(site: Site, device_count: int = 0) -> SiteRead:
         code=site.code,
         name=site.name,
         address=site.address,
+        status=site.status,
+        opened_on=site.opened_on,
+        closed_on=site.closed_on,
         notes=site.notes,
         device_count=device_count,
     )

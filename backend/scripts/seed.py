@@ -21,6 +21,7 @@ from app.models import (
     DeviceVrf,
     MaintenanceContract,
     Site,
+    SiteStatus,
     Vlan,
 )
 from app.models.change_log import ChangeSource
@@ -55,7 +56,12 @@ def _seed(force: bool) -> None:
             db.query(Site).delete()
             db.commit()
 
-        hq = Site(name="本社データセンター", address="東京都千代田区")
+        hq = Site(
+            name="本社データセンター",
+            code="TOK-DC1",
+            address="東京都千代田区",
+            opened_on=date(2018, 4, 1),
+        )
         db.add(hq)
         db.flush()
         # 出口・FW・コアは同じ拠点に置く。回線が拠点をまたいで往復するような
@@ -379,6 +385,22 @@ def _seed(force: bool) -> None:
         # 全国規模の広域網。数台のサンプルだけだと「拠点が増えたときにどう使うか」を
         # 試せない。拠点を選ぶ・対向まで見る・名前で探す、が要る規模を入れておく
         wan = seed_wan(db, by_host["edge-rt-01"])
+
+        # 拠点は開いたり閉じたりする。機器を消さずに状態だけ変える運用を、
+        # デモでも見えるようにしておく（移転・一時閉鎖・閉店）
+        moved = db.scalar(select(Site).where(Site.name == "千葉県営業所"))
+        if moved is not None:
+            moved.address = "千葉県千葉市中央区（2026年2月に移転）"
+        paused = db.scalar(select(Site).where(Site.name == "秋田県営業所"))
+        if paused is not None:
+            paused.status = SiteStatus.SUSPENDED
+            paused.notes = "建て替えのため休業中。機器は据え置き"
+        shut = db.scalar(select(Site).where(Site.name == "青森県営業所"))
+        if shut is not None:
+            shut.status = SiteStatus.CLOSED
+            shut.closed_on = date(2026, 6, 30)
+            shut.notes = "閉店。回線解約済み、機器の引き上げ待ち"
+        db.commit()
         print(
             f"投入完了: 拠点{1 + wan['sites']}件 / 機器{len(devices) + wan['devices']}台 / "
             f"保守契約5件 / 結線{len(wiring) + wan['links']}本 / "

@@ -82,9 +82,16 @@ export interface Site {
   code: string | null;
   name: string;
   address: string | null;
+  /** いまどういう状態か。閉鎖しても機器は残る */
+  status: SiteStatus;
+  /** 開いた日・閉じた日。棚卸しのときに要る */
+  opened_on: string | null;
+  closed_on: string | null;
   notes: string | null;
   device_count: number;
 }
+
+export type SiteStatus = "active" | "planned" | "suspended" | "closed";
 
 export interface ImportField {
   name: string;

@@ -556,3 +556,31 @@ def test_a_device_can_be_registered_with_only_a_hostname(client):
     assert device["vendor"] == ""
     # 未入力は一覧の「情報不足」で追える
     assert "メーカー" in device["missing_fields"]
+
+
+def test_a_site_made_from_its_code_gets_its_name_later(client):
+    """拠点IDだけで起こした拠点に、後から名前の入った台帳が来たら名前を入れる。
+
+    IDをそのまま名前にしてあるだけなので、名前が分かった時点で置き換える。
+    人が付けた名前がある拠点は、機器の台帳からは書き換えない。
+    """
+    upload(client, "ホスト名,拠点ID（任意）\na-sw,TOK-DC1\n", path="/import/devices")
+    sites = client.get(f"{API}/sites").json()
+    assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "TOK-DC1")]
+
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\na-sw,東京データセンター,TOK-DC1\n",
+        path="/import/devices",
+    )
+    sites = client.get(f"{API}/sites").json()
+    assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "東京データセンター")]
+
+    # 名前が付いたあとは、機器の台帳から書き換えない
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\na-sw,まちがえた名前,TOK-DC1\n",
+        path="/import/devices",
+    )
+    sites = client.get(f"{API}/sites").json()
+    assert sites[0]["name"] == "東京データセンター"
