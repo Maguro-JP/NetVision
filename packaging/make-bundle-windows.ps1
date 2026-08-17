@@ -85,6 +85,10 @@ foreach ($dir in "python", "lib", "backend", "frontend", "docs") {
 }
 Copy-Item (Join-Path $Repo "backend\app") (Join-Path $Stage "backend\app") -Recurse
 Copy-Item (Join-Path $Repo "backend\scripts") (Join-Path $Stage "backend\scripts") -Recurse
+# 表を作る手順（マイグレーション）も持ち込む。これが無いと、初回起動で
+# DB を作れずに落ちる
+Copy-Item (Join-Path $Repo "backend\alembic") (Join-Path $Stage "backend\alembic") -Recurse
+Copy-Item (Join-Path $Repo "backend\alembic.ini") (Join-Path $Stage "backend\alembic.ini")
 Copy-Item $dist (Join-Path $Stage "frontend\dist") -Recurse
 foreach ($doc in "INSTALL.md", "OPERATIONS.md", "WINDOWS_BEGINNER.md") {
     $path = Join-Path $Repo "docs\$doc"
@@ -120,7 +124,7 @@ Fetch "https://bootstrap.pypa.io/get-pip.py" $getPip
 if ($LASTEXITCODE -ne 0) { throw "pip の準備に失敗しました" }
 
 $packages = @(
-    "fastapi", "sqlalchemy", "pydantic", "pydantic-settings", "python-dateutil",
+    "fastapi", "sqlalchemy", "alembic", "pydantic", "pydantic-settings", "python-dateutil",
     "openpyxl", "python-multipart", "jinja2", "uvicorn"
 )
 & $python -m pip install --quiet --target (Join-Path $Stage "lib") --no-warn-script-location @packages
