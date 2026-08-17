@@ -57,13 +57,21 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱に加えて、ポート名を置く余白を見込む。
-# 広げすぎると開いた図が間延びして、構成図として読めない。
-# 箱の大きさ（_BOX_WIDTH / _DETAIL_HEIGHT）を変えたら、_min_stored_gap_* を
-# 下回らないようにここも見直すこと
-_X_SPACING = 340.0
-# 詳細箱＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
-_Y_SPACING = 220.0
+# 自動配置の間隔。画面のマス目（TopologyPage.tsx の LAYOUT_GRID = 20）の
+# 整数倍にしてある。「何マス空ける」で言えないと、人が並べ直したときに
+# 自動配置と揃わない。
+_GRID = 20.0
+
+# 段と段の間（箱の下端から次の箱の上端まで）は7マス。
+# 上の機器のポート名・線の名前（備考）・下の機器のポート名の3行が縦に並び、
+# さらにラック等の枠（上下に 22 ずつ）が入っても潰れない幅。
+# 奇数マスにしてあるのは、真ん中の1マスに線の名前が来るため。
+# 箱（141）+ 7マス（140）を、マス目に乗せて 14マス
+_Y_SPACING = _GRID * 14
+
+# 横は、同じ段に並ぶ機器の間。縦ほど文字を積まないので詰められる。
+# 箱（210）+ 5マス（100）。以前は 340 で、対向が遠く離れて見えていた
+_X_SPACING = _GRID * 15
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -513,6 +521,8 @@ def scope_graph(
             node.peer_kind = None
         node.hidden_peers = 0
 
+    _pull_outside_closer(nodes, graph.edges)
+
     used_rank = rank if rank is not None else hierarchy_rank(graph)
     used_rank = _align_redundant_pairs(
         used_rank,
@@ -533,6 +543,74 @@ def scope_graph(
         ],
         unplaced_count=graph.unplaced_count,
         groups=graph.groups,
+    )
+
+
+#: 対向を内側の機器から離す幅。マス目2つ。
+#: 図の外の相手は箱が小さく、線も1本なので、内側どうしほど空ける必要がない。
+#: 離れていると「別の場所にある」ように見えて、かえって関係が読めない
+_OUTSIDE_GAP = _GRID * 2
+
+
+def _pull_outside_closer(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> None:
+    """図の外にいる相手（対向）の列を、内側の機器の隣まで寄せる。
+
+    対向も内側と同じ間隔で置くと、横に大きく空いて線だけが長く伸びる。
+    寄せると「この機器の向こう側」だと一目で分かる。
+
+    1台ずつ寄せるのではなく、右の対向は右の列、左の対向は左の列として
+    まとめて寄せる。個別に寄せると列が崩れ、どこまでが図の外なのか
+    分からなくなる。
+    """
+    # 人が置いた機器は動かさない。自動で寄せると、置き直した意味が無くなる
+    outside = [n for n in nodes if n.outside and not n.placed]
+    inside = [n for n in nodes if not n.outside]
+    if not outside or not inside:
+        return
+
+    top_bottom: dict[int, int] = {}
+    for edge in edges:
+        for device_id in (edge.source, edge.target):
+            top_bottom[device_id] = top_bottom.get(device_id, 0) + 1
+    width_of = {node.device_id: _box_width(top_bottom.get(node.device_id, 0)) for node in nodes}
+
+    inside_left = min(n.x for n in inside)
+    inside_right = max(n.x + width_of[n.device_id] for n in inside)
+    center = (inside_left + inside_right) / 2
+
+    right = [n for n in outside if n.x >= center]
+    left = [n for n in outside if n.x < center]
+
+    for group, wanted in (
+        (right, inside_right + _OUTSIDE_GAP),
+        (left, None),
+    ):
+        if not group:
+            continue
+        if wanted is None:
+            widest = max(width_of[n.device_id] for n in group)
+            wanted = inside_left - _OUTSIDE_GAP - widest
+        # 内側へ食い込む向きには動かさない。広げるだけの寄せは意味がない
+        if right and group is right and wanted >= min(n.x for n in group):
+            continue
+        if left and group is left and wanted <= max(n.x for n in group):
+            continue
+        for node in group:
+            node.x = wanted
+
+
+def _boxes_touch(
+    a: TopologyNodeView, b: TopologyNodeView, width_of: dict[int, float] | None = None
+) -> bool:
+    """箱（詳細表示の大きさ）が重なるか。すき間はマス目1つ分を見る。"""
+    gap = _GRID
+    wa = (width_of or {}).get(a.device_id, _BOX_WIDTH)
+    wb = (width_of or {}).get(b.device_id, _BOX_WIDTH)
+    return (
+        a.x < b.x + wb + gap
+        and b.x < a.x + wa + gap
+        and a.y < b.y + _DETAIL_HEIGHT + gap
+        and b.y < a.y + _DETAIL_HEIGHT + gap
     )
 
 
@@ -2235,15 +2313,15 @@ def reset_positions(
 
 
 #: 人が図を揃えるときのマス目。画面のグリッド・ドラッグの吸着と同じ値。
-LAYOUT_GRID = 40.0
-#: この距離以内なら同じ段・同じ列とみなして揃える（マス目1つ弱）
+LAYOUT_GRID = _GRID
+#: この距離以内なら同じ段・同じ列とみなして揃える（マス目2つ弱）
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
-#: 箱＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
-_MIN_GAP_X = 340.0
-#: 詳細表示の箱＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
-_MIN_GAP_Y = 216.0
+#: 横に並ぶ機器の最小のすき間。自動配置の間隔と同じにして、整頓しても間隔が変わらない
+_MIN_GAP_X = _X_SPACING
+#: 縦に並ぶ機器の最小のすき間。ポート名・線の名前・ポート名の3行が入る幅
+_MIN_GAP_Y = _Y_SPACING
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:

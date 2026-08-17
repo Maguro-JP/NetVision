@@ -79,7 +79,16 @@ const VIEW_KEY = "netvision.topology.view";
 const WIDE_LIMIT = 40;
 
 /** 配置のマス目。画面の線・自動配置・整頓で使う。手で置くときは吸着しない。 */
-const LAYOUT_GRID = 40;
+/**
+ * マス目の大きさ。
+ *
+ * 図面のマス目に国際規格はない。実務で見かけるのは Visio の既定（1/4インチ）と、
+ * 画面まわりで広く使われている 8 の倍数の2つ。ここでは 20px にしてある。
+ * 箱（210×141）と段の間隔がマス目の整数倍で表せて、ポート名1行（18px）より
+ * 少し大きい、という条件で決めた。40 だと段の間隔が半端な倍数になり、
+ * 「何マス空ける」で揃えられなかった。
+ */
+const LAYOUT_GRID = 20;
 
 export function snapToGrid(value: number): number {
   return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;

@@ -161,8 +161,7 @@ def test_group_padding_matches_the_screen():
         Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "topologyGroups.ts"
     ).read_text(encoding="utf-8")
     values = {
-        name: int(value)
-        for name, value in re.findall(r"export const (GROUP_\w+) = (\d+);", source)
+        name: int(value) for name, value in re.findall(r"export const (GROUP_\w+) = (\d+);", source)
     }
     assert _GROUP_PAD == float(values["GROUP_PAD"])
     assert _GROUP_HEAD == float(values["GROUP_HEAD"])

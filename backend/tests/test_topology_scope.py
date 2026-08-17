@@ -232,9 +232,11 @@ def test_the_kept_devices_are_laid_out_again_so_the_figure_is_not_spread_out(db_
 
     width = max(n.x for n in graph.nodes) - min(n.x for n in graph.nodes)
     height = max(n.y for n in graph.nodes) - min(n.y for n in graph.nodes)
-    # 3台なら、段2つ・横1つ分に収まる（詳細箱のすき間を見込む）
-    assert width <= 600
-    assert height <= 520
+    # 3台なら、段2つ・横1つ分に収まる（詳細箱のすき間を見込む）。
+    # 段の間隔（_Y_SPACING）から出す。定数を変えたときに、ここだけ
+    # 古い数字が残らないようにする
+    assert width <= topology._X_SPACING * 2
+    assert height <= topology._Y_SPACING * 2 + 60
 
 
 def test_a_saved_layout_is_not_rearranged(db_session):
