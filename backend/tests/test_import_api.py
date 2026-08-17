@@ -530,3 +530,29 @@ def test_type_and_status_show_their_choices(client):
     assert "稼働中" in fields["status"]["choices"]
     # 自由入力の項目に候補は出さない
     assert fields["hostname"]["choices"] == []
+
+
+def test_site_falls_back_to_the_code_when_there_is_no_name(client):
+    """拠点は名前で呼ぶ。名前が無いときは拠点IDをそのまま名前にする。
+
+    どちらも空だと「拠点が入っていない機器」と見分けが付かない。
+    """
+    upload(client, "ホスト名,拠点名,拠点ID（任意）\na-sw,本社DC,TOK-DC1\n", path="/import/devices")
+    upload(client, "ホスト名,拠点ID（任意）\nb-sw,OSA-DC9\n", path="/import/devices")
+    upload(client, "ホスト名,拠点名\nc-sw,名古屋営業所\n", path="/import/devices")
+
+    sites = {d["hostname"]: d["site_name"] for d in client.get(f"{API}/devices").json()}
+    assert sites["a-sw"] == "本社DC"
+    assert sites["b-sw"] == "OSA-DC9"
+    assert sites["c-sw"] == "名古屋営業所"
+
+
+def test_a_device_can_be_registered_with_only_a_hostname(client):
+    """ベンダーも型番も無い行が、実際に登録できること（下書きの機器）。"""
+    body = upload(client, "ホスト名\nnew-sw-01\n", path="/import/devices").json()
+    assert body["created"] == 1
+    device = client.get(f"{API}/devices").json()[0]
+    assert device["hostname"] == "new-sw-01"
+    assert device["vendor"] == ""
+    # 未入力は一覧の「情報不足」で追える
+    assert "メーカー" in device["missing_fields"]
