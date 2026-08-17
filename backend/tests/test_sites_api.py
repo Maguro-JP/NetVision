@@ -45,3 +45,35 @@ def test_a_new_site_is_active(client):
     assert site["status"] == "active"
     assert site["opened_on"] is None
     assert site["closed_on"] is None
+
+
+def test_sites_can_be_exported(client):
+    """拠点の台帳を書き出せること。閉鎖した拠点に機器が残っていないかを、
+    表の上で数えられるよう台数も入れる。"""
+    site = client.post(
+        f"{API}/sites",
+        json={"name": "青森県営業所", "code": "AOM-1", "status": "closed", "address": "青森県"},
+    ).json()
+    client.post(f"{API}/devices", json={"hostname": "aomori-rt-01", "site_id": site["id"]})
+
+    res = client.get(f"{API}/export/sites.csv")
+    assert res.status_code == 200
+    lines = res.text.lstrip("﻿").strip().splitlines()
+    assert lines[0].split(",") == [
+        "拠点ID",
+        "拠点名",
+        "状態",
+        "住所",
+        "開設日",
+        "閉鎖日",
+        "機器数",
+        "メモ",
+    ]
+    row = dict(zip(lines[0].split(","), lines[1].split(","), strict=False))
+    assert row["拠点ID"] == "AOM-1"
+    assert row["状態"] == "閉鎖・閉店"
+    assert row["機器数"] == "1"
+
+    book = client.get(f"{API}/export/sites.xlsx")
+    assert book.status_code == 200
+    assert "spreadsheetml" in book.headers["content-type"]

@@ -11,7 +11,7 @@ import csv
 import io
 from datetime import date
 
-from app.models import Device, MaintenanceContract
+from app.models import Device, MaintenanceContract, Site
 from app.services.importer import FIELD_LABELS, IMPORTABLE_FIELDS
 from app.services.lifecycle import LifecycleStatus, Severity, evaluate
 
@@ -167,6 +167,87 @@ def to_xlsx(devices: list[Device], *, include_status: bool = True) -> bytes:
         letter = get_column_letter(index)
         sheet.column_dimensions[letter].width = min(max(len(header) * 2, 12), 40)
         if header in date_headers:
+            for cell in sheet[letter][1:]:
+                cell.number_format = "yyyy/mm/dd"
+
+    sheet.freeze_panes = "A2"
+    sheet.auto_filter.ref = sheet.dimensions
+
+    buffer = io.BytesIO()
+    workbook.save(buffer)
+    return buffer.getvalue()
+
+
+# --- 拠点の台帳 ------------------------------------------------------------
+#
+# 機器と同じく、書き出したものを直して戻せる並びにする。拠点IDを先に置くのは、
+# 取り込みで拠点を突き合わせる鍵がこの列だから。
+
+SITE_COLUMNS: tuple[tuple[str, str], ...] = (
+    ("code", "拠点ID"),
+    ("name", "拠点名"),
+    ("status", "状態"),
+    ("address", "住所"),
+    ("opened_on", "開設日"),
+    ("closed_on", "閉鎖日"),
+    ("device_count", "機器数"),
+    ("notes", "メモ"),
+)
+
+SITE_STATUS_LABELS = {
+    "active": "稼働中",
+    "planned": "開設予定",
+    "suspended": "一時閉鎖",
+    "closed": "閉鎖・閉店",
+}
+
+
+def site_headers() -> list[str]:
+    return [label for _, label in SITE_COLUMNS]
+
+
+def build_site_row(site: Site, device_count: int) -> list[object]:
+    values: dict[str, object] = {
+        "code": site.code,
+        "name": site.name,
+        "status": SITE_STATUS_LABELS.get(str(site.status), str(site.status)),
+        "address": site.address,
+        "opened_on": site.opened_on,
+        "closed_on": site.closed_on,
+        "device_count": device_count,
+        "notes": site.notes,
+    }
+    return [values[name] for name, _ in SITE_COLUMNS]
+
+
+def sites_to_csv(rows: list[tuple[Site, int]], *, encoding: str = "utf-8-sig") -> bytes:
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer.writerow(site_headers())
+    for site, count in rows:
+        writer.writerow([_text(value) for value in build_site_row(site, count)])
+    return buffer.getvalue().encode(encoding, errors="replace")
+
+
+def sites_to_xlsx(rows: list[tuple[Site, int]]) -> bytes:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    workbook = Workbook()
+    sheet = workbook.active
+    sheet.title = "拠点台帳"
+    headers = site_headers()
+    sheet.append(headers)
+    for cell in sheet[1]:
+        cell.font = Font(bold=True)
+    for site, count in rows:
+        sheet.append(build_site_row(site, count))
+
+    for index, header in enumerate(headers, start=1):
+        letter = get_column_letter(index)
+        sheet.column_dimensions[letter].width = min(max(len(header) * 3, 12), 40)
+        if header in {"開設日", "閉鎖日"}:
             for cell in sheet[letter][1:]:
                 cell.number_format = "yyyy/mm/dd"
 

@@ -270,6 +270,12 @@ export const api = {
     return `${BASE}/export/devices.${format}${query(params)}`;
   },
 
+  /** 拠点台帳の書き出し。直してそのまま取り込み直せる並びで出る */
+  siteExportUrl: (format: "csv" | "xlsx", encoding?: "utf-8" | "shift_jis") =>
+    `${BASE}/export/sites.${format}${
+      format === "csv" && encoding ? query({ encoding }) : ""
+    }`,
+
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
 

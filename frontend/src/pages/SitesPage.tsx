@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { Site, SiteStatus } from "../api/types";
 import QueryError from "../components/QueryError";
+import WindowLink from "../components/WindowLink";
 import { SITE_STATUS_LABEL, formatDate } from "../lib/format";
 
 type SiteForm = {
@@ -106,6 +107,21 @@ export default function SitesPage() {
         削除しても機器は残ります。ここで名前を直すと、その拠点の機器は付いたまま名前だけ
         変わります（移転は住所を書き換えるだけで済みます）。
       </p>
+
+      <div className="toolbar">
+        <span className="toolbar-spacer" />
+        {/* 機器一覧と同じく、中身を見てから Excel / CSV を選ぶ */}
+        <WindowLink
+          className="button"
+          to="/export?kind=sites"
+          name="netvision-export"
+          width={1200}
+          height={900}
+          title="拠点の台帳を、中身を見てから Excel / CSV で保存します"
+        >
+          {(data ?? []).length.toLocaleString()} 拠点を出力する
+        </WindowLink>
+      </div>
 
       {(error || saveError) && (
         <QueryError
