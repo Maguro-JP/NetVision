@@ -593,7 +593,8 @@ button:disabled {
 }
 /* 機器を囲む枠。図の背景に沈まないよう、輪郭と見出しをはっきり出す */
 .topo-group {
-  border: 2px dashed;
+  /* 枠は点線。結線の「片側のみ」は破線なので、線種を分けて見分けられるようにする */
+  border: 2px dotted;
   border-radius: 10px;
   pointer-events: all;
   box-sizing: border-box;

@@ -98,9 +98,11 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
-# 枠の内側に取る余白と、名前の行の高さ
-_GROUP_PAD = 18.0
-_GROUP_HEAD = 8.0
+# 枠の内側に取る余白と、名前の行の高さ。画面（topologyGroups.ts の
+# GROUP_PAD / GROUP_HEAD）と同じ値にする。違うと同じ配置なのに枠だけずれ、
+# 画面で確かめた見た目のまま配れない
+_GROUP_PAD = 22.0
+_GROUP_HEAD = 22.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
 # 名前の幅がいる。左右の辺は行の高さ（_LABEL_PITCH）で決まる
 _BUNDLE_LABEL_W = 56.0
@@ -268,10 +270,25 @@ def render_svg(
         + [p.y + PEER_H for p in peers]
     )
     if graph.groups:
-        min_x -= 24
-        min_y -= 28
-        max_x += 24
-        max_y += 24
+        # 枠は箱の外側を回る。入れ子になっている分だけ外へ広がるので、
+        # 深さぶんの余白を取る。足りないと、一番外の枠が見出しに重なる
+        parent_of = {group.id: group.parent_id for group in graph.groups}
+
+        def _depth(group_id: int) -> int:
+            seen = {group_id}
+            depth = 1
+            at = parent_of.get(group_id)
+            while at is not None and at not in seen:
+                seen.add(at)
+                depth += 1
+                at = parent_of.get(at)
+            return depth
+
+        deep = max(_depth(group.id) for group in graph.groups)
+        min_x -= _GROUP_PAD * deep
+        min_y -= (_GROUP_PAD + _GROUP_HEAD) * deep
+        max_x += _GROUP_PAD * deep
+        max_y += _GROUP_PAD * deep
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
     legend_h = 0.0 if simple else LEGEND_H
@@ -379,7 +396,7 @@ def render_svg(
         parts.append(
             f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
             f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
-            f'stroke-width="1.6" stroke-dasharray="6 4"/>'
+            f'stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>'
             f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '
             f'paint-order="stroke" stroke="#ffffff" stroke-width="3" '
             f'fill="{_esc(group.color)}">{_esc(label)}</text>'
