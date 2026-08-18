@@ -2469,6 +2469,10 @@ function TopologyEditor() {
             nodesDraggable={editable}
             nodesConnectable={editable && layer !== "logical"}
             elementsSelectable
+            /* 選ぶと最前面へ持ち上げる既定の動き。枠を選んだだけで中の機器が
+               その下に隠れ、触れなくなるので止める。重なりはこちらで決める */
+            elevateNodesOnSelect={false}
+            elevateEdgesOnSelect={false}
             deleteKeyCode={
               editable && layer !== "logical" ? ["Backspace", "Delete"] : null
             }
