@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     llm_url: str | None = None
     llm_model: str | None = None
     llm_timeout: float = 60.0
+    # 事業者の API を使う場合の鍵。閉域では空のまま。使う人が自分の契約を
+    # 入れる想定で、こちらでは持たない
+    llm_api_key: str | None = None
+    # 外の事業者へ出してよいか。既定は閉域なので不可。人が明示したときだけ許す
+    llm_allow_external: bool = False
 
 
 settings = Settings()

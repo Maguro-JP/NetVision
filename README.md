@@ -831,6 +831,19 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_SERVE_FRONTEND` | なし | ビルド済み画面の配信元。同一プロセスで画面も返す |
 | `NETVISION_DEMO_MODE` | `false` | プレビュー用。起動時にスキーマ作成とデモデータ投入を行う（本番では使わない） |
 | `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
+| `NETVISION_LLM_URL` | なし | 閉域の中に置いたモデル（OpenAI 互換 API）。例: `http://127.0.0.1:11434/v1` |
+| `NETVISION_LLM_MODEL` | なし | 使うモデル名。例: `qwen2.5-coder:7b` |
+| `NETVISION_LLM_TIMEOUT` | `60` | モデルの返事を待つ秒数 |
+| `NETVISION_LLM_API_KEY` | なし | 事業者の API を使う場合の鍵。閉域では空のまま |
+| `NETVISION_LLM_ALLOW_EXTERNAL` | `false` | 外向きの宛先を許すか。既定は不可で、社内・手元の宛先だけ繋ぐ |
+
+### モデルを置く場合
+
+設定しなければ、どこへも繋がずに規則ベースだけで動きます。置く場合も、
+宛先が社内・手元（127.0.0.1 / 10.x / 192.168.x / ドメインの付かない名前）
+でなければ繋ぎません。事業者の API を使うときだけ
+`NETVISION_LLM_ALLOW_EXTERNAL=true` を明示します。設定を1つ書き換えただけで
+実機の Config が社外へ出ていく、ということが起きない作りにしてあります。
 
 ## 主なAPI
 
