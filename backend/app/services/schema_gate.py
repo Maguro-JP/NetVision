@@ -14,11 +14,11 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
-from zoneinfo import ZoneInfo
 
 from sqlalchemy.engine import make_url
 
 from app.config import settings
+from app.services import localtime
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,9 @@ def backup_dir() -> Path:
 
 
 def _now() -> datetime:
-    return datetime.now(ZoneInfo(settings.display_timezone))
+    # 地域の時計が読めない環境でも、表の更新そのものは通す必要がある。
+    # 控えのフォルダ名が UTC になるだけで、データは守られる
+    return localtime.now()
 
 
 def _index_path() -> Path:

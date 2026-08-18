@@ -76,3 +76,13 @@ def test_the_powershell_version_needs_no_python_on_the_build_machine():
     powershell = POWERSHELL.read_text(encoding="utf-8")
     assert "get-pip.py" in powershell
     assert "& $python -m pip install" in powershell
+
+
+def test_the_bundles_carry_the_time_zone_database():
+    """Windows には地域の時計のデータが入っていない。
+
+    同梱しないと、日本時間を出そうとした時点で例外になる。落ちるのは画面を
+    開いた後なので、作る側では気づけない。実際に表の更新が止まった。
+    """
+    for script in (FOR_WINDOWS, POWERSHELL):
+        assert "tzdata" in script.read_text(encoding="utf-8"), f"{script.name} に tzdata が無い"

@@ -112,7 +112,7 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
   --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
   --implementation cp --abi "$PY_TAG" \
   fastapi sqlalchemy alembic pydantic pydantic-settings python-dateutil \
-  openpyxl python-multipart jinja2 uvicorn
+  openpyxl python-multipart jinja2 uvicorn tzdata
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 # 起動用バッチと説明書きを作る。
