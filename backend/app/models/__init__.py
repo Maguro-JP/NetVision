@@ -1,7 +1,13 @@
 from app.models.change_log import ChangeAction, ChangeLog, ChangeSource
 from app.models.config_plan import ConfigPlan, PlanStatus
 from app.models.device import Device, DeviceStatus, DeviceType
-from app.models.document import ConfigTemplate, Document, DocumentType, TemplateCategory
+from app.models.document import (
+    ConfigTemplate,
+    Document,
+    DocumentSection,
+    DocumentType,
+    TemplateCategory,
+)
 from app.models.exposure import DeviceExposure, ExposureStatus
 from app.models.maintenance import MaintenanceContract
 from app.models.pending_link import PendingLink
@@ -34,6 +40,7 @@ __all__ = [
     "ConfigSnapshot",
     "ConfigTemplate",
     "Document",
+    "DocumentSection",
     "DocumentType",
     "TemplateCategory",
     "ConfigSource",

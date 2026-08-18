@@ -93,6 +93,18 @@ export interface Site {
 
 export type SiteStatus = "active" | "planned" | "suspended" | "closed";
 
+/** 資料の中を探した結果。1件が1つの章 */
+export interface DocumentHit {
+  document_id: number;
+  title: string;
+  vendor: string;
+  model: string | null;
+  heading: string | null;
+  body: string;
+  /** その章に出てくるコマンド。書き方をそのまま拾ったもの */
+  commands: string[];
+}
+
 export interface ImportField {
   name: string;
   label: string;
@@ -495,6 +507,10 @@ export interface VendorDocument {
   superseded_by_id: number | null;
   superseded_by_title: string | null;
   device_count: number;
+  /** 中身を章に切った日時。読めなかった資料は index_note に理由が入る */
+  indexed_at: string | null;
+  index_note: string | null;
+  section_count: number;
 }
 
 export interface VendorDocumentMatch extends VendorDocument {

@@ -47,8 +47,8 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = 
     items: [
       { to: "/configs", label: "Configの取り込み" },
       { to: "/import", label: "台帳の取り込み" },
-      { to: "/reference", label: "リファレンス管理" },
-      { to: "/documents", label: "ベンダー資料" },
+      { to: "/reference", label: "製品情報（EoL・脆弱性）" },
+      { to: "/documents", label: "メーカー資料" },
     ],
   },
 ];

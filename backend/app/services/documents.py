@@ -13,14 +13,15 @@ from __future__ import annotations
 import hashlib
 import shutil
 from dataclasses import dataclass
+from datetime import UTC
 from pathlib import Path
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.models import Device
-from app.models.document import ConfigTemplate, Document
+from app.models.document import ConfigTemplate, Document, DocumentSection
 from app.services import versions
 
 
@@ -206,3 +207,87 @@ def templates_for_device(db: Session, device: Device) -> list[TemplateMatch]:
 
     matches.sort(key=lambda m: (m.template.category, m.template.name))
     return matches
+
+
+# --- 資料の整理 ------------------------------------------------------------
+
+
+def index_document(db: Session, document: Document, content: bytes | None = None) -> int:
+    """資料の中身を章に切り、章ごとのコマンドを控える。
+
+    渡すだけで引ける状態にするための処理。読めなかった資料は、その理由を
+    残して分かるようにする（黙って空にすると、入れたつもりで引けない）。
+
+    戻り値は作った章の数。
+    """
+    from datetime import datetime
+
+    from app.services import docindex
+
+    if content is None:
+        path = resolve_file(document)
+        content = path.read_bytes() if path else None
+
+    document.sections.clear()
+    document.indexed_at = datetime.now(UTC)
+
+    if content is None:
+        document.index_note = "ファイルが無いので中身は読めません（URL だけの登録）"
+        db.commit()
+        return 0
+
+    text = docindex.extract_text(content, document.filename, document.content_type)
+    if text is None:
+        document.index_note = "この形式は読めません（PDF は環境によって読めます）"
+        db.commit()
+        return 0
+
+    result = docindex.build(text)
+    if not result.ok:
+        document.index_note = result.note or "章に切れませんでした"
+        db.commit()
+        return 0
+
+    for position, section in enumerate(result.sections):
+        db.add(
+            DocumentSection(
+                document_id=document.id,
+                position=position,
+                heading=section.heading,
+                page=section.page,
+                body=section.body,
+                commands="\n".join(section.commands),
+            )
+        )
+    document.index_note = None
+    db.commit()
+    return len(result.sections)
+
+
+def search_sections(
+    db: Session, query: str, *, vendor: str | None = None, model: str | None = None, limit: int = 30
+) -> list[tuple[Document, DocumentSection]]:
+    """資料の中を探す。閉域なので、外の検索には出さずここで完結させる。"""
+    words = [word for word in query.split() if word]
+    if not words:
+        return []
+
+    stmt = select(DocumentSection, Document).join(
+        Document, DocumentSection.document_id == Document.id
+    )
+    for word in words:
+        like = f"%{word}%"
+        stmt = stmt.where(
+            or_(
+                DocumentSection.body.ilike(like),
+                DocumentSection.heading.ilike(like),
+                DocumentSection.commands.ilike(like),
+            )
+        )
+    if vendor:
+        stmt = stmt.where(Document.vendor.ilike(f"%{vendor}%"))
+    if model:
+        stmt = stmt.where(or_(Document.model.is_(None), Document.model.ilike(f"{model}%")))
+
+    rows = db.execute(stmt.limit(limit)).all()
+    return [(document, section) for section, document in rows]

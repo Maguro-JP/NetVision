@@ -65,14 +65,17 @@ export default function DocumentsPage() {
 
   return (
     <>
-      <h1>ベンダードキュメント</h1>
+      <h1>メーカー資料</h1>
       <p className="subtitle">
-        コマンドリファレンスやコンフィグガイドを、<strong>ベンダー・型番・バージョン範囲</strong>
-        で管理します。
+        コマンドリファレンスやコンフィグガイドを、<strong>メーカー・型番・バージョン範囲</strong>
+        で管理します。渡した資料はこちらで章に切り、章ごとに出てくるコマンドを控えるので、
+        下の「資料の中を探す」から書き方を引けます（閉域のまま、外の検索には出しません）。
         <br />
         <strong>古い版は消しません。</strong>
         新しい版を登録しても旧版は残り、そのバージョンで動いている機器からは旧版が引かれます。
       </p>
+
+      <DocumentSearch />
 
       <div className="toolbar">
         <input
@@ -300,5 +303,69 @@ export default function DocumentsPage() {
         </table>
       )}
     </>
+  );
+}
+
+/**
+ * 取り込んだ資料の中を探すところ。
+ *
+ * 資料は「置いてある」だけでは使えない。どの機種のどのコマンドをどう書くのか、
+ * その場で引けて初めて現場で開かれる。探す先は取り込んだ資料の中だけで、
+ * 外へは出さない。
+ */
+function DocumentSearch() {
+  const [text, setText] = useState("");
+  const [asked, setAsked] = useState("");
+  const hits = useQuery({
+    queryKey: ["documentSearch", asked],
+    queryFn: () => api.searchDocuments({ q: asked }),
+    enabled: asked.length > 0,
+  });
+
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h2 style={{ marginTop: 0, fontSize: "1rem" }}>資料の中を探す</h2>
+      <form
+        className="toolbar"
+        onSubmit={(event) => {
+          event.preventDefault();
+          setAsked(text.trim());
+        }}
+      >
+        <input
+          value={text}
+          onChange={(event) => setText(event.target.value)}
+          placeholder="例: link-aggregation / VLAN 作成 / ntp"
+          style={{ minWidth: 320, flex: 1 }}
+        />
+        <button className="primary" type="submit" disabled={!text.trim()}>
+          探す
+        </button>
+      </form>
+
+      {asked && hits.isLoading && <p className="muted">探しています…</p>}
+      {asked && hits.data?.length === 0 && (
+        <p className="muted">
+          見つかりませんでした。資料を取り込むと、その中身から探せるようになります。
+        </p>
+      )}
+      {(hits.data ?? []).map((hit, index) => (
+        <div key={`${hit.document_id}-${index}`} className="card" style={{ marginTop: 8 }}>
+          <div className="muted" style={{ fontSize: 12 }}>
+            {hit.vendor}
+            {hit.model ? ` / ${hit.model}` : ""} ・ {hit.title}
+          </div>
+          {hit.heading && <strong>{hit.heading}</strong>}
+          {hit.commands.length > 0 && (
+            <pre className="config-block" style={{ marginTop: 6 }}>
+              {hit.commands.join("\n")}
+            </pre>
+          )}
+          <p className="muted" style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
+            {hit.body.slice(0, 300)}
+          </p>
+        </div>
+      ))}
+    </div>
   );
 }

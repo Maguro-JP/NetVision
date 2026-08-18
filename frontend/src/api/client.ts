@@ -47,6 +47,7 @@ import type {
   VlanCatalogEntry,
   VlanCatalogWrite,
   VendorDocument,
+  DocumentHit,
   VendorDocumentMatch,
   Vulnerability,
   VulnerabilityImportResult,
@@ -621,6 +622,14 @@ export const api = {
   documentDownloadUrl: (id: number) => `${BASE}/documents/${id}/download`,
   documentsForDevice: (deviceId: number) =>
     request<VendorDocumentMatch[]>(`/devices/${deviceId}/documents`),
+  /** 取り込んだ資料の中を探す。閉域なので外の検索には出さない */
+  searchDocuments: (params: { q: string; vendor?: string; model?: string }) =>
+    request<DocumentHit[]>(`/documents/search${query(params)}`),
+  /** その機器に合う資料の中だけを探す */
+  searchDocumentsForDevice: (deviceId: number, q: string) =>
+    request<DocumentHit[]>(`/devices/${deviceId}/document-search${query({ q })}`),
+  reindexDocument: (id: number) =>
+    request<VendorDocument>(`/documents/${id}/index`, { method: "POST" }),
 
   // --- Config テンプレート ---
   listTemplates: (params: { q?: string; vendor?: string; category?: string } = {}) =>

@@ -33,7 +33,7 @@ export default function VulnerabilitiesPage() {
       <h1>脆弱性</h1>
       <p className="subtitle">
         取り込んだ脆弱性情報と、機器のベンダー・型番・OSバージョンを突き合わせた結果です。
-        データは <Link to="/reference">リファレンス管理</Link> から取り込みます。
+        データは <Link to="/reference">製品情報</Link> から取り込みます。
       </p>
 
       {isLoading || !summary ? (

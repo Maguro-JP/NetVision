@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -46,6 +46,10 @@ class DocumentRead(DocumentBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: int
+    #: 中身を章に切った日時。読めなかった資料は index_note に理由が入る
+    indexed_at: datetime | None = None
+    index_note: str | None = None
+    section_count: int = 0
     filename: str | None = None
     content_type: str | None = None
     size_bytes: int | None = None
@@ -54,6 +58,19 @@ class DocumentRead(DocumentBase):
     superseded_by_id: int | None = None
     superseded_by_title: str | None = None
     device_count: int = 0
+
+
+class DocumentHitRead(BaseModel):
+    """資料の中を探した結果。1件が1つの章。"""
+
+    document_id: int
+    title: str
+    vendor: str
+    model: str | None = None
+    heading: str | None = None
+    body: str
+    #: その章に出てくるコマンド。書き方をそのまま拾ったもの
+    commands: list[str] = []
 
 
 class DocumentMatchRead(DocumentRead):

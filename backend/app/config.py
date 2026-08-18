@@ -45,5 +45,11 @@ class Settings(BaseSettings):
     # 表を更新する前の控えの置き場所。空なら DB または資料フォルダの隣の backups/
     backup_path: str | None = None
 
+    # 閉域の中に置いたモデル（OpenAI 互換 API）。設定しなければどこへも繋がず、
+    # 規則ベースだけで動く。社内に立てたものを想定していて、外の事業者へは出さない
+    llm_url: str | None = None
+    llm_model: str | None = None
+    llm_timeout: float = 60.0
+
 
 settings = Settings()

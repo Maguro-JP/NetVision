@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
+import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type {
@@ -72,9 +73,10 @@ export default function ReferencePage() {
 
   return (
     <>
-      <h1>リファレンス管理</h1>
+      <h1>製品情報（EoL・脆弱性）</h1>
       <p className="subtitle">
-        型番ごとの EoL 情報と脆弱性情報をここで管理します。EoL は機器ごとではなく
+        型番ごとの EoL 情報と脆弱性情報をここで管理します（機器の仕様書やコマンド
+        リファレンスは <Link to="/documents">メーカー資料</Link> です）。EoL は機器ごとではなく
         <strong>型番に紐づけて</strong>いるので、1回直せば該当機器すべてに反映されます。
         <br />
         閉域環境を前提に、<strong>オフラインでの持ち込み</strong>を主な経路にしています。

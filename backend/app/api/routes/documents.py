@@ -16,6 +16,7 @@ from app.schemas.documents import (
     ConfigTemplateMatchRead,
     ConfigTemplateRead,
     ConfigTemplateUpdate,
+    DocumentHitRead,
     DocumentMatchRead,
     DocumentRead,
     DocumentUpdate,
@@ -37,6 +38,7 @@ def _active_devices(db: Session) -> list[Device]:
 
 def _to_read(document: Document, device_count: int = 0) -> DocumentRead:
     read = DocumentRead.model_validate(document, from_attributes=True)
+    read.section_count = len(document.sections)
     read.has_file = bool(document.storage_path)
     read.superseded_by_title = (
         document.superseded_by.title if document.superseded_by is not None else None
@@ -161,6 +163,11 @@ async def create_document(
     db.add(document)
     db.commit()
     db.refresh(document)
+    # 渡された資料はその場で整理する。人が「整理する」を押さないと引けない、
+    # という作りにはしない
+    if document.storage_path:
+        service.index_document(db, document)
+        db.refresh(document)
     return _to_read(document)
 
 
@@ -169,6 +176,30 @@ def _load(db: Session, document_id: int) -> Document:
     if document is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"document {document_id} が見つかりません")
     return document
+
+
+@router.get("/documents/search", response_model=list[DocumentHitRead])
+def search_documents(
+    db: DbSession,
+    q: str = Query(min_length=1, description="探す言葉。空白区切りで絞り込む"),
+    vendor: str | None = None,
+    model: str | None = None,
+    limit: int = Query(default=30, le=100),
+) -> list[DocumentHitRead]:
+    """資料の中を探す。閉域なので外の検索には出さず、取り込んだ資料の中だけを見る。"""
+    hits = service.search_sections(db, q, vendor=vendor, model=model, limit=limit)
+    return [
+        DocumentHitRead(
+            document_id=document.id,
+            title=document.title,
+            vendor=document.vendor,
+            model=document.model,
+            heading=section.heading,
+            body=section.body[:600],
+            commands=[line for line in section.commands.splitlines() if line],
+        )
+        for document, section in hits
+    ]
 
 
 @router.get("/documents/{document_id}", response_model=DocumentRead)
@@ -189,6 +220,15 @@ def update_document(document_id: int, payload: DocumentUpdate, db: DbSession) ->
     for key, value in changes.items():
         setattr(document, key, value)
     db.commit()
+    db.refresh(document)
+    return _to_read(document)
+
+
+@router.post("/documents/{document_id}/index", response_model=DocumentRead)
+def index_document(document_id: int, db: DbSession) -> DocumentRead:
+    """資料を整理し直す。取り込んだあとに読めるようになった環境（PDF など）で使う。"""
+    document = _load(db, document_id)
+    service.index_document(db, document)
     db.refresh(document)
     return _to_read(document)
 
@@ -245,6 +285,39 @@ def documents_for_device(device_id: int, db: DbSession) -> list[DocumentMatchRea
         read = _to_read(match.document)
         results.append(DocumentMatchRead(**read.model_dump(), reason=match.reason))
     return results
+
+
+@router.get("/devices/{device_id}/document-search", response_model=list[DocumentHitRead])
+def search_documents_for_device(
+    device_id: int,
+    db: DbSession,
+    q: str = Query(min_length=1),
+    limit: int = Query(default=20, le=100),
+) -> list[DocumentHitRead]:
+    """その機器に合う資料の中だけを探す。
+
+    機種の違う書き方を混ぜて出すと、そのまま打たれてしまう。ベンダーと型番で
+    先に絞ってから探す。
+    """
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"device {device_id} が見つかりません")
+
+    hits = service.search_sections(
+        db, q, vendor=device.vendor or None, model=device.model or None, limit=limit
+    )
+    return [
+        DocumentHitRead(
+            document_id=document.id,
+            title=document.title,
+            vendor=document.vendor,
+            model=document.model,
+            heading=section.heading,
+            body=section.body[:600],
+            commands=[line for line in section.commands.splitlines() if line],
+        )
+        for document, section in hits
+    ]
 
 
 # ---------------------------------------------------------------------------

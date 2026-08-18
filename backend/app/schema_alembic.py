@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 # create_all で作られた試用 DB には alembic_version が無い。
 # 新しい順に目印を見て、すでに持っている形を stamp してから差分を当てる。
 LEGACY_MARKERS: tuple[tuple[str, str, str | None], ...] = (
+    ("a4e7f2c19b53", "document_sections", None),
     ("f1c3d8a25e07", "sites", "status"),
     ("e5b2c7d1a934", "topology_groups", "parent_id"),
     ("d3a7c1e5b982", "devices", "label"),
