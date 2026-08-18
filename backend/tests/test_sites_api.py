@@ -77,3 +77,19 @@ def test_sites_can_be_exported(client):
     book = client.get(f"{API}/export/sites.xlsx")
     assert book.status_code == 200
     assert "spreadsheetml" in book.headers["content-type"]
+
+
+def test_two_sites_can_share_a_name_when_they_have_ids(client):
+    """同名のビル・同名の営業所は普通にある。拠点IDで区別できるなら通す。"""
+    first = client.post(f"{API}/sites", json={"name": "大手町ビル", "code": "S-001"})
+    second = client.post(f"{API}/sites", json={"name": "大手町ビル", "code": "S-002"})
+    assert first.status_code == 201
+    assert second.status_code == 201
+
+
+def test_a_site_without_an_id_still_needs_a_free_name(client):
+    """拠点IDが無いものどうしは名前でしか見分けられないので、そこは止める。"""
+    client.post(f"{API}/sites", json={"name": "青森県営業所"})
+    again = client.post(f"{API}/sites", json={"name": "青森県営業所"})
+    assert again.status_code == 409
+    assert "拠点ID" in again.json()["detail"]

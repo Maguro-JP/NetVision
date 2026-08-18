@@ -127,6 +127,15 @@ def test_schema_matches_the_models(migrated: str):
     assert not missing, "マイグレーションに入っていない項目があります: " + ", ".join(missing)
 
 
+def _head_revision() -> str:
+    """手順の最新版。"""
+    from alembic.script import ScriptDirectory
+
+    from app.bootstrap import _alembic_config
+
+    return ScriptDirectory.from_config(_alembic_config()).get_current_head()
+
+
 def _site_id_and_revision(url: str) -> tuple[bool, str | None]:
     engine = create_engine(url)
     inspector = inspect(engine)
@@ -181,7 +190,8 @@ def test_old_sqlite_without_site_id_gains_the_column(tmp_path: Path):
     _upgrade(url)
     has_site, revision = _site_id_and_revision(url)
     assert has_site
-    assert revision == "a4e7f2c19b53"
+    # 版数を書き込むと、手順を1つ足すたびにここが落ちる。最新かどうかだけ見る
+    assert revision == _head_revision()
 
 
 def test_existing_rows_stay_as_global_layout(tmp_path: Path):

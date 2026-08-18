@@ -97,7 +97,13 @@ def test_outdated_schema_opens_the_migration_gate(tmp_path: Path):
     body = json.loads(out)
     assert body["schema"]["phase"] == "needs_apply"
     assert body["schema"]["pending"]
-    assert body["schema"]["pending"][-1]["revision"] == "a4e7f2c19b53"
+    # 最後に来るのは最新版。版数を書き込むと、手順を足すたびにここが落ちる
+    from alembic.script import ScriptDirectory
+
+    from app.bootstrap import _alembic_config
+
+    head = ScriptDirectory.from_config(_alembic_config()).get_current_head()
+    assert body["schema"]["pending"][-1]["revision"] == head
     assert body["devices_status"] == 409
     assert body["hint"] == "schema_migration_required"
 

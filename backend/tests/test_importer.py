@@ -197,3 +197,51 @@ def test_reimport_with_contracts_does_not_query_per_row(db_session):
     assert preview.contracts_added == n
     # 行ごとに契約を見に行くと n 回以上増える。塊読みなら数百で足りる
     assert queries["n"] < n, queries["n"]
+
+
+def test_two_sites_can_share_a_name_when_they_have_ids(db_session):
+    """同じ名前の拠点が並んでいても取り込める。
+
+    離れた場所に同じ名前の拠点があること自体は珍しくない（同名のビル、
+    同名の営業所）。拠点IDで区別できているのに、名前の重複禁止で
+    16万台の台帳が丸ごと入らなくなっていた。
+    """
+    from app.models import Site
+    from app.services.importer import KeyField, run_import
+
+    headers = ["管理ID", "ホスト名", "拠点ID（任意）", "拠点名"]
+    rows = [
+        {"管理ID": "A0001", "ホスト名": "sw-01", "拠点ID（任意）": "S-001", "拠点名": "大手町ビル"},
+        {"管理ID": "A0002", "ホスト名": "sw-02", "拠点ID（任意）": "S-002", "拠点名": "大手町ビル"},
+    ]
+
+    outcome = run_import(db_session, headers, rows, key_field=KeyField.CODE, commit=True)
+
+    assert outcome.created == 2
+    sites = db_session.query(Site).filter(Site.name == "大手町ビル").all()
+    assert {site.code for site in sites} == {"S-001", "S-002"}
+
+
+def test_renaming_a_site_does_not_collide_with_another(db_session):
+    """拠点IDが同じなら名前を書き換える。書き換えた先の名前が
+    別の拠点で使われていても止まらない。"""
+    from app.models import Site
+    from app.services.importer import KeyField, run_import
+
+    db_session.add_all(
+        [
+            Site(code="S-001", name="旧・大手町"),
+            Site(code="S-002", name="大手町ビル"),
+        ]
+    )
+    db_session.commit()
+
+    headers = ["管理ID", "ホスト名", "拠点ID（任意）", "拠点名"]
+    rows = [
+        {"管理ID": "A0001", "ホスト名": "sw-01", "拠点ID（任意）": "S-001", "拠点名": "大手町ビル"}
+    ]
+
+    run_import(db_session, headers, rows, key_field=KeyField.CODE, commit=True)
+
+    renamed = db_session.query(Site).filter(Site.code == "S-001").one()
+    assert renamed.name == "大手町ビル"
