@@ -86,3 +86,37 @@ def test_the_bundles_carry_the_time_zone_database():
     """
     for script in (FOR_WINDOWS, POWERSHELL):
         assert "tzdata" in script.read_text(encoding="utf-8"), f"{script.name} に tzdata が無い"
+
+
+def _bat_from_shell() -> str:
+    text = FOR_WINDOWS.read_text(encoding="utf-8")
+    body = text.split('bat = """', 1)[1].split('"""', 1)[0]
+    # Python の文字列リテラルとして書かれているので、二重のバックスラッシュを戻す
+    return body.replace("\\\\", "\\")
+
+
+def _bat_from_powershell() -> str:
+    text = POWERSHELL.read_text(encoding="utf-8")
+    return text.split("$bat = @'\n", 1)[1].split("\n'@", 1)[0] + "\n"
+
+
+def test_both_bundles_write_the_same_launcher():
+    """起動用バッチが2つのスクリプトで食い違わないこと。
+
+    片方だけ直すと、配る相手によって挙動が違うことになる。
+    """
+    assert _bat_from_shell() == _bat_from_powershell()
+
+
+def test_the_launcher_asks_before_it_closes():
+    """Ctrl+C のあとの「バッチ ジョブを終了しますか」で N を選んでも、
+    アプリは既に止まっている。Windows の作りなので変えられない。
+
+    止まったことを伝えて、もう一度起動するかを聞く。黙って窓が閉じると、
+    何が起きたのか分からないまま作業が終わる。
+    """
+    bat = _bat_from_shell()
+    assert ":run" in bat
+    assert "choice /c YN" in bat
+    assert "goto run" in bat
+    assert "止めました" in bat

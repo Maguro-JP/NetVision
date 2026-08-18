@@ -154,10 +154,22 @@ echo.
 echo   画面 : http://127.0.0.1:8000
 echo   停止 : このウィンドウを閉じてください
 echo.
+echo   Ctrl+C を押すと、その場で止まります。
+echo   そのあとに出る「バッチ ジョブを終了しますか」は、この画面を残すかどうかの
+echo   確認です。N を選んでも NetVision は止まったままです。
+echo.
 timeout /t 2 >nul
 start "" http://127.0.0.1:8000
+:run
 "%~dp0python\python.exe" -m scripts.standalone
-pause
+echo.
+echo NetVision を止めました。
+choice /c YN /n /m "もう一度起動しますか (Y/N) "
+if errorlevel 2 goto end
+echo.
+echo 起動しています...
+goto run
+:end
 '@
 $crlf = ($bat -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllBytes(
@@ -178,6 +190,9 @@ NetVision （インストール不要版）
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
   止めるときは、開いた黒いウィンドウを閉じてください。
+  Ctrl+C でも止まります。そのあとに出る「バッチ ジョブを終了しますか」は、
+  この画面を残すかどうかの確認です。N を選んでも NetVision は止まったままなので、
+  続けたいときは「もう一度起動しますか」に Y と答えてください。
 
 ■ データの保存先
 
