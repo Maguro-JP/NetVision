@@ -118,8 +118,9 @@ export default function DeviceDetailPage() {
   if (!device) return null;
 
   const lc = device.lifecycle;
-  const set = (key: keyof typeof EMPTY_CONTRACT) => (e: { target: { value: string } }) =>
-    setContract((prev) => ({ ...prev, [key]: e.target.value }));
+  const set =
+    (key: keyof typeof EMPTY_CONTRACT) => (e: { target: { value: string } }) =>
+      setContract((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
     <>
@@ -134,16 +135,6 @@ export default function DeviceDetailPage() {
         <Link to={`/devices/${device.id}/edit`}>
           <button className="primary">編集</button>
         </Link>
-        <button
-          className="danger"
-          onClick={() => {
-            if (confirm(`${device.hostname} を削除します。よろしいですか？`)) {
-              removeDevice.mutate();
-            }
-          }}
-        >
-          削除
-        </button>
       </div>
 
       <h2>基本情報</h2>
@@ -161,7 +152,8 @@ export default function DeviceDetailPage() {
         <div>
           <span className="k">種別 / 状態</span>
           <span>
-            {DEVICE_TYPE_LABEL[device.device_type]} / {DEVICE_STATUS_LABEL[device.status]}
+            {DEVICE_TYPE_LABEL[device.device_type]} /{" "}
+            {DEVICE_STATUS_LABEL[device.status]}
           </span>
         </div>
         <div>
@@ -182,7 +174,10 @@ export default function DeviceDetailPage() {
           <span className="k">設置場所</span>
           <span>
             {device.site_id ? (
-              <Link to={`/topology?site=${device.site_id}`} title="この拠点の構成図を開きます">
+              <Link
+                to={`/topology?site=${device.site_id}`}
+                title="この拠点の構成図を開きます"
+              >
                 {device.site_name ?? "—"}
               </Link>
             ) : (
@@ -211,7 +206,9 @@ export default function DeviceDetailPage() {
           <span className="k">保守期限</span>
           <span>
             {formatDate(lc.maintenance_end)}{" "}
-            <span className="muted">{formatRemaining(lc.days_to_maintenance_end)}</span>{" "}
+            <span className="muted">
+              {formatRemaining(lc.days_to_maintenance_end)}
+            </span>{" "}
             <SeverityBadge severity={lc.maintenance_severity} />
           </span>
         </div>
@@ -239,8 +236,10 @@ export default function DeviceDetailPage() {
 
       <h2>図から想定 Config を起こす</h2>
       <p className="muted" style={{ marginTop: -6 }}>
-        トポロジー図に描いた結線と VLAN 台帳から、この機器の Config を組み立てます。
-        <strong>新規構築やテスト環境</strong>で、図を描いてから書き起こす手間を減らすためのものです。
+        トポロジー図に描いた結線と VLAN 台帳から、この機器の Config
+        を組み立てます。
+        <strong>新規構築やテスト環境</strong>
+        で、図を描いてから書き起こす手間を減らすためのものです。
         図に無い情報（アクセスポート・経路・ACL）は起こせないので、その箇所は印を残します。
       </p>
       <div className="toolbar">
@@ -249,7 +248,8 @@ export default function DeviceDetailPage() {
         </button>
         {designConfig.data && (
           <span className="muted">
-            結線 {designConfig.data.link_count} 本 / VLAN {designConfig.data.vlan_count} 件から生成
+            結線 {designConfig.data.link_count} 本 / VLAN{" "}
+            {designConfig.data.vlan_count} 件から生成
           </span>
         )}
       </div>
@@ -288,7 +288,8 @@ export default function DeviceDetailPage() {
       ) : (
         <>
           <p className="muted" style={{ marginTop: -6 }}>
-            実機の Config から読み取った内容です。アクセス・ネイティブ・トランクは
+            実機の Config
+            から読み取った内容です。アクセス・ネイティブ・トランクは
             別々に持っています（混ぜると片側だけの食い違いが見えなくなるため）。
           </p>
           <div className="table-wrap">
@@ -311,11 +312,17 @@ export default function DeviceDetailPage() {
                   <tr key={port.id}>
                     <td className="nowrap">
                       {port.enabled ? (
-                        <span className="badge ok" title="Config で shutdown されていません">
+                        <span
+                          className="badge ok"
+                          title="Config で shutdown されていません"
+                        >
                           有効
                         </span>
                       ) : (
-                        <span className="badge unknown" title="Config で shutdown されています">
+                        <span
+                          className="badge unknown"
+                          title="Config で shutdown されています"
+                        >
                           shutdown
                         </span>
                       )}
@@ -372,7 +379,10 @@ export default function DeviceDetailPage() {
                 </td>
                 <td>{formatCurrency(c.annual_cost)}</td>
                 <td>
-                  <button className="danger" onClick={() => removeContract.mutate(c.id)}>
+                  <button
+                    className="danger"
+                    onClick={() => removeContract.mutate(c.id)}
+                  >
                     削除
                   </button>
                 </td>
@@ -396,11 +406,18 @@ export default function DeviceDetailPage() {
             addContract.mutate();
           }}
         >
-          {addContract.error && <div className="error">{(addContract.error as Error).message}</div>}
+          {addContract.error && (
+            <div className="error">{(addContract.error as Error).message}</div>
+          )}
           <div className="form-grid">
             <div className="field">
               <label htmlFor="provider">保守ベンダー *</label>
-              <input id="provider" required value={contract.provider} onChange={set("provider")} />
+              <input
+                id="provider"
+                required
+                value={contract.provider}
+                onChange={set("provider")}
+              />
             </div>
             <div className="field">
               <label htmlFor="contract_number">契約番号</label>
@@ -451,11 +468,19 @@ export default function DeviceDetailPage() {
             </div>
             <div className="field">
               <label htmlFor="contact">連絡先</label>
-              <input id="contact" value={contract.contact} onChange={set("contact")} />
+              <input
+                id="contact"
+                value={contract.contact}
+                onChange={set("contact")}
+              />
             </div>
           </div>
           <div className="actions">
-            <button className="primary" type="submit" disabled={addContract.isPending}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={addContract.isPending}
+            >
               追加
             </button>
           </div>
@@ -484,11 +509,19 @@ export default function DeviceDetailPage() {
                 <td>
                   {doc.title}
                   {doc.superseded_by_title && (
-                    <div className="muted">新版あり: {doc.superseded_by_title}</div>
+                    <div className="muted">
+                      新版あり: {doc.superseded_by_title}
+                    </div>
                   )}
                 </td>
                 <td className="muted">{DOC_TYPE_LABEL[doc.doc_type]}</td>
-                <td>{versionRange(doc.applies_from, doc.applies_to, doc.version_label)}</td>
+                <td>
+                  {versionRange(
+                    doc.applies_from,
+                    doc.applies_to,
+                    doc.version_label,
+                  )}
+                </td>
                 <td className="muted" style={{ whiteSpace: "normal" }}>
                   {doc.reason}
                 </td>
@@ -558,6 +591,27 @@ export default function DeviceDetailPage() {
           </div>
         </>
       )}
+
+      {/* 消す操作は一番下に置く。よく使うボタンの隣にあると、
+          押すつもりのないときに手が滑る。取り返しがつかない操作ほど遠くに置く */}
+      <h2>この機器を削除する</h2>
+      <p className="muted">
+        台帳から消えます。取り込んだ
+        Config・結線・変更履歴も一緒に消えるため、元には戻せません。
+        使わなくなっただけなら、編集から状態を「廃棄」にしておくと履歴が残ります。
+      </p>
+      <div className="actions">
+        <button
+          className="danger"
+          onClick={() => {
+            if (confirm(`${device.hostname} を削除します。よろしいですか？`)) {
+              removeDevice.mutate();
+            }
+          }}
+        >
+          削除
+        </button>
+      </div>
     </>
   );
 }

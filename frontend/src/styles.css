@@ -846,6 +846,11 @@ button:disabled {
   border-bottom: 1px solid var(--border);
   fill: var(--text);
 }
+/* 線に添える名前・ポート名・警告の札。線そのものより手前に出す。
+   線を前に出したときに、札だけが線の裏へ回って読めなくなっていた */
+.react-flow__edgelabel-renderer {
+  z-index: 150;
+}
 /* 俯瞰図。薄いと機器の散らばりが読めないので、枠と機器をはっきり出す */
 .topo-minimap {
   background: var(--panel-2);
