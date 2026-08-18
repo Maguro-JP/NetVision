@@ -61,6 +61,7 @@ import {
   type EditHistory,
 } from "./topologyEditHistory";
 import { groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
+import { restickEdges } from "./topologyRestick";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -931,6 +932,30 @@ const SIDE_LABEL: Record<string, string> = {
 };
 
 /** 線をどの辺から出すかを選ぶ。自動に戻せることが大事（間違えても直せる）。 */
+/** 俯瞰図の1台分。枠（group）は描かない。 */
+function MiniDevice({
+  x,
+  y,
+  width,
+  height,
+  className,
+  color,
+  id,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  className?: string;
+  color?: string;
+  id: string;
+}) {
+  if (id.startsWith("g-")) return null;
+  return (
+    <rect x={x} y={y} width={width} height={height} className={className} fill={color} rx={4} />
+  );
+}
+
 function SidePicker({
   label,
   value,
@@ -1004,6 +1029,15 @@ function TopologyEditor() {
   const [revision, setRevision] = useState(0);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData | GroupFrameData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // いまの中身を、rAF の中など「あとから」参照するための控え
+  const nodesRef = useRef<Node<DeviceNodeData | GroupFrameData>[]>([]);
+  nodesRef.current = nodes;
+  const edgesRef = useRef<Edge[]>([]);
+  edgesRef.current = edges;
+  const graphRef = useRef<TopologyGraph | null>(null);
+  const simpleRef = useRef(false);
+  simpleRef.current = simple;
+
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
@@ -1071,6 +1105,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
+    graphRef.current = graph;
     const flow = toFlow(graph, simple, { portStyle, alongLine, editable, colors });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
@@ -1529,9 +1564,16 @@ function TopologyEditor() {
           rememberHistory(pushStep(history, capturePositions(next)));
           return next;
         });
+        // 動かし終わったら、線の付き場所を今の位置で付け直す。決まった点に
+        // 吸い付いたままだと、箱の裏から線が出たり遠回りしたりする
+        const graph = graphRef.current;
+        if (!graph) return;
+        const stuck = restickEdges(nodesRef.current, edgesRef.current, graph, simpleRef.current);
+        setNodes(stuck.nodes);
+        setEdges(stuck.edges);
       });
     },
-    [onNodesChange, rememberHistory, setNodes],
+    [onNodesChange, rememberHistory, setNodes, setEdges],
   );
 
   // 入力欄にいるときはショートカットを奪わない
@@ -2216,7 +2258,14 @@ function TopologyEditor() {
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="topo-minimap" />
+            {/* 俯瞰図に出すのは機器だけ。ラックや部屋の枠まで塗ると、
+                大きな四角がいくつも並んで、機器の散らばりが読めなくなる */}
+            <MiniMap
+              pannable
+              zoomable
+              className="topo-minimap"
+              nodeComponent={MiniDevice}
+            />
             {selectedDevice && !selectedGroup && !selectedEdge && (
               <Panel position="top-right" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
