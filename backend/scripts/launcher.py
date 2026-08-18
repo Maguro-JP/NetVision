@@ -92,6 +92,12 @@ def _window(runner: Runner, data_dir: str) -> int:
     buttons.pack(anchor="w")
 
     def quit_app() -> None:
+        # 押し間違いで止めてしまうと、開いている画面が急に動かなくなる。
+        # 一度だけ聞く
+        from tkinter import messagebox
+
+        if not messagebox.askyesno("NetVision", "NetVision を終了しますか。"):
+            return
         # 先に窓を閉じて、押した手応えを出す。停止はそのあと
         root.destroy()
 
@@ -164,10 +170,20 @@ def _dialog(runner: Runner, data_dir: str) -> bool:
         f"データの置き場所 : {data_dir}\n\n"
         "終了するときは、このダイアログの「OK」を押してください。"
     )
-    try:
-        ctypes.windll.user32.MessageBoxW(None, text, "NetVision", 0x00000040)
-    except Exception:
-        return False
+    #: MB_ICONINFORMATION / MB_YESNO+MB_ICONQUESTION / IDYES
+    info, ask, yes = 0x00000040, 0x00000024, 6
+    while True:
+        try:
+            ctypes.windll.user32.MessageBoxW(None, text, "NetVision", info)
+            # 押し間違いで止めてしまうと、開いている画面が急に動かなくなる。
+            # 一度だけ聞き、違うなら動かしたまま元のダイアログへ戻る
+            answer = ctypes.windll.user32.MessageBoxW(
+                None, "NetVision を終了しますか。", "NetVision", ask
+            )
+        except Exception:
+            return False
+        if answer == yes:
+            break
     runner.stop()
     return True
 
