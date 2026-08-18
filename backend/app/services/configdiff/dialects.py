@@ -304,6 +304,14 @@ _NEC_QX = _ComwareDialect(
             re.compile(r"^\s*undo\s+vlan\b", re.I),
             "VLAN を削除します。所属ポートの通信が止まります",
         ),
+        RiskRule(
+            re.compile(r"^\s*undo\s+port\s+link-aggregation\s+group\b", re.I),
+            "束ねているポートを外します。片系だけになり帯域が落ちます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*undo\s+port\s+trunk\s+permit\s+vlan\b", re.I),
+            "トランクの許可 VLAN を外します。その VLAN が通らなくなります",
+        ),
     ],
 )
 
@@ -328,6 +336,15 @@ _NEC_IX = Dialect(
         RiskRule(
             re.compile(r"^\s*no\s+ip\s+address\b", re.I),
             "IPアドレスを外します。その経路で作業していると接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+ip\s+route\b", re.I),
+            "経路を削除します。その先へ通信できなくなります",
+        ),
+        RiskRule(
+            # IX のポートは既定で止まっている。`no shutdown` を消すと落ちる
+            re.compile(r"^\s*no\s+no\s+shutdown\b", re.I),
+            "ポートを閉塞します。IX は既定が閉塞なので通信が止まります",
         ),
     ],
 )

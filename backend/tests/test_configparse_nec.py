@@ -262,3 +262,108 @@ def test_ix_negation_is_no():
     result = build(current, target, "nec_ix")
     assert result.verified
     assert "no ip address 10.0.0.1/30" in result.script
+
+
+def test_qx_vlan_definitions_are_read_from_running_config():
+    """`display current-configuration` は行頭に空白が入る。
+
+    行頭固定で見ると VLAN の定義を丸ごと取りこぼし、VLAN 台帳に名前が載らない。
+    """
+    text = """#
+ sysname aichi-sw-01
+#
+ vlan 10
+  name USERS
+#
+ vlan 20 to 22
+#
+interface GigabitEthernet1/0/2
+ port link-type access
+ port access vlan 10
+#
+"""
+    parsed = configparse.parse(text)
+    assert parsed.vlans[10] == "USERS"
+    assert set(parsed.vlans) == {10, 20, 21, 22}
+
+
+def test_qx_lag_membership_is_read():
+    """束ねたポートは、どの LAG のものか分からないと1本の線にまとめられない。"""
+    text = """#
+ sysname sw
+#
+interface Bridge-Aggregation1
+ port link-type trunk
+#
+interface GigabitEthernet1/0/1
+ port link-aggregation group 1
+#
+"""
+    parsed = configparse.parse(text)
+    member = next(i for i in parsed.interfaces if i.name.endswith("1/0/1"))
+    assert member.lag_group == 1
+
+
+def test_qx_ip_keeps_its_mask():
+    """マスクを落とすと、どの範囲のアドレスなのかが台帳から消える。"""
+    text = """#
+ sysname sw
+#
+interface Vlan-interface10
+ ip address 10.104.10.1 255.255.255.0
+#
+"""
+    parsed = configparse.parse(text)
+    assert parsed.interfaces[0].ip_address == "10.104.10.1/24"
+
+
+def test_ix_ports_are_down_until_no_shutdown():
+    """IX のポートは既定で止まっている。
+
+    `no shutdown` を書いていないポートを「使っている」と読むと、
+    空きポートの数を間違える。
+    """
+    text = """device-name rt
+!
+interface GigaEthernet0.0
+  ip address 10.0.0.1/30
+  no shutdown
+!
+interface GigaEthernet1.0
+  ip address 10.0.1.1/24
+!
+"""
+    parsed = configparse.parse(text)
+    used = next(i for i in parsed.interfaces if i.name.endswith("0.0"))
+    spare = next(i for i in parsed.interfaces if i.name.endswith("1.0"))
+    assert used.enabled is True
+    assert spare.enabled is False
+
+
+def test_ix_lldp_table_with_local_interface_header():
+    """見出しが `Local Interface` の実機がある。読み飛ばすと隣接が0本になる。"""
+    text = """device-name rt
+!
+show lldp neighbor
+Local Interface  Chassis ID         Port ID                System Name
+GigaEthernet0.0  00:11:22:33:44:55  GigabitEthernet1/0/24  aichi-sw-01
+"""
+    parsed = configparse.parse(text)
+    assert [(n.local_interface, n.remote_hostname) for n in parsed.neighbors] == [
+        ("GigaEthernet0.0", "aichi-sw-01")
+    ]
+
+
+def test_hostname_falls_back_to_the_prompt():
+    """show 出力だけのファイルでも、プロンプトの機器名で台帳と結び付ける。"""
+    qx = configparse.parse(
+        "<aichi-sw-01>display version\nNEC Comware Platform Software\n"
+        "Comware Software, Version 7.1.070, Release 3506P05\nNEC QX-S5528P uptime is 1 day\n"
+    )
+    assert qx.hostname == "aichi-sw-01"
+    assert qx.model == "QX-S5528P"
+
+    ix = configparse.parse(
+        "mie-rt-01# show version\nIX Series IX2215 (magellan-sec) Software, Version 10.6.21\n"
+    )
+    assert ix.hostname == "mie-rt-01"
