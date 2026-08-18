@@ -22,7 +22,9 @@ def _env_files() -> tuple[str, ...]:
 class Settings(BaseSettings):
     """環境変数から読み込む設定。閉域環境での運用を想定し外部依存は持たない。"""
 
-    model_config = SettingsConfigDict(env_prefix="NETVISION_", env_file=_env_files(), extra="ignore")
+    model_config = SettingsConfigDict(
+        env_prefix="NETVISION_", env_file=_env_files(), extra="ignore"
+    )
 
     database_url: str = "postgresql+psycopg://netvision:netvision@localhost:5432/netvision"
 
