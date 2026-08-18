@@ -87,7 +87,13 @@ import {
   undo as undoHistory,
   type EditHistory,
 } from "./topologyEditHistory";
-import { groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
+import {
+  LAYER,
+  frameLayer,
+  groupBoxes,
+  groupDepth,
+  updateGroupBounds,
+} from "./topologyGroups";
 import { restickEdges } from "./topologyRestick";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
@@ -821,8 +827,9 @@ function toFlow(
       id: String(node.device_id),
       type: "device" as const,
       position: { x: node.x - shift, y: node.y - shiftY },
-      // 対向（簡易表示）は線の下に置く。箱が結線を隠さないようにする
-      zIndex: node.outside ? 0 : 2,
+      // 対向（簡易表示）は線の下。箱が結線を隠さないようにする。
+      // 自拠点の機器は一番手前。枠の下に入ると掴めなくなる
+      zIndex: node.outside ? LAYER.outside : LAYER.device,
       data: {
         hostname: node.hostname,
         label: simple ? null : node.label,
@@ -873,14 +880,15 @@ function toFlow(
   const groups = (graph.groups ?? []).flatMap((group) => {
     const box = boxes.get(group.id);
     if (!box) return [];
-    // 外側の枠ほど先に（背面に）描く。順が逆だと内側の枠の名前が隠れる
+    // 外側の枠ほど背面に置く。拠点・建物が一番後ろ、部屋、ラックと内側ほど手前。
+    // 同じ高さに揃えると、小さい枠が大きい枠の下に入って掴めなくなる
     const depth = groupDepth(specs, group.id);
     return [
       {
         id: groupNodeId(group),
         type: "group" as const,
         position: { x: box.x, y: box.y },
-        zIndex: Math.min(depth, 1),
+        zIndex: frameLayer(depth),
         selectable: true,
         draggable: false,
         connectable: false,
@@ -922,7 +930,7 @@ function toFlow(
     id: String(edge.id),
     source: String(edge.source),
     target: String(edge.target),
-    zIndex: 1,
+    zIndex: LAYER.edge,
     // 引き出し口は位置関係から選ぶ（人が指定していればそちら）
     sourceHandle: `s-${anchors.get(edge.id)?.source ?? "bottom-1"}`,
     targetHandle: `t-${anchors.get(edge.id)?.target ?? "top-1"}`,
