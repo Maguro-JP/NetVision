@@ -129,30 +129,11 @@ stage, py_version, version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 
 bat = """@echo off
 rem NetVision を起動します。インストールは不要です。
+rem 黒い画面は出しません。小さな窓が出るので、終了はそこから行います。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
-echo NetVision を起動しています...
-echo.
-echo   画面 : http://127.0.0.1:8000
-echo   停止 : このウィンドウを閉じてください
-echo.
-echo   Ctrl+C を押すと、その場で止まります。
-echo   そのあとに出る「バッチ ジョブを終了しますか」は、この画面を残すかどうかの
-echo   確認です。N を選んでも NetVision は止まったままです。
-echo.
-timeout /t 2 >nul
-start "" http://127.0.0.1:8000
-:run
-"%~dp0python\\python.exe" -m scripts.standalone
-echo.
-echo NetVision を止めました。
-choice /c YN /n /m "もう一度起動しますか (Y/N) "
-if errorlevel 2 goto end
-echo.
-echo 起動しています...
-goto run
-:end
+start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
 """
 (stage / "NetVision.bat").write_bytes(bat.replace("\n", "\r\n").encode("cp932"))
 
@@ -168,10 +149,8 @@ readme = f"""NetVision （インストール不要版）
   2. 「NetVision.bat」をダブルクリック
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
-  止めるときは、開いた黒いウィンドウを閉じてください。
-  Ctrl+C でも止まります。そのあとに出る「バッチ ジョブを終了しますか」は、
-  この画面を残すかどうかの確認です。N を選んでも NetVision は止まったままなので、
-  続けたいときは「もう一度起動しますか」に Y と答えてください。
+  小さな窓が1つ出ます。止めるときは、その窓の「終了する」を押すか、
+  窓を閉じてください。黒い画面は出ません。
 
 ■ データの保存先
 

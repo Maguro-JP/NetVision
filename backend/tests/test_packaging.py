@@ -108,15 +108,22 @@ def test_both_bundles_write_the_same_launcher():
     assert _bat_from_shell() == _bat_from_powershell()
 
 
-def test_the_launcher_asks_before_it_closes():
-    """Ctrl+C のあとの「バッチ ジョブを終了しますか」で N を選んでも、
-    アプリは既に止まっている。Windows の作りなので変えられない。
+def test_the_launcher_opens_a_window_instead_of_a_console():
+    """黒い画面を出さず、窓から止められる形にする。
 
-    止まったことを伝えて、もう一度起動するかを聞く。黙って窓が閉じると、
-    何が起きたのか分からないまま作業が終わる。
+    黒い画面だと止め方が Ctrl+C しか無く、そのあとに Windows が出す
+    「バッチ ジョブを終了しますか」は、Y でも N でも意図とずれる。
+    ふつうのアプリと同じく、窓の「終了する」で止められるようにする。
     """
     bat = _bat_from_shell()
-    assert ":run" in bat
-    assert "choice /c YN" in bat
-    assert "goto run" in bat
-    assert "止めました" in bat
+    assert "pythonw.exe" in bat, "黒い画面の出ない起動になっていない"
+    assert "scripts.launcher" in bat
+    assert "pause" not in bat
+    assert "Ctrl+C" not in bat
+
+
+def test_the_launcher_module_is_bundled():
+    """起動役そのものが同梱されていること。無いと起動しない。"""
+    assert (REPO / "backend" / "scripts" / "launcher.py").is_file()
+    for script in (FOR_WINDOWS, POWERSHELL):
+        assert "scripts" in script.read_text(encoding="utf-8")

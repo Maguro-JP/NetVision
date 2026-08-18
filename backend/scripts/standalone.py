@@ -23,7 +23,7 @@ REPO = Path(__file__).resolve().parent.parent.parent
 DEFAULT_DATA = Path.home() / ".netvision"
 
 
-def main(argv: list[str] | None = None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="NetVision を1台完結で起動する")
     parser.add_argument("--port", type=int, default=8000, help="待ち受けポート（既定 8000）")
     parser.add_argument(
@@ -37,26 +37,49 @@ def main(argv: list[str] | None = None) -> int:
         help=f"DB と資料ファイルの置き場所（既定 {DEFAULT_DATA}）",
     )
     parser.add_argument("--demo", action="store_true", help="デモデータを入れて起動する")
-    args = parser.parse_args(argv)
+    return parser
 
-    data_dir = Path(args.data_dir).expanduser()
-    data_dir.mkdir(parents=True, exist_ok=True)
-    db_path = data_dir / "netvision.db"
+
+def prepare(data_dir: str, *, demo: bool = False) -> Path:
+    """置き場所を決めて、環境変数に反映する。
+
+    起動の入口が2つ（黒い画面と、窓のある起動役）あるので、ここを共有する。
+    片方だけ直すと、同じアプリなのに置き場所が違う、ということが起きる。
+    """
+    path = Path(data_dir).expanduser()
+    path.mkdir(parents=True, exist_ok=True)
+    db_path = path / "netvision.db"
 
     os.environ.setdefault("NETVISION_DATABASE_URL", f"sqlite:///{db_path}")
-    os.environ.setdefault("NETVISION_DOCUMENT_STORAGE_PATH", str(data_dir / "documents"))
-    if args.demo:
+    os.environ.setdefault("NETVISION_DOCUMENT_STORAGE_PATH", str(path / "documents"))
+    if demo:
         os.environ["NETVISION_DEMO_MODE"] = "true"
+    return path
 
+
+def frontend_dist() -> Path | None:
+    """ビルド済みの画面。無ければ None。"""
     dist = REPO / "frontend" / "dist"
-    if dist.is_dir():
-        os.environ.setdefault("NETVISION_SERVE_FRONTEND", str(dist))
-    else:
-        print(
-            "画面がまだビルドされていません。先に次を実行してください:\n"
-            "    cd frontend && npm ci && npm run build",
-            file=sys.stderr,
-        )
+    if not dist.is_dir():
+        return None
+    os.environ.setdefault("NETVISION_SERVE_FRONTEND", str(dist))
+    return dist
+
+
+NO_FRONTEND = (
+    "画面がまだビルドされていません。先に次を実行してください:\n"
+    "    cd frontend && npm ci && npm run build"
+)
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+
+    data_dir = prepare(args.data_dir, demo=args.demo)
+    db_path = data_dir / "netvision.db"
+
+    if frontend_dist() is None:
+        print(NO_FRONTEND, file=sys.stderr)
         return 1
 
     import uvicorn
