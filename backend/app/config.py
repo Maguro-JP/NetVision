@@ -53,6 +53,9 @@ class Settings(BaseSettings):
     # 事業者の API を使う場合の鍵。閉域では空のまま。使う人が自分の契約を
     # 入れる想定で、こちらでは持たない
     llm_api_key: str | None = None
+    # 役割ごとにモデルを分ける場合の一覧（JSON）。要約は小さいモデル、
+    # Config の下書きは大きいモデル、のように使い分ける
+    llm_profiles: str | None = None
     # 外の事業者へ出してよいか。既定は閉域なので不可。人が明示したときだけ許す
     llm_allow_external: bool = False
 
