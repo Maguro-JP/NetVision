@@ -521,7 +521,7 @@ def scope_graph(
             node.peer_kind = None
         node.hidden_peers = 0
 
-    _pull_outside_closer(nodes, graph.edges)
+    _stack_outside(nodes, graph.edges)
 
     used_rank = rank if rank is not None else hierarchy_rank(graph)
     used_rank = _align_redundant_pairs(
@@ -546,21 +546,27 @@ def scope_graph(
     )
 
 
-#: 対向を内側の機器から離す幅。マス目2つ。
-#: 図の外の相手は箱が小さく、線も1本なので、内側どうしほど空ける必要がない。
-#: 離れていると「別の場所にある」ように見えて、かえって関係が読めない
-_OUTSIDE_GAP = _GRID * 2
+#: 対向どうしの間隔。マス目1つ。
+#: 図の外の相手は名前だけの小さな箱なので、内側と同じだけ空ける必要がない
+_OUTSIDE_GAP = _GRID
+
+#: 対向の箱の高さ（画面の OUTSIDE_HEIGHT と合わせる）。名前と拠点の2行ぶん
+_OUTSIDE_HEIGHT = 53.0
 
 
-def _pull_outside_closer(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> None:
-    """図の外にいる相手（対向）の列を、内側の機器の隣まで寄せる。
+def _stack_outside(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> None:
+    """図の外にいる相手（対向）を、上下に詰めて置く。
 
-    対向も内側と同じ間隔で置くと、横に大きく空いて線だけが長く伸びる。
-    寄せると「この機器の向こう側」だと一目で分かる。
+    対向は内側の機器と同じ間隔で並べていたため、縦に大きく散らばっていた。
+    小さい箱がまばらに散ると、どれが図の外なのかが読み取りにくい。
 
-    1台ずつ寄せるのではなく、右の対向は右の列、左の対向は左の列として
-    まとめて寄せる。個別に寄せると列が崩れ、どこまでが図の外なのか
-    分からなくなる。
+    詰めるのは段と段のすき間だけで、順番も左右の位置も変えない。
+
+    - 横には寄せない。内側の機器へ寄せると拠点の中の機器と地続きに見えて、
+      どこまでが自分の拠点なのかが分からなくなる。
+    - 上下の順番は変えない。上位は上、配下は下という関係が読めなくなる。
+    - 同じ段にいる2台（冗長の対向）は同じ段のまま動かす。横並びが崩れると、
+      冗長なのか別系統なのかが区別できない。
     """
     # 人が置いた機器は動かさない。自動で寄せると、置き直した意味が無くなる
     outside = [n for n in nodes if n.outside and not n.placed]
@@ -568,102 +574,30 @@ def _pull_outside_closer(nodes: list[TopologyNodeView], edges: list[TopologyEdge
     if not outside or not inside:
         return
 
-    top_bottom: dict[int, int] = {}
-    for edge in edges:
-        for device_id in (edge.source, edge.target):
-            top_bottom[device_id] = top_bottom.get(device_id, 0) + 1
-    width_of = {node.device_id: _box_width(top_bottom.get(node.device_id, 0)) for node in nodes}
+    center = (min(n.x for n in inside) + max(n.x for n in inside)) / 2
+    step = _OUTSIDE_HEIGHT + _OUTSIDE_GAP
 
-    # 寄せる先は「その対向が繋がっている機器」の端。図全体の端に合わせると、
-    # 遠くにある関係のない機器に引きずられて、対向だけが離れて見える
-    by_id = {n.device_id: n for n in nodes}
-    partners: dict[int, list[TopologyNodeView]] = {}
-    for edge in edges:
-        for a, b in ((edge.source, edge.target), (edge.target, edge.source)):
-            here, there = by_id.get(a), by_id.get(b)
-            if here is None or there is None or not here.outside or there.outside:
+    for column in (
+        [n for n in outside if n.x >= center],
+        [n for n in outside if n.x < center],
+    ):
+        if len(column) < 2:
+            continue
+        rows: dict[float, list[TopologyNodeView]] = {}
+        for node in column:
+            rows.setdefault(round(node.y / _GRID) * _GRID, []).append(node)
+        if len(rows) < 2:
+            continue
+
+        top = min(rows)
+        for index, key in enumerate(sorted(rows)):
+            want = top + index * step
+            # 詰めるだけ。広げると、また散らばる
+            if want >= key:
                 continue
-            partners.setdefault(here.device_id, []).append(there)
-
-    center = (min(n.x for n in inside) + max(n.x + width_of[n.device_id] for n in inside)) / 2
-
-    def _abreast(node: TopologyNodeView) -> bool:
-        """相手と同じ段にいるか。
-
-        段がずれている対向を横へ寄せると、線が回り込んで途中の箱を貫く。
-        真横にいる対向だけを寄せる。
-        """
-        return any(
-            abs(partner.y - node.y) <= _DETAIL_HEIGHT / 2 for partner in partners[node.device_id]
-        )
-
-    movable = [n for n in outside if partners.get(n.device_id) and _abreast(n)]
-    right = [n for n in movable if n.x >= center]
-    left = [n for n in movable if n.x < center]
-
-    def _fits(shift: float, group: list[TopologyNodeView]) -> bool:
-        """その量だけ寄せられるか。
-
-        箱に食い込まないことに加えて、相手までの線が別の箱を貫かないことを見る。
-        寄せた結果、途中の機器を線が突き抜けては読めない。
-        """
-        for node in group:
-            x = node.x - shift
-            moved = replace(node, x=x)
-            for other in inside:
-                if _boxes_touch(moved, other, width_of):
-                    return False
-            for partner in partners[node.device_id]:
-                lo = min(partner.x + width_of[partner.device_id], x)
-                hi = max(partner.x + width_of[partner.device_id], x)
-                # 線は相手と対向の間を L 字で通る。どちらの高さの帯も見る
-                bands = (
-                    (node.y, node.y + _DETAIL_HEIGHT),
-                    (partner.y, partner.y + _DETAIL_HEIGHT),
-                )
-                for other in inside:
-                    if other is partner:
-                        continue
-                    for top, bottom in bands:
-                        if other.y + _DETAIL_HEIGHT <= top or other.y >= bottom:
-                            continue
-                        if lo < other.x + width_of[other.device_id] and other.x < hi:
-                            return False
-                    # 縦に下りる部分。対向の真上・真下に箱があれば通せない
-                    if (
-                        other.x < x + width_of[node.device_id]
-                        and x < other.x + width_of[other.device_id]
-                    ):
-                        lo_y = min(partner.y, node.y)
-                        hi_y = max(partner.y, node.y) + _DETAIL_HEIGHT
-                        if other.y + _DETAIL_HEIGHT > lo_y and other.y < hi_y:
-                            return False
-        return True
-
-    # 動かすのは列ごと。位置を1つに揃えるのではなく、同じ量だけ平行に寄せる。
-    # 揃えてしまうと、横に並んでいる冗長の2台が重なる
-    if right:
-        edge_x = max(
-            partner.x + width_of[partner.device_id]
-            for node in right
-            for partner in partners[node.device_id]
-        )
-        shift = min(n.x for n in right) - (edge_x + _OUTSIDE_GAP)
-        while shift > 0 and not _fits(shift, right):
-            shift -= _GRID
-        if shift > 0:
-            for node in right:
-                node.x -= shift
-
-    if left:
-        edge_x = min(partner.x for node in left for partner in partners[node.device_id])
-        widest = max(width_of[n.device_id] for n in left)
-        shift = (edge_x - _OUTSIDE_GAP - widest) - max(n.x for n in left)
-        while shift > 0 and not _fits(-shift, left):
-            shift -= _GRID
-        if shift > 0:
-            for node in left:
-                node.x += shift
+            snapped = round(want / _GRID) * _GRID
+            for node in rows[key]:
+                node.y = snapped
 
 
 def _boxes_touch(
@@ -1869,20 +1803,23 @@ def _visual_right(stored_x: float, links: int) -> float:
     return stored_x - shift + width
 
 
-def _visual_top(stored_y: float, links: int) -> float:
+def _visual_top(stored_y: float, links: int, *, base: float = _DETAIL_HEIGHT) -> float:
     """保存座標から、画面に見える上端を出す。links は左右辺の本数。
 
     すき間は詳細表示の箱（中身で伸びる）に合わせる。78 のままだと
     詳細で箱どうしが被り、ポート名が潰れる。
+
+    図の外の相手は名前だけの小さい箱なので、`base` に対向の高さを渡す。
+    詳細の高さで見ると、詰めて並べただけで重なった扱いになる。
     """
-    height = _box_height(links, _DETAIL_HEIGHT)
+    height = _box_height(links, base)
     shift = (height - _BOX_HEIGHT) / 2
     return stored_y - shift
 
 
-def _visual_bottom(stored_y: float, links: int) -> float:
+def _visual_bottom(stored_y: float, links: int, *, base: float = _DETAIL_HEIGHT) -> float:
     """保存座標から、画面に見える下端を出す。links は左右辺の本数。"""
-    height = _box_height(links, _DETAIL_HEIGHT)
+    height = _box_height(links, base)
     shift = (height - _BOX_HEIGHT) / 2
     return stored_y - shift + height
 

@@ -1,6 +1,14 @@
 import { describe, expect, it } from "vitest";
 
-import { groupBox, groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
+import type { GroupSpec } from "./topologyGroups";
+import {
+  LAYER,
+  frameLayer,
+  groupBox,
+  groupBoxes,
+  groupDepth,
+  updateGroupBounds,
+} from "./topologyGroups";
 
 describe("機器を囲む枠", () => {
   it("箱の外側に余白を取る", () => {
@@ -23,8 +31,18 @@ describe("機器を囲む枠", () => {
         position: { x: 0, y: 0 },
         data: { deviceIds: [1, 2], width: 80, height: 48 },
       },
-      { id: "1", type: "device", position: { x: 200, y: 120 }, data: { width: 190 } },
-      { id: "2", type: "device", position: { x: 420, y: 120 }, data: { width: 190 } },
+      {
+        id: "1",
+        type: "device",
+        position: { x: 200, y: 120 },
+        data: { width: 190 },
+      },
+      {
+        id: "2",
+        type: "device",
+        position: { x: 420, y: 120 },
+        data: { width: 190 },
+      },
     ]);
     const frame = next.find((node) => node.id === "g-1");
     expect(frame?.position.x).toBeLessThan(200);
@@ -58,7 +76,10 @@ describe("入れ子の枠", () => {
       { id: 1, parentId: 2, deviceIds: [1] },
       { id: 2, parentId: 1, deviceIds: [] },
     ];
-    const boxes = groupBoxes(specs, new Map([[1, { x: 0, y: 0, width: 10, height: 10 }]]));
+    const boxes = groupBoxes(
+      specs,
+      new Map([[1, { x: 0, y: 0, width: 10, height: 10 }]]),
+    );
     expect(boxes.size).toBeGreaterThan(0);
   });
 
@@ -70,5 +91,25 @@ describe("入れ子の枠", () => {
     ];
     expect(groupDepth(specs, 1)).toBe(0);
     expect(groupDepth(specs, 3)).toBe(2);
+  });
+});
+
+describe("重なりの順", () => {
+  it("大きい枠ほど後ろ、小さい枠ほど手前になる", () => {
+    const specs: GroupSpec[] = [
+      { id: 1, parentId: null, deviceIds: [] }, // 建物
+      { id: 2, parentId: 1, deviceIds: [] }, // 部屋
+      { id: 3, parentId: 2, deviceIds: [10] }, // ラック
+    ];
+    const layers = specs.map((spec) => frameLayer(groupDepth(specs, spec.id)));
+    expect(layers[0]).toBeLessThan(layers[1]);
+    expect(layers[1]).toBeLessThan(layers[2]);
+  });
+
+  it("機器は枠より手前、対向は線より後ろ", () => {
+    const deepest = frameLayer(20);
+    expect(deepest).toBeLessThan(LAYER.outside);
+    expect(LAYER.outside).toBeLessThan(LAYER.edge);
+    expect(LAYER.edge).toBeLessThan(LAYER.device);
   });
 });

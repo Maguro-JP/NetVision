@@ -88,6 +88,29 @@ export function groupBoxes(
   return out;
 }
 
+/**
+ * 図の重なりの順（手前ほど大きい）。
+ *
+ * 小さいものが大きいものの下に入ると、掴めなくなって作業できない。
+ * 拠点や建物のような大きい枠を一番後ろに置き、部屋、ラックと内側へ行くほど
+ * 手前にする。線はその上、機器は一番手前。
+ */
+export const LAYER = {
+  /** 枠。ここに枠の深さを足す（外側 0、内側ほど手前） */
+  frame: 0,
+  /** 図の外の相手。線に隠れない位置だが、枠より手前 */
+  outside: 80,
+  /** 結線 */
+  edge: 100,
+  /** 機器。掴めなくなると困るので一番手前 */
+  device: 200,
+} as const;
+
+/** その枠の重なりの順。深いほど（内側ほど）手前に来る。 */
+export function frameLayer(depth: number): number {
+  return LAYER.frame + depth;
+}
+
 /** 枠の深さ。0 が一番外側。外側から順に描かないと、内側の名前が隠れる。 */
 export function groupDepth(specs: GroupSpec[], id: number): number {
   const parentOf = new Map(specs.map((spec) => [spec.id, spec.parentId]));
@@ -112,10 +135,15 @@ export function updateGroupBounds<T extends Node>(nodes: T[]): T[] {
       x: node.position.x,
       y: node.position.y,
       width:
-        data.width ?? (typeof node.style?.width === "number" ? node.style.width : DEFAULT_WIDTH),
+        data.width ??
+        (typeof node.style?.width === "number"
+          ? node.style.width
+          : DEFAULT_WIDTH),
       height:
         data.height ??
-        (typeof node.style?.height === "number" ? node.style.height : DEFAULT_HEIGHT),
+        (typeof node.style?.height === "number"
+          ? node.style.height
+          : DEFAULT_HEIGHT),
     });
   }
   const specs: GroupSpec[] = nodes
@@ -137,7 +165,9 @@ export function updateGroupBounds<T extends Node>(nodes: T[]): T[] {
   return nodes.map((node) => {
     if (node.type !== "group") return node;
     const data = node.data as { groupId?: number };
-    const box = boxes.get(data.groupId ?? Number(String(node.id).replace("g-", "")));
+    const box = boxes.get(
+      data.groupId ?? Number(String(node.id).replace("g-", "")),
+    );
     if (!box) return node;
     return {
       ...node,

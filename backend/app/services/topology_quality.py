@@ -11,6 +11,8 @@ from collections import defaultdict
 from dataclasses import dataclass
 
 from app.services.topology import (
+    _DETAIL_HEIGHT,
+    _OUTSIDE_HEIGHT,
     TopologyGraph,
     _busiest_sides,
     _visual_bottom,
@@ -49,11 +51,14 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
             a_lr = busiest_lr.get(a.device_id, 0)
             b_lr = busiest_lr.get(b.device_id, 0)
             # 見た目の箱で判定。保存座標の差だけだと広げた箱の食い込みを見逃す。
+            # 図の外の相手は名前だけの小さい箱なので、その高さで見る
+            a_base = _OUTSIDE_HEIGHT if a.outside else _DETAIL_HEIGHT
+            b_base = _OUTSIDE_HEIGHT if b.outside else _DETAIL_HEIGHT
             if (
                 _visual_left(a.x, a_tb) < _visual_right(b.x, b_tb) - 1
                 and _visual_left(b.x, b_tb) < _visual_right(a.x, a_tb) - 1
-                and _visual_top(a.y, a_lr) < _visual_bottom(b.y, b_lr) - 1
-                and _visual_top(b.y, b_lr) < _visual_bottom(a.y, a_lr) - 1
+                and _visual_top(a.y, a_lr, base=a_base) < _visual_bottom(b.y, b_lr, base=b_base) - 1
+                and _visual_top(b.y, b_lr, base=b_base) < _visual_bottom(a.y, a_lr, base=a_base) - 1
             ):
                 overlap = True
                 findings.append(

@@ -125,7 +125,7 @@ if ($LASTEXITCODE -ne 0) { throw "pip の準備に失敗しました" }
 
 $packages = @(
     "fastapi", "sqlalchemy", "alembic", "pydantic", "pydantic-settings", "python-dateutil",
-    "openpyxl", "python-multipart", "jinja2", "uvicorn"
+    "openpyxl", "python-multipart", "jinja2", "uvicorn", "tzdata"
 )
 & $python -m pip install --quiet --target (Join-Path $Stage "lib") --no-warn-script-location @packages
 if ($LASTEXITCODE -ne 0) { throw "ライブラリの取得に失敗しました" }
