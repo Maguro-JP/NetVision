@@ -27,12 +27,25 @@ def _to_read(site: Site, device_count: int = 0) -> SiteRead:
     )
 
 
-def _ensure_unique_name(db: Session, name: str, *, exclude_id: int | None = None) -> None:
-    stmt = select(Site).where(Site.name == name)
+def _ensure_unique_name(
+    db: Session, name: str, *, code: str | None = None, exclude_id: int | None = None
+) -> None:
+    """名前の重複を止めるのは、拠点IDが無いときだけ。
+
+    離れた場所に同じ名前の拠点があること自体は珍しくない（同名のビル、同名の
+    営業所）。拠点IDが振ってあれば区別できるので、名前が同じでも通す。
+    IDが無いものどうしは名前でしか見分けられないので、そこだけ止める。
+    """
+    if code:
+        return
+    stmt = select(Site).where(Site.name == name, Site.code.is_(None))
     if exclude_id is not None:
         stmt = stmt.where(Site.id != exclude_id)
     if db.scalar(stmt):
-        raise HTTPException(status.HTTP_409_CONFLICT, f"拠点名 '{name}' は登録済みです")
+        raise HTTPException(
+            status.HTTP_409_CONFLICT,
+            f"拠点名 '{name}' は登録済みです。別の拠点として登録するなら拠点IDを付けてください",
+        )
 
 
 def _ensure_unique_code(db: Session, code: str | None, *, exclude_id: int | None = None) -> None:
@@ -58,7 +71,7 @@ def list_sites(db: DbSession) -> list[SiteRead]:
 
 @router.post("", response_model=SiteRead, status_code=status.HTTP_201_CREATED)
 def create_site(payload: SiteCreate, db: DbSession) -> SiteRead:
-    _ensure_unique_name(db, payload.name)
+    _ensure_unique_name(db, payload.name, code=payload.code)
     _ensure_unique_code(db, payload.code)
     site = Site(**payload.model_dump())
     db.add(site)
@@ -79,7 +92,12 @@ def update_site(site_id: int, payload: SiteUpdate, db: DbSession) -> SiteRead:
     site = _load(db, site_id)
     changes = payload.model_dump(exclude_unset=True)
     if "name" in changes and changes["name"] is not None:
-        _ensure_unique_name(db, changes["name"], exclude_id=site_id)
+        _ensure_unique_name(
+            db,
+            changes["name"],
+            code=changes.get("code", site.code),
+            exclude_id=site_id,
+        )
     if "code" in changes:
         _ensure_unique_code(db, changes["code"], exclude_id=site_id)
     for key, value in changes.items():

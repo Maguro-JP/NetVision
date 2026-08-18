@@ -146,18 +146,11 @@ Step "起動用バッチと説明書きを作ります"
 $bat = @'
 @echo off
 rem NetVision を起動します。インストールは不要です。
+rem 黒い画面は出しません。小さな窓が出るので、終了はそこから行います。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
-echo NetVision を起動しています...
-echo.
-echo   画面 : http://127.0.0.1:8000
-echo   停止 : このウィンドウを閉じてください
-echo.
-timeout /t 2 >nul
-start "" http://127.0.0.1:8000
-"%~dp0python\python.exe" -m scripts.standalone
-pause
+start "" "%~dp0python\pythonw.exe" -m scripts.launcher
 '@
 $crlf = ($bat -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllBytes(
@@ -177,7 +170,8 @@ NetVision （インストール不要版）
   2. 「NetVision.bat」をダブルクリック
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
-  止めるときは、開いた黒いウィンドウを閉じてください。
+  小さな窓が1つ出ます。止めるときは、その窓の「終了する」を押すか、
+  窓を閉じてください。黒い画面は出ません。
 
 ■ データの保存先
 

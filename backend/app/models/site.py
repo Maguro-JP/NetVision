@@ -31,7 +31,9 @@ class Site(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     #: 人が決める拠点ID。プロジェクト既定の番号をそのまま使える。空は未設定
     code: Mapped[str | None] = mapped_column(String(80), unique=True, default=None, index=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True, index=True)
+    #: 呼び名。離れた場所に同じ名前の拠点があるので、重複は禁止しない。
+    #: 同一性は拠点ID で決める（IDが無いものだけ、名前の重複を画面で止める）
+    name: Mapped[str] = mapped_column(String(120), index=True)
     address: Mapped[str | None] = mapped_column(String(255), default=None)
     #: いまどういう状態か。閉鎖しても機器は残す（引き上げの棚卸しに要る）
     status: Mapped[str] = mapped_column(

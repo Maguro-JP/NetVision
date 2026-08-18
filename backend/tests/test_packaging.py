@@ -86,3 +86,44 @@ def test_the_bundles_carry_the_time_zone_database():
     """
     for script in (FOR_WINDOWS, POWERSHELL):
         assert "tzdata" in script.read_text(encoding="utf-8"), f"{script.name} に tzdata が無い"
+
+
+def _bat_from_shell() -> str:
+    text = FOR_WINDOWS.read_text(encoding="utf-8")
+    body = text.split('bat = """', 1)[1].split('"""', 1)[0]
+    # Python の文字列リテラルとして書かれているので、二重のバックスラッシュを戻す
+    return body.replace("\\\\", "\\")
+
+
+def _bat_from_powershell() -> str:
+    text = POWERSHELL.read_text(encoding="utf-8")
+    return text.split("$bat = @'\n", 1)[1].split("\n'@", 1)[0] + "\n"
+
+
+def test_both_bundles_write_the_same_launcher():
+    """起動用バッチが2つのスクリプトで食い違わないこと。
+
+    片方だけ直すと、配る相手によって挙動が違うことになる。
+    """
+    assert _bat_from_shell() == _bat_from_powershell()
+
+
+def test_the_launcher_opens_a_window_instead_of_a_console():
+    """黒い画面を出さず、窓から止められる形にする。
+
+    黒い画面だと止め方が Ctrl+C しか無く、そのあとに Windows が出す
+    「バッチ ジョブを終了しますか」は、Y でも N でも意図とずれる。
+    ふつうのアプリと同じく、窓の「終了する」で止められるようにする。
+    """
+    bat = _bat_from_shell()
+    assert "pythonw.exe" in bat, "黒い画面の出ない起動になっていない"
+    assert "scripts.launcher" in bat
+    assert "pause" not in bat
+    assert "Ctrl+C" not in bat
+
+
+def test_the_launcher_module_is_bundled():
+    """起動役そのものが同梱されていること。無いと起動しない。"""
+    assert (REPO / "backend" / "scripts" / "launcher.py").is_file()
+    for script in (FOR_WINDOWS, POWERSHELL):
+        assert "scripts" in script.read_text(encoding="utf-8")

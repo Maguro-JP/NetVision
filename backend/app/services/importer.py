@@ -1041,14 +1041,17 @@ def _apply_values(
             # 拠点IDは人が決めるものなので、無いときは名前なしで起こさずエラーにする
             # （呼び出し側の issues に載せるのは難しいので、ここでは名前列があれば併用）
             if site_name:
-                site = site_cache.get(str(site_name))
-                if site is None:
+                known = site_cache.get(str(site_name))
+                # 名前が同じでも、別の拠点IDが振ってあるなら別の拠点。
+                # 同名のビル・同名の営業所は普通にあるので、混ぜてはいけない
+                if known is not None and not known.code:
+                    known.code = key
+                    site_cache[key] = known
+                    site = known
+                else:
                     site = Site(name=str(site_name), code=key)
                     db.add(site)
-                    site_cache[str(site_name)] = site
-                    site_cache[key] = site
-                elif not site.code:
-                    site.code = key
+                    site_cache.setdefault(str(site_name), site)
                     site_cache[key] = site
             else:
                 site = Site(name=key, code=key)
