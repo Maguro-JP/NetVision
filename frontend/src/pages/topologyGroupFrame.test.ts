@@ -11,10 +11,7 @@ import { describe, expect, it } from "vitest";
  * 出て、背景と枠がずれているように見える。実際にそう見えていた。
  */
 describe("囲み枠", () => {
-  const css = readFileSync(
-    fileURLToPath(new URL("../styles.css", import.meta.url)),
-    "utf-8",
-  );
+  const css = readFileSync(fileURLToPath(new URL("../styles.css", import.meta.url)), "utf-8");
 
   it("React Flow の既定の枠と背景を打ち消している", () => {
     const block = css.slice(css.indexOf(".react-flow__node-group {"));
