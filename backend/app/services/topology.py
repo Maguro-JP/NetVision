@@ -574,29 +574,96 @@ def _pull_outside_closer(nodes: list[TopologyNodeView], edges: list[TopologyEdge
             top_bottom[device_id] = top_bottom.get(device_id, 0) + 1
     width_of = {node.device_id: _box_width(top_bottom.get(node.device_id, 0)) for node in nodes}
 
-    inside_left = min(n.x for n in inside)
-    inside_right = max(n.x + width_of[n.device_id] for n in inside)
-    center = (inside_left + inside_right) / 2
+    # 寄せる先は「その対向が繋がっている機器」の端。図全体の端に合わせると、
+    # 遠くにある関係のない機器に引きずられて、対向だけが離れて見える
+    by_id = {n.device_id: n for n in nodes}
+    partners: dict[int, list[TopologyNodeView]] = {}
+    for edge in edges:
+        for a, b in ((edge.source, edge.target), (edge.target, edge.source)):
+            here, there = by_id.get(a), by_id.get(b)
+            if here is None or there is None or not here.outside or there.outside:
+                continue
+            partners.setdefault(here.device_id, []).append(there)
 
-    right = [n for n in outside if n.x >= center]
-    left = [n for n in outside if n.x < center]
+    center = (min(n.x for n in inside) + max(n.x + width_of[n.device_id] for n in inside)) / 2
 
-    for group, wanted in (
-        (right, inside_right + _OUTSIDE_GAP),
-        (left, None),
-    ):
-        if not group:
-            continue
-        if wanted is None:
-            widest = max(width_of[n.device_id] for n in group)
-            wanted = inside_left - _OUTSIDE_GAP - widest
-        # 内側へ食い込む向きには動かさない。広げるだけの寄せは意味がない
-        if right and group is right and wanted >= min(n.x for n in group):
-            continue
-        if left and group is left and wanted <= max(n.x for n in group):
-            continue
+    def _abreast(node: TopologyNodeView) -> bool:
+        """相手と同じ段にいるか。
+
+        段がずれている対向を横へ寄せると、線が回り込んで途中の箱を貫く。
+        真横にいる対向だけを寄せる。
+        """
+        return any(
+            abs(partner.y - node.y) <= _DETAIL_HEIGHT / 2 for partner in partners[node.device_id]
+        )
+
+    movable = [n for n in outside if partners.get(n.device_id) and _abreast(n)]
+    right = [n for n in movable if n.x >= center]
+    left = [n for n in movable if n.x < center]
+
+    def _fits(shift: float, group: list[TopologyNodeView]) -> bool:
+        """その量だけ寄せられるか。
+
+        箱に食い込まないことに加えて、相手までの線が別の箱を貫かないことを見る。
+        寄せた結果、途中の機器を線が突き抜けては読めない。
+        """
         for node in group:
-            node.x = wanted
+            x = node.x - shift
+            moved = replace(node, x=x)
+            for other in inside:
+                if _boxes_touch(moved, other, width_of):
+                    return False
+            for partner in partners[node.device_id]:
+                lo = min(partner.x + width_of[partner.device_id], x)
+                hi = max(partner.x + width_of[partner.device_id], x)
+                # 線は相手と対向の間を L 字で通る。どちらの高さの帯も見る
+                bands = (
+                    (node.y, node.y + _DETAIL_HEIGHT),
+                    (partner.y, partner.y + _DETAIL_HEIGHT),
+                )
+                for other in inside:
+                    if other is partner:
+                        continue
+                    for top, bottom in bands:
+                        if other.y + _DETAIL_HEIGHT <= top or other.y >= bottom:
+                            continue
+                        if lo < other.x + width_of[other.device_id] and other.x < hi:
+                            return False
+                    # 縦に下りる部分。対向の真上・真下に箱があれば通せない
+                    if (
+                        other.x < x + width_of[node.device_id]
+                        and x < other.x + width_of[other.device_id]
+                    ):
+                        lo_y = min(partner.y, node.y)
+                        hi_y = max(partner.y, node.y) + _DETAIL_HEIGHT
+                        if other.y + _DETAIL_HEIGHT > lo_y and other.y < hi_y:
+                            return False
+        return True
+
+    # 動かすのは列ごと。位置を1つに揃えるのではなく、同じ量だけ平行に寄せる。
+    # 揃えてしまうと、横に並んでいる冗長の2台が重なる
+    if right:
+        edge_x = max(
+            partner.x + width_of[partner.device_id]
+            for node in right
+            for partner in partners[node.device_id]
+        )
+        shift = min(n.x for n in right) - (edge_x + _OUTSIDE_GAP)
+        while shift > 0 and not _fits(shift, right):
+            shift -= _GRID
+        if shift > 0:
+            for node in right:
+                node.x -= shift
+
+    if left:
+        edge_x = min(partner.x for node in left for partner in partners[node.device_id])
+        widest = max(width_of[n.device_id] for n in left)
+        shift = (edge_x - _OUTSIDE_GAP - widest) - max(n.x for n in left)
+        while shift > 0 and not _fits(-shift, left):
+            shift -= _GRID
+        if shift > 0:
+            for node in left:
+                node.x += shift
 
 
 def _boxes_touch(

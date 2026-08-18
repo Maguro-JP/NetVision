@@ -394,7 +394,8 @@ def render_svg(
         if group.plane and group.plane != "custom":
             label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
         parts.append(
-            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
+            f'<rect class="group-frame" x="{gx:.0f}" y="{gy:.0f}" '
+            f'width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
             f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
             f'stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>'
             f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '

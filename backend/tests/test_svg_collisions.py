@@ -58,8 +58,9 @@ def edge(edge_id: int, source: int, target: int, a: str, b: str) -> TopologyEdge
 def node_rects(svg: str) -> list[Rect]:
     """機器の箱と、絞り込みの外にいる相手の箱。色帯（幅5）は除く。
 
-    ラック・部屋の枠は数えない。枠は機器を囲むものなので、その中に
-    ポート名が入るのは当たり前で、重なりとは呼ばない。
+    ラック・部屋の枠は数えない（class="group-frame" が付いている）。枠は
+    機器を囲むものなので、その中にポート名が入るのは当たり前で、重なりとは
+    呼ばない。
     """
     from app.services.topology_export import PEER_H, PEER_W
 
@@ -68,9 +69,7 @@ def node_rects(svg: str) -> list[Rect]:
         x, y, w, h = (float(v) for v in match.groups())
         is_node = w >= NODE_W - 1 and h >= NODE_H - 1
         is_peer = abs(w - PEER_W) < 1 and abs(h - PEER_H) < 1
-        # 枠は箱より大きい。幅も高さも箱を超えるものは枠として外す
-        is_frame = w > NODE_W + 8 and h > NODE_H + 8
-        if (is_node or is_peer) and not is_frame:
+        if is_node or is_peer:
             out.append(Rect(x, y, x + w, y + h))
     return out
 
