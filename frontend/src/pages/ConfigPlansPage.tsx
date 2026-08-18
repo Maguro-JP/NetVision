@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
 import { formatTimestamp } from "../lib/format";
-import type { ConfigPlan, DiffCommand } from "../api/types";
+import type { ConfigDraft, ConfigPlan, DiffCommand } from "../api/types";
 
 const OUTPUT_TABS = [
   {
@@ -41,9 +41,19 @@ export default function ConfigPlansPage() {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ device_id: "", name: "", seed_from: "current" });
+  const [form, setForm] = useState({
+    device_id: "",
+    name: "",
+    seed_from: "current",
+  });
+  // 資料を根拠にした下書き。依頼の文と、返ってきた結果
+  const [wish, setWish] = useState("");
+  const [suggestion, setSuggestion] = useState<ConfigDraft | null>(null);
 
-  const { data: plans } = useQuery({ queryKey: ["configPlans"], queryFn: () => api.listPlans() });
+  const { data: plans } = useQuery({
+    queryKey: ["configPlans"],
+    queryFn: () => api.listPlans(),
+  });
   const { data: devices } = useQuery({
     queryKey: ["devices", {}],
     queryFn: () => api.listDevices(),
@@ -96,6 +106,17 @@ export default function ConfigPlansPage() {
     },
   });
 
+  const { data: llm } = useQuery({
+    queryKey: ["llmStatus"],
+    queryFn: () => api.llmStatus(),
+  });
+
+  const suggest = useMutation({
+    mutationFn: () =>
+      api.draftConfig(selected!.device_id, { request: wish, base: draft }),
+    onSuccess: (result) => setSuggestion(result),
+  });
+
   const diff = outputs?.diff;
   const bodyFor = (key: (typeof OUTPUT_TABS)[number]["key"]) => {
     if (!outputs) return "";
@@ -111,7 +132,9 @@ export default function ConfigPlansPage() {
       <p className="subtitle">
         1つの機器について「今こうなっている」と「こうしたい」を持ち、そこから3つを出します。
         <br />
-        <strong>差分は、当てた結果が将来フルと同じ状態になることを機械で確認してから出します。</strong>
+        <strong>
+          差分は、当てた結果が将来フルと同じ状態になることを機械で確認してから出します。
+        </strong>
         確認が取れない差分はコマンドを出さず、どこが合わなかったかを表示します。
         <br />
         <strong>生成するだけで、実機には投入しません。</strong>
@@ -123,7 +146,9 @@ export default function ConfigPlansPage() {
         </button>
       </div>
 
-      {create.error && <div className="error">{(create.error as Error).message}</div>}
+      {create.error && (
+        <div className="error">{(create.error as Error).message}</div>
+      )}
 
       {showForm && (
         <form
@@ -139,7 +164,9 @@ export default function ConfigPlansPage() {
                 id="device"
                 required
                 value={form.device_id}
-                onChange={(e) => setForm((f) => ({ ...f, device_id: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, device_id: e.target.value }))
+                }
               >
                 <option value="">選択してください</option>
                 {(devices ?? []).map((d) => (
@@ -156,7 +183,9 @@ export default function ConfigPlansPage() {
                 required
                 placeholder="2027年度 更改後の構成"
                 value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, name: e.target.value }))
+                }
               />
             </div>
             <div className="field">
@@ -164,16 +193,24 @@ export default function ConfigPlansPage() {
               <select
                 id="seed"
                 value={form.seed_from}
-                onChange={(e) => setForm((f) => ({ ...f, seed_from: e.target.value }))}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, seed_from: e.target.value }))
+                }
               >
                 <option value="current">現行 config をコピーして直す</option>
-                <option value="design">図に描いた構成から起こす（新規構築・テスト）</option>
+                <option value="design">
+                  図に描いた構成から起こす（新規構築・テスト）
+                </option>
                 <option value="blank">白紙から書く</option>
               </select>
             </div>
           </div>
           <div className="actions">
-            <button className="primary" type="submit" disabled={create.isPending}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={create.isPending}
+            >
               作成
             </button>
           </div>
@@ -198,7 +235,9 @@ export default function ConfigPlansPage() {
               <tr key={plan.id}>
                 <td>
                   <strong>{plan.name}</strong>
-                  {plan.description && <div className="muted">{plan.description}</div>}
+                  {plan.description && (
+                    <div className="muted">{plan.description}</div>
+                  )}
                 </td>
                 <td>{plan.device_hostname ?? "—"}</td>
                 <td>r{plan.revision}</td>
@@ -213,7 +252,10 @@ export default function ConfigPlansPage() {
                   >
                     開く
                   </button>{" "}
-                  <button className="danger" onClick={() => remove.mutate(plan.id)}>
+                  <button
+                    className="danger"
+                    onClick={() => remove.mutate(plan.id)}
+                  >
                     削除
                   </button>
                 </td>
@@ -230,7 +272,11 @@ export default function ConfigPlansPage() {
           </h2>
 
           {outputs.notes.map((note) => (
-            <div key={note} className="card" style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}>
+            <div
+              key={note}
+              className="card"
+              style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}
+            >
               {note}
             </div>
           ))}
@@ -250,7 +296,9 @@ export default function ConfigPlansPage() {
             </button>
           </div>
 
-          <p className="muted">{OUTPUT_TABS.find((t) => t.key === tab)?.hint}</p>
+          <p className="muted">
+            {OUTPUT_TABS.find((t) => t.key === tab)?.hint}
+          </p>
 
           {editing ? (
             <>
@@ -260,8 +308,123 @@ export default function ConfigPlansPage() {
                 onChange={(e) => setDraft(e.target.value)}
                 style={{ width: "100%", fontFamily: "monospace" }}
               />
+              <details
+                className="card"
+                style={{ marginTop: 12 }}
+                open={suggestion !== null}
+              >
+                <summary>資料から下書きする</summary>
+                <p className="muted">
+                  取り込んだベンダー資料の中から、やりたいことに関係する箇所を探し、
+                  それを根拠に投入コマンドの下書きを作ります。
+                  {llm?.configured
+                    ? "資料に同じ書き方が見つからない行には印を付けます。"
+                    : "モデルを置いていないので、資料から拾ったコマンドを並べるところまでです。"}
+                </p>
+                <div className="actions">
+                  <input
+                    style={{ flex: 1 }}
+                    placeholder="例: VLAN 120 を作って Gi0/1 に乗せる"
+                    value={wish}
+                    onChange={(e) => setWish(e.target.value)}
+                  />
+                  <button
+                    className="primary"
+                    onClick={() => suggest.mutate()}
+                    disabled={!wish.trim() || suggest.isPending}
+                  >
+                    {suggest.isPending ? "探しています…" : "下書きを作る"}
+                  </button>
+                </div>
+                {suggest.error && (
+                  <div className="error">
+                    {(suggest.error as Error).message}
+                  </div>
+                )}
+                {suggestion && (
+                  <>
+                    {suggestion.notes.map((note) => (
+                      <div
+                        key={note}
+                        className="muted"
+                        style={{ marginTop: 6 }}
+                      >
+                        {note}
+                      </div>
+                    ))}
+                    {suggestion.risks.length > 0 && (
+                      <div
+                        className="card"
+                        style={{
+                          marginTop: 8,
+                          borderColor: "var(--sev-critical)",
+                        }}
+                      >
+                        <strong>通信・接続に影響します</strong>
+                        <ul>
+                          {suggestion.risks.map((r) => (
+                            <li key={r}>{r}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {suggestion.lines.length > 0 && (
+                      <pre className="diff" style={{ marginTop: 8 }}>
+                        {suggestion.lines.map((line, i) => (
+                          <div
+                            key={i}
+                            style={{
+                              color: line.grounded
+                                ? undefined
+                                : "var(--sev-warning)",
+                            }}
+                            title={
+                              line.grounded
+                                ? "資料に同じ書き方があります"
+                                : "資料に裏付けがありません"
+                            }
+                          >
+                            {line.grounded ? "  " : "? "}
+                            {line.text}
+                          </div>
+                        ))}
+                      </pre>
+                    )}
+                    {suggestion.sources.length > 0 && (
+                      <p className="muted">
+                        根拠:{" "}
+                        {suggestion.sources
+                          .map((s) =>
+                            s.heading ? `${s.title} / ${s.heading}` : s.title,
+                          )
+                          .join("、")}
+                        {suggestion.model && `（下書き: ${suggestion.model}）`}
+                      </p>
+                    )}
+                    {suggestion.body && (
+                      <div className="actions">
+                        <button
+                          onClick={() =>
+                            setDraft(
+                              (current) =>
+                                `${current.replace(/\s*$/, "")}\n${suggestion.body}\n`,
+                            )
+                          }
+                        >
+                          将来フルの末尾に貼る
+                        </button>
+                      </div>
+                    )}
+                  </>
+                )}
+              </details>
+
               <div className="actions">
-                <button className="primary" onClick={() => save.mutate()} disabled={save.isPending}>
+                <button
+                  className="primary"
+                  onClick={() => save.mutate()}
+                  disabled={save.isPending}
+                >
                   保存して差分を作り直す
                 </button>
                 <button
@@ -279,13 +442,23 @@ export default function ConfigPlansPage() {
               {tab === "diff" && diff && (
                 <>
                   {diff.verified ? (
-                    <div className="card" style={{ borderColor: "var(--sev-ok)" }}>
-                      ✓ この差分を当てると将来フルと同じ状態になることを確認しました
-                      （追加 {diff.added} / 変更 {diff.changed} / 削除 {diff.removed}）
+                    <div
+                      className="card"
+                      style={{ borderColor: "var(--sev-ok)" }}
+                    >
+                      ✓
+                      この差分を当てると将来フルと同じ状態になることを確認しました
+                      （追加 {diff.added} / 変更 {diff.changed} / 削除{" "}
+                      {diff.removed}）
                     </div>
                   ) : (
-                    <div className="card" style={{ borderColor: "var(--sev-expired)" }}>
-                      <strong>差分が将来フルに収束しないため、コマンドを出していません。</strong>
+                    <div
+                      className="card"
+                      style={{ borderColor: "var(--sev-expired)" }}
+                    >
+                      <strong>
+                        差分が将来フルに収束しないため、コマンドを出していません。
+                      </strong>
                       <ul>
                         {diff.mismatches.map((m) => (
                           <li key={m}>{m}</li>
@@ -295,7 +468,13 @@ export default function ConfigPlansPage() {
                   )}
 
                   {diff.risks.length > 0 && (
-                    <div className="card" style={{ marginTop: 8, borderColor: "var(--sev-critical)" }}>
+                    <div
+                      className="card"
+                      style={{
+                        marginTop: 8,
+                        borderColor: "var(--sev-critical)",
+                      }}
+                    >
                       <strong>通信・接続に影響します</strong>
                       <ul>
                         {diff.risks.map((r) => (
@@ -306,7 +485,14 @@ export default function ConfigPlansPage() {
                   )}
 
                   {diff.warnings.map((w) => (
-                    <div key={w} className="card" style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}>
+                    <div
+                      key={w}
+                      className="card"
+                      style={{
+                        marginTop: 8,
+                        borderColor: "var(--sev-warning)",
+                      }}
+                    >
                       {w}
                     </div>
                   ))}
@@ -326,7 +512,9 @@ export default function ConfigPlansPage() {
                 </>
               )}
 
-              {tab !== "diff" && <pre className="diff">{bodyFor(tab) || "（空です）"}</pre>}
+              {tab !== "diff" && (
+                <pre className="diff">{bodyFor(tab) || "（空です）"}</pre>
+              )}
 
               <div className="actions">
                 <a
@@ -340,7 +528,9 @@ export default function ConfigPlansPage() {
                 >
                   ファイルで落とす
                 </a>
-                <button onClick={() => navigator.clipboard?.writeText(bodyFor(tab))}>
+                <button
+                  onClick={() => navigator.clipboard?.writeText(bodyFor(tab))}
+                >
                   クリップボードにコピー
                 </button>
               </div>

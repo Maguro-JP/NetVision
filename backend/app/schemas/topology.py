@@ -44,7 +44,7 @@ class VlanRead(BaseModel):
 
 
 class VrfRead(BaseModel):
-    """機器の中に切られた仮想ルータ。名前でまとめてある。"""
+    """機器の中に切られた仮想ルーター。名前でまとめてある。"""
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -232,7 +232,7 @@ class SavePositions(BaseModel):
 
 
 class ArrangePositions(BaseModel):
-    """整頓の起点。空ならサーバ上の保存済み（無ければ自動配置）から整える。"""
+    """整頓の起点。空ならサーバー上の保存済み（無ければ自動配置）から整える。"""
 
     positions: list[NodePosition] = []
 

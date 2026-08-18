@@ -50,6 +50,7 @@ def list_importable_fields() -> list[ImportFieldInfo]:
             label=importer.FIELD_LABELS[name],
             required=name in importer.REQUIRED_FIELDS,
             aliases=list(importer.FIELD_ALIASES.get(name, ())),
+            choices=list(importer.FIELD_CHOICES.get(name, ())),
         )
         for name in importer.IMPORTABLE_FIELDS
     ]
@@ -71,6 +72,7 @@ def download_template() -> StreamingResponse:
         {
             "code": "ASSET-1001",
             "hostname": "core-sw-01",
+            "label": "本社コア1号機",
             "vendor": "Cisco",
             "model": "C9500-40X",
             "serial_number": "FOC2401A001",

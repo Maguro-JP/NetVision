@@ -1,7 +1,7 @@
 /**
  * 線の引き方。人が定規で描くならどうするか、を規則にしたもの。
  *
- * 支社の図を見ると分かりやすい。支社ルータの真下に自拠点のスイッチがあり、
+ * 支社の図を見ると分かりやすい。支社ルーターの真下に自拠点のスイッチがあり、
  * 右の列に配下の営業所が並ぶ。ここで営業所への線を下から出すと、真下へ伸びる
  * 線を何本もまたいでしまう。人はそうは描かない。横から出して、何本かを
  * 平行に沿わせて下ろし、相手の高さで1本ずつ抜く。基板の配線と同じ描き方で、
@@ -397,7 +397,7 @@ describe("動かした位置を表示の切り替えで消さない", () => {
     expect(keepLocalPositions(incoming, current, true)).toEqual(current);
   });
 
-  it("機器の顔ぶれが変わったときは、サーバの配置に従う", () => {
+  it("機器の顔ぶれが変わったときは、サーバーの配置に従う", () => {
     const incoming = [{ id: "3", position: { x: 0, y: 0 } }];
     const current = [{ id: "1", position: { x: 40, y: 80 } }];
     expect(keepLocalPositions(incoming, current, true)).toEqual(incoming);
@@ -420,7 +420,7 @@ describe("動かした位置を表示の切り替えで消さない", () => {
     ]);
   });
 
-  it("保存・リセットのあとは、サーバの配置をそのまま使う", () => {
+  it("保存・リセットのあとは、サーバーの配置をそのまま使う", () => {
     const incoming = [{ id: "1", position: { x: 0, y: 0 } }];
     const current = [{ id: "1", position: { x: 40, y: 80 } }];
     expect(keepLocalPositions(incoming, current, false)).toEqual(incoming);

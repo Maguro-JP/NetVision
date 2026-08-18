@@ -4,7 +4,7 @@ import { useSearchParams } from "react-router-dom";
 
 import { api, type DeviceFilters } from "../api/client";
 import QueryError from "../components/QueryError";
-import { DEVICE_TYPE_LABEL, formatDate } from "../lib/format";
+import { DEVICE_TYPE_LABEL, SITE_STATUS_LABEL, formatDate } from "../lib/format";
 
 /**
  * 出力をまとめて選ぶ画面。
@@ -17,7 +17,7 @@ import { DEVICE_TYPE_LABEL, formatDate } from "../lib/format";
  * 元の画面から URL で受け取る。出すものと画面が食い違わないようにするため。
  */
 
-type Kind = "svg" | "workbook" | "links" | "ports" | "devices";
+type Kind = "svg" | "workbook" | "links" | "ports" | "devices" | "sites";
 
 const KIND_LABEL: Record<Kind, string> = {
   svg: "図（SVG）",
@@ -25,16 +25,25 @@ const KIND_LABEL: Record<Kind, string> = {
   links: "結線表",
   ports: "ポート一覧",
   devices: "機器一覧",
+  sites: "拠点一覧",
 };
 
-/** 機器一覧の形。CSV は取り込み直せるので、文字コードまで選べるようにする */
-type DeviceFormat = "xlsx" | "csv" | "csv-sjis" | "import";
+/**
+ * 表の形。ふだん選ぶのは Excel か CSV の2つだけにする。
+ *
+ * 文字コードは取り込み側が見て判別するので、人が選ぶ必要はない。算出した列
+ * （保守期限まで、など）が入っていても、取り込みでは読み飛ばすので、
+ * 取り込み用に別の CSV を用意する必要もない。
+ *
+ * Shift_JIS だけは、UTF-8 を読めない古い社内ツールへ渡すときに要る。
+ * 並べて選ばせるほどのものではないので、下に小さく置く。
+ */
+type DeviceFormat = "xlsx" | "csv" | "csv-sjis";
 
 const DEVICE_FORMAT_LABEL: Record<DeviceFormat, string> = {
   xlsx: "Excel",
-  csv: "CSV（UTF-8）",
+  csv: "CSV",
   "csv-sjis": "CSV（Shift_JIS）",
-  import: "取り込み用 CSV",
 };
 
 /** 保存したときのファイルの種類。押す前に何が落ちてくるか分かるようにする */
@@ -44,6 +53,7 @@ const KIND_FILE: Record<Kind, string> = {
   links: "Excel ファイル",
   ports: "Excel ファイル",
   devices: "Excel ファイル",
+  sites: "Excel ファイル",
 };
 
 const KIND_NOTE: Record<Kind, string> = {
@@ -55,7 +65,9 @@ const KIND_NOTE: Record<Kind, string> = {
   ports:
     "機器から見たポートの割付。何ポートあって、上位のどこへ上がっていて、下に何がぶら下がっていて、どこが空いているか。増設の検討に使います。",
   devices:
-    "台帳の機器一覧。保守期限や EoL の残りも入ります。取り込み用 CSV は算出した列を外してあるので、直して取り込み直せます。",
+    "台帳の機器一覧。保守期限や EoL の残りも入ります。直してそのまま取り込み直せます（算出した列は取り込みのときに読み飛ばします）。",
+  sites:
+    "拠点の台帳。拠点ID・状態・住所・開設/閉鎖日と、その拠点に置いてある機器の台数が入ります。閉鎖した拠点に機器が残っていないかを、この表の上で数えられます。",
 };
 
 export default function ExportPage() {
@@ -96,11 +108,9 @@ export default function ExportPage() {
   const deviceUrl =
     deviceFormat === "xlsx"
       ? api.exportUrl("xlsx", deviceFilters)
-      : deviceFormat === "import"
-        ? api.exportUrl("csv", deviceFilters, { includeStatus: false })
-        : api.exportUrl("csv", deviceFilters, {
-            encoding: deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8",
-          });
+      : api.exportUrl("csv", deviceFilters, {
+          encoding: deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8",
+        });
 
   const url: Record<Kind, string> = {
     svg: svgUrl,
@@ -108,6 +118,10 @@ export default function ExportPage() {
     links: api.linkTableUrl(layer, "xlsx", { site_id: siteId }),
     ports: api.portMapUrl({ site_id: siteId }),
     devices: deviceUrl,
+    sites:
+      deviceFormat === "xlsx"
+        ? api.siteExportUrl("xlsx")
+        : api.siteExportUrl("csv", deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8"),
   };
 
   // 図の中身。結線表の下見にも使う（出すものと同じ絞り込みで取る）。
@@ -142,7 +156,7 @@ export default function ExportPage() {
           <span>
             {KIND_LABEL[kind]}を保存
             <span className="export-save-file">
-              {kind === "devices"
+              {kind === "devices" || kind === "sites"
                 ? DEVICE_FORMAT_LABEL[deviceFormat].includes("CSV")
                   ? "CSV ファイル"
                   : "Excel ファイル"
@@ -168,18 +182,41 @@ export default function ExportPage() {
 
       <p className="muted export-note">{KIND_NOTE[kind]}</p>
 
-      {kind === "devices" && (
-        <div className="export-kinds">
-          {(Object.keys(DEVICE_FORMAT_LABEL) as DeviceFormat[]).map((value) => (
-            <button
-              key={value}
-              className={deviceFormat === value ? "primary" : ""}
-              onClick={() => setDeviceFormat(value)}
-            >
-              {DEVICE_FORMAT_LABEL[value]}
-            </button>
-          ))}
-        </div>
+      {(kind === "devices" || kind === "sites") && (
+        <>
+          <div className="export-kinds">
+            {(["xlsx", "csv"] as DeviceFormat[]).map((value) => (
+              <button
+                key={value}
+                className={deviceFormat === value ? "primary" : ""}
+                onClick={() => setDeviceFormat(value)}
+              >
+                {DEVICE_FORMAT_LABEL[value]}
+              </button>
+            ))}
+          </div>
+          <p className="muted export-note">
+            CSV は直してそのまま取り込み直せます（文字コードは取り込みのときに自動で判別します）。
+            {deviceFormat === "csv-sjis" ? (
+              <>
+                {" "}
+                いまは Shift_JIS で出します。
+                <button className="link-button" onClick={() => setDeviceFormat("csv")}>
+                  ふつうの CSV に戻す
+                </button>
+              </>
+            ) : (
+              <>
+                {" "}
+                UTF-8 を読めない古いツールへ渡すときは、
+                <button className="link-button" onClick={() => setDeviceFormat("csv-sjis")}>
+                  Shift_JIS の CSV
+                </button>
+                を使ってください。
+              </>
+            )}
+          </p>
+        </>
       )}
 
       {needsGraph && graph.isError && <QueryError error={graph.error} />}
@@ -195,6 +232,7 @@ export default function ExportPage() {
       {kind === "links" && <LinkPreview graph={graph.data} />}
       {kind === "ports" && <PortsNote />}
       {kind === "devices" && <DevicePreview filters={deviceFilters} />}
+      {kind === "sites" && <SitePreview />}
     </div>
   );
 }
@@ -345,6 +383,48 @@ const PREVIEW_ROWS = 30;
 
 
 /** 機器一覧の下見。出す表と同じ絞り込みで、頭の分だけ見せる。 */
+/** 拠点一覧の下見。拠点は絞り込みが無いので、頭から並べるだけでよい。 */
+function SitePreview() {
+  const sites = useQuery({ queryKey: ["export-sites"], queryFn: api.listSites });
+
+  if (sites.isError) return <QueryError error={sites.error} />;
+  if (!sites.data) return <div className="muted">読み込んでいます…</div>;
+
+  const shown = sites.data.slice(0, PREVIEW_ROWS);
+  return (
+    <>
+      <div className="export-rows">
+        <table>
+          <thead>
+            <tr>
+              <th>拠点ID</th>
+              <th>拠点名</th>
+              <th>状態</th>
+              <th>住所</th>
+              <th>機器数</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shown.map((site) => (
+              <tr key={site.id}>
+                <td className="mono">{site.code ?? "—"}</td>
+                <td>{site.name}</td>
+                <td className="muted">{SITE_STATUS_LABEL[site.status]}</td>
+                <td className="muted">{site.address ?? "—"}</td>
+                <td className="num">{site.device_count}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="muted">
+        全 {sites.data.length.toLocaleString()} 拠点のうち {shown.length} 件を出しています。
+        保存すると全部入ります。
+      </p>
+    </>
+  );
+}
+
 function DevicePreview({ filters }: { filters: DeviceFilters }) {
   const devices = useQuery({
     queryKey: ["export-devices", filters],

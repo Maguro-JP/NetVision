@@ -87,7 +87,7 @@ def test_bad_date_blocks_the_whole_import(client):
 
 
 def test_device_inherits_eol_from_product_reference(client, device_payload):
-    """機器に EoL を入れなくても、型番の製品マスタから解決される。"""
+    """機器に EoL を入れなくても、型番の製品マスターから解決される。"""
     upload_products(client)
     device_id = add_device(client, device_payload, hostname="core-sw-01", model="C9500-40X")
 
@@ -144,7 +144,7 @@ def test_updating_one_reference_moves_every_device(client, device_payload):
 
 
 def test_reference_drives_the_alert_severity(client, device_payload):
-    """製品マスタの EoL でアラートが立つ。"""
+    """製品マスターの EoL でアラートが立つ。"""
     past = (date.today() - timedelta(days=30)).strftime("%Y/%m/%d")
     upload_products(client, f"ベンダー,型番,サポート終了(EoL)\nCisco,C2960X,{past}\n")
     add_device(client, device_payload, model="C2960X")

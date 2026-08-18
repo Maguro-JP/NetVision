@@ -57,7 +57,7 @@ def test_api_returns_timestamps_with_a_timezone(client):
 def test_exported_diagram_carries_the_local_time(client):
     """書き出した図の「◯◯時点」が、使う人の時刻であること。
 
-    サーバの時計が UTC のまま資料に載ると、日本で見て9時間ずれる。
+    サーバーの時計が UTC のまま資料に載ると、日本で見て9時間ずれる。
     """
     client.post(
         f"{API}/devices",

@@ -184,7 +184,7 @@ def test_device_independent_template_renders_without_a_device(client):
     template = add_template(
         client,
         body="ntp server {{ ntp_server }}\n",
-        variables=[{"name": "ntp_server", "label": "NTPサーバ", "required": True}],
+        variables=[{"name": "ntp_server", "label": "NTPサーバー", "required": True}],
     ).json()
 
     body = render(client, template["id"], variables={"ntp_server": "10.0.0.1"}).json()

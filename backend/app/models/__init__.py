@@ -1,7 +1,13 @@
 from app.models.change_log import ChangeAction, ChangeLog, ChangeSource
 from app.models.config_plan import ConfigPlan, PlanStatus
 from app.models.device import Device, DeviceStatus, DeviceType
-from app.models.document import ConfigTemplate, Document, DocumentType, TemplateCategory
+from app.models.document import (
+    ConfigTemplate,
+    Document,
+    DocumentSection,
+    DocumentType,
+    TemplateCategory,
+)
 from app.models.exposure import DeviceExposure, ExposureStatus
 from app.models.maintenance import MaintenanceContract
 from app.models.pending_link import PendingLink
@@ -13,7 +19,7 @@ from app.models.reference import (
 )
 from app.models.remediation import Remediation, RemediationKind
 from app.models.scenario import Scenario, ScenarioAction, ScenarioItem, ScenarioStatus
-from app.models.site import Site
+from app.models.site import Site, SiteStatus
 from app.models.topology import (
     ConfigSnapshot,
     ConfigSource,
@@ -34,6 +40,7 @@ __all__ = [
     "ConfigSnapshot",
     "ConfigTemplate",
     "Document",
+    "DocumentSection",
     "DocumentType",
     "TemplateCategory",
     "ConfigSource",
@@ -67,4 +74,5 @@ __all__ = [
     "PendingLink",
     "Vlan",
     "Site",
+    "SiteStatus",
 ]

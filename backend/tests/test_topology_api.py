@@ -740,7 +740,7 @@ def test_arranging_a_site_does_not_overwrite_a_linked_peer(client, device_payloa
 def test_initial_layout_stacks_connected_routers(client, device_payload):
     """初期配置は結線の上下で置く。同じ種別でも横一列にしない。
 
-    センターと支社はどちらもルータだが、段が違う。種別の段だけだと
+    センターと支社はどちらもルーターだが、段が違う。種別の段だけだと
     横並びになり、線が機器の間を横切る。
     """
     core = client.post(

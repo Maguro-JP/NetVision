@@ -61,7 +61,7 @@ class DeviceVlan(Base):
 
 
 class DeviceVrf(Base):
-    """機器の中に切った仮想ルータ。
+    """機器の中に切った仮想ルーター。
 
     ベンダーによって呼び方が違うが（Cisco/NEC IX = VRF、Comware = VPN インスタンス、
     Junos = routing-instance、FortiGate = VDOM）、

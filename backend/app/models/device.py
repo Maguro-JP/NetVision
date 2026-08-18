@@ -42,8 +42,11 @@ class Device(Base):
     #: 人が付ける機器の名称。「本社コア1号機」など。空ならホスト名で呼ぶ。
     #: ホスト名は機械に付けた名前で、現場の呼び名と食い違うことがある
     label: Mapped[str | None] = mapped_column(String(120), default=None, index=True)
-    vendor: Mapped[str] = mapped_column(String(80), index=True)
-    model: Mapped[str] = mapped_column(String(120), index=True)
+    # ベンダーと型番は Config を読ませれば埋まる。台帳を起こす時点では空でよい。
+    # NULL ではなく空文字で持つ。二種類の「無い」があると、絞り込みの条件が
+    # 場所ごとに食い違う（未入力は missing_fields で拾う）
+    vendor: Mapped[str] = mapped_column(String(80), index=True, default="", server_default="")
+    model: Mapped[str] = mapped_column(String(120), index=True, default="", server_default="")
     serial_number: Mapped[str | None] = mapped_column(String(120), unique=True, default=None)
     device_type: Mapped[DeviceType] = mapped_column(
         Enum(DeviceType, native_enum=False, length=32), default=DeviceType.OTHER, index=True
@@ -98,7 +101,7 @@ class Device(Base):
         """
         return [label for name, label in self.REQUIRED_FIELDS if not getattr(self, name, None)]
 
-    # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスタに正規化してある。
+    # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスターに正規化してある。
     # 台帳の表記ゆれ（cisco / Cisco）を吸収するため、大文字小文字を無視して突き合わせる。
     product: Mapped[ProductReference | None] = relationship(
         primaryjoin=lambda: and_(

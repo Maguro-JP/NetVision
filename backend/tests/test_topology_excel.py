@@ -124,7 +124,7 @@ def test_endpoint(client):
 def test_the_upper_device_is_decided_by_the_whole_network_not_by_link_count(db_session):
     """上下を「繋がっている本数」で決めないこと。
 
-    支社ルータは配下の拠点が多いぶん本数が多い。本数で並べると、
+    支社ルーターは配下の拠点が多いぶん本数が多い。本数で並べると、
     センターより支社が上に来てしまう。
     """
     from app.services import topology

@@ -130,7 +130,7 @@ JUNOS = """
 set system host-name edge-sw-01
 set vlans v-users vlan-id 10
 set vlans v-srv vlan-id 20
-set vlans v-srv description サーバセグメント
+set vlans v-srv description サーバーセグメント
 set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode trunk
 set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members [ v-users v-srv ]
 set interfaces ge-0/0/1 native-vlan-id 999
@@ -145,7 +145,7 @@ def test_junos_vlan_names_are_resolved_to_numbers():
     ports = {i.key: i for i in parsed.interfaces}
 
     assert parsed.vlans[10] == "v-users"
-    assert parsed.vlans[20] == "サーバセグメント"
+    assert parsed.vlans[20] == "サーバーセグメント"
 
     assert ports["ge-0/0/1"].trunk_vlans == [10, 20]
     assert ports["ge-0/0/1"].native_vlan == 999

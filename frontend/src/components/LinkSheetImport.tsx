@@ -46,7 +46,8 @@ export default function LinkSheetImport() {
     <section className="link-import">
       <h2>結線表から取り込む</h2>
       <p className="subtitle">
-        Config が揃う前でも、結線表があれば図を立ち上げられます。
+        Config が揃う前でも、結線表があれば図を立ち上げられます。機器はホスト名でも
+        管理IDでも書けます（台帳にあるどちらかに合っていれば繋がります）。
         台帳にまだ無い機器の行は預かっておき、その機器を登録した時点で自動的に結線になります
         （取り込み直しは要りません）。
       </p>

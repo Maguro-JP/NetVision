@@ -15,7 +15,7 @@ export type DeviceStatus = "active" | "standby" | "maintenance" | "retired";
 export interface LifecycleStatus {
   effective_eos_date: string | null;
   effective_eol_date: string | null;
-  /** "device" = 機器個別の入力 / "product" = 型番の製品マスタ / null = 未登録 */
+  /** "device" = 機器個別の入力 / "product" = 型番の製品マスター / null = 未登録 */
   eol_source: "device" | "product" | null;
   maintenance_end: string | null;
   days_to_maintenance_end: number | null;
@@ -82,8 +82,27 @@ export interface Site {
   code: string | null;
   name: string;
   address: string | null;
+  /** いまどういう状態か。閉鎖しても機器は残る */
+  status: SiteStatus;
+  /** 開いた日・閉じた日。棚卸しのときに要る */
+  opened_on: string | null;
+  closed_on: string | null;
   notes: string | null;
   device_count: number;
+}
+
+export type SiteStatus = "active" | "planned" | "suspended" | "closed";
+
+/** 資料の中を探した結果。1件が1つの章 */
+export interface DocumentHit {
+  document_id: number;
+  title: string;
+  vendor: string;
+  model: string | null;
+  heading: string | null;
+  body: string;
+  /** その章に出てくるコマンド。書き方をそのまま拾ったもの */
+  commands: string[];
 }
 
 export interface ImportField {
@@ -91,6 +110,8 @@ export interface ImportField {
   label: string;
   required: boolean;
   aliases: string[];
+  /** 決まった書き方しか受け付けない項目の候補（種別・状態）。空なら自由入力 */
+  choices: string[];
 }
 
 export type ImportRowAction = "create" | "update" | "skip" | "error";
@@ -294,7 +315,9 @@ export interface VlanCatalogEntry {
   notes: string | null;
 }
 
-export type VlanCatalogWrite = Partial<Omit<VlanCatalogEntry, "id" | "vlan_id">>;
+export type VlanCatalogWrite = Partial<
+  Omit<VlanCatalogEntry, "id" | "vlan_id">
+>;
 
 export interface TopologyEdge {
   id: number;
@@ -486,6 +509,10 @@ export interface VendorDocument {
   superseded_by_id: number | null;
   superseded_by_title: string | null;
   device_count: number;
+  /** 中身を章に切った日時。読めなかった資料は index_note に理由が入る */
+  indexed_at: string | null;
+  index_note: string | null;
+  section_count: number;
 }
 
 export interface VendorDocumentMatch extends VendorDocument {
@@ -655,7 +682,12 @@ export interface DashboardSummary {
 
 // --- Config 計画（現行フル / 将来フル / 差分） ---
 
-export type PlanStatus = "draft" | "review" | "approved" | "applied" | "archived";
+export type PlanStatus =
+  | "draft"
+  | "review"
+  | "approved"
+  | "applied"
+  | "archived";
 
 export interface ConfigPlan {
   id: number;
@@ -703,6 +735,47 @@ export interface PlanOutputs {
   current_full: string;
   future_full: string;
   diff: PlanDiff;
+}
+
+/** 資料を根拠にした Config の下書き。 */
+export interface ConfigDraftLine {
+  text: string;
+  /** 資料に同じ書き方が出てくるか */
+  grounded: boolean;
+  risks: string[];
+}
+
+export interface ConfigDraftSource {
+  document_id: number;
+  title: string;
+  heading: string | null;
+  commands: string[];
+}
+
+export interface ConfigDraft {
+  device_id: number;
+  vendor: string;
+  body: string;
+  lines: ConfigDraftLine[];
+  sources: ConfigDraftSource[];
+  risks: string[];
+  notes: string[];
+  /** 下書きを起こしたモデル。資料から拾っただけなら null */
+  model: string | null;
+}
+
+export interface LlmModel {
+  role: string;
+  model: string;
+  endpoint: string;
+  local: boolean;
+  usable: boolean;
+  blocked_external: boolean;
+}
+
+export interface LlmStatus {
+  configured: boolean;
+  models: LlmModel[];
 }
 
 // --- 更改支援 ---

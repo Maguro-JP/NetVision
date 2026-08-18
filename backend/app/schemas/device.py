@@ -13,8 +13,11 @@ class DeviceBase(BaseModel):
     code: str | None = Field(default=None, max_length=80)
     #: 人が付ける機器の名称。空ならホスト名で呼ぶ
     label: str | None = Field(default=None, max_length=120)
-    vendor: str = Field(min_length=1, max_length=80)
-    model: str = Field(min_length=1, max_length=120)
+    # ベンダーと型番は Config を読ませれば埋まる。台帳を起こす時点で必須に
+    # すると、名前だけ分かっている機器を登録できない。未入力は「情報不足」として
+    # 一覧に出るので、埋め忘れは追える
+    vendor: str = Field(default="", max_length=80)
+    model: str = Field(default="", max_length=120)
     serial_number: str | None = None
     device_type: DeviceType = DeviceType.OTHER
     status: DeviceStatus = DeviceStatus.ACTIVE
@@ -101,7 +104,7 @@ class DeviceUpdate(BaseModel):
 class LifecycleStatusRead(BaseModel):
     effective_eos_date: date | None
     effective_eol_date: date | None
-    # "device"（機器個別の入力） / "product"（型番の製品マスタ） / None（未登録）
+    # "device"（機器個別の入力） / "product"（型番の製品マスター） / None（未登録）
     eol_source: str | None
     maintenance_end: date | None
     days_to_maintenance_end: int | None

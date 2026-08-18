@@ -182,7 +182,7 @@ export default function ReplacementPage() {
               <h2>期限が分からない機器</h2>
               <p className="muted">
                 保守期限も EoL も登録されていないため、年度に割り付けられません。
-                リファレンス管理で型番の EoL を登録すると自動で入ります。
+                製品情報で型番の EoL を登録すると自動で入ります。
               </p>
               <TargetTable targets={plan.unscheduled} onPick={setImpactFor} />
             </>

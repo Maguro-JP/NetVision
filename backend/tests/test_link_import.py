@@ -177,3 +177,39 @@ def test_devices_added_by_the_inventory_import_also_resolve_links(client):
     )
 
     assert len(client.get(f"{API}/topology/links").json()) == 1
+
+
+def test_devices_can_be_written_by_their_management_code(client, device_payload):
+    """結線表は管理IDでも書ける。
+
+    ホスト名で書く現場もあれば、社内台帳の管理IDで書く現場もある。
+    どちらでも引けないと、表を作り直してもらうことになる。
+    """
+    add(client, device_payload, "core-sw-01", code="NW-00101")
+    add(client, device_payload, "edge-rt-01", code="NW-00001", serial_number="X2")
+
+    result = upload(client, HEADER + "NW-00101,Gi1/0/24,NW-00001,ge-0/0/0,本社 上位\n").json()
+
+    assert result["linked"] == 1
+    assert result["pending"] == 0
+    links = client.get(f"{API}/topology/links").json()
+    assert len(links) == 1
+
+
+def test_a_code_row_waits_for_the_device_too(client, device_payload):
+    """管理IDで書いた行も、機器が登録された時点で繋がる。"""
+    add(client, device_payload, "core-sw-01", code="NW-00101")
+    held = upload(client, HEADER + "NW-00101,Gi1/0/24,NW-00001,ge-0/0/0,\n").json()
+    assert held["pending"] == 1
+
+    add(client, device_payload, "edge-rt-01", code="NW-00001", serial_number="X2")
+    links = client.get(f"{API}/topology/links").json()
+    assert len(links) == 1
+
+
+def test_the_same_device_written_two_ways_is_still_the_same_device(client, device_payload):
+    """片側をホスト名、片側を管理IDで書いても、同じ機器なら結線にしない。"""
+    add(client, device_payload, "core-sw-01", code="NW-00101")
+    result = upload(client, HEADER + "core-sw-01,Gi1/0/1,NW-00101,Gi1/0/2,\n").json()
+    assert result["linked"] == 0
+    assert any("同じ機器" in issue["message"] for issue in result["issues"]), result["issues"]

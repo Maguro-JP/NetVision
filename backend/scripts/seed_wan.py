@@ -147,7 +147,7 @@ ROMAJI = {
 
 
 def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
-    """広域網を作る。`core_router` は大元（本社データセンター）の出口ルータ。"""
+    """広域網を作る。`core_router` は大元（本社データセンター）の出口ルーター。"""
     sites: dict[str, Site] = {}
     devices: list[Device] = []
     links: list[tuple[str, str, str, str]] = []

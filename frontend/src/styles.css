@@ -60,6 +60,15 @@ a:hover {
   padding: 20px 0;
   overflow-y: auto;
   overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+/* 設定を一番下へ落とすため、項目の並びに高さを持たせる */
+.nav {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .layout.collapsed .sidebar {
   display: none;
@@ -307,6 +316,41 @@ td.wrap {
   color: #fff;
 }
 
+/* 拠点の状態。稼働中は数が多いので目立たせず、休みと閉鎖だけ色を付ける */
+.badge.site-active {
+  /* 大半はこれなので、色で埋め尽くさない。休みと閉鎖だけが目に入るようにする */
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  font-weight: 500;
+}
+.badge.site-planned {
+  background: var(--sev-unknown);
+  color: #fff;
+}
+.badge.site-suspended {
+  background: var(--sev-warning);
+}
+.badge.site-closed {
+  background: var(--sev-expired);
+  color: #fff;
+}
+
+/* 別ウィンドウで開いた画面。メニューを出さず、中身に幅を全部渡す */
+.layout.bare {
+  display: block;
+}
+.layout.bare .main {
+  margin-left: 0;
+  padding: 20px 24px;
+}
+/* 設定はメニューの一番下。上の並びと切り離して置く */
+.nav-settings {
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
 .toolbar {
   display: flex;
   gap: 8px;
@@ -549,7 +593,8 @@ button:disabled {
 }
 /* 機器を囲む枠。図の背景に沈まないよう、輪郭と見出しをはっきり出す */
 .topo-group {
-  border: 2px dashed;
+  /* 枠は点線。結線の「片側のみ」は破線なので、線種を分けて見分けられるようにする */
+  border: 2px dotted;
   border-radius: 10px;
   pointer-events: all;
   box-sizing: border-box;

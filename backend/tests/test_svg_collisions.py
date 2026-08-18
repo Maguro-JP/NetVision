@@ -56,7 +56,12 @@ def edge(edge_id: int, source: int, target: int, a: str, b: str) -> TopologyEdge
 
 
 def node_rects(svg: str) -> list[Rect]:
-    """機器の箱と、絞り込みの外にいる相手の箱。色帯（幅5）は除く。"""
+    """機器の箱と、絞り込みの外にいる相手の箱。色帯（幅5）は除く。
+
+    ラック・部屋の枠は数えない（class="group-frame" が付いている）。枠は
+    機器を囲むものなので、その中にポート名が入るのは当たり前で、重なりとは
+    呼ばない。
+    """
     from app.services.topology_export import PEER_H, PEER_W
 
     out: list[Rect] = []

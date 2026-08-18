@@ -85,7 +85,7 @@ export default function DeviceListPage() {
     queryFn: api.listSites,
   });
   // 全件は取りに行かない。16万台の環境では1ページ分でも全件読み込むと
-  // 10秒かかっていた（絞り込みも件数も、いまはサーバ側で済ませている）
+  // 10秒かかっていた（絞り込みも件数も、いまはサーバー側で済ませている）
   const { data, isLoading, isFetching, error, refetch } = useQuery({
     queryKey: ["devices", filters, page],
     queryFn: () => api.listDevicePage({ ...filters, limit: PAGE_SIZE, offset: page * PAGE_SIZE }),
@@ -148,8 +148,8 @@ export default function DeviceListPage() {
       <ColumnChoiceFilter
         value={statusValue}
         choices={statusChoices}
-        placeholder="状態を探す…"
-        title="状態で絞り込む。文字を打つと候補が減ります"
+        placeholder="保守を探す…"
+        title="保守・EoL の状態で絞り込む。文字を打つと候補が減ります"
         onChange={(next) => {
           const updated = new URLSearchParams(params);
           updated.delete("severity");
@@ -164,7 +164,7 @@ export default function DeviceListPage() {
     hostname: (
       <ColumnTextFilter
         value={params.get("hostname") ?? ""}
-        placeholder="ホスト名…"
+        placeholder="管理ID・ホスト名…"
         title="ホスト名に含む文字で絞り込む"
         onChange={(next) => setTextFilter("hostname", next)}
       />
@@ -255,6 +255,19 @@ export default function DeviceListPage() {
           </button>
         )}
         <span className="toolbar-spacer" />
+        {/* 出力は1つにまとめる。Excel か CSV か、文字コードをどうするかは
+            別ウィンドウで中身を見ながら選ぶ。
+            表の下ではなく上に置く。何万件もあるとき、下まで送るのは手間 */}
+        <WindowLink
+          className="button"
+          to={`/export${exportQuery}`}
+          name="netvision-export"
+          width={1200}
+          height={900}
+          title="絞り込んだ機器を、中身を見てから Excel / CSV で保存します"
+        >
+          {total.toLocaleString()} 件を出力する
+        </WindowLink>
         <Link to="/devices/new">
           <button className="primary">機器を追加</button>
         </Link>
@@ -282,20 +295,6 @@ export default function DeviceListPage() {
         </>
       )}
 
-      <div className="toolbar">
-        {/* 出力は1つにまとめる。Excel か CSV か、文字コードをどうするかは
-            別ウィンドウで中身を見ながら選ぶ */}
-        <WindowLink
-          className="button"
-          to={`/export${exportQuery}`}
-          name="netvision-export"
-          width={1200}
-          height={900}
-          title="絞り込んだ機器を、中身を見てから Excel / CSV で保存します"
-        >
-          絞り込んだ {total.toLocaleString()} 件を出力する
-        </WindowLink>
-      </div>
     </>
   );
 }

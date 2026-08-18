@@ -382,7 +382,7 @@ def analyze(
                 collector.emit(
                     InsightKind.MISSING_PRODUCT_REFERENCE,
                     device,
-                    f"{device.vendor} {device.model} の EoL 情報が製品マスタにありません",
+                    f"{device.vendor} {device.model} の EoL 情報が製品マスターにありません",
                     recommendation=(
                         "リファレンス管理から型番を登録すると、同じ型番の機器すべてに反映されます。"
                     ),

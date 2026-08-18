@@ -124,11 +124,14 @@ def meta() -> dict[str, object]:
     確かめる先が無いと、上げ忘れや入れ替え漏れに気づけない。閉域では
     画面を開いて確かめられることが大事なので、API から見えるようにしておく。
     """
+    from app.services import llm
     from app.services.schema_gate import schema_status
 
     status = schema_status()
     return {
         "demo_mode": settings.demo_mode,
+        # モデルを置いてあるか。画面はこれを見て「AI で下書きする」を出す
+        "llm": llm.status(),
         "warning_days": settings.warning_days,
         "critical_days": settings.critical_days,
         "version": app.version,

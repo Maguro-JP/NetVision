@@ -28,23 +28,27 @@ from app.services.configparse import normalize_hostname
 # 取り込み可能なフィールド
 # ---------------------------------------------------------------------------
 
+# 並びは、人が台帳を読むときの順にしてある。
+#   どの機器か（管理ID・名前）→ 何か（種別・製品）→ どういう状態か
+#   → どこにあるか（拠点・ラック・IP）→ 中身（OS）→ 日付 → 備考
+# 拠点は名前を先に置く。ID は突き合わせ用で、人が読む列ではない
 DEVICE_FIELDS = (
     "code",
-    "hostname",
     "label",
+    "hostname",
+    "device_type",
     "vendor",
     "model",
     "serial_number",
-    "device_type",
     "status",
-    "os_name",
-    "os_version",
-    "firmware_version",
     "site",
     "site_code",
     "rack",
     "rack_unit",
     "mgmt_ip",
+    "os_name",
+    "os_version",
+    "firmware_version",
     "install_date",
     "eos_date",
     "eol_date",
@@ -61,17 +65,20 @@ CONTRACT_FIELDS = (
 )
 
 # 機器ID は取り込みでも受け取る。書き出して直して戻すとき、この列があるから
-# ホスト名を書き換えても同じ機器として直せる（無いと別名の機器が増える）
-IMPORTABLE_FIELDS = ("device_id",) + DEVICE_FIELDS + CONTRACT_FIELDS
+# ホスト名を書き換えても同じ機器として直せる（無いと別名の機器が増える）。
+# 人が読む列ではないので、並びは最後にする
+IMPORTABLE_FIELDS = DEVICE_FIELDS + CONTRACT_FIELDS + ("device_id",)
 
-REQUIRED_FIELDS = ("hostname", "vendor", "model")
+# 取り込みで最低限いるのはホスト名だけ。ベンダーと型番は Config を読ませれば
+# 埋まるので、台帳を起こす時点で必須にすると、分かっている機器まで登録できない
+REQUIRED_FIELDS = ("hostname",)
 
 DATE_FIELDS = frozenset(
     {"install_date", "eos_date", "eol_date", "contract_start_date", "contract_end_date"}
 )
 
 FIELD_LABELS: dict[str, str] = {
-    "device_id": "内部ID",
+    "device_id": "内部ID（書き出した行を戻すとき用）",
     "code": "管理ID",
     "hostname": "ホスト名",
     "label": "機器名",
@@ -83,8 +90,8 @@ FIELD_LABELS: dict[str, str] = {
     "os_name": "OS名",
     "os_version": "OSバージョン",
     "firmware_version": "ファームウェアバージョン",
-    "site": "拠点",
-    "site_code": "拠点ID",
+    "site": "拠点名",
+    "site_code": "拠点ID（任意）",
     "rack": "ラック",
     "rack_unit": "搭載U",
     "mgmt_ip": "管理IP",
@@ -183,6 +190,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "ファームウェアバージョン",
     ),
     "site": (
+        "拠点名",
         "site",
         "location",
         "sitename",
@@ -194,6 +202,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
         "建屋",
     ),
     "site_code": (
+        "拠点id（任意）",
         "sitecode",
         "site_code",
         "siteid",
@@ -293,6 +302,7 @@ DEVICE_TYPE_ALIASES: dict[str, DeviceType] = {
     "アクセスポイント": DeviceType.WIRELESS_AP,
     "wirelesscontroller": DeviceType.WIRELESS_CONTROLLER,
     "無線コントローラ": DeviceType.WIRELESS_CONTROLLER,
+    "無線コントローラー": DeviceType.WIRELESS_CONTROLLER,
     "wlc": DeviceType.WIRELESS_CONTROLLER,
     "server": DeviceType.SERVER,
     "サーバ": DeviceType.SERVER,
@@ -300,6 +310,23 @@ DEVICE_TYPE_ALIASES: dict[str, DeviceType] = {
     "other": DeviceType.OTHER,
     "その他": DeviceType.OTHER,
 }
+
+# 決まった書き方しか受け付けない項目の候補。取り込み画面と台帳の入力欄に出す。
+# 別名（router / sw / ルータ など）も受け付けるが、人に見せるのは代表表記だけ
+FIELD_CHOICES: dict[str, tuple[str, ...]] = {
+    "device_type": (
+        "ルーター",
+        "スイッチ",
+        "ファイアウォール",
+        "ロードバランサー",
+        "無線AP",
+        "無線コントローラー",
+        "サーバー",
+        "その他",
+    ),
+    "status": ("稼働中", "予備機", "保守中", "撤去済み"),
+}
+
 
 DEVICE_STATUS_ALIASES: dict[str, DeviceStatus] = {
     "active": DeviceStatus.ACTIVE,
@@ -1001,6 +1028,15 @@ def _apply_values(
     if site_code:
         key = str(site_code).strip()
         site = site_cache.get(key)
+        if site is not None and site_name:
+            # 拠点IDが同じなら同じ拠点。名前はその拠点の呼び名なので、
+            # 違う名前で来たら書き換える。打ち間違いを直す手段が
+            # 拠点の台帳しか無いと、機器の台帳を直しても直らない
+            new_name = str(site_name).strip()
+            if new_name and new_name != site.name:
+                site_cache.pop(site.name, None)
+                site.name = new_name
+                site_cache[new_name] = site
         if site is None:
             # 拠点IDは人が決めるものなので、無いときは名前なしで起こさずエラーにする
             # （呼び出し側の issues に載せるのは難しいので、ここでは名前列があれば併用）

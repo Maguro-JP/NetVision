@@ -367,3 +367,33 @@ def test_new_frames_get_different_colors(db_session):
     first = topology.create_group(db_session, "physical", "枠1", [a.id])
     second = topology.create_group(db_session, "physical", "枠2", [b.id])
     assert first.color != second.color
+
+
+def test_spacings_sit_on_the_grid():
+    """自動配置の間隔は、画面のマス目の整数倍。
+
+    半端な倍数だと「何マス空ける」で言えず、人が並べ直したときに
+    自動配置と揃わない。
+    """
+    import re
+    from pathlib import Path
+
+    from app.services import topology
+
+    for value in (topology._X_SPACING, topology._Y_SPACING, topology.LAYOUT_GRID):
+        assert value % topology._GRID == 0, value
+
+    source = (
+        Path(__file__).resolve().parents[2] / "frontend" / "src" / "pages" / "TopologyPage.tsx"
+    ).read_text(encoding="utf-8")
+    screen_grid = int(re.search(r"const LAYOUT_GRID = (\d+);", source).group(1))
+    assert topology._GRID == float(screen_grid)
+
+
+def test_rows_leave_room_for_three_lines_of_text():
+    """段の間に、ポート名・線の名前・ポート名の3行が入ること。"""
+    from app.services import topology
+
+    clear = topology._Y_SPACING - topology._DETAIL_HEIGHT
+    # ポート名2行と線の名前1行（各18px）＋ 枠が上下に入る余地
+    assert clear >= 18 * 3 + 22 * 2

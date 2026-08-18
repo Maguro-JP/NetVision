@@ -39,7 +39,7 @@ _SET_NATIVE = re.compile(r"^set interfaces (\S+) native-vlan-id\s+(\d+)", re.MUL
 # VLAN の定義。Junos は名前で参照するので、名前→番号の対応が要る
 _SET_VLAN_ID = re.compile(r"^set vlans (\S+) vlan-id\s+(\d+)", re.MULTILINE)
 _SET_VLAN_DESC = re.compile(r"^set vlans (\S+) description\s+(.+)$", re.MULTILINE)
-# Junos の仮想ルータ。instance-type virtual-router / vrf のものだけを対象にする
+# Junos の仮想ルーター。instance-type virtual-router / vrf のものだけを対象にする
 _SET_INSTANCE_TYPE = re.compile(r"^set routing-instances (\S+) instance-type\s+(\S+)", re.MULTILINE)
 _SET_INSTANCE_RD = re.compile(
     r"^set routing-instances (\S+) route-distinguisher\s+(\S+)", re.MULTILINE
@@ -135,7 +135,7 @@ def _parse_vlan_definitions(text: str, parsed: ParsedConfig) -> dict[str, int]:
 
 
 def _parse_routing_instances(text: str, parsed: ParsedConfig) -> None:
-    """routing-instances のうち、仮想ルータにあたるものを VRF として扱う。
+    """routing-instances のうち、仮想ルーターにあたるものを VRF として扱う。
 
     `instance-type` が forwarding などのものは経路表を分ける用途ではないので除く。
     """

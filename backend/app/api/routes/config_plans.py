@@ -7,13 +7,19 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import ConfigPlan, Device
 from app.schemas.config_plans import (
+    ConfigDraftRead,
+    ConfigDraftRequest,
     ConfigPlanCreate,
     ConfigPlanRead,
     ConfigPlanUpdate,
     DiffPreviewRequest,
     DiffRead,
+    DraftLineRead,
+    DraftSourceRead,
+    LlmStatusRead,
     PlanOutputRead,
 )
+from app.services import config_draft, llm
 from app.services import config_plans as service
 from app.services.api_helpers import diff_read
 from app.services.configdiff import DiffResult, build
@@ -221,3 +227,47 @@ def download(plan_id: int, kind: str, db: DbSession) -> Response:
 def preview(payload: DiffPreviewRequest) -> DiffRead:
     """計画を作らずに、2つの config をその場で比べる。"""
     return _diff_read(build(payload.current, payload.target, payload.vendor))
+
+
+# ---------------------------------------------------------------------------
+# 資料を根拠にした下書き
+# ---------------------------------------------------------------------------
+
+
+@router.get("/llm/status", response_model=LlmStatusRead)
+def llm_status() -> LlmStatusRead:
+    """モデルを置いてあるか。画面に「下書きを作る」を出すかの判断に使う。"""
+    return LlmStatusRead.model_validate(llm.status())
+
+
+@router.post("/devices/{device_id}/config-draft", response_model=ConfigDraftRead)
+def draft_config(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> ConfigDraftRead:
+    """取り込んだ資料を根拠に、投入コマンドの下書きを作る。実機へは投入しない。"""
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
+    if not payload.request.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+
+    result = config_draft.draft(db, device, payload.request, base=payload.base)
+    return ConfigDraftRead(
+        device_id=device.id,
+        vendor=result.vendor,
+        body=result.body,
+        lines=[
+            DraftLineRead(text=line.text, grounded=line.grounded, risks=line.risks)
+            for line in result.lines
+        ],
+        sources=[
+            DraftSourceRead(
+                document_id=source.document_id,
+                title=source.title,
+                heading=source.heading,
+                commands=source.commands[:20],
+            )
+            for source in result.sources
+        ],
+        risks=result.risks,
+        notes=result.notes,
+        model=result.model,
+    )

@@ -35,12 +35,52 @@ COLUMNS = ("機器A", "ポートA", "機器B", "ポートB", "備考")
 
 #: 見出しの表記ゆれ。現場の表をそのまま持ってきても読めるように
 ALIASES: dict[str, tuple[str, ...]] = {
-    "a_hostname": ("機器a", "機器名a", "ホスト名a", "自機器", "from", "device_a", "local"),
+    "a_hostname": (
+        "機器a",
+        "機器名a",
+        "ホスト名a",
+        "管理ida",
+        "自機器",
+        "from",
+        "device_a",
+        "local",
+    ),
     "a_interface": ("ポートa", "インターフェースa", "自ポート", "port_a", "local_port"),
-    "b_hostname": ("機器b", "機器名b", "ホスト名b", "対向機器", "to", "device_b", "remote"),
+    "b_hostname": (
+        "機器b",
+        "機器名b",
+        "ホスト名b",
+        "管理idb",
+        "対向機器",
+        "to",
+        "device_b",
+        "remote",
+    ),
     "b_interface": ("ポートb", "インターフェースb", "対向ポート", "port_b", "remote_port"),
     "label": ("備考", "回線", "メモ", "note", "label"),
 }
+
+
+def _device_lookup(db: Session) -> dict[str, Device]:
+    """書かれた名前から機器を引くための表。
+
+    結線表に何を書くかは現場で違う。ホスト名で書く人もいれば、社内台帳の
+    管理IDで書く人もいる。どちらでも引けないと、表を作り直してもらうことに
+    なる。ホスト名を先に入れてから管理IDを足すので、両方に当たる文字列は
+    ホスト名として扱う（結線表の列は機器名の欄なので、そちらが自然）。
+    """
+    lookup: dict[str, Device] = {}
+    devices = list(db.scalars(select(Device)))
+    for device in devices:
+        lookup[normalize_hostname(device.hostname)] = device
+    for device in devices:
+        if device.code:
+            lookup.setdefault(normalize_hostname(device.code), device)
+    return lookup
+
+
+def _find(lookup: dict[str, Device], written: str) -> Device | None:
+    return lookup.get(normalize_hostname(written))
 
 
 @dataclass
@@ -76,6 +116,8 @@ def template_xlsx() -> bytes:
     example = ["（例）core-sw-01", "GigabitEthernet1/0/1"]
     example += ["（例）edge-rt-01", "ge-0/0/0", "本社 上位回線"]
     sheet.append(example)
+    # 管理IDでも書けることは、見本で見せた方が早い
+    sheet.append(["（例）NW-00101", "Gi1/0/24", "（例）NW-00002", "port2", "管理IDでも書けます"])
 
     for index, width in enumerate((24, 24, 24, 24, 30), start=1):
         sheet.column_dimensions[sheet.cell(row=1, column=index).column_letter].width = width
@@ -85,7 +127,8 @@ def template_xlsx() -> bytes:
         ["結線表の書き方"],
         [],
         ["・1行に1本の結線を書きます。両端の機器名とポート名を入れてください"],
-        ["・機器名は台帳のホスト名に合わせます。大文字小文字とドメインの有無は問いません"],
+        ["・機器はホスト名でも管理IDでも書けます。台帳にあるどちらかに合っていれば繋がります"],
+        ["・大文字小文字とドメインの有無（core-sw-01.example.jp）は問いません"],
         ["・ポート名は Config の表記のまま書いてください（Gi1/0/1 のような略記も読めます）"],
         ["・（例）の行は消してから取り込んでください"],
         [],
@@ -145,7 +188,7 @@ def run_import(
         )
         return result
 
-    devices = {normalize_hostname(d.hostname): d for d in db.scalars(select(Device))}
+    devices = _device_lookup(db)
 
     for index, raw in enumerate(table.rows, start=2):
         values = {mapping[h]: str(raw.get(h) or "").strip() for h in mapping}
@@ -160,12 +203,13 @@ def run_import(
         if not (a_host and b_host and a_port and b_port):
             result.issues.append(RowIssue(index, "機器名とポート名を4つとも書いてください"))
             continue
-        if normalize_hostname(a_host) == normalize_hostname(b_host):
+        a_device = _find(devices, a_host)
+        b_device = _find(devices, b_host)
+        same_text = normalize_hostname(a_host) == normalize_hostname(b_host)
+        same_device = a_device is not None and b_device is not None and a_device.id == b_device.id
+        if same_text or same_device:
             result.issues.append(RowIssue(index, "同じ機器どうしが書かれています"))
             continue
-
-        a_device = devices.get(normalize_hostname(a_host))
-        b_device = devices.get(normalize_hostname(b_host))
 
         if a_device is not None and b_device is not None:
             from app.services.configs import upsert_link
@@ -237,12 +281,12 @@ def resolve_pending(db: Session) -> int:
     if not pendings:
         return 0
 
-    devices = {normalize_hostname(d.hostname): d for d in db.scalars(select(Device))}
+    devices = _device_lookup(db)
     resolved = 0
 
     for pending in pendings:
-        a_device = devices.get(normalize_hostname(pending.a_hostname))
-        b_device = devices.get(normalize_hostname(pending.b_hostname))
+        a_device = _find(devices, pending.a_hostname)
+        b_device = _find(devices, pending.b_hostname)
         if a_device is None or b_device is None:
             continue
 

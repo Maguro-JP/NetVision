@@ -12,6 +12,9 @@ dist/
 
 # 環境設定
 .env
+# 客先ごとの設定（見本だけ残す）
+config/*.env
+!config/*.env.sample
 *.egg-info/
 
 # 資料ファイルの保管領域（DB とは別にバックアップが必要）

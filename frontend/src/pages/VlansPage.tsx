@@ -8,7 +8,7 @@ import type { TopologyVlan, VlanCatalogWrite } from "../api/types";
 type Draft = VlanCatalogWrite;
 
 const FIELDS: { key: keyof Draft; label: string; width: number; placeholder?: string }[] = [
-  { key: "name", label: "名称", width: 160, placeholder: "全社ユーザ" },
+  { key: "name", label: "名称", width: 160, placeholder: "全社ユーザー" },
   { key: "purpose", label: "用途", width: 240, placeholder: "社員端末（有線）" },
   { key: "owner", label: "管理", width: 120, placeholder: "情シス" },
   { key: "subnet", label: "サブネット", width: 140, placeholder: "10.20.30.0/24" },

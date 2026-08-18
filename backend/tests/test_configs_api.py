@@ -422,7 +422,7 @@ def test_a_config_is_linked_by_the_hostname_inside_it_not_the_filename(client):
 
 
 def test_topology_builds_itself_from_multiple_configs(client):
-    """複数台まとめて入れれば、台帳とトポロジが一度に立ち上がる。"""
+    """複数台まとめて入れれば、台帳とトポロジーが一度に立ち上がる。"""
     directory = Path(__file__).parent / "fixtures"
     files = [
         ("files", (path.name, path.read_bytes(), "text/plain"))

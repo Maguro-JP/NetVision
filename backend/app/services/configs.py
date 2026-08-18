@@ -389,7 +389,7 @@ def _sync_vlans(db: Session, device: Device, parsed: ParsedConfig) -> None:
 
 
 def _sync_vrfs(db: Session, device: Device, parsed: ParsedConfig) -> None:
-    """その機器に切られている仮想ルータ（VRF / VPN インスタンス / VDOM）を揃える。"""
+    """その機器に切られている仮想ルーター（VRF / VPN インスタンス / VDOM）を揃える。"""
     rows = db.scalars(select(DeviceVrf).where(DeviceVrf.device_id == device.id))
     existing = {v.name: v for v in rows}
 

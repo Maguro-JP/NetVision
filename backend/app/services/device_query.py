@@ -148,7 +148,7 @@ def _overall_rank(today: date):
     """機器1台の総合重要度。保守期限と EoL の重い方を採る。
 
     保守期限は契約のうち最も遠い終了日、EoL は機器個別の入力を優先して
-    無ければ型番の製品マスタ、という lifecycle.evaluate と同じ決め方。
+    無ければ型番の製品マスター、という lifecycle.evaluate と同じ決め方。
     """
     maintenance_rank = _rank_of(_maintenance_end_expr(), today)
     eol_rank = _rank_of(_eol_expr(), today)
@@ -348,7 +348,7 @@ def count_by_vendor(db: Session) -> list[tuple[str, int]]:
 
 
 def count_without_lifecycle_data(db: Session) -> int:
-    """機器側の EoL も保守終了日も無い台数。製品マスタの EoL は見ない。
+    """機器側の EoL も保守終了日も無い台数。製品マスターの EoL は見ない。
 
     ダッシュボードの「ライフサイクル情報未登録」と同じ定義。
     """

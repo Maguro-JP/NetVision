@@ -7,6 +7,8 @@
 
 import type { Node } from "@xyflow/react";
 
+import { DEFAULT_HEIGHT, DEFAULT_WIDTH } from "./TopologyPage";
+
 export const GROUP_PAD = 22;
 export const GROUP_HEAD = 22;
 
@@ -21,8 +23,10 @@ export function groupBox(
   members: { x: number; y: number; width?: number; height?: number }[],
 ): GroupBox | null {
   if (members.length === 0) return null;
-  const width = (node: { width?: number }) => node.width ?? 190;
-  const height = (node: { height?: number }) => node.height ?? 78;
+  // 大きさが渡されていない機器は、画面の既定の箱として数える。
+  // ここに古い数を置いておくと、枠だけが小さくなって中身がはみ出す
+  const width = (node: { width?: number }) => node.width ?? DEFAULT_WIDTH;
+  const height = (node: { height?: number }) => node.height ?? DEFAULT_HEIGHT;
   const left = Math.min(...members.map((node) => node.x));
   const top = Math.min(...members.map((node) => node.y));
   const right = Math.max(...members.map((node) => node.x + width(node)));
@@ -108,9 +112,10 @@ export function updateGroupBounds<T extends Node>(nodes: T[]): T[] {
       x: node.position.x,
       y: node.position.y,
       width:
-        data.width ?? (typeof node.style?.width === "number" ? node.style.width : 190),
+        data.width ?? (typeof node.style?.width === "number" ? node.style.width : DEFAULT_WIDTH),
       height:
-        data.height ?? (typeof node.style?.height === "number" ? node.style.height : 78),
+        data.height ??
+        (typeof node.style?.height === "number" ? node.style.height : DEFAULT_HEIGHT),
     });
   }
   const specs: GroupSpec[] = nodes

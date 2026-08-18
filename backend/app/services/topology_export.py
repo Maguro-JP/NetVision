@@ -9,7 +9,7 @@
 ので、ベクタ（SVG）で図そのものを出す。SVG は Word / PowerPoint / Excel が
 そのまま挿入でき（Office 2016 以降）、ブラウザでも開けて印刷にも耐える。
 
-生成はサーバ側で行う。画面側の描画ライブラリに依存しないので、閉域配布の
+生成はサーバー側で行う。画面側の描画ライブラリに依存しないので、閉域配布の
 バンドルに余計なものが増えず、出力内容をテストできる。
 """
 
@@ -44,13 +44,13 @@ SEVERITY_COLOR: dict[str, str] = {
 }
 #: 機器の種別の呼び方。画面（DEVICE_TYPE_LABEL）と揃えること
 DEVICE_TYPE_NAMES: dict[str, str] = {
-    "router": "ルータ",
+    "router": "ルーター",
     "switch": "スイッチ",
     "firewall": "ファイアウォール",
-    "load_balancer": "ロードバランサ",
+    "load_balancer": "ロードバランサー",
     "wireless_ap": "無線AP",
-    "wireless_controller": "無線コントローラ",
-    "server": "サーバ",
+    "wireless_controller": "無線コントローラー",
+    "server": "サーバー",
     "other": "その他",
 }
 #: 台帳の稼働状態の呼び方
@@ -98,9 +98,11 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
-# 枠の内側に取る余白と、名前の行の高さ
-_GROUP_PAD = 18.0
-_GROUP_HEAD = 8.0
+# 枠の内側に取る余白と、名前の行の高さ。画面（topologyGroups.ts の
+# GROUP_PAD / GROUP_HEAD）と同じ値にする。違うと同じ配置なのに枠だけずれ、
+# 画面で確かめた見た目のまま配れない
+_GROUP_PAD = 22.0
+_GROUP_HEAD = 22.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
 # 名前の幅がいる。左右の辺は行の高さ（_LABEL_PITCH）で決まる
 _BUNDLE_LABEL_W = 56.0
@@ -144,7 +146,7 @@ def render_svg(
     along_line: bool = False,
     show_peers: bool = True,
 ) -> str:
-    """トポロジを SVG にする。位置は渡されたグラフのまま使う。
+    """トポロジーを SVG にする。位置は渡されたグラフのまま使う。
 
     拠点の図は、画面と同じ配置（自拠点と対向）をそのまま描く。
     ここで自拠点だけ残して対向を置き直すと、箱が千切れ、斜め線が出る。
@@ -268,10 +270,25 @@ def render_svg(
         + [p.y + PEER_H for p in peers]
     )
     if graph.groups:
-        min_x -= 24
-        min_y -= 28
-        max_x += 24
-        max_y += 24
+        # 枠は箱の外側を回る。入れ子になっている分だけ外へ広がるので、
+        # 深さぶんの余白を取る。足りないと、一番外の枠が見出しに重なる
+        parent_of = {group.id: group.parent_id for group in graph.groups}
+
+        def _depth(group_id: int) -> int:
+            seen = {group_id}
+            depth = 1
+            at = parent_of.get(group_id)
+            while at is not None and at not in seen:
+                seen.add(at)
+                depth += 1
+                at = parent_of.get(at)
+            return depth
+
+        deep = max(_depth(group.id) for group in graph.groups)
+        min_x -= _GROUP_PAD * deep
+        min_y -= (_GROUP_PAD + _GROUP_HEAD) * deep
+        max_x += _GROUP_PAD * deep
+        max_y += _GROUP_PAD * deep
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
     legend_h = 0.0 if simple else LEGEND_H
@@ -305,7 +322,7 @@ def render_svg(
     )
     parts.append('<rect width="100%" height="100%" fill="#ffffff"/>')
 
-    # 資料に載る時刻は、サーバの時計ではなく使う人の時刻でなければ意味が無い
+    # 資料に載る時刻は、サーバーの時計ではなく使う人の時刻でなければ意味が無い
     generated = localtime.format(localtime.now(), with_zone=True)
     parts.append(
         f'<text x="{MARGIN:.0f}" y="30" font-size="18" font-weight="700" fill="#1a1a1a">'
@@ -377,9 +394,10 @@ def render_svg(
         if group.plane and group.plane != "custom":
             label = f"{group.name} · {PLANE_NAMES.get(group.plane, group.plane)}"
         parts.append(
-            f'<rect x="{gx:.0f}" y="{gy:.0f}" width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
+            f'<rect class="group-frame" x="{gx:.0f}" y="{gy:.0f}" '
+            f'width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
             f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
-            f'stroke-width="1.6" stroke-dasharray="6 4"/>'
+            f'stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>'
             f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '
             f'paint-order="stroke" stroke="#ffffff" stroke-width="3" '
             f'fill="{_esc(group.color)}">{_esc(label)}</text>'
@@ -863,7 +881,7 @@ def render_svg(
 class _Peer:
     """絞り込みの外にいる対向機器を、図の端に置くための簡易ノード。
 
-    拠点で絞ったときに上位ルータが図から消えると、その拠点が
+    拠点で絞ったときに上位ルーターが図から消えると、その拠点が
     「どこにも繋がっていない」ように見える。実際には繋がっているので、
     相手がいることだけは残す。ただし本題ではないので、名前と拠点だけに留める。
     """

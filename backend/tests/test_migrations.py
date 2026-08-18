@@ -90,7 +90,7 @@ def test_every_table_accepts_a_row(migrated: str):
             {"d": device_id},
         )
         conn.execute(
-            text("INSERT INTO vlans (vlan_id, name) VALUES (10, '全社ユーザ')"),
+            text("INSERT INTO vlans (vlan_id, name) VALUES (10, '全社ユーザー')"),
         )
         conn.execute(
             text("INSERT INTO device_vrfs (device_id, name) VALUES (:d, 'SHANAI')"),
@@ -181,7 +181,7 @@ def test_old_sqlite_without_site_id_gains_the_column(tmp_path: Path):
     _upgrade(url)
     has_site, revision = _site_id_and_revision(url)
     assert has_site
-    assert revision == "e5b2c7d1a934"
+    assert revision == "a4e7f2c19b53"
 
 
 def test_existing_rows_stay_as_global_layout(tmp_path: Path):

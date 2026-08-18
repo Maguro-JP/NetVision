@@ -46,6 +46,8 @@ class ParsedInterface:
     trunk_all: bool = False
     trunk_excluded: set[int] = field(default_factory=set)  # `except` 指定の除外分
     vrf: str | None = None
+    #: 束ねているポートの番号（LAG / ポートチャネル）。同じ番号どうしが1本の線になる
+    lag_group: int | None = None
     enabled: bool = True
 
     @property
@@ -69,7 +71,7 @@ class ParsedInterface:
 
 @dataclass
 class ParsedVrf:
-    """機器の中に切った仮想ルータ（VRF / VPN インスタンス / VDOM）。
+    """機器の中に切った仮想ルーター（VRF / VPN インスタンス / VDOM）。
 
     経路表が分かれるので、同じ図に見えていても VRF が違えば通信できない。
     「繋がっているのに通らない」の原因になりやすいところなので、明示的に持つ。
@@ -144,7 +146,15 @@ class ParsedConfig:
         """同じポートが複数箇所に出てきたらまとめる（config と show 出力の両方に出るため）。"""
         for existing in self.interfaces:
             if existing.key == interface.key:
-                for name in ("description", "ip_address", "vlan", "mode", "native_vlan", "vrf"):
+                for name in (
+                    "description",
+                    "ip_address",
+                    "vlan",
+                    "mode",
+                    "native_vlan",
+                    "vrf",
+                    "lag_group",
+                ):
                     if getattr(existing, name) is None:
                         setattr(existing, name, getattr(interface, name))
                 if interface.trunk_vlans and not existing.trunk_vlans:

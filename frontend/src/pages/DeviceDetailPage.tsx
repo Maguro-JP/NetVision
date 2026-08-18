@@ -226,7 +226,7 @@ export default function DeviceDetailPage() {
           <span className="k">
             サポート終了 (EoL)
             {lc.eol_source === "product" && (
-              <span className="muted">（型番の製品マスタ由来）</span>
+              <span className="muted">（型番の製品マスター由来）</span>
             )}
           </span>
           <span>

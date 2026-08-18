@@ -5,7 +5,7 @@ Revises: b2c9e14d7f30
 Create Date: 2026-08-09
 
 VLAN を3つの顔（アクセス / ネイティブ / トランク許可）で持てるようにし、
-人が用途を書く VLAN 台帳と、機器の中の仮想ルータ（VRF）を足す。
+人が用途を書く VLAN 台帳と、機器の中の仮想ルーター（VRF）を足す。
 """
 
 from __future__ import annotations

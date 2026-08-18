@@ -7,6 +7,7 @@ import type {
   DeviceDetail,
   ChangeLogPage,
   ConfigDiff,
+  ConfigDraft,
   ConfigPlan,
   ConfigTemplate,
   ConfigTemplateMatch,
@@ -15,6 +16,7 @@ import type {
   IngestResult,
   InsightReport,
   ImportResult,
+  LlmStatus,
   MaintenanceContract,
   NetworkInterface,
   AppMeta,
@@ -47,6 +49,7 @@ import type {
   VlanCatalogEntry,
   VlanCatalogWrite,
   VendorDocument,
+  DocumentHit,
   VendorDocumentMatch,
   Vulnerability,
   VulnerabilityImportResult,
@@ -80,31 +83,49 @@ function isAbortError(error: unknown): boolean {
   return error instanceof Error && error.name === "AbortError";
 }
 
-async function send(path: string, init: RequestInit = {}, timeoutMs?: number): Promise<Response> {
+async function send(
+  path: string,
+  init: RequestInit = {},
+  timeoutMs?: number,
+): Promise<Response> {
   if (typeof navigator !== "undefined" && navigator.onLine === false) {
     throw new ApiError(0, "オフラインです。接続してからやり直してください");
   }
 
   const method = (init.method ?? "GET").toUpperCase();
-  const wait = timeoutMs ?? (method === "GET" ? GET_TIMEOUT_MS : LONG_TIMEOUT_MS);
+  const wait =
+    timeoutMs ?? (method === "GET" ? GET_TIMEOUT_MS : LONG_TIMEOUT_MS);
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), wait);
   init.signal?.addEventListener("abort", () => controller.abort());
 
   try {
-    return await fetch(`${BASE}${path}`, { ...init, signal: controller.signal });
+    return await fetch(`${BASE}${path}`, {
+      ...init,
+      signal: controller.signal,
+    });
   } catch (error) {
     if (error instanceof ApiError) throw error;
     if (isAbortError(error)) {
-      throw new ApiError(0, "応答がありません。しばらくしてからもう一度試してください");
+      throw new ApiError(
+        0,
+        "応答がありません。しばらくしてからもう一度試してください",
+      );
     }
-    throw new ApiError(0, "接続できませんでした。ネットワークを確認してください");
+    throw new ApiError(
+      0,
+      "接続できませんでした。ネットワークを確認してください",
+    );
   } finally {
     clearTimeout(timer);
   }
 }
 
-async function request<T>(path: string, init?: RequestInit, timeoutMs?: number): Promise<T> {
+async function request<T>(
+  path: string,
+  init?: RequestInit,
+  timeoutMs?: number,
+): Promise<T> {
   const res = await send(
     path,
     {
@@ -126,7 +147,9 @@ async function request<T>(path: string, init?: RequestInit, timeoutMs?: number):
  * 16万台の環境では全件を返せない。かといって総数が分からないとページも
  * 送れないので、本体はページ、総数はヘッダに分けて受け取る。
  */
-async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: number }> {
+async function requestWithTotal<T>(
+  path: string,
+): Promise<{ items: T[]; total: number }> {
   const res = await send(path, {
     headers: { "Content-Type": "application/json" },
   });
@@ -139,7 +162,11 @@ async function requestWithTotal<T>(path: string): Promise<{ items: T[]; total: n
 }
 
 /** multipart 送信。Content-Type はブラウザに境界文字列ごと決めさせる。 */
-async function upload<T>(path: string, form: FormData, timeoutMs?: number): Promise<T> {
+async function upload<T>(
+  path: string,
+  form: FormData,
+  timeoutMs?: number,
+): Promise<T> {
   const res = await send(path, { method: "POST", body: form }, timeoutMs);
   if (!res.ok) {
     throw new ApiError(res.status, await extractError(res));
@@ -148,11 +175,14 @@ async function upload<T>(path: string, form: FormData, timeoutMs?: number): Prom
 }
 
 export function humanizeHttpError(status: number, fallback: string): string {
-  if (status === 404) return "見つかりませんでした。削除されたか、アドレスが違う可能性があります";
-  if (status === 409) return "他の操作と衝突しました。画面を読み直してからやり直してください";
+  if (status === 404)
+    return "見つかりませんでした。削除されたか、アドレスが違う可能性があります";
+  if (status === 409)
+    return "他の操作と衝突しました。画面を読み直してからやり直してください";
   if (status === 413)
-    return "ファイルが大きすぎます。CSV に分けるか、サーバの NETVISION_MAX_IMPORT_BYTES を確認してください";
-  if (status >= 500) return "サーバで問題が起きました。しばらくしてからやり直してください";
+    return "ファイルが大きすぎます。CSV に分けるか、サーバーの NETVISION_MAX_IMPORT_BYTES を確認してください";
+  if (status >= 500)
+    return "サーバーで問題が起きました。しばらくしてからやり直してください";
   return fallback;
 }
 
@@ -176,12 +206,16 @@ async function extractError(res: Response): Promise<string> {
   return humanizeHttpError(res.status, `${res.status} ${res.statusText}`);
 }
 
-function query(params: Record<string, string | number | boolean | undefined>): string {
+function query(
+  params: Record<string, string | number | boolean | undefined>,
+): string {
   const entries = Object.entries(params).filter(
     // false は「指定なし」と同じ扱い。?incomplete=false を送っても意味がない
     ([, v]) => v !== undefined && v !== "" && v !== null && v !== false,
   );
-  return entries.length ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}` : "";
+  return entries.length
+    ? `?${new URLSearchParams(entries.map(([k, v]) => [k, String(v)]))}`
+    : "";
 }
 
 export type ImportKeyField = "code" | "hostname" | "serial_number";
@@ -195,7 +229,10 @@ export interface ImportOptions {
   commit: boolean;
 }
 
-export interface ChangeFilters extends Record<string, string | number | undefined> {
+export interface ChangeFilters extends Record<
+  string,
+  string | number | undefined
+> {
   entity_type?: string;
   entity_id?: number;
   action?: string;
@@ -206,7 +243,10 @@ export interface ChangeFilters extends Record<string, string | number | undefine
   offset?: number;
 }
 
-export interface DeviceFilters extends Record<string, string | number | boolean | undefined> {
+export interface DeviceFilters extends Record<
+  string,
+  string | number | boolean | undefined
+> {
   q?: string;
   hostname?: string;
   vendor?: string;
@@ -238,25 +278,35 @@ export interface DevicePage {
 
 export const api = {
   summary: () => request<DashboardSummary>("/summary"),
-  alerts: (withinDays: number) => request<Device[]>(`/alerts${query({ within_days: withinDays })}`),
+  alerts: (withinDays: number) =>
+    request<Device[]>(`/alerts${query({ within_days: withinDays })}`),
 
-  listDevices: (filters: DeviceFilters = {}) => request<Device[]>(`/devices${query(filters)}`),
+  listDevices: (filters: DeviceFilters = {}) =>
+    request<Device[]>(`/devices${query(filters)}`),
   /** 1ページ分を、総数つきで取る。総数は X-Total-Count ヘッダで返ってくる。 */
   listDevicePage: (filters: DeviceFilters = {}) =>
     requestWithTotal<Device>(`/devices${query(filters)}`),
   getDevice: (id: number) => request<DeviceDetail>(`/devices/${id}`),
   createDevice: (body: Partial<Device>) =>
-    request<DeviceDetail>("/devices", { method: "POST", body: JSON.stringify(body) }),
+    request<DeviceDetail>("/devices", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updateDevice: (id: number, body: Partial<Device>) =>
-    request<DeviceDetail>(`/devices/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteDevice: (id: number) => request<void>(`/devices/${id}`, { method: "DELETE" }),
+    request<DeviceDetail>(`/devices/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteDevice: (id: number) =>
+    request<void>(`/devices/${id}`, { method: "DELETE" }),
 
   createContract: (deviceId: number, body: Partial<MaintenanceContract>) =>
     request<MaintenanceContract>(`/devices/${deviceId}/contracts`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  deleteContract: (id: number) => request<void>(`/contracts/${id}`, { method: "DELETE" }),
+  deleteContract: (id: number) =>
+    request<void>(`/contracts/${id}`, { method: "DELETE" }),
 
   /** 書き出しURL。一覧の絞り込みをそのまま引き継いで出力する。 */
   exportUrl: (
@@ -264,17 +314,27 @@ export const api = {
     filters: DeviceFilters = {},
     options: { includeStatus?: boolean; encoding?: "utf-8" | "shift_jis" } = {},
   ) => {
-    const params: Record<string, string | number | boolean | undefined> = { ...filters };
+    const params: Record<string, string | number | boolean | undefined> = {
+      ...filters,
+    };
     if (options.includeStatus === false) params.include_status = "false";
-    if (format === "csv" && options.encoding) params.encoding = options.encoding;
+    if (format === "csv" && options.encoding)
+      params.encoding = options.encoding;
     return `${BASE}/export/devices.${format}${query(params)}`;
   },
+
+  /** 拠点台帳の書き出し。直してそのまま取り込み直せる並びで出る */
+  siteExportUrl: (format: "csv" | "xlsx", encoding?: "utf-8" | "shift_jis") =>
+    `${BASE}/export/sites.${format}${
+      format === "csv" && encoding ? query({ encoding }) : ""
+    }`,
 
   importFields: () => request<ImportField[]>("/import/fields"),
   importTemplateUrl: `${BASE}/import/template.csv`,
 
   /** 変更履歴1件を元の値に戻す。戻したことも履歴に残る。 */
-  revertChange: (id: number) => request<ChangeLog>(`/changes/${id}/revert`, { method: "POST" }),
+  revertChange: (id: number) =>
+    request<ChangeLog>(`/changes/${id}/revert`, { method: "POST" }),
   /** 取り込み1回分をまとめて戻す。 */
   revertBatch: (batchId: string) =>
     request<{ reverted: number; skipped: { id: number; reason: string }[] }>(
@@ -290,14 +350,18 @@ export const api = {
   importLinks: (file: File, commit: boolean) => {
     const form = new FormData();
     form.append("file", file);
-    return upload<LinkImportResult>(commit ? "/import/links" : "/import/links/preview", form);
+    return upload<LinkImportResult>(
+      commit ? "/import/links" : "/import/links/preview",
+      form,
+    );
   },
   importDevices: (options: ImportOptions) => {
     const form = new FormData();
     form.append("file", options.file);
     form.append("key_field", options.keyField);
     form.append("update_existing", String(options.updateExisting));
-    if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
+    if (options.mapping)
+      form.append("mapping", JSON.stringify(options.mapping));
     return upload<ImportResult>(
       options.commit ? "/import/devices" : "/import/devices/preview",
       form,
@@ -306,13 +370,16 @@ export const api = {
   },
 
   /** エラー行だけを抽出したCSVを取得する（Blob で受けてブラウザに保存させる）。 */
-  importErrorsCsv: async (options: ImportOptions & { encoding?: "utf-8" | "shift_jis" }) => {
+  importErrorsCsv: async (
+    options: ImportOptions & { encoding?: "utf-8" | "shift_jis" },
+  ) => {
     const form = new FormData();
     form.append("file", options.file);
     form.append("key_field", options.keyField);
     form.append("update_existing", String(options.updateExisting));
     form.append("encoding", options.encoding ?? "utf-8");
-    if (options.mapping) form.append("mapping", JSON.stringify(options.mapping));
+    if (options.mapping)
+      form.append("mapping", JSON.stringify(options.mapping));
 
     const res = await send(
       "/import/devices/errors.csv",
@@ -332,15 +399,26 @@ export const api = {
   listScenarios: () => request<Scenario[]>("/scenarios"),
   getScenario: (id: number) => request<ScenarioDetail>(`/scenarios/${id}`),
   createScenario: (body: Partial<Scenario>) =>
-    request<ScenarioDetail>("/scenarios", { method: "POST", body: JSON.stringify(body) }),
-  updateScenario: (id: number, body: Partial<Scenario>) =>
-    request<ScenarioDetail>(`/scenarios/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteScenario: (id: number) => request<void>(`/scenarios/${id}`, { method: "DELETE" }),
-  generateScenarioItems: (id: number, withinDays: number) =>
-    request<ScenarioDetail>(`/scenarios/${id}/generate?within_days=${withinDays}`, {
+    request<ScenarioDetail>("/scenarios", {
       method: "POST",
+      body: JSON.stringify(body),
     }),
-  scenarioSummary: (id: number) => request<ScenarioSummary>(`/scenarios/${id}/summary`),
+  updateScenario: (id: number, body: Partial<Scenario>) =>
+    request<ScenarioDetail>(`/scenarios/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteScenario: (id: number) =>
+    request<void>(`/scenarios/${id}`, { method: "DELETE" }),
+  generateScenarioItems: (id: number, withinDays: number) =>
+    request<ScenarioDetail>(
+      `/scenarios/${id}/generate?within_days=${withinDays}`,
+      {
+        method: "POST",
+      },
+    ),
+  scenarioSummary: (id: number) =>
+    request<ScenarioSummary>(`/scenarios/${id}/summary`),
   addScenarioItem: (scenarioId: number, body: Partial<ScenarioItem>) =>
     request<ScenarioItem>(`/scenarios/${scenarioId}/items`, {
       method: "POST",
@@ -357,11 +435,16 @@ export const api = {
   // --- Config 取り込み ---
   uploadConfigs: (
     files: File[],
-    options: { deviceId?: number; applyInventory?: boolean; createMissing?: boolean } = {},
+    options: {
+      deviceId?: number;
+      applyInventory?: boolean;
+      createMissing?: boolean;
+    } = {},
   ) => {
     const form = new FormData();
     for (const file of files) form.append("files", file);
-    if (options.deviceId !== undefined) form.append("device_id", String(options.deviceId));
+    if (options.deviceId !== undefined)
+      form.append("device_id", String(options.deviceId));
     form.append("apply_inventory", String(options.applyInventory ?? false));
     form.append("create_missing", String(options.createMissing ?? false));
     return upload<IngestResult[]>("/configs/upload", form);
@@ -373,14 +456,16 @@ export const api = {
   },
   listConfigs: (deviceId?: number) =>
     request<ConfigSnapshot[]>(`/configs${query({ device_id: deviceId })}`),
-  getConfig: (id: number) => request<ConfigSnapshot & { content: string }>(`/configs/${id}`),
+  getConfig: (id: number) =>
+    request<ConfigSnapshot & { content: string }>(`/configs/${id}`),
   diffConfig: (id: number, against?: number) =>
     request<ConfigDiff>(`/configs/${id}/diff${query({ against })}`),
-  deleteConfig: (id: number) => request<void>(`/configs/${id}`, { method: "DELETE" }),
+  deleteConfig: (id: number) =>
+    request<void>(`/configs/${id}`, { method: "DELETE" }),
   listInterfaces: (deviceId: number) =>
     request<NetworkInterface[]>(`/configs/devices/${deviceId}/interfaces`),
 
-  // --- トポロジ ---
+  // --- トポロジー ---
   getTopology: (
     layer: string,
     includeRetired = false,
@@ -396,13 +481,19 @@ export const api = {
         ...filter,
       })}`,
     ),
-  getTopologyStats: (layer: string) => request<TopologyStats>(`/topology/stats${query({ layer })}`),
+  getTopologyStats: (layer: string) =>
+    request<TopologyStats>(`/topology/stats${query({ layer })}`),
   /** 論理構成の材料。相手が特定できなかったトンネルも件数で返す。 */
   getTopologyTunnels: () =>
     request<{
       tunnel_count: number;
       device_count: number;
-      unresolved: { device: string; name: string; destination: string | null; kind: string | null }[];
+      unresolved: {
+        device: string;
+        name: string;
+        destination: string | null;
+        kind: string | null;
+      }[];
     }>("/topology/tunnels"),
   savePositions: (
     layer: string,
@@ -458,21 +549,36 @@ export const api = {
       { method: "POST" },
     ),
   /** 配置を自動レイアウトに戻す。拠点や検索で絞っていればその範囲だけ。 */
-  resetPositions: (layer: string, scope: { site_id?: number; q?: string } = {}) =>
-    request<{ reset: number }>(`/topology/positions${query({ layer, ...scope })}`, {
-      method: "DELETE",
-    }),
+  resetPositions: (
+    layer: string,
+    scope: { site_id?: number; q?: string } = {},
+  ) =>
+    request<{ reset: number }>(
+      `/topology/positions${query({ layer, ...scope })}`,
+      {
+        method: "DELETE",
+      },
+    ),
   /** いま画面にある配置を起点に、マス目・揃いだけ整えて保存する。 */
   arrangePositions: (
     layer: string,
-    scope: { site_id?: number; q?: string; scope?: string; orientation?: string } = {},
+    scope: {
+      site_id?: number;
+      q?: string;
+      scope?: string;
+      orientation?: string;
+    } = {},
     positions: { device_id: number; x: number; y: number }[] = [],
   ) =>
-    request<{ arranged: number }>(`/topology/positions/arrange${query({ layer, ...scope })}`, {
-      method: "POST",
-      body: JSON.stringify({ positions }),
-    }),
-  rebuildTopology: () => request<RebuildResult>("/topology/rebuild", { method: "POST" }),
+    request<{ arranged: number }>(
+      `/topology/positions/arrange${query({ layer, ...scope })}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ positions }),
+      },
+    ),
+  rebuildTopology: () =>
+    request<RebuildResult>("/topology/rebuild", { method: "POST" }),
   listTopologyVlans: () => request<TopologyVlan[]>("/topology/vlans"),
   listTopologyVrfs: () => request<TopologyVrf[]>("/topology/vrfs"),
 
@@ -517,8 +623,10 @@ export const api = {
   portMapUrl: (options: { site_id?: number } = {}) =>
     `${BASE}/topology/ports.xlsx${query({ ...options })}`,
   // 図・結線表・ポート一覧を1つにまとめた Excel。配るのはこれ1つで済む
-  workbookUrl: (layer: string, options: { site_id?: number; scope?: string } = {}) =>
-    `${BASE}/topology/workbook.xlsx${query({ layer, ...options })}`,
+  workbookUrl: (
+    layer: string,
+    options: { site_id?: number; scope?: string } = {},
+  ) => `${BASE}/topology/workbook.xlsx${query({ layer, ...options })}`,
   designConfig: (deviceId: number) =>
     request<{
       device_id: number;
@@ -539,7 +647,11 @@ export const api = {
     a_interface?: string;
     b_interface?: string;
     label?: string | null;
-  }) => request<TopologyEdge>("/topology/links", { method: "POST", body: JSON.stringify(body) }),
+  }) =>
+    request<TopologyEdge>("/topology/links", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updateLink: (
     id: number,
     body: {
@@ -555,7 +667,8 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  deleteLink: (id: number) => request<void>(`/topology/links/${id}`, { method: "DELETE" }),
+  deleteLink: (id: number) =>
+    request<void>(`/topology/links/${id}`, { method: "DELETE" }),
 
   // --- リファレンス（型番のライフサイクル / 脆弱性）---
   listProducts: (params: { q?: string; stale_only?: string } = {}) =>
@@ -584,7 +697,10 @@ export const api = {
     const form = new FormData();
     form.append("file", file);
     if (fetchedAt) form.append("fetched_at", fetchedAt);
-    return upload<VulnerabilityImportResult>("/reference/vulnerabilities/import", form);
+    return upload<VulnerabilityImportResult>(
+      "/reference/vulnerabilities/import",
+      form,
+    );
   },
   listVulnerabilities: (params: { q?: string; affecting_only?: string } = {}) =>
     request<Vulnerability[]>(`/reference/vulnerabilities${query(params)}`),
@@ -597,8 +713,9 @@ export const api = {
   referenceFreshness: () => request<ReferenceFreshness>("/reference/freshness"),
 
   // --- ベンダードキュメント ---
-  listDocuments: (params: { q?: string; vendor?: string; doc_type?: string } = {}) =>
-    request<VendorDocument[]>(`/documents${query(params)}`),
+  listDocuments: (
+    params: { q?: string; vendor?: string; doc_type?: string } = {},
+  ) => request<VendorDocument[]>(`/documents${query(params)}`),
   createDocument: (fields: Record<string, string>, file?: File | null) => {
     const form = new FormData();
     for (const [key, value] of Object.entries(fields)) {
@@ -608,28 +725,52 @@ export const api = {
     return upload<VendorDocument>("/documents", form);
   },
   updateDocument: (id: number, body: Partial<VendorDocument>) =>
-    request<VendorDocument>(`/documents/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    request<VendorDocument>(`/documents/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   supersedeDocument: (id: number, successorId: number) =>
-    request<VendorDocument>(`/documents/${id}/supersede/${successorId}`, { method: "POST" }),
-  deleteDocument: (id: number) => request<void>(`/documents/${id}`, { method: "DELETE" }),
+    request<VendorDocument>(`/documents/${id}/supersede/${successorId}`, {
+      method: "POST",
+    }),
+  deleteDocument: (id: number) =>
+    request<void>(`/documents/${id}`, { method: "DELETE" }),
   documentDownloadUrl: (id: number) => `${BASE}/documents/${id}/download`,
   documentsForDevice: (deviceId: number) =>
     request<VendorDocumentMatch[]>(`/devices/${deviceId}/documents`),
+  /** 取り込んだ資料の中を探す。閉域なので外の検索には出さない */
+  searchDocuments: (params: { q: string; vendor?: string; model?: string }) =>
+    request<DocumentHit[]>(`/documents/search${query(params)}`),
+  /** その機器に合う資料の中だけを探す */
+  searchDocumentsForDevice: (deviceId: number, q: string) =>
+    request<DocumentHit[]>(
+      `/devices/${deviceId}/document-search${query({ q })}`,
+    ),
+  reindexDocument: (id: number) =>
+    request<VendorDocument>(`/documents/${id}/index`, { method: "POST" }),
 
   // --- Config テンプレート ---
-  listTemplates: (params: { q?: string; vendor?: string; category?: string } = {}) =>
-    request<ConfigTemplate[]>(`/config-templates${query(params)}`),
+  listTemplates: (
+    params: { q?: string; vendor?: string; category?: string } = {},
+  ) => request<ConfigTemplate[]>(`/config-templates${query(params)}`),
   createTemplate: (body: Partial<ConfigTemplate>) =>
-    request<ConfigTemplate>("/config-templates", { method: "POST", body: JSON.stringify(body) }),
+    request<ConfigTemplate>("/config-templates", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updateTemplate: (id: number, body: Partial<ConfigTemplate>) =>
     request<ConfigTemplate>(`/config-templates/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
     }),
-  deleteTemplate: (id: number) => request<void>(`/config-templates/${id}`, { method: "DELETE" }),
+  deleteTemplate: (id: number) =>
+    request<void>(`/config-templates/${id}`, { method: "DELETE" }),
   templatesForDevice: (deviceId: number) =>
     request<ConfigTemplateMatch[]>(`/devices/${deviceId}/config-templates`),
-  renderTemplate: (id: number, body: { device_id?: number; variables: Record<string, string> }) =>
+  renderTemplate: (
+    id: number,
+    body: { device_id?: number; variables: Record<string, string> },
+  ) =>
     request<RenderResult>(`/config-templates/${id}/render`, {
       method: "POST",
       body: JSON.stringify(body),
@@ -639,17 +780,36 @@ export const api = {
   listPlans: (deviceId?: number) =>
     request<ConfigPlan[]>(`/config-plans${query({ device_id: deviceId })}`),
   createPlan: (body: Record<string, unknown>) =>
-    request<ConfigPlan>("/config-plans", { method: "POST", body: JSON.stringify(body) }),
+    request<ConfigPlan>("/config-plans", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   updatePlan: (id: number, body: Partial<ConfigPlan>) =>
-    request<ConfigPlan>(`/config-plans/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deletePlan: (id: number) => request<void>(`/config-plans/${id}`, { method: "DELETE" }),
-  planOutputs: (id: number) => request<PlanOutputs>(`/config-plans/${id}/outputs`),
-  planDownloadUrl: (id: number, kind: "current" | "future" | "diff" | "rollback") =>
-    `${BASE}/config-plans/${id}/download/${kind}`,
+    request<ConfigPlan>(`/config-plans/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deletePlan: (id: number) =>
+    request<void>(`/config-plans/${id}`, { method: "DELETE" }),
+  planOutputs: (id: number) =>
+    request<PlanOutputs>(`/config-plans/${id}/outputs`),
+  draftConfig: (deviceId: number, body: { request: string; base?: string }) =>
+    request<ConfigDraft>(`/devices/${deviceId}/config-draft`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  llmStatus: () => request<LlmStatus>("/llm/status"),
+  planDownloadUrl: (
+    id: number,
+    kind: "current" | "future" | "diff" | "rollback",
+  ) => `${BASE}/config-plans/${id}/download/${kind}`,
 
   // --- 対処状況（対処漏れ防止） ---
-  syncExposures: () => request<ExposureSyncResult>("/exposures/sync", { method: "POST" }),
-  listExposures: (params: { status_filter?: string; unhandled_only?: boolean } = {}) =>
+  syncExposures: () =>
+    request<ExposureSyncResult>("/exposures/sync", { method: "POST" }),
+  listExposures: (
+    params: { status_filter?: string; unhandled_only?: boolean } = {},
+  ) =>
     request<ExposureRow[]>(
       `/exposures${query({
         status_filter: params.status_filter,
@@ -658,16 +818,22 @@ export const api = {
     ),
   exposureSummary: () => request<ExposureSummary>("/exposures/summary"),
   decideExposure: (id: number, body: Record<string, unknown>) =>
-    request<ExposureRow>(`/exposures/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+    request<ExposureRow>(`/exposures/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   verifyExposureConfig: (id: number) =>
     request<ExposureRow>(`/exposures/${id}/verify-config`, { method: "POST" }),
   fixConfig: (deviceId: number, remediationId: number) =>
-    request<FixConfig>(`/devices/${deviceId}/remediations/${remediationId}/config`),
+    request<FixConfig>(
+      `/devices/${deviceId}/remediations/${remediationId}/config`,
+    ),
   fixConfigDownloadUrl: (
     deviceId: number,
     remediationId: number,
     kind: "current" | "fixed" | "diff" | "rollback",
-  ) => `${BASE}/devices/${deviceId}/remediations/${remediationId}/config/download/${kind}`,
+  ) =>
+    `${BASE}/devices/${deviceId}/remediations/${remediationId}/config/download/${kind}`,
 
   // --- 脆弱性への対処 ---
   deviceRemediation: (deviceId: number) =>
@@ -675,8 +841,12 @@ export const api = {
   listRemediations: (cveId?: string) =>
     request<Remediation[]>(`/remediations${query({ cve_id: cveId })}`),
   createRemediation: (body: Record<string, unknown>) =>
-    request<Remediation>("/remediations", { method: "POST", body: JSON.stringify(body) }),
-  deleteRemediation: (id: number) => request<void>(`/remediations/${id}`, { method: "DELETE" }),
+    request<Remediation>("/remediations", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteRemediation: (id: number) =>
+    request<void>(`/remediations/${id}`, { method: "DELETE" }),
 
   // --- 更改支援 ---
   replacementPlan: (years = 5) =>
@@ -688,12 +858,17 @@ export const api = {
   // プレビューの初回は表の作成とデモ投入が走る。8秒だと「起動できませんでした」になる
   schemaStatus: () => request<SchemaStatus>("/schema", undefined, 25_000),
   applySchema: () => request<SchemaStatus>("/schema/apply", { method: "POST" }),
-  confirmSchema: () => request<SchemaStatus>("/schema/confirm", { method: "POST" }),
+  confirmSchema: () =>
+    request<SchemaStatus>("/schema/confirm", { method: "POST" }),
 
   listSites: () => request<Site[]>("/sites"),
   createSite: (body: Partial<Site>) =>
     request<Site>("/sites", { method: "POST", body: JSON.stringify(body) }),
   updateSite: (id: number, body: Partial<Site>) =>
-    request<Site>(`/sites/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
-  deleteSite: (id: number) => request<void>(`/sites/${id}`, { method: "DELETE" }),
+    request<Site>(`/sites/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
+  deleteSite: (id: number) =>
+    request<void>(`/sites/${id}`, { method: "DELETE" }),
 };

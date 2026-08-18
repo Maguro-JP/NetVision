@@ -57,13 +57,21 @@ TIER_ORDER: dict[DeviceType, int] = {
     DeviceType.OTHER: 7,
 }
 
-# 自動配置の間隔。機器の箱に加えて、ポート名を置く余白を見込む。
-# 広げすぎると開いた図が間延びして、構成図として読めない。
-# 箱の大きさ（_BOX_WIDTH / _DETAIL_HEIGHT）を変えたら、_min_stored_gap_* を
-# 下回らないようにここも見直すこと
-_X_SPACING = 340.0
-# 詳細箱＋すき間。_min_stored_gap_y(0,0) 以上。狭いと詳細表示で箱が重なる
-_Y_SPACING = 220.0
+# 自動配置の間隔。画面のマス目（TopologyPage.tsx の LAYOUT_GRID = 20）の
+# 整数倍にしてある。「何マス空ける」で言えないと、人が並べ直したときに
+# 自動配置と揃わない。
+_GRID = 20.0
+
+# 段と段の間（箱の下端から次の箱の上端まで）は7マス。
+# 上の機器のポート名・線の名前（備考）・下の機器のポート名の3行が縦に並び、
+# さらにラック等の枠（上下に 22 ずつ）が入っても潰れない幅。
+# 奇数マスにしてあるのは、真ん中の1マスに線の名前が来るため。
+# 箱（141）+ 7マス（140）を、マス目に乗せて 14マス
+_Y_SPACING = _GRID * 14
+
+# 横は、同じ段に並ぶ機器の間。縦ほど文字を積まないので詰められる。
+# 箱（210）+ 5マス（100）。以前は 340 で、対向が遠く離れて見えていた
+_X_SPACING = _GRID * 15
 
 # 絞り込んだときの並べ直しで、1段に並べる上限と折り返した段の間隔
 _WRAP = 6
@@ -104,7 +112,7 @@ class TopologyNodeView:
     placed: bool  # 保存済みの位置か、自動配置か
     # この機器に載っている VLAN。定義されているものと、トランクで通しているものの合計
     vlans: list[int] = field(default_factory=list)
-    vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルータ
+    vrfs: list[str] = field(default_factory=list)  # この機器に切られている仮想ルーター
     # この機器で図に出てくるポートの種類（GigabitEthernet など）。
     # 線のラベルを番号だけにしても、ここを見れば何のポートか分かるようにするため
     port_kinds: list[str] = field(default_factory=list)
@@ -377,7 +385,7 @@ def _shrink_to(graph: TopologyGraph, edges: list[TopologyEdgeView]) -> TopologyG
 def _as_l2(graph: TopologyGraph) -> TopologyGraph:
     """VLAN が載っている結線だけを残す。
 
-    物理図の WAN 線（ルータ同士で VLAN が無い）は出さない。スイッチ間の
+    物理図の WAN 線（ルーター同士で VLAN が無い）は出さない。スイッチ間の
     トランクやアクセスが残るので、「どこまで同じ VLAN が伸びているか」が読める。
 
     人が手で引いた線（manual）は、VLAN がまだ付いていなくても残す。
@@ -397,7 +405,7 @@ def _as_l2(graph: TopologyGraph) -> TopologyGraph:
 def _as_l3(graph: TopologyGraph, ports: dict[tuple[int, str], Interface]) -> TopologyGraph:
     """セグメント（L3）の結線だけを残す。
 
-    - ルータ / FW / LB どうしの物理結線
+    - ルーター / FW / LB どうしの物理結線
     - 両端のポートに IP が付いている結線（点対点のルート）
     - VRF が付いている結線
     - 人が手で引いた線（manual）
@@ -513,6 +521,8 @@ def scope_graph(
             node.peer_kind = None
         node.hidden_peers = 0
 
+    _pull_outside_closer(nodes, graph.edges)
+
     used_rank = rank if rank is not None else hierarchy_rank(graph)
     used_rank = _align_redundant_pairs(
         used_rank,
@@ -533,6 +543,141 @@ def scope_graph(
         ],
         unplaced_count=graph.unplaced_count,
         groups=graph.groups,
+    )
+
+
+#: 対向を内側の機器から離す幅。マス目2つ。
+#: 図の外の相手は箱が小さく、線も1本なので、内側どうしほど空ける必要がない。
+#: 離れていると「別の場所にある」ように見えて、かえって関係が読めない
+_OUTSIDE_GAP = _GRID * 2
+
+
+def _pull_outside_closer(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> None:
+    """図の外にいる相手（対向）の列を、内側の機器の隣まで寄せる。
+
+    対向も内側と同じ間隔で置くと、横に大きく空いて線だけが長く伸びる。
+    寄せると「この機器の向こう側」だと一目で分かる。
+
+    1台ずつ寄せるのではなく、右の対向は右の列、左の対向は左の列として
+    まとめて寄せる。個別に寄せると列が崩れ、どこまでが図の外なのか
+    分からなくなる。
+    """
+    # 人が置いた機器は動かさない。自動で寄せると、置き直した意味が無くなる
+    outside = [n for n in nodes if n.outside and not n.placed]
+    inside = [n for n in nodes if not n.outside]
+    if not outside or not inside:
+        return
+
+    top_bottom: dict[int, int] = {}
+    for edge in edges:
+        for device_id in (edge.source, edge.target):
+            top_bottom[device_id] = top_bottom.get(device_id, 0) + 1
+    width_of = {node.device_id: _box_width(top_bottom.get(node.device_id, 0)) for node in nodes}
+
+    # 寄せる先は「その対向が繋がっている機器」の端。図全体の端に合わせると、
+    # 遠くにある関係のない機器に引きずられて、対向だけが離れて見える
+    by_id = {n.device_id: n for n in nodes}
+    partners: dict[int, list[TopologyNodeView]] = {}
+    for edge in edges:
+        for a, b in ((edge.source, edge.target), (edge.target, edge.source)):
+            here, there = by_id.get(a), by_id.get(b)
+            if here is None or there is None or not here.outside or there.outside:
+                continue
+            partners.setdefault(here.device_id, []).append(there)
+
+    center = (min(n.x for n in inside) + max(n.x + width_of[n.device_id] for n in inside)) / 2
+
+    def _abreast(node: TopologyNodeView) -> bool:
+        """相手と同じ段にいるか。
+
+        段がずれている対向を横へ寄せると、線が回り込んで途中の箱を貫く。
+        真横にいる対向だけを寄せる。
+        """
+        return any(
+            abs(partner.y - node.y) <= _DETAIL_HEIGHT / 2 for partner in partners[node.device_id]
+        )
+
+    movable = [n for n in outside if partners.get(n.device_id) and _abreast(n)]
+    right = [n for n in movable if n.x >= center]
+    left = [n for n in movable if n.x < center]
+
+    def _fits(shift: float, group: list[TopologyNodeView]) -> bool:
+        """その量だけ寄せられるか。
+
+        箱に食い込まないことに加えて、相手までの線が別の箱を貫かないことを見る。
+        寄せた結果、途中の機器を線が突き抜けては読めない。
+        """
+        for node in group:
+            x = node.x - shift
+            moved = replace(node, x=x)
+            for other in inside:
+                if _boxes_touch(moved, other, width_of):
+                    return False
+            for partner in partners[node.device_id]:
+                lo = min(partner.x + width_of[partner.device_id], x)
+                hi = max(partner.x + width_of[partner.device_id], x)
+                # 線は相手と対向の間を L 字で通る。どちらの高さの帯も見る
+                bands = (
+                    (node.y, node.y + _DETAIL_HEIGHT),
+                    (partner.y, partner.y + _DETAIL_HEIGHT),
+                )
+                for other in inside:
+                    if other is partner:
+                        continue
+                    for top, bottom in bands:
+                        if other.y + _DETAIL_HEIGHT <= top or other.y >= bottom:
+                            continue
+                        if lo < other.x + width_of[other.device_id] and other.x < hi:
+                            return False
+                    # 縦に下りる部分。対向の真上・真下に箱があれば通せない
+                    if (
+                        other.x < x + width_of[node.device_id]
+                        and x < other.x + width_of[other.device_id]
+                    ):
+                        lo_y = min(partner.y, node.y)
+                        hi_y = max(partner.y, node.y) + _DETAIL_HEIGHT
+                        if other.y + _DETAIL_HEIGHT > lo_y and other.y < hi_y:
+                            return False
+        return True
+
+    # 動かすのは列ごと。位置を1つに揃えるのではなく、同じ量だけ平行に寄せる。
+    # 揃えてしまうと、横に並んでいる冗長の2台が重なる
+    if right:
+        edge_x = max(
+            partner.x + width_of[partner.device_id]
+            for node in right
+            for partner in partners[node.device_id]
+        )
+        shift = min(n.x for n in right) - (edge_x + _OUTSIDE_GAP)
+        while shift > 0 and not _fits(shift, right):
+            shift -= _GRID
+        if shift > 0:
+            for node in right:
+                node.x -= shift
+
+    if left:
+        edge_x = min(partner.x for node in left for partner in partners[node.device_id])
+        widest = max(width_of[n.device_id] for n in left)
+        shift = (edge_x - _OUTSIDE_GAP - widest) - max(n.x for n in left)
+        while shift > 0 and not _fits(-shift, left):
+            shift -= _GRID
+        if shift > 0:
+            for node in left:
+                node.x += shift
+
+
+def _boxes_touch(
+    a: TopologyNodeView, b: TopologyNodeView, width_of: dict[int, float] | None = None
+) -> bool:
+    """箱（詳細表示の大きさ）が重なるか。すき間はマス目1つ分を見る。"""
+    gap = _GRID
+    wa = (width_of or {}).get(a.device_id, _BOX_WIDTH)
+    wb = (width_of or {}).get(b.device_id, _BOX_WIDTH)
+    return (
+        a.x < b.x + wb + gap
+        and b.x < a.x + wa + gap
+        and a.y < b.y + _DETAIL_HEIGHT + gap
+        and b.y < a.y + _DETAIL_HEIGHT + gap
     )
 
 
@@ -577,7 +722,7 @@ def network_rank(db: Session) -> dict[int, int]:
 def hierarchy_rank(graph) -> dict[int, int]:
     """網全体の「上位からの遠さ」。小さいほど上位。
 
-    繋がっている本数では上下は決まらない。支社ルータは配下の拠点が多いぶん
+    繋がっている本数では上下は決まらない。支社ルーターは配下の拠点が多いぶん
     本数が多くなり、センターより上に見えてしまう。
 
     代わりに、結線の端から端を見て上を決める。相手が多い（星型）ときは
@@ -2235,15 +2380,15 @@ def reset_positions(
 
 
 #: 人が図を揃えるときのマス目。画面のグリッド・ドラッグの吸着と同じ値。
-LAYOUT_GRID = 40.0
-#: この距離以内なら同じ段・同じ列とみなして揃える（マス目1つ弱）
+LAYOUT_GRID = _GRID
+#: この距離以内なら同じ段・同じ列とみなして揃える（マス目2つ弱）
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
-#: 箱＋ポート名が両側に出るすき間。40px だと Eth / bond が箱の間で潰れる
-_MIN_GAP_X = 340.0
-#: 詳細表示の箱＋すき間。160 だと CLEAR を上げても列ずれの対が食い込む
-_MIN_GAP_Y = 216.0
+#: 横に並ぶ機器の最小のすき間。自動配置の間隔と同じにして、整頓しても間隔が変わらない
+_MIN_GAP_X = _X_SPACING
+#: 縦に並ぶ機器の最小のすき間。ポート名・線の名前・ポート名の3行が入る幅
+_MIN_GAP_Y = _Y_SPACING
 
 
 def _snap_to_grid(value: float, grid: float = LAYOUT_GRID) -> float:
@@ -2746,7 +2891,7 @@ class VrfView:
 
 
 def vrf_summary(db: Session) -> list[VrfView]:
-    """機器の中に切られた仮想ルータを、名前ごとにまとめて返す。
+    """機器の中に切られた仮想ルーターを、名前ごとにまとめて返す。
 
     同じ VRF 名が複数台にあるのが普通（拠点をまたいで同じ VRF を延ばす）ので、
     名前を軸にする。RD が機器ごとに食い違っていれば印を付ける。

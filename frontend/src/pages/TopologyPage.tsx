@@ -61,6 +61,7 @@ import {
   type EditHistory,
 } from "./topologyEditHistory";
 import { groupBoxes, groupDepth, updateGroupBounds } from "./topologyGroups";
+import { restickEdges } from "./topologyRestick";
 
 const NODE_TYPES = { device: DeviceNode, group: GroupFrame };
 const EDGE_TYPES = { port: PortLabeledEdge };
@@ -79,7 +80,16 @@ const VIEW_KEY = "netvision.topology.view";
 const WIDE_LIMIT = 40;
 
 /** 配置のマス目。画面の線・自動配置・整頓で使う。手で置くときは吸着しない。 */
-const LAYOUT_GRID = 40;
+/**
+ * マス目の大きさ。
+ *
+ * 図面のマス目に国際規格はない。実務で見かけるのは Visio の既定（1/4インチ）と、
+ * 画面まわりで広く使われている 8 の倍数の2つ。ここでは 20px にしてある。
+ * 箱（210×141）と段の間隔がマス目の整数倍で表せて、ポート名1行（18px）より
+ * 少し大きい、という条件で決めた。40 だと段の間隔が半端な倍数になり、
+ * 「何マス空ける」で揃えられなかった。
+ */
+const LAYOUT_GRID = 20;
 
 export function snapToGrid(value: number): number {
   return Math.round(value / LAYOUT_GRID) * LAYOUT_GRID;
@@ -135,7 +145,7 @@ const LAYERS = [
   {
     value: "l3",
     label: "L3 (セグメント)",
-    hint: "ルータ同士や IP 付きの結線。ルーティングの段",
+    hint: "ルーター同士や IP 付きの結線。ルーティングの段",
   },
 ];
 
@@ -883,7 +893,7 @@ function toFlow(
 }
 
 /**
- * 表示の切り替えで、人が動かした位置をサーバの古い値で上書きしない。
+ * 表示の切り替えで、人が動かした位置をサーバーの古い値で上書きしない。
  *
  * 編集のオンオフやポート名の出し方を変えるたびに、取得済みのグラフから
  * ノードを作り直していた。未保存の移動がそこで消え、「突然ロールバックした」
@@ -922,6 +932,30 @@ const SIDE_LABEL: Record<string, string> = {
 };
 
 /** 線をどの辺から出すかを選ぶ。自動に戻せることが大事（間違えても直せる）。 */
+/** 俯瞰図の1台分。枠（group）は描かない。 */
+function MiniDevice({
+  x,
+  y,
+  width,
+  height,
+  className,
+  color,
+  id,
+}: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  className?: string;
+  color?: string;
+  id: string;
+}) {
+  if (id.startsWith("g-")) return null;
+  return (
+    <rect x={x} y={y} width={width} height={height} className={className} fill={color} rx={4} />
+  );
+}
+
 function SidePicker({
   label,
   value,
@@ -995,6 +1029,15 @@ function TopologyEditor() {
   const [revision, setRevision] = useState(0);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData | GroupFrameData>>([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
+  // いまの中身を、rAF の中など「あとから」参照するための控え
+  const nodesRef = useRef<Node<DeviceNodeData | GroupFrameData>[]>([]);
+  nodesRef.current = nodes;
+  const edgesRef = useRef<Edge[]>([]);
+  edgesRef.current = edges;
+  const graphRef = useRef<TopologyGraph | null>(null);
+  const simpleRef = useRef(false);
+  simpleRef.current = simple;
+
   const [dirty, setDirty] = useState(false);
   const dirtyRef = useRef(false);
   dirtyRef.current = dirty;
@@ -1062,6 +1105,7 @@ function TopologyEditor() {
 
   useEffect(() => {
     if (!graph) return;
+    graphRef.current = graph;
     const flow = toFlow(graph, simple, { portStyle, alongLine, editable, colors });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
@@ -1122,7 +1166,7 @@ function TopologyEditor() {
     }
     setEdges(flow.edges);
     // 未保存の移動は消さない。以前はここで dirty を落としていたため、
-    // 表示を切り替えただけで「保存済み」に見え、位置もサーバの古い値に戻った
+    // 表示を切り替えただけで「保存済み」に見え、位置もサーバーの古い値に戻った
   }, [
     graph,
     selectedVlans,
@@ -1520,9 +1564,16 @@ function TopologyEditor() {
           rememberHistory(pushStep(history, capturePositions(next)));
           return next;
         });
+        // 動かし終わったら、線の付き場所を今の位置で付け直す。決まった点に
+        // 吸い付いたままだと、箱の裏から線が出たり遠回りしたりする
+        const graph = graphRef.current;
+        if (!graph) return;
+        const stuck = restickEdges(nodesRef.current, edgesRef.current, graph, simpleRef.current);
+        setNodes(stuck.nodes);
+        setEdges(stuck.edges);
       });
     },
-    [onNodesChange, rememberHistory, setNodes],
+    [onNodesChange, rememberHistory, setNodes, setEdges],
   );
 
   // 入力欄にいるときはショートカットを奪わない
@@ -1860,7 +1911,7 @@ function TopologyEditor() {
               className="primary"
               disabled={!dirty || save.isPending}
               onClick={() => save.mutate()}
-              title="編集した配置をサーバに残します"
+              title="編集した配置をサーバーに残します"
             >
               {dirty ? "配置を保存" : "保存済み"}
             </button>
@@ -2097,7 +2148,7 @@ function TopologyEditor() {
               <>
                 <p>L3 の結線がありません。</p>
                 <p className="muted">
-                  ルータ同士の結線や、両端に IP が付いたポートがあるとここに出ます。
+                  ルーター同士の結線や、両端に IP が付いたポートがあるとここに出ます。
                 </p>
               </>
             ) : layer === "logical" ? (
@@ -2114,10 +2165,51 @@ function TopologyEditor() {
                   )}
                 </p>
               </>
+            ) : (stats?.device_count ?? 0) > 0 ? (
+              <>
+                {/* 台帳に機器があるのに図が空なら、絞り込みが効いている。
+                    「機器を置いてください」とだけ言われても、何が起きているのか
+                    分からない。効いている条件をそのまま出す */}
+                <p>
+                  いまの絞り込みでは、出せる機器がありません（台帳には{" "}
+                  {stats?.device_count.toLocaleString()} 台あります）。
+                </p>
+                <p className="muted">
+                  効いている条件:{" "}
+                  {[
+                    selectedSite !== ""
+                      ? `拠点「${sites?.find((s) => s.id === selectedSite)?.name ?? selectedSite}」`
+                      : null,
+                    appliedSearch ? `探す言葉「${appliedSearch}」` : null,
+                    selectedVlans.length > 0 ? `VLAN ${selectedVlans.join(", ")}` : null,
+                    selectedVrf ? `VRF「${selectedVrf}」` : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" / ") || "なし（撤去済みの機器は図に出しません）"}
+                </p>
+                <div className="actions">
+                  <button
+                    onClick={() => {
+                      setSelectedSite("");
+                      setSearch("");
+                      setAppliedSearch("");
+                      setSelectedVlans([]);
+                      setSelectedVrf("");
+                    }}
+                  >
+                    絞り込みを外して全部見る
+                  </button>
+                </div>
+              </>
             ) : (
               <>
-                表示できる機器がありません。編集中に「機器を置く」から図へ枠を置けます。台帳から
-                登録しても出ます。
+                <p>台帳に機器がありません。</p>
+                <p className="muted">
+                  「台帳の取り込み」で機器一覧の CSV を入れるか、「Config の取り込み」で
+                  Config を読ませると出ます。結線表だけ先に入れておくこともできます
+                  （機器を登録した時点で線が繋がります）。編集中なら「機器を置く」から
+                  図の上に直接置くこともできます。
+                </p>
               </>
             )}
           </div>
@@ -2166,7 +2258,14 @@ function TopologyEditor() {
             {/* React Flow が持っている鍵は隠す。こちらの「編集する」と連動しておらず、
                 押すと表示だけロックが外れて、二重の鍵があるように見えてしまう */}
             <Controls showInteractive={false} />
-            <MiniMap pannable zoomable className="topo-minimap" />
+            {/* 俯瞰図に出すのは機器だけ。ラックや部屋の枠まで塗ると、
+                大きな四角がいくつも並んで、機器の散らばりが読めなくなる */}
+            <MiniMap
+              pannable
+              zoomable
+              className="topo-minimap"
+              nodeComponent={MiniDevice}
+            />
             {selectedDevice && !selectedGroup && !selectedEdge && (
               <Panel position="top-right" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
@@ -2418,7 +2517,7 @@ function TopologyEditor() {
         {(vrfs ?? []).length > 0 && (
           <div className="vlan-filter">
             <div className="vlan-filter-head">
-              <strong>VRF（仮想ルータ）で絞り込む</strong>
+              <strong>VRF（仮想ルーター）で絞り込む</strong>
               <span className="muted">同じ線で繋がって見えても、VRF が違えば通信できません</span>
               <select value={selectedVrf} onChange={(e) => setSelectedVrf(e.target.value)}>
                 <option value="">すべて</option>

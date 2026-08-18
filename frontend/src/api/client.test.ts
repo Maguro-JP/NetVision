@@ -11,7 +11,7 @@ describe("エラーの見せ方", () => {
     expect(humanizeHttpError(413, "413")).toMatch(/大きすぎ/);
   });
 
-  it("サーバ障害は待ってやり直す案内にする", () => {
+  it("サーバー障害は待ってやり直す案内にする", () => {
     expect(humanizeHttpError(500, "500")).toMatch(/しばらく/);
   });
 
@@ -20,7 +20,7 @@ describe("エラーの見せ方", () => {
     expect(isRetryableError(new ApiError(404, "missing"))).toBe(false);
   });
 
-  it("通信切れとサーバ障害はもう一度試せる", () => {
+  it("通信切れとサーバー障害はもう一度試せる", () => {
     expect(isRetryableError(new ApiError(0, "timeout"))).toBe(true);
     expect(isRetryableError(new ApiError(503, "busy"))).toBe(true);
   });

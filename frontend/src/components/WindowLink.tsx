@@ -24,6 +24,19 @@ export function deviceWindow(deviceId: number | string): string {
   return `netvision-device-${deviceId}`;
 }
 
+/**
+ * 別ウィンドウで開いたことを、開いた先の画面に伝える印。
+ *
+ * 1台を見るためだけの窓にメニューを出しても、押す相手がいない。幅も取る。
+ * 印は URL に載せる。窓の名前だけで判断すると、あとで人がその窓の中を
+ * 動き回ったときに戻せなくなる。
+ */
+export const WINDOW_FLAG = "w";
+
+export function asWindowUrl(to: string): string {
+  return to.includes("?") ? `${to}&${WINDOW_FLAG}=1` : `${to}?${WINDOW_FLAG}=1`;
+}
+
 export interface WindowLinkProps {
   /** 開く先。アプリ内のパス */
   to: string;
@@ -44,9 +57,11 @@ export function openInWindow(to: string, name: string, width = 1400, height = 90
     return;
   }
   if (target === "tab") {
+    // タブは元の画面と並ぶので、メニューはそのまま出す
     window.open(to, "_blank", "noopener,noreferrer");
     return;
   }
+  to = asWindowUrl(to);
   const w = Math.min(width, window.screen.availWidth);
   const h = Math.min(height, window.screen.availHeight);
   // 同じ名前のウィンドウがあればそれを使う。押すたびに窓が増えない

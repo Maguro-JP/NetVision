@@ -6,7 +6,7 @@ from tests.conftest import API
 CSV_HEADER = "ホスト名,メーカー,型番,種別,状態,OSバージョン,設置場所,導入年月日,サポート終了日,保守ベンダー,保守開始日,保守終了日,保守年額\n"  # noqa: E501
 CSV_ROWS = (
     'core-sw-01,Cisco,C9500-40X,スイッチ,稼働中,17.09.04a,本社DC,2021/4/1,2030/2/25,ネットワン,2024/4/1,2027/3/31,"480,000"\n'  # noqa: E501
-    "edge-rt-01,Juniper,MX204,ルータ,稼働中,21.4R3-S5,本社DC,2019年10月1日,2026/9/19,Juniper Care,2023/10/1,2026/10/4,720000\n"  # noqa: E501
+    "edge-rt-01,Juniper,MX204,ルーター,稼働中,21.4R3-S5,本社DC,2019年10月1日,2026/9/19,Juniper Care,2023/10/1,2026/10/4,720000\n"  # noqa: E501
 )
 
 
@@ -120,9 +120,17 @@ def test_row_errors_block_the_whole_import(client):
 
 
 def test_missing_required_column_is_reported(client):
-    body = upload(client, "ホスト名,設置場所\ncore-sw-01,本社DC\n").json()
-    assert body["missing_required_fields"] == ["vendor", "model"]
+    """ホスト名が無いファイルは、どの機器の行か決められない。"""
+    body = upload(client, "ベンダー,型番\nCisco,C9500-40X\n").json()
+    assert body["missing_required_fields"] == ["hostname"]
     assert body["rows"] == []
+
+
+def test_vendor_and_model_are_not_required(client):
+    """ベンダーと型番は Config を読ませれば埋まる。台帳を起こす時点では要らない。"""
+    body = upload(client, "ホスト名,拠点名\ncore-sw-01,本社DC\n").json()
+    assert body["missing_required_fields"] == []
+    assert [r["action"] for r in body["rows"]] == ["create"]
 
 
 def test_duplicate_keys_in_one_file_are_rejected(client):
@@ -193,8 +201,9 @@ def test_template_includes_management_code_column(client):
     assert res.status_code == 200
     lines = res.text.lstrip("﻿").strip().splitlines()
     headers = lines[0].split(",")
-    assert headers[0] == "内部ID"
-    assert headers[1] == "管理ID"
+    # 人が読む列から並べる。内部IDは戻すとき用なので最後
+    assert headers[0] == "管理ID"
+    assert headers[-1] == "内部ID（書き出した行を戻すとき用）"
     assert "ホスト名" in headers
     # サンプル行は列とずれない（管理IDに値が入っている）
     values = dict(zip(headers, lines[1].split(","), strict=False))
@@ -250,7 +259,7 @@ def test_fields_and_template_endpoints(client):
     assert {f["name"] for f in fields} >= {"hostname", "vendor", "model", "contract_end_date"}
 
     required = {f["name"] for f in fields if f["required"]}
-    assert required == {"hostname", "vendor", "model"}
+    assert required == {"hostname"}
     # 機器IDは任意。新しく登録する行では空のままでよい
     assert "device_id" in {f["name"] for f in fields}
     assert "device_id" not in required
@@ -497,7 +506,7 @@ def test_large_preview_returns_a_sample_not_every_row(client):
     for i in range(total):
         # 先頭付近にエラーを混ぜる。サンプルにエラーが残ることを見る
         if i in (3, 7):
-            lines.append(f"bad-{i:04d},Cisco,")  # 型番欠落
+            lines.append(",Cisco,C9300")  # ホスト名欠落
         else:
             lines.append(f"sw-{i:04d},Cisco,C9300")
 
@@ -511,3 +520,89 @@ def test_large_preview_returns_a_sample_not_every_row(client):
     assert [r["action"] for r in body["rows"][:2]] == ["error", "error"]
     # プレビューなので台帳は空のまま
     assert client.get(f"{API}/devices").json() == []
+
+
+def test_type_and_status_show_their_choices(client):
+    """種別に何を書けばよいのかを、取り込み画面から確かめられること。"""
+    fields = {f["name"]: f for f in client.get(f"{API}/import/fields").json()}
+    assert "スイッチ" in fields["device_type"]["choices"]
+    assert "ルーター" in fields["device_type"]["choices"]
+    assert "稼働中" in fields["status"]["choices"]
+    # 自由入力の項目に候補は出さない
+    assert fields["hostname"]["choices"] == []
+
+
+def test_site_falls_back_to_the_code_when_there_is_no_name(client):
+    """拠点は名前で呼ぶ。名前が無いときは拠点IDをそのまま名前にする。
+
+    どちらも空だと「拠点が入っていない機器」と見分けが付かない。
+    """
+    upload(client, "ホスト名,拠点名,拠点ID（任意）\na-sw,本社DC,TOK-DC1\n", path="/import/devices")
+    upload(client, "ホスト名,拠点ID（任意）\nb-sw,OSA-DC9\n", path="/import/devices")
+    upload(client, "ホスト名,拠点名\nc-sw,名古屋営業所\n", path="/import/devices")
+
+    sites = {d["hostname"]: d["site_name"] for d in client.get(f"{API}/devices").json()}
+    assert sites["a-sw"] == "本社DC"
+    assert sites["b-sw"] == "OSA-DC9"
+    assert sites["c-sw"] == "名古屋営業所"
+
+
+def test_a_device_can_be_registered_with_only_a_hostname(client):
+    """ベンダーも型番も無い行が、実際に登録できること（下書きの機器）。"""
+    body = upload(client, "ホスト名\nnew-sw-01\n", path="/import/devices").json()
+    assert body["created"] == 1
+    device = client.get(f"{API}/devices").json()[0]
+    assert device["hostname"] == "new-sw-01"
+    assert device["vendor"] == ""
+    # 未入力は一覧の「情報不足」で追える
+    assert "メーカー" in device["missing_fields"]
+
+
+def test_a_site_made_from_its_code_gets_its_name_later(client):
+    """拠点IDだけで起こした拠点に、後から名前の入った台帳が来たら名前を入れる。"""
+    upload(client, "ホスト名,拠点ID（任意）\na-sw,TOK-DC1\n", path="/import/devices")
+    sites = client.get(f"{API}/sites").json()
+    assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "TOK-DC1")]
+
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\na-sw,東京データセンター,TOK-DC1\n",
+        path="/import/devices",
+    )
+    sites = client.get(f"{API}/sites").json()
+    assert [(s["code"], s["name"]) for s in sites] == [("TOK-DC1", "東京データセンター")]
+
+
+def test_a_site_name_can_be_fixed_by_importing_with_its_code(client):
+    """拠点IDが同じなら同じ拠点。名前が違えば直す。
+
+    打ち間違いを直す手段が拠点の台帳しか無いと、機器の台帳を直しても
+    直らない、という行き止まりになる。
+    """
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\nb-sw,大阪支者,OSA-1\n",
+        path="/import/devices",
+    )
+    upload(
+        client,
+        "ホスト名,拠点名,拠点ID（任意）\nb-sw,大阪支社,OSA-1\n",
+        path="/import/devices",
+    )
+    sites = client.get(f"{API}/sites").json()
+    assert [(s["code"], s["name"]) for s in sites] == [("OSA-1", "大阪支社")]
+    devices = client.get(f"{API}/devices").json()
+    assert devices[0]["site_name"] == "大阪支社"
+
+
+def test_without_a_code_a_new_name_means_a_new_site(client):
+    """拠点IDが無いときは、名前がその拠点そのもの。別の名前は別の拠点になる。
+
+    機器は新しい拠点へ移る。元の拠点は残るので、要らなければ拠点の台帳で消す。
+    """
+    upload(client, "ホスト名,拠点名\nc-sw,本社DG\n", path="/import/devices")
+    upload(client, "ホスト名,拠点名\nc-sw,本社DC\n", path="/import/devices")
+    devices = client.get(f"{API}/devices").json()
+    assert devices[0]["site_name"] == "本社DC"
+    names = {s["name"] for s in client.get(f"{API}/sites").json()}
+    assert names == {"本社DC", "本社DG"}

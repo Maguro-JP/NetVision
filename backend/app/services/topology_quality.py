@@ -118,8 +118,18 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
                 findings.append(Finding(False, "uplink_not_row", "上位の冗長が同じ段に無い"))
 
     if down_peers:
-        right = max(n.x for n in inside)
-        if all(n.x > right + 80 for n in down_peers):
+        # 「右の列にある」は、同じ段の機器より右にある、という意味。
+        # 図全体の右端と比べると、離れた段にいる機器に引きずられ、対向を
+        # 隣へ寄せられなくなる（寄せた方が、どの機器の先かを読みやすい）
+        def _clear_of_its_row(peer) -> bool:
+            same_row = [n for n in inside if abs(n.y - peer.y) < 160]
+            edge = max((n.x for n in same_row), default=None)
+            if edge is None:
+                # 同じ段に内側の機器がいないなら、混ざりようがない
+                return True
+            return peer.x > edge + 20
+
+        if all(_clear_of_its_row(n) for n in down_peers):
             findings.append(Finding(True, "peers_right", "配下拠点が右の列にある"))
         else:
             findings.append(Finding(False, "peers_not_right", "配下拠点が右の列に無い"))
@@ -399,11 +409,20 @@ def _svg_polylines(svg: str) -> list[list[tuple[float, float]]]:
 
 
 def _svg_boxes(svg: str) -> list[tuple[float, float, float, float]]:
+    """機器の箱。ラック・部屋の枠（class="group-frame"）は含めない。
+
+    枠は機器を囲むものなので、そこへ線が入るのは当たり前で、貫きではない。
+    枠まで数えると、枠を1つ置いただけで図が「線が箱を貫いている」になる。
+    """
     boxes: list[tuple[float, float, float, float]] = []
     for match in re.finditer(
-        r'<rect x="([\d.]+)" y="([\d.]+)" width="([\d.]+)" height="([\d.]+)"', svg
+        r'<rect (?:class="([^"]*)" )?x="([\d.]+)" y="([\d.]+)" '
+        r'width="([\d.]+)" height="([\d.]+)"',
+        svg,
     ):
-        x, y, w, h = (float(match.group(i)) for i in range(1, 5))
+        if (match.group(1) or "") == "group-frame":
+            continue
+        x, y, w, h = (float(match.group(i)) for i in range(2, 6))
         if w > 80 and h > 30:
             boxes.append((x, y, x + w, y + h))
     return boxes

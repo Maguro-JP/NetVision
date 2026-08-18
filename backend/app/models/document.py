@@ -10,6 +10,7 @@ from sqlalchemy import (
     DateTime,
     Enum,
     ForeignKey,
+    Integer,
     String,
     Text,
     func,
@@ -86,10 +87,46 @@ class Document(Base):
     )
     superseded_by: Mapped[Document | None] = relationship(remote_side="Document.id")
 
+    # 中身を章に切った日時。取り込んだが読めなかった資料を見分ける
+    indexed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), default=None)
+    index_note: Mapped[str | None] = mapped_column(String(300), default=None)
+
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
     )
+    sections: Mapped[list[DocumentSection]] = relationship(
+        back_populates="document", cascade="all, delete-orphan", order_by="DocumentSection.position"
+    )
+
+
+class DocumentSection(Base):
+    """資料の1章分。
+
+    ファイルを置いておくだけでは「この機種のこのコマンドはどう書くのか」を
+    引けない。渡された資料を章に切り、章ごとに出てくるコマンドを抜き出して
+    おくと、機器・型番から辿れる。
+
+    本文もそのまま持つ。閉域では外の検索に出せないので、探すのはこの表の中で
+    完結させる必要がある。
+    """
+
+    __tablename__ = "document_sections"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    document_id: Mapped[int] = mapped_column(
+        ForeignKey("documents.id", ondelete="CASCADE"), index=True
+    )
+    position: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    heading: Mapped[str | None] = mapped_column(String(400), default=None)
+    page: Mapped[int | None] = mapped_column(Integer, default=None)
+    body: Mapped[str] = mapped_column(Text, default="", server_default="")
+    #: その章に出てくるコマンド。改行区切り
+    commands: Mapped[str] = mapped_column(Text, default="", server_default="")
+
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+    document: Mapped[Document] = relationship(back_populates="sections")
 
 
 class TemplateCategory(enum.StrEnum):
