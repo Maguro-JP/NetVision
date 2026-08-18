@@ -577,19 +577,27 @@ button:disabled {
 /* 対向（絞り込みの外）。見たいのは絞り込んだ側なので、相手は輪郭を破線にして
    控えめに出す。中身は名前と拠点だけで、先はその拠点の図で追う */
 .topo-node.outside {
-  border: 1px dashed var(--border);
-  border-left: 4px dashed var(--border);
-  background: transparent;
-  box-shadow: none;
-  opacity: 0.85;
+  /* 破線で「図の外」を表すが、薄さでは表さない。背景に沈むと読めず、
+     どこに繋がっているのかが分からなくなる */
+  border: 1px dashed var(--muted);
+  border-left: 4px dashed var(--muted);
+  background: var(--panel);
+  box-shadow: 0 1px 4px rgb(0 0 0 / 35%);
   cursor: pointer;
 }
 .topo-node.outside:hover {
   border-color: var(--accent);
-  opacity: 1;
 }
 .topo-node.selected {
   outline: 2px solid var(--accent);
+}
+/* React Flow は枠の入れ物にも既定で背景と枠線と余白を持たせる。こちらが描く枠と
+   二重になり、5px ずれた四角が背後に見えていた。入れ物は透明にして、枠は1つにする */
+.react-flow__node-group {
+  background: transparent;
+  border: none;
+  padding: 0;
+  border-radius: 10px;
 }
 /* 機器を囲む枠。図の背景に沈まないよう、輪郭と見出しをはっきり出す */
 .topo-group {
@@ -838,8 +846,15 @@ button:disabled {
   border-bottom: 1px solid var(--border);
   fill: var(--text);
 }
+/* 俯瞰図。薄いと機器の散らばりが読めないので、枠と機器をはっきり出す */
 .topo-minimap {
   background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+}
+.topo-minimap .react-flow__minimap-node {
+  fill: var(--accent);
+  stroke: none;
 }
 
 .topo-legend {

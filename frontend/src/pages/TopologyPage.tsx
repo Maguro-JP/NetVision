@@ -17,25 +17,52 @@ import {
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent,
+} from "react";
 import { Link as RouterLink, useSearchParams } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { DeviceType, TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
+import type {
+  DeviceType,
+  TopologyEdge,
+  TopologyGraph,
+  TopologyNode,
+} from "../api/types";
 import DeviceNode, {
   anchorId,
   type DeviceNodeData,
   type Side,
 } from "../components/DeviceNode";
-import GroupFrame, { groupNodeId, type GroupFrameData } from "../components/GroupFrame";
-import WindowLink, { deviceWindow, openInWindow } from "../components/WindowLink";
+import GroupFrame, {
+  groupNodeId,
+  type GroupFrameData,
+} from "../components/GroupFrame";
+import WindowLink, {
+  deviceWindow,
+  openInWindow,
+} from "../components/WindowLink";
 import PortLabeledEdge, {
   type PortEdgeData,
   type WireBox,
   facesForEdge,
 } from "../components/PortLabeledEdge";
-import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, SEVERITY_LABEL } from "../lib/format";
-import { MEDIA_LABEL, mediaOf, type Media, type PortStyle } from "../lib/portlabel";
+import {
+  DEVICE_STATUS_LABEL,
+  DEVICE_TYPE_LABEL,
+  SEVERITY_LABEL,
+} from "../lib/format";
+import {
+  MEDIA_LABEL,
+  mediaOf,
+  type Media,
+  type PortStyle,
+} from "../lib/portlabel";
 import {
   DEFAULT_TYPE_COLOR,
   PLANE_LABEL,
@@ -68,8 +95,16 @@ const EDGE_TYPES = { port: PortLabeledEdge };
 
 const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
   { value: "short", label: "略記", hint: "GigabitEthernet1/0/24 → Gi1/0/24" },
-  { value: "number", label: "番号だけ", hint: "種別は色で表します（Gi は青、Te は緑）" },
-  { value: "full", label: "そのまま", hint: "Config に書かれている名前をそのまま出します" },
+  {
+    value: "number",
+    label: "番号だけ",
+    hint: "種別は色で表します（Gi は青、Te は緑）",
+  },
+  {
+    value: "full",
+    label: "そのまま",
+    hint: "Config に書かれている名前をそのまま出します",
+  },
 ];
 
 /** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
@@ -96,7 +131,10 @@ export function snapToGrid(value: number): number {
 }
 
 /** 図をクリックした位置を、箱の左上にする。手置きはマス目に吸着しない。 */
-export function placementFromClick(x: number, y: number): { x: number; y: number } {
+export function placementFromClick(
+  x: number,
+  y: number,
+): { x: number; y: number } {
   return { x, y };
 }
 
@@ -207,7 +245,13 @@ const LABEL_PITCH = 18;
 const BUNDLE_LABEL_W = 56;
 
 export const DETAIL_HEIGHT =
-  PAD_Y + TOP_ROW + HEAD_ROW + SUB_ROW + BODY_ROW * BODY_ROWS + PORTS_ROW + FOOT_ROW;
+  PAD_Y +
+  TOP_ROW +
+  HEAD_ROW +
+  SUB_ROW +
+  BODY_ROW * BODY_ROWS +
+  PORTS_ROW +
+  FOOT_ROW;
 
 /**
  * 対向（絞り込みの外）の箱の高さ。中身は名前と拠点名の2行だけ。
@@ -230,7 +274,10 @@ export function widthFor(topBottomCount: number): number | undefined {
  *
  * 右辺・左辺に対向が何本も付くとき、幅を広げても縦の間隔は増えない。
  * 接続点とポート名が被るので、4本を超えたら1本あたり 22px 高くする。 */
-export function heightFor(leftRightCount: number, base: number = DEFAULT_HEIGHT): number {
+export function heightFor(
+  leftRightCount: number,
+  base: number = DEFAULT_HEIGHT,
+): number {
   // 3本でも辺に余裕が要る。2本まで既定、3本目から伸ばす（backend と同じ）。
   if (leftRightCount <= 2) return base;
   return Math.min(480, base + (leftRightCount - 2) * 22);
@@ -263,8 +310,7 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
  * 間の文字はそのまま比べると、機器の面板と同じ順になる。
  */
 export function comparePortNames(a: string, b: string): number {
-  const parts = (name: string) =>
-    name.toLowerCase().match(/\d+|\D+/g) ?? [];
+  const parts = (name: string) => name.toLowerCase().match(/\d+|\D+/g) ?? [];
   const left = parts(a);
   const right = parts(b);
   for (let i = 0; i < Math.max(left.length, right.length); i += 1) {
@@ -349,7 +395,9 @@ export function assignAnchors(
       sourceBox: displayBox(edge.source),
       targetBox: displayBox(edge.target),
       obstacles: graph.nodes
-        .filter((n) => n.device_id !== edge.source && n.device_id !== edge.target)
+        .filter(
+          (n) => n.device_id !== edge.source && n.device_id !== edge.target,
+        )
         .map((n) => displayBox(n.device_id)),
       sourceSide: (edge.source_side as Side | null) ?? null,
       targetSide: (edge.target_side as Side | null) ?? null,
@@ -385,9 +433,15 @@ export function assignAnchors(
     const device = Number(key.split(":")[0]);
     const side = key.split(":")[1] as Side;
     if (side === "left" || side === "right") {
-      busiestLR.set(device, Math.max(busiestLR.get(device) ?? 0, members.length));
+      busiestLR.set(
+        device,
+        Math.max(busiestLR.get(device) ?? 0, members.length),
+      );
     } else {
-      busiestTB.set(device, Math.max(busiestTB.get(device) ?? 0, members.length));
+      busiestTB.set(
+        device,
+        Math.max(busiestTB.get(device) ?? 0, members.length),
+      );
     }
   }
   const busiest = new Map<number, number>();
@@ -402,7 +456,10 @@ export function assignAnchors(
   for (const node of graph.nodes) {
     // 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
     const base = !simple && node.outside ? OUTSIDE_HEIGHT : baseHeight;
-    heights.set(node.device_id, heightFor(busiestLR.get(node.device_id) ?? 0, base));
+    heights.set(
+      node.device_id,
+      heightFor(busiestLR.get(node.device_id) ?? 0, base),
+    );
   }
 
   const faceHeight = (deviceId: number) => heights.get(deviceId) ?? baseHeight;
@@ -421,7 +478,8 @@ export function assignAnchors(
       return (other.y + DEFAULT_HEIGHT / 2 - hereTop) / height;
     }
     const width = faceWidth(end.device);
-    const hereLeft = here.x - shiftFor(widthFor(busiestTB.get(end.device) ?? 0));
+    const hereLeft =
+      here.x - shiftFor(widthFor(busiestTB.get(end.device) ?? 0));
     return (other.x + DEFAULT_WIDTH / 2 - hereLeft) / width;
   };
 
@@ -532,7 +590,10 @@ export function assignAnchors(
 
   const assigned = new Map<string, string>(); // 辺 + 機器 → 引き出し口
   const flipped = new Set<string>(); // ポート名を逃がす端（辺 + 機器）
-  const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
+  const faceHandles = new Map<
+    number,
+    { id: string; side: Side; t: number }[]
+  >();
   for (const [, members] of groups) {
     const side = members[0].side;
     const device = members[0].device;
@@ -543,7 +604,9 @@ export function assignAnchors(
     };
     members.sort((a, b) => along(a.other) - along(b.other) || inFace(a, b));
     const facePx =
-      side === "left" || side === "right" ? faceHeight(device) : faceWidth(device);
+      side === "left" || side === "right"
+        ? faceHeight(device)
+        : faceWidth(device);
     const spaced = spaceTs(
       members.map((end) => idealT(end)),
       members.map((end) => end.other),
@@ -570,7 +633,9 @@ export function assignAnchors(
     // 3本以上を挟むと真ん中の行き場が無く、釣り合いも崩れるので全部下に出す。
     const sameP = new Map<number, (typeof members)[number][]>();
     for (const end of members) {
-      (sameP.get(end.other) ?? sameP.set(end.other, []).get(end.other)!).push(end);
+      (sameP.get(end.other) ?? sameP.set(end.other, []).get(end.other)!).push(
+        end,
+      );
     }
     for (const pair of sameP.values()) {
       if (pair.length !== 2) continue;
@@ -633,7 +698,9 @@ export function assignAnchors(
     const steps = Math.max(1, members.length - 1);
     const fitMin = 8 * steps;
     const gap =
-      room >= fitMin ? Math.min(LANE_GAP, room / steps) : Math.max(0, room / steps);
+      room >= fitMin
+        ? Math.min(LANE_GAP, room / steps)
+        : Math.max(0, room / steps);
 
     [...members]
       .sort((a, b) => along(a.other) - along(b.other) || inFace(a, b))
@@ -709,7 +776,9 @@ export function positionsToSave(
     const id = Number(node.id);
     if (!Number.isFinite(id)) continue;
     const shiftX =
-      node.data && "shift" in node.data && typeof node.data.shift === "number" ? node.data.shift : 0;
+      node.data && "shift" in node.data && typeof node.data.shift === "number"
+        ? node.data.shift
+        : 0;
     const shiftY =
       node.data && "shiftY" in node.data && typeof node.data.shiftY === "number"
         ? node.data.shiftY
@@ -739,49 +808,48 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } = assignAnchors(
-    graph,
-    { simple },
-  );
+  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } =
+    assignAnchors(graph, { simple });
 
   const devices = graph.nodes.map((node) => {
     const width = widthFor(busiestTB.get(node.device_id) ?? 0);
-    const height = heights.get(node.device_id) ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+    const height =
+      heights.get(node.device_id) ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
     const shift = shiftFor(width);
     const shiftY = shiftYFor(height);
     return {
-    id: String(node.device_id),
-    type: "device" as const,
-    position: { x: node.x - shift, y: node.y - shiftY },
-    // 対向（簡易表示）は線の下に置く。箱が結線を隠さないようにする
-    zIndex: node.outside ? 0 : 2,
-    data: {
-      hostname: node.hostname,
-      label: simple ? null : node.label,
-      code: simple ? null : node.code,
-      vendor: simple ? "" : node.vendor,
-      model: simple ? "" : node.model,
-      deviceType: node.device_type,
-      severity: simple ? null : node.severity,
-      siteName: siteNameOnCanvas(node, simple),
-      mgmtIp: simple ? null : node.mgmt_ip,
-      interfaceCount: simple ? 0 : node.interface_count,
-      portKinds: simple ? [] : node.port_kinds,
-      editable: options.editable,
-      outside: node.outside,
-      hiddenPeers: node.hidden_peers,
-      width,
-      height,
-      shift,
-      shiftY,
-      faceHandles: faceHandles.get(node.device_id),
-      accent: options.colors.types[node.device_type],
-      serialNumber: simple ? null : node.serial_number,
-      statusLabel: simple ? null : DEVICE_STATUS_LABEL[node.status],
-      runState: simple ? null : node.status,
-      typeLabel: simple ? null : DEVICE_TYPE_LABEL[node.device_type],
-    } satisfies DeviceNodeData,
-    draggable: options.editable,
+      id: String(node.device_id),
+      type: "device" as const,
+      position: { x: node.x - shift, y: node.y - shiftY },
+      // 対向（簡易表示）は線の下に置く。箱が結線を隠さないようにする
+      zIndex: node.outside ? 0 : 2,
+      data: {
+        hostname: node.hostname,
+        label: simple ? null : node.label,
+        code: simple ? null : node.code,
+        vendor: simple ? "" : node.vendor,
+        model: simple ? "" : node.model,
+        deviceType: node.device_type,
+        severity: simple ? null : node.severity,
+        siteName: siteNameOnCanvas(node, simple),
+        mgmtIp: simple ? null : node.mgmt_ip,
+        interfaceCount: simple ? 0 : node.interface_count,
+        portKinds: simple ? [] : node.port_kinds,
+        editable: options.editable,
+        outside: node.outside,
+        hiddenPeers: node.hidden_peers,
+        width,
+        height,
+        shift,
+        shiftY,
+        faceHandles: faceHandles.get(node.device_id),
+        accent: options.colors.types[node.device_type],
+        serialNumber: simple ? null : node.serial_number,
+        statusLabel: simple ? null : DEVICE_STATUS_LABEL[node.status],
+        runState: simple ? null : node.status,
+        typeLabel: simple ? null : DEVICE_TYPE_LABEL[node.device_type],
+      } satisfies DeviceNodeData,
+      draggable: options.editable,
     };
   });
 
@@ -836,7 +904,8 @@ function toFlow(
   const boxOf = new Map(
     devices.map((node) => {
       const width = node.data.width ?? DEFAULT_WIDTH;
-      const height = node.data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+      const height =
+        node.data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
       return [
         Number(node.id),
         {
@@ -866,7 +935,9 @@ function toFlow(
     className:
       `topo-edge ${edge.origin} ${edge.confirmed_both_ways || simple ? "confirmed" : ""}` +
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
-      (!simple && (edge.vlan_mismatch.length > 0 || edge.native_mismatch) ? " mismatch" : ""),
+      (!simple && (edge.vlan_mismatch.length > 0 || edge.native_mismatch)
+        ? " mismatch"
+        : ""),
     data: {
       sourceInterface: edge.source_interface,
       targetInterface: edge.target_interface,
@@ -899,11 +970,9 @@ function toFlow(
  * ノードを作り直していた。未保存の移動がそこで消え、「突然ロールバックした」
  * ように見える。同じ機器が並んでいるときは、今の座標を残す。
  */
-export function keepLocalPositions<T extends { id: string; position: { x: number; y: number } }>(
-  incoming: T[],
-  current: T[],
-  keep: boolean,
-): T[] {
+export function keepLocalPositions<
+  T extends { id: string; position: { x: number; y: number } },
+>(incoming: T[], current: T[], keep: boolean): T[] {
   if (!keep || current.length === 0) return incoming;
   // 台数が変わっても、残っている機器の未保存位置は捨てない。
   // 結線削除で L2/L3 の顔ぶれが変わったとき、配置までリセットされないようにする。
@@ -952,7 +1021,15 @@ function MiniDevice({
 }) {
   if (id.startsWith("g-")) return null;
   return (
-    <rect x={x} y={y} width={width} height={height} className={className} fill={color} rx={4} />
+    <rect
+      x={x}
+      y={y}
+      width={width}
+      height={height}
+      className={className}
+      fill={color}
+      rx={4}
+    />
   );
 }
 
@@ -970,7 +1047,9 @@ function SidePicker({
       {label}{" "}
       <select
         value={value ?? "auto"}
-        onChange={(event) => onChange(event.target.value === "auto" ? null : event.target.value)}
+        onChange={(event) =>
+          onChange(event.target.value === "auto" ? null : event.target.value)
+        }
       >
         {Object.entries(SIDE_LABEL).map(([key, text]) => (
           <option key={key} value={key}>
@@ -983,7 +1062,10 @@ function SidePicker({
 }
 
 function nodeName(graph: TopologyGraph | undefined, deviceId: number): string {
-  return graph?.nodes.find((n) => n.device_id === deviceId)?.hostname ?? `#${deviceId}`;
+  return (
+    graph?.nodes.find((n) => n.device_id === deviceId)?.hostname ??
+    `#${deviceId}`
+  );
 }
 
 function TopologyEditor() {
@@ -996,7 +1078,9 @@ function TopologyEditor() {
   const [selectedVlans, setSelectedVlans] = useState<number[]>(() =>
     params.get("vlan") ? [Number(params.get("vlan"))] : [],
   );
-  const [selectedVrf, setSelectedVrf] = useState<string>(() => params.get("vrf") ?? "");
+  const [selectedVrf, setSelectedVrf] = useState<string>(
+    () => params.get("vrf") ?? "",
+  );
   // 拠点で絞る。現場では自分の拠点だけを見たいことが多い
   const [selectedSite, setSelectedSite] = useState<number | "">(() =>
     params.get("site") ? Number(params.get("site")) : "",
@@ -1027,7 +1111,9 @@ function TopologyEditor() {
   // 再描画のきっかけ。取得結果が同じ内容だと参照が変わらず、
   // 動かした位置が画面に残ってしまうため、明示的に作り直す合図を持つ
   const [revision, setRevision] = useState(0);
-  const [nodes, setNodes, onNodesChange] = useNodesState<Node<DeviceNodeData | GroupFrameData>>([]);
+  const [nodes, setNodes, onNodesChange] = useNodesState<
+    Node<DeviceNodeData | GroupFrameData>
+  >([]);
   const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>([]);
   // いまの中身を、rAF の中など「あとから」参照するための控え
   const nodesRef = useRef<Node<DeviceNodeData | GroupFrameData>[]>([]);
@@ -1044,7 +1130,9 @@ function TopologyEditor() {
   useUnsavedWarning(dirty);
   const [selectedEdge, setSelectedEdge] = useState<Edge | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const instance = useRef<ReactFlowInstance<Node<DeviceNodeData | GroupFrameData>> | null>(null);
+  const instance = useRef<ReactFlowInstance<
+    Node<DeviceNodeData | GroupFrameData>
+  > | null>(null);
   const canvas = useRef<HTMLDivElement | null>(null);
   // ドラッグの過程。保存は基準から動いた機器だけ送る
   const historyRef = useRef<EditHistory | null>(null);
@@ -1064,10 +1152,18 @@ function TopologyEditor() {
   });
   // 全体図は台数が増えると読めないし、描くだけで重い。
   // 絞っていないときは、物理だけ自動で止める（L2/L3/論理は中身が絞られる）
-  const tooWide = !scoped && layer === "physical" && (stats?.device_count ?? 0) > WIDE_LIMIT;
+  const tooWide =
+    !scoped && layer === "physical" && (stats?.device_count ?? 0) > WIDE_LIMIT;
 
   const { data: graph, isLoading } = useQuery({
-    queryKey: ["topology", layer, orientation, selectedSite, appliedSearch, scope],
+    queryKey: [
+      "topology",
+      layer,
+      orientation,
+      selectedSite,
+      appliedSearch,
+      scope,
+    ],
     queryFn: () =>
       api.getTopology(layer, false, orientation, {
         site_id: selectedSite === "" ? undefined : selectedSite,
@@ -1089,7 +1185,10 @@ function TopologyEditor() {
     queryKey: ["topologyVrfs"],
     queryFn: () => api.listTopologyVrfs(),
   });
-  const { data: sites } = useQuery({ queryKey: ["sites"], queryFn: () => api.listSites() });
+  const { data: sites } = useQuery({
+    queryKey: ["sites"],
+    queryFn: () => api.listSites(),
+  });
 
   // 物理の全体図が出せない規模なら、最初から本社を選ぶ。
   // 「表示できる機器がありません」だけのデモにはしない。
@@ -1106,18 +1205,25 @@ function TopologyEditor() {
   useEffect(() => {
     if (!graph) return;
     graphRef.current = graph;
-    const flow = toFlow(graph, simple, { portStyle, alongLine, editable, colors });
+    const flow = toFlow(graph, simple, {
+      portStyle,
+      alongLine,
+      editable,
+      colors,
+    });
 
     // VLAN / VRF / 拠点を選んでいるときは、該当しない機器を薄くする。
     // 消さずに残すのは、選んだセグメントが「どこまで伸びていないか」も
     // 同時に見えた方が構成を掴みやすいため。
-    const filtering = selectedVlans.length > 0 || selectedVrf !== "" || selectedSite !== "";
+    const filtering =
+      selectedVlans.length > 0 || selectedVrf !== "" || selectedSite !== "";
     if (filtering) {
       const matches = new Set(
         graph.nodes
           .filter(
             (n) =>
-              (selectedVlans.length === 0 || n.vlans.some((v) => selectedVlans.includes(v))) &&
+              (selectedVlans.length === 0 ||
+                n.vlans.some((v) => selectedVlans.includes(v))) &&
               (selectedVrf === "" || n.vrfs.includes(selectedVrf)) &&
               (selectedSite === "" || n.site_id === selectedSite),
           )
@@ -1139,7 +1245,10 @@ function TopologyEditor() {
         // ラックや部屋の枠が消え、どこに置いてある機材なのか分からなくなる
         if (n.type === "group") return;
         if (matches.has(n.id)) return;
-        n.style = { ...(n.style ?? {}), opacity: neighbours.has(n.id) ? 0.55 : 0.15 };
+        n.style = {
+          ...(n.style ?? {}),
+          opacity: neighbours.has(n.id) ? 0.55 : 0.15,
+        };
       });
       flow.edges.forEach((e) => {
         const source = String(e.source);
@@ -1155,14 +1264,19 @@ function TopologyEditor() {
     takeServerLayout.current = false;
     let nextNodes = flow.nodes;
     setNodes((current) => {
-      nextNodes = updateGroupBounds(keepLocalPositions(flow.nodes, current, keepLocal));
+      nextNodes = updateGroupBounds(
+        keepLocalPositions(flow.nodes, current, keepLocal),
+      );
       return nextNodes;
     });
     if (!keepLocal) {
       historyRef.current = startHistory(capturePositions(nextNodes));
       setHistoryTick((value) => value + 1);
     } else if (historyRef.current) {
-      historyRef.current = absorbPositions(historyRef.current, capturePositions(nextNodes));
+      historyRef.current = absorbPositions(
+        historyRef.current,
+        capturePositions(nextNodes),
+      );
     }
     setEdges(flow.edges);
     // 未保存の移動は消さない。以前はここで dirty を落としていたため、
@@ -1219,7 +1333,10 @@ function TopologyEditor() {
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
   useEffect(() => {
-    localStorage.setItem(VIEW_KEY, JSON.stringify({ portStyle, alongLine, simple, orientation }));
+    localStorage.setItem(
+      VIEW_KEY,
+      JSON.stringify({ portStyle, alongLine, simple, orientation }),
+    );
   }, [portStyle, alongLine, simple, orientation]);
 
   // 絞り込みを URL に残す。この画面をそのまま人に送れる
@@ -1233,9 +1350,18 @@ function TopologyEditor() {
     // この効果がまた走って、描き直しが止まらなくなる
     if (next.toString() === params.toString()) return;
     setParams(next, { replace: true });
-  }, [selectedSite, appliedSearch, selectedVrf, selectedVlans, params, setParams]);
+  }, [
+    selectedSite,
+    appliedSearch,
+    selectedVrf,
+    selectedVlans,
+    params,
+    setParams,
+  ]);
 
-  const refresh = async ({ takeLayout = true }: { takeLayout?: boolean } = {}) => {
+  const refresh = async ({
+    takeLayout = true,
+  }: { takeLayout?: boolean } = {}) => {
     // 取り直してから画面を作り直す。以前はキャッシュの古いグラフで
     // 先に描いていたため、保存・リセットの直後に配置が戻って見えた
     // 結線の追加・削除では、未保存の配置を消さない（takeLayout: false）
@@ -1256,7 +1382,11 @@ function TopologyEditor() {
   const save = useMutation({
     mutationFn: () => {
       const current = instance.current?.getNodes() ?? nodes;
-      return api.savePositions(layer, positionsToSave(current), viewScope.site_id);
+      return api.savePositions(
+        layer,
+        positionsToSave(current),
+        viewScope.site_id,
+      );
     },
     onSuccess: async () => {
       const current = instance.current?.getNodes() ?? nodes;
@@ -1276,7 +1406,9 @@ function TopologyEditor() {
       setDirty(false);
       setNotice(
         `配置をリセットしました（${result.reset} 台を自動レイアウトに戻しました）` +
-          (viewScope.site_id || viewScope.q ? "。絞り込みの外は触っていません" : ""),
+          (viewScope.site_id || viewScope.q
+            ? "。絞り込みの外は触っていません"
+            : ""),
       );
     },
   });
@@ -1363,7 +1495,12 @@ function TopologyEditor() {
     },
     onSuccess: async ({ device, placed }) => {
       setPlaceHostname("");
-      if (appliedSearch.trim() && !device.hostname.toLowerCase().includes(appliedSearch.trim().toLowerCase())) {
+      if (
+        appliedSearch.trim() &&
+        !device.hostname
+          .toLowerCase()
+          .includes(appliedSearch.trim().toLowerCase())
+      ) {
         setSearch("");
         setAppliedSearch("");
       }
@@ -1378,7 +1515,9 @@ function TopologyEditor() {
     onError: async () => {
       queryClient.invalidateQueries({ queryKey: ["devices"] });
       await refresh({ takeLayout: false });
-      setNotice("機器を置けませんでした。同じ名前が既にあるときは別名にしてください");
+      setNotice(
+        "機器を置けませんでした。同じ名前が既にあるときは別名にしてください",
+      );
     },
   });
 
@@ -1414,15 +1553,17 @@ function TopologyEditor() {
       api.createTopologyGroup({
         layer,
         name:
-          graph?.nodes.find((node) => selectedDeviceIds.includes(node.device_id))?.site_name ??
-          "枠",
+          graph?.nodes.find((node) =>
+            selectedDeviceIds.includes(node.device_id),
+          )?.site_name ?? "枠",
         device_ids: selectedDeviceIds,
       }),
     onSuccess: async () => {
       setNotice("選んだ機器を枠で囲みました");
       await refresh({ takeLayout: false });
     },
-    onError: () => setNotice("枠を作れませんでした。機器を選んでから押してください"),
+    onError: () =>
+      setNotice("枠を作れませんでした。機器を選んでから押してください"),
   });
 
   const encloseSites = useMutation({
@@ -1480,8 +1621,7 @@ function TopologyEditor() {
       color?: string;
       parent_id?: number | null;
       clear_parent?: boolean;
-    }) =>
-      api.updateTopologyGroup(selectedGroupId!, body),
+    }) => api.updateTopologyGroup(selectedGroupId!, body),
     onSuccess: async () => {
       await refresh({ takeLayout: false });
     },
@@ -1511,7 +1651,9 @@ function TopologyEditor() {
     const history = historyRef.current;
     if (!history) return;
     applyingHistory.current = true;
-    setNodes((current) => updateGroupBounds(applyPositions(current, history.baseline)));
+    setNodes((current) =>
+      updateGroupBounds(applyPositions(current, history.baseline)),
+    );
     applyingHistory.current = false;
     rememberHistory(startHistory(history.baseline));
     setNotice("編集中の配置を破棄しました");
@@ -1523,7 +1665,9 @@ function TopologyEditor() {
     const next = undoHistory(history);
     if (!next) return;
     applyingHistory.current = true;
-    setNodes((current) => updateGroupBounds(applyPositions(current, currentPositions(next))));
+    setNodes((current) =>
+      updateGroupBounds(applyPositions(current, currentPositions(next))),
+    );
     applyingHistory.current = false;
     rememberHistory(next);
   }, [rememberHistory, setNodes]);
@@ -1534,7 +1678,9 @@ function TopologyEditor() {
     const next = redoHistory(history);
     if (!next) return;
     applyingHistory.current = true;
-    setNodes((current) => updateGroupBounds(applyPositions(current, currentPositions(next))));
+    setNodes((current) =>
+      updateGroupBounds(applyPositions(current, currentPositions(next))),
+    );
     applyingHistory.current = false;
     rememberHistory(next);
   }, [rememberHistory, setNodes]);
@@ -1544,7 +1690,11 @@ function TopologyEditor() {
       onNodesChange(changes);
       if (applyingHistory.current) return;
       // ドラッグ中の途中座標は残さない
-      if (changes.some((change) => change.type === "position" && change.dragging === true)) {
+      if (
+        changes.some(
+          (change) => change.type === "position" && change.dragging === true,
+        )
+      ) {
         requestAnimationFrame(() => {
           if (applyingHistory.current) return;
           setNodes((current) => updateGroupBounds(current));
@@ -1560,7 +1710,8 @@ function TopologyEditor() {
         if (applyingHistory.current) return;
         setNodes((current) => {
           const next = updateGroupBounds(current);
-          const history = historyRef.current ?? startHistory(capturePositions(next));
+          const history =
+            historyRef.current ?? startHistory(capturePositions(next));
           rememberHistory(pushStep(history, capturePositions(next)));
           return next;
         });
@@ -1568,7 +1719,12 @@ function TopologyEditor() {
         // 吸い付いたままだと、箱の裏から線が出たり遠回りしたりする
         const graph = graphRef.current;
         if (!graph) return;
-        const stuck = restickEdges(nodesRef.current, edgesRef.current, graph, simpleRef.current);
+        const stuck = restickEdges(
+          nodesRef.current,
+          edgesRef.current,
+          graph,
+          simpleRef.current,
+        );
         setNodes(stuck.nodes);
         setEdges(stuck.edges);
       });
@@ -1621,8 +1777,10 @@ function TopologyEditor() {
       if (connection.source === connection.target) return;
 
       const body: Record<string, number> = {};
-      if (connection.source !== oldEdge.source) body.a_device_id = Number(connection.source);
-      if (connection.target !== oldEdge.target) body.b_device_id = Number(connection.target);
+      if (connection.source !== oldEdge.source)
+        body.a_device_id = Number(connection.source);
+      if (connection.target !== oldEdge.target)
+        body.b_device_id = Number(connection.target);
       if (!Object.keys(body).length) return;
 
       reconnect.mutate({ id: Number(oldEdge.id), body });
@@ -1643,7 +1801,10 @@ function TopologyEditor() {
       }
       if (connection.source === connection.target) return;
       setEdges((current) =>
-        addEdge({ ...connection, type: "smoothstep", className: "topo-edge manual" }, current),
+        addEdge(
+          { ...connection, type: "smoothstep", className: "topo-edge manual" },
+          current,
+        ),
       );
       createLink.mutate(connection);
     },
@@ -1655,7 +1816,9 @@ function TopologyEditor() {
       setSelectedEdge(null);
       if (!placing || !editable) return;
       if (layer !== "physical") {
-        setNotice("機器の枠は物理構成で置きます。L2 / L3 / 論理では線の無い箱は出ません");
+        setNotice(
+          "機器の枠は物理構成で置きます。L2 / L3 / 論理では線の無い箱は出ません",
+        );
         return;
       }
       const hostname = placeHostname.trim();
@@ -1665,7 +1828,10 @@ function TopologyEditor() {
       }
       const flow = instance.current;
       if (!flow || placeDevice.isPending) return;
-      const point = flow.screenToFlowPosition({ x: event.clientX, y: event.clientY });
+      const point = flow.screenToFlowPosition({
+        x: event.clientX,
+        y: event.clientY,
+      });
       const position = placementFromClick(point.x, point.y);
       placeDevice.mutate({
         ...position,
@@ -1674,7 +1840,15 @@ function TopologyEditor() {
         site_id: selectedSite === "" ? null : selectedSite,
       });
     },
-    [editable, layer, placeDevice, placeHostname, placeType, placing, selectedSite],
+    [
+      editable,
+      layer,
+      placeDevice,
+      placeHostname,
+      placeType,
+      placing,
+      selectedSite,
+    ],
   );
 
   const onEdgesDelete = useCallback(
@@ -1713,13 +1887,17 @@ function TopologyEditor() {
     for (const node of graph?.nodes ?? []) {
       if (node.plane) found.add(node.plane);
     }
-    return (["backbone", "metro", "access"] as const).filter((plane) => found.has(plane));
+    return (["backbone", "metro", "access"] as const).filter((plane) =>
+      found.has(plane),
+    );
   }, [graph]);
 
   const usedTypes = useMemo(() => {
     const found = new Set<DeviceType>();
     for (const node of graph?.nodes ?? []) found.add(node.device_type);
-    return (Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).filter((type) => found.has(type));
+    return (Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).filter((type) =>
+      found.has(type),
+    );
   }, [graph]);
 
   // 選択が変わったときの処理は、毎回作り直すと React Flow の中で
@@ -1729,9 +1907,13 @@ function TopologyEditor() {
       const devices = picked.filter((node) => node.type !== "group");
       const frame = picked.find((node) => node.type === "group");
       setSelectedDeviceIds(
-        devices.map((node) => Number(node.id)).filter((id) => Number.isFinite(id)),
+        devices
+          .map((node) => Number(node.id))
+          .filter((id) => Number.isFinite(id)),
       );
-      setSelectedGroupId(frame ? ((frame.data as GroupFrameData).groupId ?? null) : null);
+      setSelectedGroupId(
+        frame ? ((frame.data as GroupFrameData).groupId ?? null) : null,
+      );
       if (picked.length > 0) setSelectedEdge(null);
     },
     [],
@@ -1754,7 +1936,9 @@ function TopologyEditor() {
     return `?${next.toString()}`;
   })();
 
-  const selectedGroup = graph?.groups?.find((group) => group.id === selectedGroupId);
+  const selectedGroup = graph?.groups?.find(
+    (group) => group.id === selectedGroupId,
+  );
   // 1台だけ選んでいるときは、その機器の要点を図の上に出す。
   // 台帳を開きに行かなくても、いま見ている図の中で確かめられるようにする
   const selectedDevice =
@@ -1775,7 +1959,10 @@ function TopologyEditor() {
 
   const legend = useMemo(
     () => [
-      { className: "topo-edge discovered confirmed", text: "自動推定（両側で確認）" },
+      {
+        className: "topo-edge discovered confirmed",
+        text: "自動推定（両側で確認）",
+      },
       { className: "topo-edge discovered", text: "自動推定（片側のみ）" },
       { className: "topo-edge manual", text: "手動で追加" },
     ],
@@ -1783,8 +1970,10 @@ function TopologyEditor() {
   );
 
   // historyTick で再描画し、ref の過程をボタンの有効／無効に反映する
-  const undoable = historyTick >= 0 && !!historyRef.current && canUndo(historyRef.current);
-  const redoable = historyTick >= 0 && !!historyRef.current && canRedo(historyRef.current);
+  const undoable =
+    historyTick >= 0 && !!historyRef.current && canUndo(historyRef.current);
+  const redoable =
+    historyTick >= 0 && !!historyRef.current && canRedo(historyRef.current);
 
   return (
     <>
@@ -1797,12 +1986,15 @@ function TopologyEditor() {
             機器をドラッグして配置を整え、機器同士をつなげば手で線を引けます。
             「機器を置く」を押して名前を入れ、図の空きをクリックすると枠が置かれます。
             線はすぐ保存されます。配置だけ「配置を保存」が必要です。
-            線を選ぶと、図の左上に削除などの短い操作が出ます（Delete でも消えます）。
-            途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。
-            Shift を押しながら機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
+            線を選ぶと、図の左上に削除などの短い操作が出ます（Delete
+            でも消えます）。
+            途中の配置は「一つ戻す」「やり直す」「破棄」で行き来できます。 Shift
+            を押しながら機器を複数選んで「枠で囲む」と、拠点や網の段のまとまりとして残せます。
           </>
         ) : (
-          <>図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。</>
+          <>
+            図は動かせません。並べ替えたいときは「編集する」を押してください。好きな位置に置けます。マス目へ揃えるのは「配置を整える」です。
+          </>
         )}
         <br />
         {LAYERS.find((item) => item.value === layer)?.hint}
@@ -1845,7 +2037,9 @@ function TopologyEditor() {
         </select>
         <select
           value={selectedSite}
-          onChange={(e) => setSelectedSite(e.target.value === "" ? "" : Number(e.target.value))}
+          onChange={(e) =>
+            setSelectedSite(e.target.value === "" ? "" : Number(e.target.value))
+          }
           title="拠点で絞り込みます。書き出すとその拠点だけの構成図になります"
         >
           <option value="">拠点: すべて</option>
@@ -1918,7 +2112,10 @@ function TopologyEditor() {
             <button
               disabled={!dirty}
               onClick={() => {
-                if (!confirm("編集中の配置を破棄して、保存前の状態に戻しますか？")) return;
+                if (
+                  !confirm("編集中の配置を破棄して、保存前の状態に戻しますか？")
+                )
+                  return;
                 discardEdits();
               }}
               title="保存していない配置を捨てて、編集を始める前に戻します"
@@ -1937,7 +2134,9 @@ function TopologyEditor() {
                   className={placing ? "primary" : ""}
                   onClick={() => {
                     if (tooWide) {
-                      setNotice("全体図では置けません。拠点を選んでから機器を置いてください");
+                      setNotice(
+                        "全体図では置けません。拠点を選んでから機器を置いてください",
+                      );
                       return;
                     }
                     setPlacing((value) => !value);
@@ -1958,14 +2157,18 @@ function TopologyEditor() {
                     />
                     <select
                       value={placeType}
-                      onChange={(event) => setPlaceType(event.target.value as DeviceType)}
+                      onChange={(event) =>
+                        setPlaceType(event.target.value as DeviceType)
+                      }
                       title="機器の種別"
                     >
-                      {(Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).map((type) => (
-                        <option key={type} value={type}>
-                          {DEVICE_TYPE_LABEL[type]}
-                        </option>
-                      ))}
+                      {(Object.keys(DEVICE_TYPE_LABEL) as DeviceType[]).map(
+                        (type) => (
+                          <option key={type} value={type}>
+                            {DEVICE_TYPE_LABEL[type]}
+                          </option>
+                        ),
+                      )}
                     </select>
                   </>
                 )}
@@ -2014,20 +2217,34 @@ function TopologyEditor() {
         <button
           onClick={() => {
             const where =
-              viewScope.site_id || viewScope.q ? "いま絞り込んでいる範囲の配置" : "すべての配置";
-            if (confirm(`${where}をリセットして自動レイアウトに戻しますか？`)) reset.mutate();
+              viewScope.site_id || viewScope.q
+                ? "いま絞り込んでいる範囲の配置"
+                : "すべての配置";
+            if (confirm(`${where}をリセットして自動レイアウトに戻しますか？`))
+              reset.mutate();
           }}
         >
           配置をリセット
         </button>
-        <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>全体を表示</button>
-        <label className="vlan-chip" title="機器名と結線だけの表示に切り替えます">
-          <input type="checkbox" checked={simple} onChange={(e) => setSimple(e.target.checked)} />{" "}
+        <button onClick={() => instance.current?.fitView({ padding: 0.2 })}>
+          全体を表示
+        </button>
+        <label
+          className="vlan-chip"
+          title="機器名と結線だけの表示に切り替えます"
+        >
+          <input
+            type="checkbox"
+            checked={simple}
+            onChange={(e) => setSimple(e.target.checked)}
+          />{" "}
           シンプル表示
         </label>
         <select
           value={orientation}
-          onChange={(e) => setOrientation(e.target.value as "vertical" | "horizontal")}
+          onChange={(e) =>
+            setOrientation(e.target.value as "vertical" | "horizontal")
+          }
           title="自動配置の向きを変えます。人が動かした配置はそのまま残ります"
         >
           <option value="vertical">並び: 上下</option>
@@ -2044,7 +2261,10 @@ function TopologyEditor() {
             </option>
           ))}
         </select>
-        <label className="vlan-chip" title="ポート名を線の向きに合わせて回転します">
+        <label
+          className="vlan-chip"
+          title="ポート名を線の向きに合わせて回転します"
+        >
           <input
             type="checkbox"
             checked={alongLine}
@@ -2070,11 +2290,18 @@ function TopologyEditor() {
       </div>
 
       {notice && (
-        <div className="card" style={{ borderColor: "var(--accent)", marginBottom: 12 }}>
+        <div
+          className="card"
+          style={{ borderColor: "var(--accent)", marginBottom: 12 }}
+        >
           {notice}
         </div>
       )}
-      {(save.error || createLink.error || rebuild.error || reconnect.error || placeDevice.error) && (
+      {(save.error ||
+        createLink.error ||
+        rebuild.error ||
+        reconnect.error ||
+        placeDevice.error) && (
         <div className="error">
           {
             (
@@ -2123,10 +2350,14 @@ function TopologyEditor() {
           // それでも見たい人のために、出す手段は残しておく
           <div className="empty" style={{ margin: 40 }}>
             <p>
-              機器が {stats?.device_count} 台あります。全体図は読めないし、描くと画面が止まるので、
-              <strong>拠点を選ぶ</strong>か<strong>拠点名・機器名で探して</strong>ください。
+              機器が {stats?.device_count}{" "}
+              台あります。全体図は読めないし、描くと画面が止まるので、
+              <strong>拠点を選ぶ</strong>か
+              <strong>拠点名・機器名で探して</strong>ください。
             </p>
-            <p className="muted">選んだ拠点の対向（直接つながっている上位）までは自動で出ます。</p>
+            <p className="muted">
+              選んだ拠点の対向（直接つながっている上位）までは自動で出ます。
+            </p>
             <p className="muted">
               L2 / L3 / 論理構成は、中身が絞られるので全体のままでも開けます。
             </p>
@@ -2141,25 +2372,30 @@ function TopologyEditor() {
               <>
                 <p>VLAN が載っている結線がありません。</p>
                 <p className="muted">
-                  ポートに VLAN / トランク設定が入ると、ここに L2 の図が出ます。物理構成とは別です。
+                  ポートに VLAN / トランク設定が入ると、ここに L2
+                  の図が出ます。物理構成とは別です。
                 </p>
               </>
             ) : layer === "l3" ? (
               <>
                 <p>L3 の結線がありません。</p>
                 <p className="muted">
-                  ルーター同士の結線や、両端に IP が付いたポートがあるとここに出ます。
+                  ルーター同士の結線や、両端に IP
+                  が付いたポートがあるとここに出ます。
                 </p>
               </>
             ) : layer === "logical" ? (
               <>
                 <p>論理構成に出せるトンネルがありません。</p>
                 <p className="muted">
-                  Config から IPsec / GRE などを取り込むと、物理とは別の通り道として出ます。
+                  Config から IPsec / GRE
+                  などを取り込むと、物理とは別の通り道として出ます。
                   {tunnelInfo && tunnelInfo.unresolved.length > 0 && (
                     <>
                       {" "}
-                      相手が台帳に無いトンネルが {tunnelInfo.unresolved.length}{" "}
+                      相手が台帳に無いトンネルが {
+                        tunnelInfo.unresolved.length
+                      }{" "}
                       件あります（黙って消してはいません）。
                     </>
                   )}
@@ -2181,7 +2417,9 @@ function TopologyEditor() {
                       ? `拠点「${sites?.find((s) => s.id === selectedSite)?.name ?? selectedSite}」`
                       : null,
                     appliedSearch ? `探す言葉「${appliedSearch}」` : null,
-                    selectedVlans.length > 0 ? `VLAN ${selectedVlans.join(", ")}` : null,
+                    selectedVlans.length > 0
+                      ? `VLAN ${selectedVlans.join(", ")}`
+                      : null,
                     selectedVrf ? `VRF「${selectedVrf}」` : null,
                   ]
                     .filter(Boolean)
@@ -2205,8 +2443,9 @@ function TopologyEditor() {
               <>
                 <p>台帳に機器がありません。</p>
                 <p className="muted">
-                  「台帳の取り込み」で機器一覧の CSV を入れるか、「Config の取り込み」で
-                  Config を読ませると出ます。結線表だけ先に入れておくこともできます
+                  「台帳の取り込み」で機器一覧の CSV を入れるか、「Config
+                  の取り込み」で Config
+                  を読ませると出ます。結線表だけ先に入れておくこともできます
                   （機器を登録した時点で線が繋がります）。編集中なら「機器を置く」から
                   図の上に直接置くこともできます。
                 </p>
@@ -2222,7 +2461,9 @@ function TopologyEditor() {
             nodesDraggable={editable}
             nodesConnectable={editable && layer !== "logical"}
             elementsSelectable
-            deleteKeyCode={editable && layer !== "logical" ? ["Backspace", "Delete"] : null}
+            deleteKeyCode={
+              editable && layer !== "logical" ? ["Backspace", "Delete"] : null
+            }
             onNodesChange={handleNodesChange}
             onEdgesChange={onEdgesChange}
             onBeforeDelete={async ({ nodes: deletingNodes }) => {
@@ -2265,12 +2506,19 @@ function TopologyEditor() {
               zoomable
               className="topo-minimap"
               nodeComponent={MiniDevice}
+              /* 既定の覆いは濃く、見えている範囲の外が真っ黒になる。
+                 全体の形が読めるよう薄くかける */
+              maskColor="rgb(16 22 29 / 55%)"
+              nodeColor="#5aa9e6"
             />
             {selectedDevice && !selectedGroup && !selectedEdge && (
               <Panel position="top-right" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
                   <div className="topo-selection-panel-row">
-                    <span className="topo-selection-panel-label" title="選択中の機器">
+                    <span
+                      className="topo-selection-panel-label"
+                      title="選択中の機器"
+                    >
                       {selectedDevice.hostname}
                     </span>
                     <button
@@ -2289,7 +2537,8 @@ function TopologyEditor() {
                     <dd>{selectedDevice.site_name ?? "未登録"}</dd>
                     <dt>型番</dt>
                     <dd>
-                      {`${selectedDevice.vendor} ${selectedDevice.model}`.trim() || "未登録"}
+                      {`${selectedDevice.vendor} ${selectedDevice.model}`.trim() ||
+                        "未登録"}
                     </dd>
                     <dt>管理IP</dt>
                     <dd>{selectedDevice.mgmt_ip ?? "未登録"}</dd>
@@ -2318,21 +2567,26 @@ function TopologyEditor() {
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
                   <div className="topo-selection-panel-row">
-                    <span className="topo-selection-panel-label">枠 {selectedGroup.name}</span>
+                    <span className="topo-selection-panel-label">
+                      枠 {selectedGroup.name}
+                    </span>
                     <input
                       type="text"
                       defaultValue={selectedGroup.name}
                       key={selectedGroup.id + selectedGroup.name}
                       onBlur={(event) => {
                         const name = event.target.value.trim();
-                        if (name && name !== selectedGroup.name) patchGroup.mutate({ name });
+                        if (name && name !== selectedGroup.name)
+                          patchGroup.mutate({ name });
                       }}
                       title="枠の名前"
                       style={{ minWidth: 100 }}
                     />
                     <select
                       value={selectedGroup.plane}
-                      onChange={(event) => patchGroup.mutate({ plane: event.target.value })}
+                      onChange={(event) =>
+                        patchGroup.mutate({ plane: event.target.value })
+                      }
                       title="キャリア網の段"
                     >
                       {Object.entries(PLANE_LABEL).map(([value, label]) => (
@@ -2344,7 +2598,9 @@ function TopologyEditor() {
                     <input
                       type="color"
                       value={asHexColor(selectedGroup.color)}
-                      onChange={(event) => patchGroup.mutate({ color: event.target.value })}
+                      onChange={(event) =>
+                        patchGroup.mutate({ color: event.target.value })
+                      }
                       title="枠の色"
                     />
                     <select
@@ -2391,7 +2647,10 @@ function TopologyEditor() {
               <Panel position="top-left" className="topo-selection-panel">
                 <div className="topo-selection-panel-body">
                   <div className="topo-selection-panel-row">
-                    <span className="topo-selection-panel-label" title="選択中の結線">
+                    <span
+                      className="topo-selection-panel-label"
+                      title="選択中の結線"
+                    >
                       {nodeName(graph, selectedEdgeData.source)}
                       {selectedEdgeData.source_interface
                         ? ` ${selectedEdgeData.source_interface}`
@@ -2412,7 +2671,9 @@ function TopologyEditor() {
                       <>
                         <button
                           className="danger"
-                          onClick={() => removeLink.mutate(Number(selectedEdge.id))}
+                          onClick={() =>
+                            removeLink.mutate(Number(selectedEdge.id))
+                          }
                           disabled={removeLink.isPending}
                           title="Delete / Backspace でも消えます"
                         >
@@ -2440,7 +2701,9 @@ function TopologyEditor() {
                         />
                       </>
                     ) : editable ? (
-                      <span className="muted">論理構成の線はここでは消せません</span>
+                      <span className="muted">
+                        論理構成の線はここでは消せません
+                      </span>
                     ) : (
                       <span className="muted">消すときは編集する</span>
                     )}
@@ -2466,7 +2729,8 @@ function TopologyEditor() {
             <div className="vlan-filter-head">
               <strong>VLAN で絞り込む</strong>
               <span className="muted">
-                選ぶと、その VLAN を持たない機器が薄くなります（どこまで伸びているかを見るため）
+                選ぶと、その VLAN
+                を持たない機器が薄くなります（どこまで伸びているかを見るため）
               </span>
               <input
                 type="search"
@@ -2478,7 +2742,9 @@ function TopologyEditor() {
                 <button onClick={() => setSelectedVlans([])}>選択を解除</button>
               )}
               <RouterLink to="/vlans">
-                <button title="VLAN の名称と用途を登録します">名称・用途を編集</button>
+                <button title="VLAN の名称と用途を登録します">
+                  名称・用途を編集
+                </button>
               </RouterLink>
             </div>
             <div className="vlan-filter-list">
@@ -2500,14 +2766,17 @@ function TopologyEditor() {
                   <span className="muted">
                     {" "}
                     / {vlan.device_ids.length}台
-                    {vlan.access_port_count > 0 && ` / アクセス${vlan.access_port_count}`}
-                    {vlan.trunk_port_count > 0 && ` / トランク${vlan.trunk_port_count}`}
+                    {vlan.access_port_count > 0 &&
+                      ` / アクセス${vlan.access_port_count}`}
+                    {vlan.trunk_port_count > 0 &&
+                      ` / トランク${vlan.trunk_port_count}`}
                   </span>
                 </label>
               ))}
               {shownVlans.length < (vlans ?? []).length && (
                 <span className="muted">
-                  ほか {(vlans ?? []).length - shownVlans.length} 件（絞り込んで表示）
+                  ほか {(vlans ?? []).length - shownVlans.length}{" "}
+                  件（絞り込んで表示）
                 </span>
               )}
             </div>
@@ -2518,8 +2787,13 @@ function TopologyEditor() {
           <div className="vlan-filter">
             <div className="vlan-filter-head">
               <strong>VRF（仮想ルーター）で絞り込む</strong>
-              <span className="muted">同じ線で繋がって見えても、VRF が違えば通信できません</span>
-              <select value={selectedVrf} onChange={(e) => setSelectedVrf(e.target.value)}>
+              <span className="muted">
+                同じ線で繋がって見えても、VRF が違えば通信できません
+              </span>
+              <select
+                value={selectedVrf}
+                onChange={(e) => setSelectedVrf(e.target.value)}
+              >
                 <option value="">すべて</option>
                 {(vrfs ?? []).map((vrf) => (
                   <option key={vrf.name} value={vrf.name}>
@@ -2550,15 +2824,27 @@ function TopologyEditor() {
 
         {legend.map((item) => (
           <span key={item.text} className="topo-legend">
-            <span className={`topo-legend-line ${item.className}`} /> {item.text}
+            <span className={`topo-legend-line ${item.className}`} />{" "}
+            {item.text}
           </span>
         ))}
 
         {usedMedia.length > 0 && (
-          <span className="topo-legend" title="ポート名の色は種別（速度）を表します。色は変えられます">
+          <span
+            className="topo-legend"
+            title="ポート名の色は種別（速度）を表します。色は変えられます"
+          >
             ポート種別:{" "}
             {usedMedia.map((media) => (
-              <label key={media} style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <label
+                key={media}
+                style={{
+                  marginLeft: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
                 <input
                   type="color"
                   value={colors.media[media]}
@@ -2571,13 +2857,18 @@ function TopologyEditor() {
                   title={`${MEDIA_LABEL[media]} の線の色`}
                   style={{ width: 22, height: 18, padding: 0, border: "none" }}
                 />
-                <strong style={{ color: colors.media[media] }}>{MEDIA_LABEL[media]}</strong>
+                <strong style={{ color: colors.media[media] }}>
+                  {MEDIA_LABEL[media]}
+                </strong>
               </label>
             ))}
           </span>
         )}
         {usedPlanes.length > 0 && (
-          <span className="topo-legend" title="結線のホップから付けたキャリア網の段">
+          <span
+            className="topo-legend"
+            title="結線のホップから付けたキャリア網の段"
+          >
             網の段:{" "}
             {usedPlanes.map((plane) => (
               <strong key={plane} style={{ marginLeft: 8 }}>
@@ -2587,10 +2878,21 @@ function TopologyEditor() {
           </span>
         )}
         {usedTypes.length > 0 && (
-          <span className="topo-legend" title="機器の枠の色。現場の凡例に合わせられます">
+          <span
+            className="topo-legend"
+            title="機器の枠の色。現場の凡例に合わせられます"
+          >
             機器種別:{" "}
             {usedTypes.map((type) => (
-              <label key={type} style={{ marginLeft: 8, display: "inline-flex", alignItems: "center", gap: 4 }}>
+              <label
+                key={type}
+                style={{
+                  marginLeft: 8,
+                  display: "inline-flex",
+                  alignItems: "center",
+                  gap: 4,
+                }}
+              >
                 <input
                   type="color"
                   value={colors.types[type] ?? DEFAULT_TYPE_COLOR[type]}
@@ -2603,7 +2905,11 @@ function TopologyEditor() {
                   title={`${DEVICE_TYPE_LABEL[type]} の枠の色`}
                   style={{ width: 22, height: 18, padding: 0, border: "none" }}
                 />
-                <strong style={{ color: colors.types[type] ?? DEFAULT_TYPE_COLOR[type] }}>
+                <strong
+                  style={{
+                    color: colors.types[type] ?? DEFAULT_TYPE_COLOR[type],
+                  }}
+                >
                   {DEVICE_TYPE_LABEL[type]}
                 </strong>
               </label>
@@ -2624,7 +2930,8 @@ function TopologyEditor() {
         <>
           <h2>どこにも繋がっていない機器</h2>
           <p className="muted" style={{ marginTop: -6 }}>
-            Config が未取り込みか、隣接情報が取れていない機器です。手で線を引くこともできます。
+            Config
+            が未取り込みか、隣接情報が取れていない機器です。手で線を引くこともできます。
           </p>
           <div className="toolbar">
             {stats.isolated_devices.map((hostname) => (
@@ -2634,7 +2941,11 @@ function TopologyEditor() {
             ))}
             {stats.isolated_count > stats.isolated_devices.length && (
               <span className="muted">
-                ほか {(stats.isolated_count - stats.isolated_devices.length).toLocaleString()} 台
+                ほか{" "}
+                {(
+                  stats.isolated_count - stats.isolated_devices.length
+                ).toLocaleString()}{" "}
+                台
               </span>
             )}
           </div>
