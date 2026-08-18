@@ -1,10 +1,28 @@
+import os
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+def _env_files() -> tuple[str, ...]:
+    """読み込む設定ファイル。後ろに書いたものが勝つ。
+
+    客先ごとに、置き場所・しきい値・モデルの宛先が少しずつ違う。共通の `.env` に
+    書き足していくと、どれがその現場の都合で、どれが全社の既定なのかが混ざる。
+    現場ぶんは `NETVISION_ENV_FILE` で別ファイルに分け、共通は触らないでおく。
+
+      NETVISION_ENV_FILE=config/aomori.env
+    """
+    files = [".env"]
+    extra = os.environ.get("NETVISION_ENV_FILE")
+    if extra:
+        files.append(extra)
+    return tuple(files)
 
 
 class Settings(BaseSettings):
     """環境変数から読み込む設定。閉域環境での運用を想定し外部依存は持たない。"""
 
-    model_config = SettingsConfigDict(env_prefix="NETVISION_", env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(env_prefix="NETVISION_", env_file=_env_files(), extra="ignore")
 
     database_url: str = "postgresql+psycopg://netvision:netvision@localhost:5432/netvision"
 

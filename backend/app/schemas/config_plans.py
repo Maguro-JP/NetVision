@@ -89,3 +89,51 @@ class DiffPreviewRequest(BaseModel):
     current: str
     target: str
     vendor: str | None = None
+
+
+class ConfigDraftRequest(BaseModel):
+    """資料を根拠に下書きを頼む。"""
+
+    #: やりたいことを言葉で。「VLAN 120 を作って Gi0/1 に乗せる」など
+    request: str
+    #: 前提にする config。省くと最新の取り込み済みを使う
+    base: str | None = None
+
+
+class DraftLineRead(BaseModel):
+    text: str
+    grounded: bool
+    risks: list[str]
+
+
+class DraftSourceRead(BaseModel):
+    document_id: int
+    title: str
+    heading: str | None
+    commands: list[str]
+
+
+class ConfigDraftRead(BaseModel):
+    device_id: int
+    vendor: str
+    body: str
+    lines: list[DraftLineRead]
+    sources: list[DraftSourceRead]
+    risks: list[str]
+    notes: list[str]
+    #: 下書きを起こしたモデル。資料から拾っただけのときは null
+    model: str | None = None
+
+
+class LlmModelRead(BaseModel):
+    role: str
+    model: str
+    endpoint: str
+    local: bool
+    usable: bool
+    blocked_external: bool
+
+
+class LlmStatusRead(BaseModel):
+    configured: bool
+    models: list[LlmModelRead]

@@ -315,7 +315,9 @@ export interface VlanCatalogEntry {
   notes: string | null;
 }
 
-export type VlanCatalogWrite = Partial<Omit<VlanCatalogEntry, "id" | "vlan_id">>;
+export type VlanCatalogWrite = Partial<
+  Omit<VlanCatalogEntry, "id" | "vlan_id">
+>;
 
 export interface TopologyEdge {
   id: number;
@@ -680,7 +682,12 @@ export interface DashboardSummary {
 
 // --- Config 計画（現行フル / 将来フル / 差分） ---
 
-export type PlanStatus = "draft" | "review" | "approved" | "applied" | "archived";
+export type PlanStatus =
+  | "draft"
+  | "review"
+  | "approved"
+  | "applied"
+  | "archived";
 
 export interface ConfigPlan {
   id: number;
@@ -728,6 +735,47 @@ export interface PlanOutputs {
   current_full: string;
   future_full: string;
   diff: PlanDiff;
+}
+
+/** 資料を根拠にした Config の下書き。 */
+export interface ConfigDraftLine {
+  text: string;
+  /** 資料に同じ書き方が出てくるか */
+  grounded: boolean;
+  risks: string[];
+}
+
+export interface ConfigDraftSource {
+  document_id: number;
+  title: string;
+  heading: string | null;
+  commands: string[];
+}
+
+export interface ConfigDraft {
+  device_id: number;
+  vendor: string;
+  body: string;
+  lines: ConfigDraftLine[];
+  sources: ConfigDraftSource[];
+  risks: string[];
+  notes: string[];
+  /** 下書きを起こしたモデル。資料から拾っただけなら null */
+  model: string | null;
+}
+
+export interface LlmModel {
+  role: string;
+  model: string;
+  endpoint: string;
+  local: boolean;
+  usable: boolean;
+  blocked_external: boolean;
+}
+
+export interface LlmStatus {
+  configured: boolean;
+  models: LlmModel[];
 }
 
 // --- 更改支援 ---
