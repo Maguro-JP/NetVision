@@ -93,3 +93,44 @@ def test_draft_is_reachable_from_the_api(client, reference):
 
     status = client.get(f"{API}/llm/status").json()
     assert status["configured"] is False
+
+
+def test_it_builds_a_prompt_to_paste_into_an_approved_ai(db_session, reference):
+    """端末に何も入れられない職場向け。承認済みの AI へ貼る依頼文を作る。"""
+    device = Device(hostname="qx-05", vendor="NEC")
+    db_session.add(device)
+    db_session.commit()
+
+    result = config_draft.prompt_for(db_session, device, "vlan")
+
+    assert "資料の抜粋" in result.body
+    assert "vlan 120" in result.body, "資料の中身が材料に入っていない"
+    assert any("貼り戻して" in note for note in result.notes)
+    assert any("外へ出す" in note for note in result.notes)
+
+
+def test_a_pasted_setting_is_checked_the_same_way(db_session, reference):
+    """よそで書いた設定でも、通す道は同じにする。"""
+    device = Device(hostname="qx-06", vendor="NEC")
+    db_session.add(device)
+    db_session.commit()
+
+    result = config_draft.review(
+        db_session,
+        device,
+        "vlan",
+        "```\nvlan 120\n name office\nsnmp-server community public rw\n```",
+    )
+
+    assert "```" not in result.body
+    assert result.ungrounded == ["snmp-server community public rw"]
+
+
+def test_the_review_is_reachable_from_the_api(client, reference):
+    device = client.post(f"{API}/devices", json={"hostname": "qx-07", "vendor": "NEC"}).json()
+    res = client.post(
+        f"{API}/devices/{device['id']}/config-draft/review",
+        json={"request": "vlan", "body": "vlan 120\n name office"},
+    )
+    assert res.status_code == 200
+    assert all(line["grounded"] for line in res.json()["lines"])

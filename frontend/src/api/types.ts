@@ -774,6 +774,8 @@ export interface LlmModel {
 }
 
 export interface LlmStatus {
+  /** 使う設定になっているか（切っていると false） */
+  enabled: boolean;
   configured: boolean;
   models: LlmModel[];
 }
@@ -992,6 +994,18 @@ export interface LinkImportResult {
   issues: { row_number: number; message: string }[];
   unmapped_columns: string[];
   committed: boolean;
+}
+
+/** 資料から起こしたテンプレートの下書き。 */
+export interface TemplateDraft {
+  name: string;
+  category: string;
+  vendor: string;
+  model: string | null;
+  body: string;
+  variables: { name: string; label: string; default: string; help: string }[];
+  heading: string | null;
+  notes: string[];
 }
 
 /** 拠点台帳の取り込み結果。 */

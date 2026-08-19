@@ -135,5 +135,16 @@ class LlmModelRead(BaseModel):
 
 
 class LlmStatusRead(BaseModel):
+    #: 使う設定になっているか（NETVISION_LLM_ENABLED）
+    enabled: bool = True
     configured: bool
     models: list[LlmModelRead]
+
+
+class ConfigReviewRequest(BaseModel):
+    """よそで書いた設定を、こちらで検める。"""
+
+    #: 何をしたかったか。資料を引き当てるのに使う
+    request: str = ""
+    #: 貼り付けた設定
+    body: str

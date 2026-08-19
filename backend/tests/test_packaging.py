@@ -148,3 +148,15 @@ def test_the_bundle_avoids_writing_bytecode_at_runtime():
         text = script.read_text(encoding="utf-8")
         assert "compileall" in text, f"{script.name} が中間ファイルを作っていない"
         assert "PYTHONDONTWRITEBYTECODE" in text, f"{script.name} が実行時に書かせている"
+
+
+def test_the_model_can_be_bundled_without_adding_an_executable():
+    """端末に新しいソフトを入れられない職場向け。
+
+    モデルはアプリの中で動かす。増えるのは lib/ のライブラリだけで、
+    実行ファイルは増えない。モデルの実体は大きいので、指定したときだけ入れる。
+    """
+    for script in (FOR_WINDOWS, POWERSHELL):
+        text = script.read_text(encoding="utf-8")
+        assert "llama-cpp-python" in text, f"{script.name} にモデルを動かす道が無い"
+        assert "models" in text

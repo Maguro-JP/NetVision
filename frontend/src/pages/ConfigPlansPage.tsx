@@ -111,6 +111,25 @@ export default function ConfigPlansPage() {
     queryFn: () => api.llmStatus(),
   });
 
+  // 手元にモデルを置けない職場向け。承認済みの AI へ貼る文と、その返事
+  const [pasted, setPasted] = useState("");
+  const [promptText, setPromptText] = useState("");
+
+  const askForPrompt = useMutation({
+    mutationFn: () =>
+      api.draftPrompt(selected!.device_id, { request: wish, base: draft }),
+    onSuccess: (result) => {
+      setPromptText(result.body);
+      setSuggestion(null);
+    },
+  });
+
+  const check = useMutation({
+    mutationFn: () =>
+      api.reviewDraft(selected!.device_id, { request: wish, body: pasted }),
+    onSuccess: (result) => setSuggestion(result),
+  });
+
   const suggest = useMutation({
     mutationFn: () =>
       api.draftConfig(selected!.device_id, { request: wish, base: draft }),
@@ -341,6 +360,66 @@ export default function ConfigPlansPage() {
                     {(suggest.error as Error).message}
                   </div>
                 )}
+
+                {/* 端末に何も入れられない職場では、会社が承認している AI を人が
+                    使うほうが現実的。生成だけをそちらへ出し、検算はここに残す */}
+                <details style={{ marginTop: 10 }}>
+                  <summary>手元にモデルが無い（承認済みの AI に貼る）</summary>
+                  <div className="actions">
+                    <button
+                      onClick={() => askForPrompt.mutate()}
+                      disabled={!wish.trim() || askForPrompt.isPending}
+                    >
+                      貼る文を作る
+                    </button>
+                    {promptText && (
+                      <button
+                        onClick={() =>
+                          navigator.clipboard?.writeText(promptText)
+                        }
+                      >
+                        クリップボードにコピー
+                      </button>
+                    )}
+                  </div>
+                  {promptText && (
+                    <>
+                      <pre
+                        className="diff"
+                        style={{ maxHeight: 220, overflow: "auto" }}
+                      >
+                        {promptText}
+                      </pre>
+                      <p className="muted">
+                        この文を AI
+                        に貼り、返ってきた設定を下に貼り戻してください。
+                        資料との突き合わせと、通信に影響する行の印は、ここで付けます。
+                        実機の情報を外へ出すことになるので、職場の決まりを確かめてください。
+                      </p>
+                    </>
+                  )}
+                  <textarea
+                    rows={6}
+                    value={pasted}
+                    placeholder="AI から返ってきた設定をここに貼る"
+                    onChange={(e) => setPasted(e.target.value)}
+                    style={{ width: "100%", fontFamily: "monospace" }}
+                  />
+                  <div className="actions">
+                    <button
+                      className="primary"
+                      onClick={() => check.mutate()}
+                      disabled={!pasted.trim() || check.isPending}
+                    >
+                      貼った設定を検める
+                    </button>
+                  </div>
+                  {check.error && (
+                    <div className="error">
+                      {(check.error as Error).message}
+                    </div>
+                  )}
+                </details>
                 {suggestion && (
                   <>
                     {suggestion.notes.map((note) => (
