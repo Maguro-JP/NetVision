@@ -20,7 +20,15 @@ from pathlib import Path
 
 # リポジトリ直下（backend/ の親）
 REPO = Path(__file__).resolve().parent.parent.parent
+#: DB と資料の置き場所。環境変数でも渡せる。
+#: 端末によっては C ドライブに置けない（データを残さない決まりの端末など）ので、
+#: 画面を触らずに、起動用のファイルの中だけで移せるようにしておく
+DATA_DIR_ENV = "NETVISION_DATA_DIR"
 DEFAULT_DATA = Path.home() / ".netvision"
+
+
+def default_data_dir() -> Path:
+    return Path(os.environ.get(DATA_DIR_ENV) or DEFAULT_DATA).expanduser()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -33,11 +41,22 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--data-dir",
-        default=str(DEFAULT_DATA),
-        help=f"DB と資料ファイルの置き場所（既定 {DEFAULT_DATA}）",
+        default=None,
+        help=f"DB と資料ファイルの置き場所（既定 {DEFAULT_DATA}、{DATA_DIR_ENV} でも指定できる）",
     )
     parser.add_argument("--demo", action="store_true", help="デモデータを入れて起動する")
     return parser
+
+
+def synced(path) -> str | None:
+    """その場所が、同期フォルダかネットワークの共有か。"""
+    text = str(path)
+    for needle in ("OneDrive", "Dropbox", "Google ドライブ", "GoogleDrive", "Box"):
+        if needle.lower() in text.lower():
+            return f"{needle} の中"
+    if text.startswith("\\\\"):
+        return "ネットワークの共有フォルダ"
+    return None
 
 
 def on_synced_folder() -> str | None:
@@ -47,14 +66,8 @@ def on_synced_folder() -> str | None:
     起動が戻ってこないことがある。実際に、起動しないという形で踏んだ。
     黙って遅いより、置き場所が悪いと言えたほうが早い。
     """
-    text = str(REPO)
-    for needle in ("OneDrive", "Dropbox", "Google ドライブ", "GoogleDrive", "Box"):
-        if needle.lower() in text.lower():
-            return f"{needle} の中に置かれています"
-    # Windows のネットワークドライブ（\\server\share か、C 以外の割り当て）
-    if text.startswith("\\\\"):
-        return "ネットワークの共有フォルダに置かれています"
-    return None
+    where = synced(REPO)
+    return f"{where}に置かれています" if where else None
 
 
 def prepare(data_dir: str, *, demo: bool = False) -> Path:
@@ -92,7 +105,7 @@ NO_FRONTEND = (
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
-    data_dir = prepare(args.data_dir, demo=args.demo)
+    data_dir = prepare(args.data_dir or str(default_data_dir()), demo=args.demo)
     db_path = data_dir / "netvision.db"
 
     if frontend_dist() is None:
@@ -112,8 +125,14 @@ def main(argv: list[str] | None = None) -> int:
     warning = on_synced_folder()
     if warning:
         print(
-            f"  ※ アプリの置き場所が {warning}。起動や取り込みが極端に遅くなることが"
-            "あります。C ドライブの、同期していないフォルダへ移してください"
+            f"  ※ アプリが{warning}。中間ファイルは同梱済みなので動きますが、"
+            "同期を止められる場所のほうが速く動きます"
+        )
+    where = synced(data_dir)
+    if where:
+        print(
+            f"  ※ DB が{where}にあります。書いている最中に同期に持っていかれると"
+            "壊れることがあるので、控え（データフォルダのコピー）をこまめに取ってください"
         )
     print("止めるときは Ctrl+C")
 

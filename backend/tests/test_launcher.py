@@ -61,3 +61,35 @@ def test_it_can_wait_without_tkinter(monkeypatch):
     runner = launcher.Runner(port=_free_port())
     assert launcher._dialog(runner, "/tmp") is False, "Windows 以外では使わない"
     assert hasattr(launcher.Runner, "wait")
+
+
+def test_a_synced_folder_is_called_out(monkeypatch, tmp_path):
+    """OneDrive の中やネットワークの共有に置くと、起動が戻ってこないことがある。
+
+    実際に「一瞬だけ黒い窓が出て、あとは何も起きない」という形で踏んだ。
+    黙って遅いより、置き場所を言えたほうが早い。
+    """
+    monkeypatch.setattr(standalone, "REPO", tmp_path / "OneDrive - Business1" / "NetVision")
+    assert standalone.on_synced_folder()
+
+    monkeypatch.setattr(standalone, "REPO", tmp_path / "NetVision")
+    assert standalone.on_synced_folder() is None
+
+
+def test_the_data_folder_can_be_set_without_touching_the_command(monkeypatch, tmp_path):
+    """置き場所を環境変数でも渡せること。
+
+    画面を触れない端末では、起動用のファイルの中で移せる必要がある。
+    C ドライブにデータを置けない決まりの端末がある。
+    """
+    monkeypatch.setenv(standalone.DATA_DIR_ENV, str(tmp_path / "elsewhere"))
+    assert standalone.default_data_dir() == tmp_path / "elsewhere"
+
+    monkeypatch.delenv(standalone.DATA_DIR_ENV)
+    assert standalone.default_data_dir() == standalone.DEFAULT_DATA
+
+
+def test_the_log_is_written_next_to_the_data(tmp_path):
+    """記録は置き場所に残す。窓のある起動には出力先が無いので、ここだけが手がかり。"""
+    launcher.attach_log(tmp_path)
+    assert (tmp_path / launcher.LOG_NAME).exists()

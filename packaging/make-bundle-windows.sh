@@ -140,6 +140,9 @@ rem 黒い画面は出しません。小さな窓が出るので、終了はそ�
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
+rem データ（DB と資料）の置き場所。空なら C:\\Users\\...\\.netvision
+rem C ドライブに置けない端末では、ここに書いてください
+set NETVISION_DATA_DIR=
 rem 置き場所が OneDrive などの同期フォルダだと、Python が書く中間ファイルの
 rem 同期で固まる。中間ファイルは同梱済みなので、実行時には書かせない
 set PYTHONDONTWRITEBYTECODE=1
@@ -153,6 +156,9 @@ rem 何が起きているかをその場に表示します。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
+rem データ（DB と資料）の置き場所。空なら C:\\Users\\...\\.netvision
+rem C ドライブに置けない端末では、ここに書いてください
+set NETVISION_DATA_DIR=
 rem 置き場所が OneDrive などの同期フォルダだと、Python が書く中間ファイルの
 rem 同期で固まる。中間ファイルは同梱済みなので、実行時には書かせない
 set PYTHONDONTWRITEBYTECODE=1
@@ -185,9 +191,23 @@ readme = f"""NetVision （インストール不要版）
 
 ■ 置き場所について
 
-  OneDrive などの同期フォルダや、ネットワークドライブ（Z: など）には
-  置かないでください。起動が何分も戻ってこない、途中で失敗する、といった
-  ことが起きます。C ドライブの中の、同期していないフォルダに置いてください。
+  同期フォルダ（OneDrive など）やネットワークドライブでも動きます。
+  Python の中間ファイルは同梱済みで、実行時には書きません。
+
+  ただし、同期していない場所のほうが速く動きます。置ける場所があるなら
+  そちらを選んでください。
+
+  データ（DB と資料）の置き場所は、既定では次の場所です。
+
+    C:\\Users\\（あなたのユーザー名）\\.netvision
+
+  ここに置けない端末では、NetVision.bat の中の
+
+    set NETVISION_DATA_DIR=
+
+  の行に置き場所を書いてください（例: set NETVISION_DATA_DIR=Z:\\NetVision-data）。
+  同期される場所に DB を置く場合は、書いている最中に同期へ持っていかれると
+  壊れることがあるので、データフォルダのコピーをこまめに取ってください。
 
 ■ うまく起動しないとき
 

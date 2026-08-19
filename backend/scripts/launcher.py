@@ -167,7 +167,9 @@ def main(argv: list[str] | None = None) -> int:
 
 def _main(argv: list[str] | None = None) -> int:
     args = standalone.build_parser().parse_args(argv)
-    data_dir = standalone.prepare(args.data_dir, demo=args.demo)
+    data_dir = standalone.prepare(
+        args.data_dir or str(standalone.default_data_dir()), demo=args.demo
+    )
     attach_log(data_dir)
 
     if standalone.frontend_dist() is None:
