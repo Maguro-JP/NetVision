@@ -56,8 +56,16 @@ NetVision/
 ライセンスは Apache 2.0（Qwen2.5 の多くのサイズ）。配る一式に同梱するときは、
 LICENSE も一緒に入れてください。
 
-配る一式に同梱するには、作成スクリプトに GGUF の URL かパスを渡します。
-既定では同梱しません（一式が数 GB 大きくなるため）。
+モデルを読むためのライブラリは、既定では入りません。作成スクリプトに指定します。
+
+```
+# ライブラリだけ入れる（モデルはあとで models フォルダへ置く）
+WITH_MODEL=1 ./packaging/make-bundle-windows.sh
+./packaging/make-bundle-windows.ps1 -WithModel 1
+```
+
+モデルも一緒に同梱するなら、GGUF の URL かパスを渡します。既定では同梱しません
+（一式が数 GB 大きくなるため）。
 
 ```
 WITH_MODEL=https://…/qwen2.5-coder-7b-instruct-q4_k_m.gguf ./packaging/make-bundle-windows.sh

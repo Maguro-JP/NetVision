@@ -116,7 +116,12 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 # モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えない。
-# 入れる場合は WITH_MODEL に GGUF の URL かパスを渡す
+#
+#   WITH_MODEL=1              ライブラリだけ入れる（モデルはあとで models へ置く）
+#   WITH_MODEL=<URL|パス>     ライブラリとモデルの両方を入れる
+#
+# ライブラリだけを別に入れられるようにしてあるのは、モデルのファイルが数 GB
+# あり、配る一式とは別に運びたいことがあるため
 if [ -n "${WITH_MODEL:-}" ]; then
   echo "==> モデルを動かすライブラリを入れます"
   "$PY" -m pip install --quiet --target "$STAGE/lib" \
@@ -127,6 +132,9 @@ if [ -n "${WITH_MODEL:-}" ]; then
 
   mkdir -p "$STAGE/models"
   case "$WITH_MODEL" in
+    1|true|yes|library)
+      echo "  モデルは同梱しません。models フォルダに GGUF を置いてください"
+      ;;
     http*)
       echo "==> モデルを取得します（数 GB あります）"
       curl -fSL -o "$STAGE/models/$(basename "${WITH_MODEL%%\?*}")" "$WITH_MODEL"

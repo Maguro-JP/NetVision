@@ -16,7 +16,7 @@
 param(
     [string]$OutDir,
     [string]$PyVersion = "3.11.9",
-    # GGUF の URL かパス。渡すとモデルを同梱する（一式が数 GB 大きくなる）
+    # 1 を渡すとライブラリだけ、GGUF の URL かパスを渡すとモデルも同梱する
     [string]$WithModel = ""
 )
 
@@ -144,7 +144,9 @@ if ($WithModel) {
 
     $models = Join-Path $Stage "models"
     New-Item -ItemType Directory -Force -Path $models | Out-Null
-    if ($WithModel -like "http*") {
+    if ($WithModel -in @("1", "true", "yes", "library")) {
+        Write-Host "  モデルは同梱しません。models フォルダに GGUF を置いてください"
+    } elseif ($WithModel -like "http*") {
         Step "モデルを取得します（数 GB あります）"
         $name = [IO.Path]::GetFileName(($WithModel -split "\?")[0])
         Fetch $WithModel (Join-Path $models $name)

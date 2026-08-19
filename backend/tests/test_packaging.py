@@ -160,3 +160,5 @@ def test_the_model_can_be_bundled_without_adding_an_executable():
         text = script.read_text(encoding="utf-8")
         assert "llama-cpp-python" in text, f"{script.name} にモデルを動かす道が無い"
         assert "models" in text
+        # モデルの実体は別に運びたいことがある。ライブラリだけ入れる道を残す
+        assert "library" in text, f"{script.name} にライブラリだけ入れる指定が無い"
