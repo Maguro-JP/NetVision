@@ -28,7 +28,10 @@ def reference(db_session):
             position=0,
             heading="VLAN の作成",
             body="VLAN を作る手順",
-            commands="vlan 120\n name office\n quit\ninterface GigabitEthernet1/0/1\n port access vlan 120",
+            commands=(
+                "vlan 120\n name office\n quit\n"
+                "interface GigabitEthernet1/0/1\n port access vlan 120"
+            ),
         )
     )
     db_session.commit()
