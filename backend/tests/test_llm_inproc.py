@@ -76,3 +76,18 @@ def test_the_model_can_be_switched_off(monkeypatch, tmp_path):
     assert llm.configured() is False
     assert llm.ask("こんにちは") is None
     assert llm.status()["enabled"] is False
+
+
+def test_the_reason_is_shown_when_it_cannot_be_used(monkeypatch, tmp_path):
+    """使えないときは理由を返す。
+
+    「設定が足りません」だけでは、何を直せばいいのか分からない。
+    ライブラリが無いのか、切ってあるのかで、やることが違う。
+    """
+    monkeypatch.setenv(llm_inproc.MODEL_DIR_ENV, str(tmp_path))
+    (tmp_path / "qwen3-8b-q4_k_m.gguf").write_bytes(b"dummy")
+    monkeypatch.setattr(llm_inproc, "runtime_ready", lambda: False)
+
+    inside = [row for row in llm.status()["models"] if row["endpoint"] == "アプリの中"]
+    assert inside
+    assert all("ライブラリ" in row["note"] for row in inside)

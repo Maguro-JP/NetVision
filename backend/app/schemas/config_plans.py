@@ -127,6 +127,8 @@ class ConfigDraftRead(BaseModel):
 
 class LlmModelRead(BaseModel):
     role: str
+    #: 使えないときの理由。画面にそのまま出す
+    note: str = ""
     model: str
     endpoint: str
     local: bool

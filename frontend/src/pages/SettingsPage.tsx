@@ -115,7 +115,9 @@ export default function SettingsPage() {
                         外向きのため止めています
                       </span>
                     ) : (
-                      <span className="badge">設定が足りません</span>
+                      <span className="badge" title={model.note}>
+                        {model.note || "設定が足りません"}
+                      </span>
                     )}
                   </td>
                 </tr>

@@ -766,6 +766,8 @@ export interface ConfigDraft {
 
 export interface LlmModel {
   role: string;
+  /** 使えないときの理由 */
+  note: string;
   model: string;
   endpoint: string;
   local: boolean;

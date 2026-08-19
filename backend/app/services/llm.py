@@ -162,14 +162,20 @@ def status() -> dict[str, object]:
     """画面に出す状態。鍵そのものは返さない。"""
     items = profiles()
     on = enabled()
+    ready = llm_inproc.runtime_ready()
     inside = [
         {
             "role": role,
             "model": path.stem,
             "endpoint": "アプリの中",
             "local": True,
-            "usable": on and llm_inproc.runtime_ready(),
+            "usable": on and ready,
             "blocked_external": False,
+            # 使えない理由。「設定が足りません」だけでは、何を直せばいいのか
+            # 分からない
+            "note": ""
+            if on and ready
+            else ("使わない設定です" if not on else "モデルを読むライブラリが入っていません"),
         }
         for role in (QUICK, DEEP)
         if (path := llm_inproc.pick_file(role)) is not None
@@ -188,6 +194,17 @@ def status() -> dict[str, object]:
                 "blocked_external": bool(item.url)
                 and not item.local
                 and not settings.llm_allow_external,
+                "note": ""
+                if on and item.usable
+                else (
+                    "使わない設定です"
+                    if not on
+                    else (
+                        "外向きの宛先なので止めています"
+                        if bool(item.url) and not item.local
+                        else "宛先かモデル名が空です"
+                    )
+                ),
             }
             for item in items
         ],

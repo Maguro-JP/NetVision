@@ -6,52 +6,53 @@ import { api } from "./api/client";
 import { WINDOW_FLAG } from "./components/WindowLink";
 
 /** メニューは「何をしたいか」で束ねる。項目が増えても探す範囲が変わらない。 */
-const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] = [
-  {
-    label: "見る",
-    items: [
-      { to: "/dashboard", label: "ダッシュボード" },
-      { to: "/topology", label: "トポロジー図" },
-      // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
-      { to: "/insights", label: "最適化の指摘" },
-    ],
-  },
-  {
-    label: "台帳",
-    items: [
-      { to: "/devices", label: "機器一覧" },
-      { to: "/sites", label: "拠点" },
-      { to: "/vlans", label: "VLAN 台帳" },
-    ],
-  },
-  {
-    label: "セキュリティ",
-    items: [
-      { to: "/exposures", label: "対処状況" },
-      { to: "/vulnerabilities", label: "脆弱性" },
-      { to: "/remediation", label: "脆弱性への対処" },
-    ],
-  },
-  {
-    label: "計画・変更",
-    items: [
-      { to: "/replacement", label: "更改支援" },
-      { to: "/scenarios", label: "将来構成シナリオ" },
-      { to: "/config-plans", label: "Config計画（差分生成）" },
-      { to: "/config-templates", label: "Configテンプレート" },
-      { to: "/changes", label: "変更履歴" },
-    ],
-  },
-  {
-    label: "取り込み・資料",
-    items: [
-      { to: "/configs", label: "Configの取り込み" },
-      { to: "/import", label: "台帳の取り込み" },
-      { to: "/reference", label: "製品情報（EoL・脆弱性）" },
-      { to: "/documents", label: "メーカー資料" },
-    ],
-  },
-];
+const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
+  [
+    {
+      label: "見る",
+      items: [
+        { to: "/dashboard", label: "ダッシュボード" },
+        { to: "/topology", label: "トポロジー図" },
+        // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
+        { to: "/insights", label: "最適化の指摘" },
+      ],
+    },
+    {
+      label: "台帳",
+      items: [
+        { to: "/devices", label: "機器一覧" },
+        { to: "/sites", label: "拠点" },
+        { to: "/vlans", label: "VLAN 台帳" },
+      ],
+    },
+    {
+      label: "セキュリティ",
+      items: [
+        { to: "/exposures", label: "対処状況" },
+        { to: "/vulnerabilities", label: "脆弱性" },
+        { to: "/remediation", label: "脆弱性への対処" },
+      ],
+    },
+    {
+      label: "計画・変更",
+      items: [
+        { to: "/replacement", label: "更改支援" },
+        { to: "/scenarios", label: "将来構成シナリオ" },
+        { to: "/config-plans", label: "Config計画（差分生成）" },
+        { to: "/config-templates", label: "Configテンプレート" },
+        { to: "/changes", label: "変更履歴" },
+      ],
+    },
+    {
+      label: "取り込み・資料",
+      items: [
+        { to: "/configs", label: "Configの取り込み" },
+        { to: "/import", label: "台帳の取り込み" },
+        { to: "/reference", label: "製品情報（EoL・脆弱性）" },
+        { to: "/documents", label: "メーカー資料" },
+      ],
+    },
+  ];
 
 const OPEN_KEY = "netvision.sidebar";
 const PIN_KEY = "netvision.sidebar.pinned";
@@ -85,12 +86,17 @@ function isOwnWindow(search: string): boolean {
 
 export default function App() {
   // プレビュー環境かどうか。データが消えることを黙っていると事故のもとになる
-  const { data: meta } = useQuery({ queryKey: ["meta"], queryFn: () => api.meta() });
+  const { data: meta } = useQuery({
+    queryKey: ["meta"],
+    queryFn: () => api.meta(),
+  });
   const location = useLocation();
   const bare = isOwnWindow(location.search);
 
   // 常時表示。画面が狭くても閉じずに出したままにする
-  const [pinned, setPinned] = useState(() => localStorage.getItem(PIN_KEY) === "true");
+  const [pinned, setPinned] = useState(
+    () => localStorage.getItem(PIN_KEY) === "true",
+  );
   const [open, setOpen] = useState(() => {
     const saved = localStorage.getItem(OPEN_KEY);
     if (saved === "open") return true;
@@ -101,9 +107,15 @@ export default function App() {
   // 既定は全部開いた状態にしておく
   const [folded, setFolded] = useState<string[]>(() => readList(FOLDED_KEY));
 
-  useEffect(() => localStorage.setItem(OPEN_KEY, open ? "open" : "closed"), [open]);
+  useEffect(
+    () => localStorage.setItem(OPEN_KEY, open ? "open" : "closed"),
+    [open],
+  );
   useEffect(() => localStorage.setItem(PIN_KEY, String(pinned)), [pinned]);
-  useEffect(() => localStorage.setItem(FOLDED_KEY, JSON.stringify(folded)), [folded]);
+  useEffect(
+    () => localStorage.setItem(FOLDED_KEY, JSON.stringify(folded)),
+    [folded],
+  );
 
   // 狭い画面ではメニューが図に覆いかぶさるので、選んだら閉じる。
   // 常時表示にしている場合と、広い画面では閉じない
@@ -118,7 +130,9 @@ export default function App() {
 
   const toggleGroup = (label: string) =>
     setFolded((current) =>
-      current.includes(label) ? current.filter((item) => item !== label) : [...current, label],
+      current.includes(label)
+        ? current.filter((item) => item !== label)
+        : [...current, label],
     );
 
   if (bare) {
@@ -133,19 +147,40 @@ export default function App() {
   }
 
   return (
-    <div className={`layout ${open ? "" : "collapsed"} ${pinned ? "pinned" : ""}`}>
+    <div
+      className={`layout ${open ? "" : "collapsed"} ${pinned ? "pinned" : ""}`}
+    >
       <aside className="sidebar">
+        {/* 設定はロゴの隣に置く。下に置くと、台帳のような長い画面では
+            一番下まで送らないと届かない */}
         <div className="brand">
-          Net<span>Vision</span>
+          <span className="brand-name">
+            Net<span>Vision</span>
+          </span>
+          <NavLink
+            to="/settings"
+            className={({ isActive }) =>
+              `brand-settings ${isActive ? "active" : ""}`
+            }
+            title="画面の設定"
+            aria-label="設定"
+          >
+            <span aria-hidden="true">⚙</span>
+          </NavLink>
         </div>
         <nav className="nav">
           {NAV_GROUPS.map((group) => {
             // 今いる画面が入っているグループは畳まない。開いて探す手間を無くす
-            const current = group.items.some((item) => item.to === location.pathname);
+            const current = group.items.some(
+              (item) => item.to === location.pathname,
+            );
             const collapsed = folded.includes(group.label) && !current;
 
             return (
-              <div key={group.label} className={`nav-group ${collapsed ? "folded" : ""}`}>
+              <div
+                key={group.label}
+                className={`nav-group ${collapsed ? "folded" : ""}`}
+              >
                 <button
                   className="nav-group-label"
                   onClick={() => toggleGroup(group.label)}
@@ -154,7 +189,9 @@ export default function App() {
                 >
                   <span className="nav-caret">{collapsed ? "▸" : "▾"}</span>
                   {group.label}
-                  {collapsed && <span className="nav-count">{group.items.length}</span>}
+                  {collapsed && (
+                    <span className="nav-count">{group.items.length}</span>
+                  )}
                 </button>
                 {!collapsed &&
                   group.items.map((item) => (
@@ -169,20 +206,13 @@ export default function App() {
               </div>
             );
           })}
-          {/* 設定は毎日押すものではない。一番下に歯車で置き、
-              上の台帳・図の並びを邪魔しない */}
-          <NavLink
-            to="/settings"
-            className={({ isActive }) => `nav-settings ${isActive ? "active" : ""}`}
-            title="画面の設定"
-          >
-            <span aria-hidden="true">⚙</span> 設定
-          </NavLink>
         </nav>
       </aside>
 
       {/* 狭い画面でメニューを開いたとき、外側を触れば閉じられるようにする */}
-      {open && !pinned && <div className="sidebar-scrim" onClick={() => setOpen(false)} />}
+      {open && !pinned && (
+        <div className="sidebar-scrim" onClick={() => setOpen(false)} />
+      )}
 
       <main className="main">
         {/* 開閉ボタンと常時表示の切り替えは、メニューの外に置く。
@@ -200,7 +230,15 @@ export default function App() {
           >
             ☰<span className="sidebar-toggle-text"> メニュー</span>
           </button>
-          <label className="sidebar-pin" title="画面が狭くてもメニューを出したままにします">
+          {/* メニューを隠しているときは、ここに名前を出す。どの道具を見ているのかが
+              分からなくなるのを防ぐ */}
+          <span className="topbar-brand">
+            Net<span>Vision</span>
+          </span>
+          <label
+            className="sidebar-pin"
+            title="画面が狭くてもメニューを出したままにします"
+          >
             <input
               type="checkbox"
               checked={pinned}
