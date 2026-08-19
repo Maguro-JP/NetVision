@@ -153,12 +153,11 @@ def test_the_bundle_avoids_writing_bytecode_at_runtime():
 def test_the_model_can_be_bundled_without_adding_an_executable():
     """端末に新しいソフトを入れられない職場向け。
 
-    モデルはアプリの中で動かす。増えるのは lib/ のライブラリだけで、
-    実行ファイルは増えない。モデルの実体は大きいので、指定したときだけ入れる。
+    モデルはアプリの中で動かす。増えるのは lib/ のライブラリだけで、実行ファイルは
+    増えないので、ライブラリは既定で入れる。使う人がやることを「GGUF を1つ置く」
+    だけにするため。モデルの実体は数 GB あるので、指定したときだけ入れる。
     """
     for script in (FOR_WINDOWS, POWERSHELL):
         text = script.read_text(encoding="utf-8")
         assert "llama-cpp-python" in text, f"{script.name} にモデルを動かす道が無い"
         assert "models" in text
-        # モデルの実体は別に運びたいことがある。ライブラリだけ入れる道を残す
-        assert "library" in text, f"{script.name} にライブラリだけ入れる指定が無い"

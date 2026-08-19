@@ -16,7 +16,7 @@
 param(
     [string]$OutDir,
     [string]$PyVersion = "3.11.9",
-    # 1 を渡すとライブラリだけ、GGUF の URL かパスを渡すとモデルも同梱する
+    # GGUF の URL かパス。渡すとモデルも同梱する（既定は同梱しない）
     [string]$WithModel = ""
 )
 
@@ -132,21 +132,20 @@ $packages = @(
 & $python -m pip install --quiet --target (Join-Path $Stage "lib") --no-warn-script-location @packages
 if ($LASTEXITCODE -ne 0) { throw "ライブラリの取得に失敗しました" }
 
-# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えない。
-# 入れる場合は -WithModel に GGUF の URL かパスを渡す
-if ($WithModel) {
-    Step "モデルを動かすライブラリを入れます"
-    & $python -m pip install --quiet --target (Join-Path $Stage "lib") `
-        --no-warn-script-location llama-cpp-python
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  取得できませんでした。モデル無しで続けます"
-    }
+# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えないので、
+# 既定で同梱する。使う人がやることを「GGUF を1つ置く」だけにするため
+Step "モデルを動かすライブラリを入れます"
+& $python -m pip install --quiet --target (Join-Path $Stage "lib") `
+    --no-warn-script-location llama-cpp-python
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  取得できませんでした。この一式ではモデルを使えません"
+}
 
-    $models = Join-Path $Stage "models"
-    New-Item -ItemType Directory -Force -Path $models | Out-Null
-    if ($WithModel -in @("1", "true", "yes", "library")) {
-        Write-Host "  モデルは同梱しません。models フォルダに GGUF を置いてください"
-    } elseif ($WithModel -like "http*") {
+# モデルの実体は数 GB あるので、同梱するときだけ -WithModel に URL かパスを渡す
+$models = Join-Path $Stage "models"
+New-Item -ItemType Directory -Force -Path $models | Out-Null
+if ($WithModel) {
+    if ($WithModel -like "http*") {
         Step "モデルを取得します（数 GB あります）"
         $name = [IO.Path]::GetFileName(($WithModel -split "\?")[0])
         Fetch $WithModel (Join-Path $models $name)
@@ -229,6 +228,14 @@ NetVision （インストール不要版）
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
   黒い画面が1つ出ます。止めるときは、その画面を閉じてください。
+
+■ AI を使うとき（任意）
+
+  models フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  置かなければ、AI を使わない形でそのまま動きます。
+
+  データの置き場所の中（C:\Users\（あなたのユーザー名）\.netvision\models）に
+  置いても構いません。アプリのフォルダを入れ替えても、そちらは残ります。
 
 ■ 置き場所について
 
