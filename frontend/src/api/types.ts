@@ -994,6 +994,18 @@ export interface LinkImportResult {
   committed: boolean;
 }
 
+/** 資料から起こしたテンプレートの下書き。 */
+export interface TemplateDraft {
+  name: string;
+  category: string;
+  vendor: string;
+  model: string | null;
+  body: string;
+  variables: { name: string; label: string; default: string; help: string }[];
+  heading: string | null;
+  notes: string[];
+}
+
 /** 拠点台帳の取り込み結果。 */
 export interface SiteImportResult {
   total_rows: number;

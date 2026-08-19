@@ -2,6 +2,7 @@ import type {
   ChangeLog,
   LinkImportResult,
   SiteImportResult,
+  TemplateDraft,
   SpaceView,
   DashboardSummary,
   Device,
@@ -357,6 +358,14 @@ export const api = {
     );
   },
   /** 拠点台帳の取り込み。書き出した表をそのまま直して戻せる。 */
+  /** 資料の章から起こしたテンプレートの下書き。登録するかは人が選ぶ */
+  templateDrafts: (documentId: number) =>
+    request<TemplateDraft[]>(`/documents/${documentId}/template-drafts`),
+  createTemplateFromDocument: (documentId: number, index: number) =>
+    request<ConfigTemplate>(`/documents/${documentId}/template-drafts`, {
+      method: "POST",
+      body: JSON.stringify({ index }),
+    }),
   importSites: (file: File, commit: boolean) => {
     const form = new FormData();
     form.append("file", file);

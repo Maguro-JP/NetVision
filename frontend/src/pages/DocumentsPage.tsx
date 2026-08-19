@@ -5,6 +5,7 @@ import { api } from "../api/client";
 import type { DocumentType } from "../api/types";
 import { DOC_TYPE_LABEL, formatBytes, versionRange } from "../lib/docs";
 import { formatDate } from "../lib/format";
+import TemplateDraftsFromDocument from "../components/TemplateDraftsFromDocument";
 
 const EMPTY_FORM = {
   vendor: "",
@@ -32,13 +33,18 @@ export default function DocumentsPage() {
 
   const { data: documents } = useQuery({
     queryKey: ["documents", q, docType],
-    queryFn: () => api.listDocuments({ q: q || undefined, doc_type: docType || undefined }),
+    queryFn: () =>
+      api.listDocuments({ q: q || undefined, doc_type: docType || undefined }),
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["documents"] });
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["documents"] });
+  // 資料からテンプレートを起こす対象。開いている資料の ID
+  const [draftsFor, setDraftsFor] = useState<number | null>(null);
 
   const create = useMutation({
-    mutationFn: () => api.createDocument(form as unknown as Record<string, string>, file),
+    mutationFn: () =>
+      api.createDocument(form as unknown as Record<string, string>, file),
     onSuccess: () => {
       setForm({ ...EMPTY_FORM });
       setFile(null);
@@ -48,7 +54,8 @@ export default function DocumentsPage() {
   });
 
   const supersede = useMutation({
-    mutationFn: ({ from, to }: { from: number; to: number }) => api.supersedeDocument(from, to),
+    mutationFn: ({ from, to }: { from: number; to: number }) =>
+      api.supersedeDocument(from, to),
     onSuccess: () => {
       setSupersedeFrom(null);
       refresh();
@@ -60,14 +67,16 @@ export default function DocumentsPage() {
     onSuccess: refresh,
   });
 
-  const set = (key: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const set =
+    (key: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) =>
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   return (
     <>
       <h1>メーカー資料</h1>
       <p className="subtitle">
-        コマンドリファレンスやコンフィグガイドを、<strong>メーカー・型番・バージョン範囲</strong>
+        コマンドリファレンスやコンフィグガイドを、
+        <strong>メーカー・型番・バージョン範囲</strong>
         で管理します。渡した資料はこちらで章に切り、章ごとに出てくるコマンドを控えるので、
         下の「資料の中を探す」から書き方を引けます（閉域のまま、外の検索には出しません）。
         <br />
@@ -97,7 +106,9 @@ export default function DocumentsPage() {
         </button>
       </div>
 
-      {create.error && <div className="error">{(create.error as Error).message}</div>}
+      {create.error && (
+        <div className="error">{(create.error as Error).message}</div>
+      )}
 
       {showForm && (
         <form
@@ -109,15 +120,26 @@ export default function DocumentsPage() {
           <div className="form-grid">
             <div className="field">
               <label htmlFor="vendor">ベンダー *</label>
-              <input id="vendor" required value={form.vendor} onChange={set("vendor")} />
+              <input
+                id="vendor"
+                required
+                value={form.vendor}
+                onChange={set("vendor")}
+              />
             </div>
             <div className="field">
-              <label htmlFor="model">型番（空ならシリーズ全体。`C9500*` で前方一致）</label>
+              <label htmlFor="model">
+                型番（空ならシリーズ全体。`C9500*` で前方一致）
+              </label>
               <input id="model" value={form.model} onChange={set("model")} />
             </div>
             <div className="field">
               <label htmlFor="doc_type">種別</label>
-              <select id="doc_type" value={form.doc_type} onChange={set("doc_type")}>
+              <select
+                id="doc_type"
+                value={form.doc_type}
+                onChange={set("doc_type")}
+              >
                 {Object.entries(DOC_TYPE_LABEL).map(([value, label]) => (
                   <option key={value} value={value}>
                     {label}
@@ -127,11 +149,20 @@ export default function DocumentsPage() {
             </div>
             <div className="field wide">
               <label htmlFor="title">タイトル *</label>
-              <input id="title" required value={form.title} onChange={set("title")} />
+              <input
+                id="title"
+                required
+                value={form.title}
+                onChange={set("title")}
+              />
             </div>
             <div className="field">
               <label htmlFor="os_name">OS名（IOS-XE など。空なら不問）</label>
-              <input id="os_name" value={form.os_name} onChange={set("os_name")} />
+              <input
+                id="os_name"
+                value={form.os_name}
+                onChange={set("os_name")}
+              />
             </div>
             <div className="field">
               <label htmlFor="applies_from">適用バージョン（開始）</label>
@@ -162,7 +193,11 @@ export default function DocumentsPage() {
             </div>
             <div className="field">
               <label htmlFor="edition">資料の版（Rev.C など）</label>
-              <input id="edition" value={form.edition} onChange={set("edition")} />
+              <input
+                id="edition"
+                value={form.edition}
+                onChange={set("edition")}
+              />
             </div>
             <div className="field">
               <label htmlFor="published_at">発行日</label>
@@ -174,8 +209,14 @@ export default function DocumentsPage() {
               />
             </div>
             <div className="field wide">
-              <label htmlFor="source_url">入手元URL（実体が無くても記録しておく）</label>
-              <input id="source_url" value={form.source_url} onChange={set("source_url")} />
+              <label htmlFor="source_url">
+                入手元URL（実体が無くても記録しておく）
+              </label>
+              <input
+                id="source_url"
+                value={form.source_url}
+                onChange={set("source_url")}
+              />
             </div>
             <div className="field wide">
               <label htmlFor="file">ファイル（PDF など。省略可）</label>
@@ -191,7 +232,11 @@ export default function DocumentsPage() {
             </div>
           </div>
           <div className="actions">
-            <button className="primary" type="submit" disabled={create.isPending}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={create.isPending}
+            >
               登録
             </button>
           </div>
@@ -199,13 +244,19 @@ export default function DocumentsPage() {
       )}
 
       {supersedeFrom !== null && (
-        <div className="card" style={{ marginTop: 12, borderColor: "var(--accent)" }}>
+        <div
+          className="card"
+          style={{ marginTop: 12, borderColor: "var(--accent)" }}
+        >
           後継として指定する資料を選んでください（旧版は削除されず、リンクされるだけです）
           <div className="actions">
             <select
               onChange={(e) => {
                 if (e.target.value) {
-                  supersede.mutate({ from: supersedeFrom, to: Number(e.target.value) });
+                  supersede.mutate({
+                    from: supersedeFrom,
+                    to: Number(e.target.value),
+                  });
                 }
               }}
               defaultValue=""
@@ -259,7 +310,13 @@ export default function DocumentsPage() {
                     {doc.os_name ? ` / ${doc.os_name}` : ""}
                   </div>
                 </td>
-                <td>{versionRange(doc.applies_from, doc.applies_to, doc.version_label)}</td>
+                <td>
+                  {versionRange(
+                    doc.applies_from,
+                    doc.applies_to,
+                    doc.version_label,
+                  )}
+                </td>
                 <td>{doc.device_count}</td>
                 <td className="muted">
                   {formatDate(doc.published_at)}
@@ -281,7 +338,12 @@ export default function DocumentsPage() {
                   )}
                 </td>
                 <td>
-                  <button onClick={() => setSupersedeFrom(doc.id)}>後継を指定</button>{" "}
+                  <button onClick={() => setDraftsFor(doc.id)}>
+                    テンプレートを起こす
+                  </button>{" "}
+                  <button onClick={() => setSupersedeFrom(doc.id)}>
+                    後継を指定
+                  </button>{" "}
                   <button
                     className="danger"
                     onClick={() => {
@@ -301,6 +363,17 @@ export default function DocumentsPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {draftsFor !== null && (
+        <TemplateDraftsFromDocument
+          documentId={draftsFor}
+          title={
+            (documents ?? []).find((doc) => doc.id === draftsFor)?.title ??
+            "資料"
+          }
+          onClose={() => setDraftsFor(null)}
+        />
       )}
     </>
   );
@@ -350,7 +423,11 @@ function DocumentSearch() {
         </p>
       )}
       {(hits.data ?? []).map((hit, index) => (
-        <div key={`${hit.document_id}-${index}`} className="card" style={{ marginTop: 8 }}>
+        <div
+          key={`${hit.document_id}-${index}`}
+          className="card"
+          style={{ marginTop: 8 }}
+        >
           <div className="muted" style={{ fontSize: 12 }}>
             {hit.vendor}
             {hit.model ? ` / ${hit.model}` : ""} ・ {hit.title}
@@ -361,7 +438,10 @@ function DocumentSearch() {
               {hit.commands.join("\n")}
             </pre>
           )}
-          <p className="muted" style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}>
+          <p
+            className="muted"
+            style={{ whiteSpace: "pre-wrap", marginBottom: 0 }}
+          >
             {hit.body.slice(0, 300)}
           </p>
         </div>

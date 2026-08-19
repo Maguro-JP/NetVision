@@ -5,6 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -23,7 +24,7 @@ from app.schemas.documents import (
     RenderRequest,
     RenderResultRead,
 )
-from app.services import config_render
+from app.services import config_render, template_from_docs
 from app.services import documents as service
 from app.services.device_query import DeviceFilters, query_devices
 
@@ -442,3 +443,66 @@ def render_template(template_id: int, payload: RenderRequest, db: DbSession) -> 
         used_variables=result.used_variables,
         warnings=result.warnings,
     )
+
+
+class TemplateDraftRead(BaseModel):
+    """資料から起こしたテンプレートの下書き。"""
+
+    name: str
+    category: str
+    vendor: str
+    model: str | None
+    body: str
+    variables: list[dict]
+    heading: str | None
+    notes: list[str]
+
+
+class TemplateDraftRequest(BaseModel):
+    #: 何番目の章から起こすか（`/documents/{id}/template-drafts` の並び）
+    index: int = 0
+
+
+@router.get("/documents/{document_id}/template-drafts", response_model=list[TemplateDraftRead])
+def list_template_drafts(document_id: int, db: DbSession) -> list[TemplateDraftRead]:
+    """資料の章から、テンプレートの下書きを作って並べる。
+
+    人が手で書き写すと、写し間違いと版ずれが必ず入る。資料の中に正しい書き方が
+    あるので、そこから起こす。登録するかどうかは人が選ぶ。
+    """
+    document = _load(db, document_id)
+    return [
+        TemplateDraftRead(
+            name=draft.name,
+            category=str(draft.category),
+            vendor=draft.vendor,
+            model=draft.model,
+            body=draft.body,
+            variables=draft.variables,
+            heading=draft.heading,
+            notes=draft.notes,
+        )
+        for draft in template_from_docs.drafts_for_document(db, document)
+    ]
+
+
+@router.post(
+    "/documents/{document_id}/template-drafts",
+    response_model=ConfigTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_template_from_document(
+    document_id: int, payload: TemplateDraftRequest, db: DbSession
+) -> ConfigTemplateRead:
+    """下書きの1つをテンプレートとして登録する。"""
+    document = _load(db, document_id)
+    drafts = template_from_docs.drafts_for_document(db, document)
+    if not drafts:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "この資料からはコマンドを拾えませんでした（読めない形式か、コマンドが無い）",
+        )
+    if not 0 <= payload.index < len(drafts):
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "その下書きはありません")
+
+    return _to_template_read(template_from_docs.save(db, drafts[payload.index]))
