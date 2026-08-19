@@ -115,17 +115,17 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
   openpyxl python-multipart jinja2 uvicorn tzdata
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
-# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えない。
-# 入れる場合は WITH_MODEL に GGUF の URL かパスを渡す
-if [ -n "${WITH_MODEL:-}" ]; then
-  echo "==> モデルを動かすライブラリを入れます"
-  "$PY" -m pip install --quiet --target "$STAGE/lib" \
-    --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
-    --implementation cp --abi "$PY_TAG" llama-cpp-python || {
-      echo "  取得できませんでした。モデル無しで続けます" >&2
-    }
+# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えないので、
+# 既定で同梱する。使う人がやることを「GGUF を1つ置く」だけにするため
+echo "==> モデルを動かすライブラリを入れます"
+"$PY" -m pip install --quiet --target "$STAGE/lib" \
+  --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
+  --implementation cp --abi "$PY_TAG" llama-cpp-python || \
+  echo "  取得できませんでした。この一式ではモデルを使えません" >&2
 
-  mkdir -p "$STAGE/models"
+# モデルの実体は数 GB あるので、同梱するときだけ WITH_MODEL に URL かパスを渡す
+mkdir -p "$STAGE/models"
+if [ -n "${WITH_MODEL:-}" ]; then
   case "$WITH_MODEL" in
     http*)
       echo "==> モデルを取得します（数 GB あります）"
@@ -206,6 +206,14 @@ readme = f"""NetVision （インストール不要版）
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
   黒い画面が1つ出ます。止めるときは、その画面を閉じてください。
+
+■ AI を使うとき（任意）
+
+  models フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  置かなければ、AI を使わない形でそのまま動きます。
+
+  データの置き場所の中（C:\\Users\\（あなたのユーザー名）\\.netvision\\models）に
+  置いても構いません。アプリのフォルダを入れ替えても、そちらは残ります。
 
 ■ 置き場所について
 

@@ -34,12 +34,28 @@ MODEL_PATH_ENV = "NETVISION_MODEL_PATH"
 _QUICK_HINTS = ("0.5b", "1.5b", "3b", "mini", "small")
 
 
-def model_dir() -> Path:
-    """モデルを探す場所。既定はアプリの隣の models/。"""
+def model_dirs() -> list[Path]:
+    """モデルを探す場所。
+
+    アプリの隣と、データの置き場所の両方を見る。アプリのフォルダを入れ替えても
+    モデルが残るようにするため、また、アプリ側が書けない場所に置かれていても
+    データ側に置けば使えるようにするため。
+    """
     named = os.environ.get(MODEL_DIR_ENV)
     if named:
-        return Path(named).expanduser()
-    return Path(__file__).resolve().parents[3] / "models"
+        return [Path(named).expanduser()]
+
+    from scripts.standalone import default_data_dir
+
+    return [
+        Path(__file__).resolve().parents[3] / "models",
+        default_data_dir() / "models",
+    ]
+
+
+def model_dir() -> Path:
+    """探す場所のうち、代表の1つ（画面の案内に使う）。"""
+    return model_dirs()[0]
 
 
 def available() -> list[Path]:
@@ -49,10 +65,11 @@ def available() -> list[Path]:
         path = Path(named).expanduser()
         return [path] if path.is_file() else []
 
-    folder = model_dir()
-    if not folder.is_dir():
-        return []
-    return sorted(path for path in folder.glob("*.gguf") if path.is_file())
+    found: list[Path] = []
+    for folder in model_dirs():
+        if folder.is_dir():
+            found.extend(path for path in folder.glob("*.gguf") if path.is_file())
+    return sorted(found)
 
 
 def pick_file(role: str) -> Path | None:
