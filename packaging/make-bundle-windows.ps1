@@ -92,10 +92,9 @@ Copy-Item (Join-Path $Repo "backend\scripts") (Join-Path $Stage "backend\scripts
 Copy-Item (Join-Path $Repo "backend\alembic") (Join-Path $Stage "backend\alembic") -Recurse
 Copy-Item (Join-Path $Repo "backend\alembic.ini") (Join-Path $Stage "backend\alembic.ini")
 Copy-Item $dist (Join-Path $Stage "frontend\dist") -Recurse
-foreach ($doc in "INSTALL.md", "OPERATIONS.md", "WINDOWS_BEGINNER.md") {
-    $path = Join-Path $Repo "docs\$doc"
-    if (Test-Path $path) { Copy-Item $path (Join-Path $Stage "docs") }
-}
+# 手引きは丸ごと持ち込む。個別に並べていると、新しく書いたものが入らない
+# （実際に LOCAL_LLM.md が抜けた）
+Copy-Item (Join-Path $Repo "docs\*.md") (Join-Path $Stage "docs")
 Get-ChildItem $Stage -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -284,7 +283,7 @@ NetVision （インストール不要版）
   lib\       このアプリが使うライブラリ
   backend\   アプリ本体
   frontend\  画面
-  docs\      導入手順書・運用手順書
+  docs\      手引き（導入・運用・AI の使い方など）
 
 版数: $Version
 "@

@@ -67,7 +67,9 @@ cp -r "$REPO/backend/scripts" "$STAGE/backend/scripts"
 cp -r "$REPO/backend/alembic" "$STAGE/backend/alembic"
 cp "$REPO/backend/alembic.ini" "$STAGE/backend/"
 cp -r "$REPO/frontend/dist" "$STAGE/frontend/dist"
-cp "$REPO/docs/INSTALL.md" "$REPO/docs/OPERATIONS.md" "$STAGE/docs/" 2>/dev/null || true
+# 手引きは丸ごと持ち込む。個別に並べていると、新しく書いたものが入らない
+# （実際に LOCAL_LLM.md が抜けた）
+cp "$REPO"/docs/*.md "$STAGE/docs/" 2>/dev/null || true
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 echo "==> インストール不要の Python を取得します（$PY_VERSION）"
@@ -262,7 +264,7 @@ readme = f"""NetVision （インストール不要版）
   lib\\       このアプリが使うライブラリ
   backend\\   アプリ本体
   frontend\\  画面
-  docs\\      導入手順書・運用手順書
+  docs\\      手引き（導入・運用・AI の使い方など）
 
 版数: {version}
 """
