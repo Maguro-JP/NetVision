@@ -1,3 +1,6 @@
+import { useQuery } from "@tanstack/react-query";
+
+import { api } from "../api/client";
 import {
   DEFAULT_PREFS,
   OPEN_TARGET_LABEL,
@@ -16,6 +19,10 @@ import {
  */
 export default function SettingsPage() {
   const [prefs, setPrefs] = usePrefs();
+  const { data: llm } = useQuery({
+    queryKey: ["llmStatus"],
+    queryFn: () => api.llmStatus(),
+  });
 
   return (
     <div>
@@ -52,7 +59,9 @@ export default function SettingsPage() {
         </p>
         {prefs.openTarget !== DEFAULT_PREFS.openTarget && (
           <div className="actions">
-            <button onClick={() => setPrefs({ openTarget: DEFAULT_PREFS.openTarget })}>
+            <button
+              onClick={() => setPrefs({ openTarget: DEFAULT_PREFS.openTarget })}
+            >
               既定（{OPEN_TARGET_LABEL[DEFAULT_PREFS.openTarget]}）に戻す
             </button>
           </div>
@@ -60,10 +69,63 @@ export default function SettingsPage() {
       </div>
 
       <div className="card settings-card">
+        <h2>資料を読ませるモデル</h2>
+        <p className="muted">
+          手元か社内に立てたモデルがあると、取り込んだベンダー資料を根拠に
+          Config の
+          下書きを作れます。置いていなくても、資料から拾ったコマンドまでは出ます。
+          外の事業者へは、明示して許すまで一切送りません。設定の仕方は
+          docs/LOCAL_LLM.md にあります。
+        </p>
+        {llm === undefined ? (
+          <p className="muted">確認しています…</p>
+        ) : llm.models.length === 0 ? (
+          <p className="muted">
+            モデルは設定されていません（NETVISION_LLM_URL /
+            NETVISION_LLM_MODEL）。
+          </p>
+        ) : (
+          <table>
+            <thead>
+              <tr>
+                <th>役割</th>
+                <th>モデル</th>
+                <th>宛先</th>
+                <th>状態</th>
+              </tr>
+            </thead>
+            <tbody>
+              {llm.models.map((model) => (
+                <tr key={`${model.role}-${model.model}`}>
+                  <td>
+                    {model.role === "deep" ? "下書き・レビュー" : "要約・分類"}
+                  </td>
+                  <td className="mono">{model.model}</td>
+                  <td className="mono">{model.endpoint}</td>
+                  <td>
+                    {model.usable ? (
+                      <span className="badge ok">使えます</span>
+                    ) : model.blocked_external ? (
+                      <span className="badge expired">
+                        外向きのため止めています
+                      </span>
+                    ) : (
+                      <span className="badge">設定が足りません</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </div>
+
+      <div className="card settings-card">
         <h2>ここにない設定</h2>
         <ul className="muted">
           <li>
-            保守期限・EoL の警告日数、待ち受けるアドレスなどは、運用そのものに効くので
+            保守期限・EoL
+            の警告日数、待ち受けるアドレスなどは、運用そのものに効くので
             環境変数で決めます（README に一覧があります）。
           </li>
           <li>

@@ -115,6 +115,13 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
   openpyxl python-multipart jinja2 uvicorn tzdata
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
+# 中間ファイル（.pyc）を先に作っておく。
+# 置き場所が OneDrive などの同期フォルダだと、初回起動時にこれを書く処理が
+# 同期に巻き込まれて、何分も戻ってこないことがある。作るのは同梱の Python で、
+# 版が違うと使われないため、必ずこの python.exe を使う
+"$STAGE/python/python.exe" -m compileall -q "$STAGE/backend" "$STAGE/lib" >/dev/null 2>&1 || \
+  echo "  （中間ファイルの作成は省略しました。初回起動が少し遅くなります）"
+
 # 起動用バッチと説明書きを作る。
 #
 # ファイル名は ASCII にしておく。日本語名は ZIP の文字コードの扱いが
@@ -129,13 +136,40 @@ stage, py_version, version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 
 bat = """@echo off
 rem NetVision を起動します。インストールは不要です。
-rem 黒い画面は出しません。小さな窓が出るので、終了はそこから行います。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
-start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
+rem データ（DB と資料）の置き場所。空なら C:\\Users\\...\\.netvision
+set NETVISION_DATA_DIR=
+rem 中間ファイルは同梱済み。同期フォルダで固まらないよう、実行時には書かせない
+set PYTHONDONTWRITEBYTECODE=1
+echo NetVision を起動しています...
+echo.
+echo   画面 : http://127.0.0.1:8000
+echo   停止 : このウィンドウを閉じてください
+echo.
+timeout /t 2 >nul
+start "" http://127.0.0.1:8000
+"%~dp0python\\python.exe" -m scripts.standalone
+echo.
+echo 終了しました。上に出ている内容を控えてください。
+pause
 """
 (stage / "NetVision.bat").write_bytes(bat.replace("\n", "\r\n").encode("cp932"))
+
+diag = """@echo off
+rem 黒い画面を出さずに起動します（窓から終了できます）。
+rem 様子を見ながら動かしたいときは NetVision.bat を使ってください。
+setlocal
+cd /d "%~dp0"
+set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
+set NETVISION_DATA_DIR=
+set PYTHONDONTWRITEBYTECODE=1
+start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
+"""
+(stage / "NetVision-window.bat").write_bytes(
+    diag.replace("\n", "\r\n").encode("cp932")
+)
 
 readme = f"""NetVision （インストール不要版）
 ====================================
@@ -145,12 +179,39 @@ readme = f"""NetVision （インストール不要版）
 
 ■ 使い方
 
-  1. このフォルダを、デスクトップなど書き込める場所に置く
+  1. このフォルダを、書き込める場所に置く
   2. 「NetVision.bat」をダブルクリック
   3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
 
-  小さな窓が1つ出ます。止めるときは、その窓の「終了する」を押すか、
-  窓を閉じてください。黒い画面は出ません。
+  黒い画面が1つ出ます。止めるときは、その画面を閉じてください。
+
+■ 置き場所について
+
+  同期フォルダ（OneDrive など）やネットワークドライブでも動きます。
+  Python の中間ファイルは同梱済みで、実行時には書きません。
+
+  ただし、同期していない場所のほうが速く動きます。置ける場所があるなら
+  そちらを選んでください。
+
+  データ（DB と資料）の置き場所は、既定では次の場所です。
+
+    C:\\Users\\（あなたのユーザー名）\\.netvision
+
+  ここに置けない端末では、NetVision.bat の中の
+
+    set NETVISION_DATA_DIR=
+
+  の行に置き場所を書いてください（例: set NETVISION_DATA_DIR=Z:\\NetVision-data）。
+  同期される場所に DB を置く場合は、書いている最中に同期へ持っていかれると
+  壊れることがあるので、データフォルダのコピーをこまめに取ってください。
+
+■ 黒い画面を出したくないとき
+
+  「NetVision-window.bat」を使ってください。小さな窓が1つ出るだけになり、
+  終了はその窓から行います。
+  起動の記録は次の場所に残ります。
+
+    C:\\Users\\（あなたのユーザー名）\\.netvision\\launcher.log
 
 ■ データの保存先
 

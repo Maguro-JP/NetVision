@@ -101,6 +101,9 @@ _LABEL_PITCH = 18.0
 # 枠の内側に取る余白と、名前の行の高さ。画面（topologyGroups.ts の
 # GROUP_PAD / GROUP_HEAD）と同じ値にする。違うと同じ配置なのに枠だけずれ、
 # 画面で確かめた見た目のまま配れない
+#: 枠の名前の始まり（枠の左上から）。画面の .topo-group-label と合わせる
+_GROUP_LABEL_X = 12.0
+_GROUP_LABEL_Y = 16.0
 _GROUP_PAD = 22.0
 _GROUP_HEAD = 22.0
 # 同じ相手への束をどこまで詰められるか。上下の辺は名前を横書きするので
@@ -398,12 +401,17 @@ def render_svg(
             f'width="{gx2 - gx:.0f}" height="{gy2 - gy:.0f}" '
             f'rx="10" fill="{_esc(group.color)}14" stroke="{_esc(group.color)}" '
             f'stroke-width="2" stroke-dasharray="2 5" stroke-linecap="round"/>'
-            f'<text x="{gx + 10:.0f}" y="{gy + 16:.0f}" font-size="11" font-weight="600" '
+            f'<text x="{gx + _GROUP_LABEL_X:.0f}" y="{gy + _GROUP_LABEL_Y:.0f}" '
+            f'font-size="11" font-weight="600" '
             f'paint-order="stroke" stroke="#ffffff" stroke-width="3" '
             f'fill="{_esc(group.color)}">{_esc(label)}</text>'
         )
         # 枠の名前も埋まっている場所として登録する。しないとポート名が上に乗る
-        placement.add(svglayout.text_rect(gx + 10, gy + 16 - 3, label, 11.0, "start", 0.0).grow(2))
+        placement.add(
+            svglayout.text_rect(
+                gx + _GROUP_LABEL_X, gy + _GROUP_LABEL_Y - 3, label, 11.0, "start", 0.0
+            ).grow(2)
+        )
         for child in children.get(group.id, []):
             _draw(child, depth + 1)
 

@@ -16,6 +16,16 @@ Ctrl+C のあとに「バッチ ジョブを終了しますか (Y/N)」と聞く
   1. tkinter があれば、「画面を開く」「終了する」の付いた窓
   2. 無ければ Windows の標準のダイアログ（ctypes 経由。追加の同梱物が要らない）
   3. どちらも出せなければ、黒い画面のまま待つ
+
+黙って消えないこと
+------------------
+
+窓のある起動では、標準の出力先が無い（pythonw では sys.stdout が None）。
+何も書かずに落ちると、画面も出ず、記録も残らず、原因が一切分からない。
+実際に「一瞬だけ黒い窓が出て、あとは何も起きない」という状態になった。
+
+そのため、起動したら真っ先に記録の口を開き、置き場所に launcher.log を書く。
+落ちたときは、その場でダイアログにも出す。
 """
 
 from __future__ import annotations
@@ -26,6 +36,9 @@ import webbrowser
 from dataclasses import dataclass
 
 from scripts import standalone
+
+#: 起動の記録。何が起きたか分からないまま消えるのを防ぐ
+LOG_NAME = "launcher.log"
 
 
 @dataclass
@@ -117,9 +130,47 @@ def _window(runner: Runner, data_dir: str) -> int:
     return 0
 
 
+def attach_log(data_dir) -> None:
+    """記録の口を開く。窓のある起動には出力先が無いので、まずここを作る。
+
+    pythonw では sys.stdout / sys.stderr が None になる。そのままだと、
+    uvicorn がログを書こうとした時点で落ち、しかも何も残らない。
+    """
+    from pathlib import Path
+
+    path = Path(data_dir) / LOG_NAME
+    try:
+        stream = path.open("a", encoding="utf-8", buffering=1)
+    except OSError:
+        return
+    # 黒い画面から動かしたときは、そちらの出力を潰さない
+    if sys.stdout is None:
+        sys.stdout = stream
+    if sys.stderr is None:
+        sys.stderr = stream
+
+
 def main(argv: list[str] | None = None) -> int:
+    try:
+        return _main(argv)
+    except BaseException as exc:  # noqa: BLE001  何が起きても黙って消えない
+        import traceback
+
+        detail = "".join(traceback.format_exception(exc))
+        try:
+            print(detail, file=sys.stderr)
+        except Exception:
+            pass
+        _report(f"NetVision を起動できませんでした。\n\n{detail[-1500:]}")
+        return 1
+
+
+def _main(argv: list[str] | None = None) -> int:
     args = standalone.build_parser().parse_args(argv)
-    data_dir = standalone.prepare(args.data_dir, demo=args.demo)
+    data_dir = standalone.prepare(
+        args.data_dir or str(standalone.default_data_dir()), demo=args.demo
+    )
+    attach_log(data_dir)
 
     if standalone.frontend_dist() is None:
         _report(standalone.NO_FRONTEND)

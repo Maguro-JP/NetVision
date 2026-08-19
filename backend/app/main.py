@@ -43,10 +43,14 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# どこからでも呼べる設定（"*"）のまま資格情報を許すと、他所のページから
+# 利用者の権限で API を叩けてしまう。認証を入れたときに効いてくるので、
+# いま塞いでおく。宛先を並べてある場合だけ資格情報を許す
+_any_origin = "*" in settings.cors_origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
-    allow_credentials=True,
+    allow_credentials=not _any_origin,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -612,10 +612,13 @@ button:disabled {
   outline: 1px solid color-mix(in srgb, currentColor 40%, transparent);
 }
 /* 枠の見出し。図の線や箱に紛れないよう、枠の色で塗った札にする */
+/* 枠の名前は左上に固定する。中身の量で位置が変わると、図を並べたときに
+   枠ごとに名前の位置がずれて見える。文字の始まりは枠の左から 12px
+   （margin 6 + padding 6）。書き出す SVG も同じ値で描く */
 .topo-group-label {
   display: inline-block;
-  margin: 5px 0 0 8px;
-  padding: 2px 8px;
+  margin: 6px 0 0 6px;
+  padding: 2px 6px;
   border-radius: 6px;
   background: currentColor;
   font-size: 11px;
