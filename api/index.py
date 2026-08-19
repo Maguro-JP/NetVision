@@ -27,8 +27,9 @@ if os.environ.get("NETVISION_DEMO_MODE", "").lower() in {"1", "true", "yes"}:
     # 資料ファイルの保管先も書き込み可能な場所へ
     os.environ.setdefault("NETVISION_DOCUMENT_STORAGE_PATH", "/tmp/netvision-documents")
 
-# 同一オリジンで配信するので本来 CORS は不要。プレビューURL からの確認用に開けておく
-os.environ.setdefault("NETVISION_CORS_ORIGINS", '["*"]')
+# 画面と API は同じ場所から配るので CORS は要らない。開けておくと、他所のページから
+# この API を叩ける状態になる（デモとはいえ、癖として残したくない）
+os.environ.setdefault("NETVISION_CORS_ORIGINS", "[]")
 
 from app.main import app as _app  # noqa: E402
 

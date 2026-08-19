@@ -163,3 +163,24 @@ def test_apply_copies_the_old_db_then_upgrades(tmp_path: Path):
     assert confirmed["unconfirmed"] == []
     assert copied.is_file()
     assert (backup_path / "documents" / "note.txt").is_file()
+
+
+def test_a_wide_open_origin_does_not_carry_credentials():
+    """どこからでも呼べる設定のまま資格情報を許さないこと。
+
+    認証を入れたときに、他所のページから利用者の権限で API を叩ける状態に
+    なる。設定を1つ間違えただけでそうなる作りにしない。
+    """
+    from starlette.middleware.cors import CORSMiddleware
+
+    from app.config import settings
+    from app.main import app
+
+    wide = "*" in settings.cors_origins
+    for middleware in app.user_middleware:
+        if middleware.cls is CORSMiddleware:
+            allows = middleware.kwargs.get("allow_credentials")
+            assert allows is not True or not wide
+            break
+    else:  # pragma: no cover
+        raise AssertionError("CORS の設定が見つからない")

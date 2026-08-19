@@ -1,6 +1,7 @@
 import type {
   ChangeLog,
   LinkImportResult,
+  SiteImportResult,
   SpaceView,
   DashboardSummary,
   Device,
@@ -353,6 +354,16 @@ export const api = {
     return upload<LinkImportResult>(
       commit ? "/import/links" : "/import/links/preview",
       form,
+    );
+  },
+  /** 拠点台帳の取り込み。書き出した表をそのまま直して戻せる。 */
+  importSites: (file: File, commit: boolean) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<SiteImportResult>(
+      commit ? "/import/sites" : "/import/sites/preview",
+      form,
+      IMPORT_TIMEOUT_MS,
     );
   },
   importDevices: (options: ImportOptions) => {

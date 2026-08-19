@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.schemas.imports import ImportFieldInfo, ImportResult
-from app.services import importer, linkimport
+from app.services import importer, linkimport, siteimport
 from app.services.tablefile import Table, TableFileError, read_table
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -299,3 +299,58 @@ async def commit_link_import(
     時点で自動的に結線に変わるので、取り込み直しは要らない。
     """
     return await _run_links(db, file, commit=True)
+
+
+# ---------------------------------------------------------------------------
+# 拠点台帳
+# ---------------------------------------------------------------------------
+
+
+class SiteImportIssueRead(BaseModel):
+    row_number: int
+    message: str
+
+
+class SiteImportResultRead(BaseModel):
+    total_rows: int
+    created: int
+    updated: int
+    unchanged: int
+    issues: list[SiteImportIssueRead]
+    unmapped_columns: list[str]
+    committed: bool
+
+
+async def _run_sites(db: Session, file: UploadFile, commit: bool) -> SiteImportResultRead:
+    content = await file.read()
+    if len(content) > _max_upload_bytes():
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+    try:
+        outcome = siteimport.run_import(db, file.filename or "sites", content, commit=commit)
+    except TableFileError as error:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+    return SiteImportResultRead.model_validate(outcome, from_attributes=True)
+
+
+@router.post("/sites/preview", response_model=SiteImportResultRead)
+async def preview_site_import(
+    db: DbSession,
+    file: UploadFile = File(description="拠点台帳（CSV / Excel）"),
+) -> SiteImportResultRead:
+    """拠点台帳の中身を確認するだけで、DB は変更しない。"""
+    return await _run_sites(db, file, commit=False)
+
+
+@router.post("/sites", response_model=SiteImportResultRead)
+async def commit_site_import(
+    db: DbSession,
+    file: UploadFile = File(description="拠点台帳（CSV / Excel）"),
+) -> SiteImportResultRead:
+    """拠点台帳を取り込む。
+
+    突き合わせの鍵は拠点ID。IDが無い行は拠点名で探し、それも無ければ
+    新しく起こす。書き出した表をそのまま直して戻せる。
+
+    拠点に紐づく機器は触らない。
+    """
+    return await _run_sites(db, file, commit=True)

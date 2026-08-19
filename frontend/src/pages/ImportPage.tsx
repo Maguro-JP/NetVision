@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api, type ImportKeyField } from "../api/client";
 import type { ImportField } from "../api/types";
 import LinkSheetImport from "../components/LinkSheetImport";
+import SiteSheetImport from "../components/SiteSheetImport";
 import WindowLink from "../components/WindowLink";
 import { saveBlob } from "../lib/download";
 import type { ImportResult, ImportRowAction } from "../api/types";
@@ -58,7 +59,10 @@ function formatElapsed(seconds: number): string {
  * 「内部ID」列がある場合は、キーよりそちらが優先される。
  */
 /** その列に書ける値の候補。種別のように決まっているものだけ返す。 */
-function choicesOf(fields: ImportField[] | undefined, field: string | undefined): string | null {
+function choicesOf(
+  fields: ImportField[] | undefined,
+  field: string | undefined,
+): string | null {
   if (!field) return null;
   const found = fields?.find((item) => item.name === field);
   if (!found || found.choices.length === 0) return null;
@@ -74,7 +78,10 @@ export default function ImportPage() {
   const [result, setResult] = useState<ImportResult | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
 
-  const { data: fields } = useQuery({ queryKey: ["importFields"], queryFn: api.importFields });
+  const { data: fields } = useQuery({
+    queryKey: ["importFields"],
+    queryFn: api.importFields,
+  });
   // 台帳に機器があるかどうかで、渡すべき下敷きが変わる。
   // 空ならひな形、入っているなら「いまの台帳を書き出したもの」が正しい下敷きになる
   const { data: ledger } = useQuery({
@@ -146,8 +153,11 @@ export default function ImportPage() {
   };
 
   // プレビュー結果に載っている列（マッピング済み + 未対応）が対応付けの編集対象
-  const columns = result ? [...Object.keys(result.mapping), ...result.unmapped_columns] : [];
-  const blocked = !result || result.errors > 0 || result.missing_required_fields.length > 0;
+  const columns = result
+    ? [...Object.keys(result.mapping), ...result.unmapped_columns]
+    : [];
+  const blocked =
+    !result || result.errors > 0 || result.missing_required_fields.length > 0;
   const keyHint = KEY_OPTIONS.find((o) => o.value === keyField)?.hint;
   const busy = run.isPending || downloadErrors.isPending;
   const largeFile = Boolean(file && file.size >= LARGE_FILE_BYTES);
@@ -167,7 +177,8 @@ export default function ImportPage() {
         書き換えます。拠点IDが無いと、別の名前は別の拠点として扱われ、機器がそちらへ移ります
         （<Link to="/sites">拠点の台帳</Link>で直すこともできます）。
         <br />
-        行数が多いとき（数万〜十数万）は CSV の方が速く、待ち時間も短くなります。
+        行数が多いとき（数万〜十数万）は CSV
+        の方が速く、待ち時間も短くなります。
         <br />
         <Link to="/devices">機器一覧</Link>
         から書き出したファイルは、そのまま編集して取り込み直せます。
@@ -183,7 +194,10 @@ export default function ImportPage() {
             onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
           />
           {largeFile && (
-            <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+            <p
+              className="muted"
+              style={{ margin: "6px 0 0", fontSize: "0.85rem" }}
+            >
               大きなファイルです。確認・取り込みに数分かかることがあります
               {excelFile ? "（可能なら CSV にすると速いです）" : ""}。
             </p>
@@ -203,7 +217,10 @@ export default function ImportPage() {
             ))}
           </select>
           {keyHint && (
-            <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+            <p
+              className="muted"
+              style={{ margin: "6px 0 0", fontSize: "0.85rem" }}
+            >
               {keyHint}
             </p>
           )}
@@ -233,19 +250,27 @@ export default function ImportPage() {
                 height={900}
                 title="いまの機器一覧を書き出します。直してそのまま取り込み直せます"
               >
-                いまの機器一覧を書き出す（{(ledger?.total ?? 0).toLocaleString()} 件）
+                いまの機器一覧を書き出す（
+                {(ledger?.total ?? 0).toLocaleString()} 件）
               </WindowLink>
-              <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+              <p
+                className="muted"
+                style={{ margin: "6px 0 0", fontSize: "0.85rem" }}
+              >
                 書き出したファイルを直して取り込むのが確実です。内部IDと管理IDが入った
                 ままなので、ホスト名を変えても同じ機器として直せます。
                 <br />
-                <a href={api.importTemplateUrl}>空のひな形（記入用CSV）</a>も使えます。
+                <a href={api.importTemplateUrl}>空のひな形（記入用CSV）</a>
+                も使えます。
               </p>
             </>
           ) : (
             <>
               <a href={api.importTemplateUrl}>記入用CSVをダウンロード</a>
-              <p className="muted" style={{ margin: "6px 0 0", fontSize: "0.85rem" }}>
+              <p
+                className="muted"
+                style={{ margin: "6px 0 0", fontSize: "0.85rem" }}
+              >
                 管理ID列付きです。社内の番号を入れてから取り込むと、あとから直しやすいです。
               </p>
             </>
@@ -255,7 +280,9 @@ export default function ImportPage() {
 
       <div className="actions">
         <button disabled={!file || busy} onClick={() => run.mutate(false)}>
-          {run.isPending && run.variables === false ? "確認中…" : "内容を確認（取り込まない）"}
+          {run.isPending && run.variables === false
+            ? "確認中…"
+            : "内容を確認（取り込まない）"}
         </button>
         <button
           className="primary"
@@ -268,7 +295,8 @@ export default function ImportPage() {
 
       {busy && (
         <p className="muted" style={{ marginTop: 12 }} role="status">
-          処理中です（{formatElapsed(elapsedSec)}）。行数が多いと数分かかることがあります。
+          処理中です（{formatElapsed(elapsedSec)}
+          ）。行数が多いと数分かかることがあります。
           画面を閉じず、そのまま待ってください。
         </p>
       )}
@@ -278,9 +306,13 @@ export default function ImportPage() {
       {result && (
         <>
           {result.committed ? (
-            <div className="card" style={{ marginTop: 16, borderColor: "var(--sev-ok)" }}>
-              取り込みが完了しました。新規 {result.created} 件 / 更新 {result.updated} 件 / 保守契約{" "}
-              {result.contracts_added} 件を登録しました。
+            <div
+              className="card"
+              style={{ marginTop: 16, borderColor: "var(--sev-ok)" }}
+            >
+              取り込みが完了しました。新規 {result.created} 件 / 更新{" "}
+              {result.updated} 件 / 保守契約 {result.contracts_added}{" "}
+              件を登録しました。
               <Link to="/devices"> 機器一覧を見る →</Link>
             </div>
           ) : result.missing_required_fields.length > 0 ? (
@@ -293,18 +325,21 @@ export default function ImportPage() {
               {result.missing_required_fields.includes(keyField) && (
                 <>
                   {" "}
-                  判定キーに「{KEY_OPTIONS.find((o) => o.value === keyField)?.label}」を選んでいるので、
-                  その列も必要です。
+                  判定キーに「
+                  {KEY_OPTIONS.find((o) => o.value === keyField)?.label}
+                  」を選んでいるので、 その列も必要です。
                 </>
               )}
             </div>
           ) : result.errors > 0 ? (
             <div className="error" style={{ marginTop: 16 }}>
               <div>
-                エラーが {result.errors} 行あります。1行でもエラーがあると取り込みは実行されません。
+                エラーが {result.errors}{" "}
+                行あります。1行でもエラーがあると取り込みは実行されません。
               </div>
               <div style={{ marginTop: 8 }}>
-                エラー行だけを書き出して Excel で修正し、そのファイルを取り込み直せます。
+                エラー行だけを書き出して Excel
+                で修正し、そのファイルを取り込み直せます。
               </div>
               <div className="actions">
                 <button
@@ -324,7 +359,9 @@ export default function ImportPage() {
           ) : null}
 
           {downloadErrors.error && (
-            <div className="error">{(downloadErrors.error as Error).message}</div>
+            <div className="error">
+              {(downloadErrors.error as Error).message}
+            </div>
           )}
 
           <h2>取り込み内容</h2>
@@ -378,13 +415,19 @@ export default function ImportPage() {
               {columns.map((column) => (
                 <tr key={column}>
                   <td>{column}</td>
-                  <td className="muted" style={{ maxWidth: 360, overflow: "hidden" }}>
-                    {(result.column_samples[column] ?? []).join(" / ") || "（空）"}
+                  <td
+                    className="muted"
+                    style={{ maxWidth: 360, overflow: "hidden" }}
+                  >
+                    {(result.column_samples[column] ?? []).join(" / ") ||
+                      "（空）"}
                   </td>
                   <td>
                     <select
                       value={mapping[column] ?? result.mapping[column] ?? ""}
-                      onChange={(e) => setMapping({ ...mapping, [column]: e.target.value })}
+                      onChange={(e) =>
+                        setMapping({ ...mapping, [column]: e.target.value })
+                      }
                     >
                       <option value="">（取り込まない）</option>
                       {(fields ?? []).map((f) => (
@@ -396,9 +439,19 @@ export default function ImportPage() {
                     </select>
                     {/* 決まった書き方しか受け付けない項目は、その場で候補を出す。
                         「種別」に何を書けばよいのか、列を選んだあとに分かる */}
-                    {choicesOf(fields, mapping[column] ?? result.mapping[column]) && (
-                      <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
-                        書き方: {choicesOf(fields, mapping[column] ?? result.mapping[column])}
+                    {choicesOf(
+                      fields,
+                      mapping[column] ?? result.mapping[column],
+                    ) && (
+                      <div
+                        className="muted"
+                        style={{ fontSize: 12, marginTop: 4 }}
+                      >
+                        書き方:{" "}
+                        {choicesOf(
+                          fields,
+                          mapping[column] ?? result.mapping[column],
+                        )}
                       </div>
                     )}
                   </td>
@@ -438,7 +491,12 @@ export default function ImportPage() {
                   <tr key={row.row_number}>
                     <td>{row.row_number}</td>
                     <td>{row.key || "—"}</td>
-                    <td style={{ color: ACTION_COLOR[row.action], fontWeight: 600 }}>
+                    <td
+                      style={{
+                        color: ACTION_COLOR[row.action],
+                        fontWeight: 600,
+                      }}
+                    >
                       {ACTION_LABEL[row.action]}
                     </td>
                     <td>{row.contract_added ? "追加" : "—"}</td>
@@ -463,6 +521,8 @@ export default function ImportPage() {
 
       <hr />
       <LinkSheetImport />
+
+      <SiteSheetImport />
     </>
   );
 }

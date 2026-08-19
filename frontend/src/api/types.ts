@@ -994,6 +994,18 @@ export interface LinkImportResult {
   committed: boolean;
 }
 
+/** 拠点台帳の取り込み結果。 */
+export interface SiteImportResult {
+  total_rows: number;
+  created: number;
+  updated: number;
+  /** 表と中身が同じで、何も変えなかった行 */
+  unchanged: number;
+  issues: { row_number: number; message: string }[];
+  unmapped_columns: string[];
+  committed: boolean;
+}
+
 /** 眺めるための、拠点単位にまとめた姿。 */
 export interface SpaceView {
   sites: {
