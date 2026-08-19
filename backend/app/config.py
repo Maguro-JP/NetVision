@@ -67,6 +67,9 @@ class Settings(BaseSettings):
 
     # 閉域の中に置いたモデル（OpenAI 互換 API）。設定しなければどこへも繋がず、
     # 規則ベースだけで動く。社内に立てたものを想定していて、外の事業者へは出さない
+    # モデルを使うかどうか。置いてあっても、切って確かめたいことがある
+    # （規則ベースだけのときと結果を見比べる、遅いので一時的に止める、など）
+    llm_enabled: bool = True
     llm_url: str | None = None
     llm_model: str | None = None
     llm_timeout: float = 60.0

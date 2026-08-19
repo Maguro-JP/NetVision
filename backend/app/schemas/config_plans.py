@@ -135,6 +135,8 @@ class LlmModelRead(BaseModel):
 
 
 class LlmStatusRead(BaseModel):
+    #: 使う設定になっているか（NETVISION_LLM_ENABLED）
+    enabled: bool = True
     configured: bool
     models: list[LlmModelRead]
 

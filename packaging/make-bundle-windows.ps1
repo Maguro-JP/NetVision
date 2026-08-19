@@ -15,7 +15,9 @@
 [CmdletBinding()]
 param(
     [string]$OutDir,
-    [string]$PyVersion = "3.11.9"
+    [string]$PyVersion = "3.11.9",
+    # GGUF の URL かパス。渡すとモデルを同梱する（一式が数 GB 大きくなる）
+    [string]$WithModel = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -129,6 +131,27 @@ $packages = @(
 )
 & $python -m pip install --quiet --target (Join-Path $Stage "lib") --no-warn-script-location @packages
 if ($LASTEXITCODE -ne 0) { throw "ライブラリの取得に失敗しました" }
+
+# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えない。
+# 入れる場合は -WithModel に GGUF の URL かパスを渡す
+if ($WithModel) {
+    Step "モデルを動かすライブラリを入れます"
+    & $python -m pip install --quiet --target (Join-Path $Stage "lib") `
+        --no-warn-script-location llama-cpp-python
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "  取得できませんでした。モデル無しで続けます"
+    }
+
+    $models = Join-Path $Stage "models"
+    New-Item -ItemType Directory -Force -Path $models | Out-Null
+    if ($WithModel -like "http*") {
+        Step "モデルを取得します（数 GB あります）"
+        $name = [IO.Path]::GetFileName(($WithModel -split "\?")[0])
+        Fetch $WithModel (Join-Path $models $name)
+    } else {
+        Copy-Item $WithModel $models
+    }
+}
 Get-ChildItem (Join-Path $Stage "lib") -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 

@@ -52,6 +52,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from app.config import settings
+from app.services import llm_inproc
 
 logger = logging.getLogger(__name__)
 
@@ -119,8 +120,19 @@ def profiles() -> list[Profile]:
     return []
 
 
+def enabled() -> bool:
+    """モデルを使う設定になっているか。
+
+    置いてあっても切れるようにしておく。規則ベースだけのときと見比べたい、
+    遅いので一時的に止めたい、という場面が必ず来る。
+    """
+    return bool(settings.llm_enabled)
+
+
 def pick(role: str = QUICK) -> Profile | None:
     """その役割に使えるモデル。無ければ他の役割で代用する。"""
+    if not enabled():
+        return None
     usable = [item for item in profiles() if item.usable]
     for item in usable:
         if item.role == role:
@@ -130,7 +142,7 @@ def pick(role: str = QUICK) -> Profile | None:
 
 def configured(role: str = QUICK) -> bool:
     """モデルに聞ける状態か。画面に「AI で下書きする」を出すかの判断に使う。"""
-    return pick(role) is not None
+    return pick(role) is not None or (enabled() and llm_inproc.usable())
 
 
 def is_local(url: str) -> bool:
@@ -149,15 +161,30 @@ def is_local(url: str) -> bool:
 def status() -> dict[str, object]:
     """画面に出す状態。鍵そのものは返さない。"""
     items = profiles()
+    on = enabled()
+    inside = [
+        {
+            "role": role,
+            "model": path.stem,
+            "endpoint": "アプリの中",
+            "local": True,
+            "usable": on and llm_inproc.runtime_ready(),
+            "blocked_external": False,
+        }
+        for role in (QUICK, DEEP)
+        if (path := llm_inproc.pick_file(role)) is not None
+    ]
     return {
-        "configured": any(item.usable for item in items),
-        "models": [
+        "enabled": on,
+        "configured": on and (any(item.usable for item in items) or llm_inproc.usable()),
+        "models": inside
+        + [
             {
                 "role": item.role,
                 "model": item.model,
                 "endpoint": item.url,
                 "local": item.local,
-                "usable": item.usable,
+                "usable": on and item.usable,
                 "blocked_external": bool(item.url)
                 and not item.local
                 and not settings.llm_allow_external,
@@ -180,7 +207,15 @@ def ask(
     """
     profile = pick(role)
     if profile is None:
-        return None
+        # 宛先が無いときは、アプリの中で動かせるかを見る。端末に新しいソフトを
+        # 入れられない職場では、こちらだけが使える道になる
+        if not enabled():
+            return None
+        inside = llm_inproc.ask(prompt, system=system, role=role, temperature=temperature)
+        if inside is None:
+            return None
+        text, name = inside
+        return Answer(text=text, model=name, role=role)
 
     messages = []
     if system:

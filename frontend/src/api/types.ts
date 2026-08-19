@@ -774,6 +774,8 @@ export interface LlmModel {
 }
 
 export interface LlmStatus {
+  /** 使う設定になっているか（切っていると false） */
+  enabled: boolean;
   configured: boolean;
   models: LlmModel[];
 }

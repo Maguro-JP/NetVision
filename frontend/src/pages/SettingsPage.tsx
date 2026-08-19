@@ -77,6 +77,11 @@ export default function SettingsPage() {
           外の事業者へは、明示して許すまで一切送りません。設定の仕方は
           docs/LOCAL_LLM.md にあります。
         </p>
+        {llm && !llm.enabled && (
+          <p className="muted">
+            いまは使わない設定です（NETVISION_LLM_ENABLED=false）。規則ベースだけで動きます。
+          </p>
+        )}
         {llm === undefined ? (
           <p className="muted">確認しています…</p>
         ) : llm.models.length === 0 ? (

@@ -19,6 +19,51 @@ NetVision は、モデルが無くても全部の機能が動きます。モデ�
 1台で試すなら `deep` に `qwen2.5-coder:7b`、その1つだけで始めて構いません。
 置いていない役割は、置いてある方へ回ります。
 
+## アプリの中で動かす（新しいソフトを入れない）
+
+端末に新しい実行ファイルを置けない場合の道です。増えるのは NetVision が使う
+ライブラリ1つだけで、実行ファイルは増えず、外にも出ません。
+
+モデルの実体（GGUF ファイル）は、アプリの隣の `models` フォルダに置きます。
+ファイル名は問いません。複数置くと、名前から使い分けます（3B のような小さいものを
+要約に、大きいものを Config の下書きに）。
+
+```
+NetVision/
+  models/
+    qwen2.5-3b-instruct-q4_k_m.gguf
+    qwen2.5-coder-7b-instruct-q4_k_m.gguf
+```
+
+置き場所を変えるなら `NETVISION_MODEL_DIR`、1つを名指しするなら
+`NETVISION_MODEL_PATH` です。何も置かなければ、規則ベースだけで動きます。
+
+配る一式に同梱するには、作成スクリプトに GGUF の URL かパスを渡します。
+既定では同梱しません（一式が数 GB 大きくなるため）。
+
+```
+WITH_MODEL=https://…/qwen2.5-coder-7b-instruct-q4_k_m.gguf ./packaging/make-bundle-windows.sh
+```
+
+```
+./packaging/make-bundle-windows.ps1 -WithModel C:\models\qwen2.5-coder-7b.gguf
+```
+
+モデルの実体をリポジトリに置かないのは、GitHub が1ファイル 100MB までという
+制約があるためと、モデルは数か月で新しいものが出るためです。アプリと一緒に
+固定すると、入れ替えのたびにアプリごと配り直すことになります。
+
+## 使うのを止める
+
+置いてあっても切れます。規則ベースだけのときと結果を見比べたい、遅いので
+一時的に止めたい、という場面のためです。
+
+```
+NETVISION_LLM_ENABLED=false
+```
+
+いまどうなっているかは、画面の「設定」に出ます。
+
 ## 何を入れるか（端末の制約で選ぶ）
 
 NetVision は OpenAI 互換の口へ問い合わせるだけで、モデルを動かすソフトは

@@ -115,6 +115,28 @@ echo "==> 依存ライブラリを Windows 向けに集めます"
   openpyxl python-multipart jinja2 uvicorn tzdata
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
+# モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えない。
+# 入れる場合は WITH_MODEL に GGUF の URL かパスを渡す
+if [ -n "${WITH_MODEL:-}" ]; then
+  echo "==> モデルを動かすライブラリを入れます"
+  "$PY" -m pip install --quiet --target "$STAGE/lib" \
+    --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
+    --implementation cp --abi "$PY_TAG" llama-cpp-python || {
+      echo "  取得できませんでした。モデル無しで続けます" >&2
+    }
+
+  mkdir -p "$STAGE/models"
+  case "$WITH_MODEL" in
+    http*)
+      echo "==> モデルを取得します（数 GB あります）"
+      curl -fSL -o "$STAGE/models/$(basename "${WITH_MODEL%%\?*}")" "$WITH_MODEL"
+      ;;
+    *)
+      cp "$WITH_MODEL" "$STAGE/models/"
+      ;;
+  esac
+fi
+
 # 中間ファイル（.pyc）を先に作っておく。
 # 置き場所が OneDrive などの同期フォルダだと、初回起動時にこれを書く処理が
 # 同期に巻き込まれて、何分も戻ってこないことがある。作るのは同梱の Python で、
