@@ -819,6 +819,12 @@ export const api = {
       body: JSON.stringify(body),
     }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
+  /** モデルを使うかどうかの切り替え。次の起動でも残る */
+  setLlmEnabled: (enabled: boolean) =>
+    request<LlmStatus>("/llm/enabled", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
   /** 手元にモデルを置けないとき、承認済みの AI へ貼るための依頼文 */
   draftPrompt: (deviceId: number, body: { request: string; base?: string }) =>
     request<ConfigDraft>(`/devices/${deviceId}/config-draft/prompt`, {

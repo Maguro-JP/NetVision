@@ -52,7 +52,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from app.config import settings
-from app.services import llm_inproc
+from app.services import appsettings, llm_inproc
 
 logger = logging.getLogger(__name__)
 
@@ -120,13 +120,27 @@ def profiles() -> list[Profile]:
     return []
 
 
+#: 画面から切り替えたときの保存先の名前
+ENABLED_KEY = "llm_enabled"
+
+
 def enabled() -> bool:
     """モデルを使う設定になっているか。
 
     置いてあっても切れるようにしておく。規則ベースだけのときと見比べたい、
     遅いので一時的に止めたい、という場面が必ず来る。
+
+    画面で決めたことが勝つ。環境変数は初期値として扱う。
     """
+    chosen = appsettings.get(ENABLED_KEY)
+    if isinstance(chosen, bool):
+        return chosen
     return bool(settings.llm_enabled)
+
+
+def set_enabled(value: bool) -> None:
+    """画面からの切り替え。次の起動でも残る。"""
+    appsettings.set_value(ENABLED_KEY, bool(value))
 
 
 def pick(role: str = QUICK) -> Profile | None:

@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api/client";
 import {
@@ -19,9 +19,16 @@ import {
  */
 export default function SettingsPage() {
   const [prefs, setPrefs] = usePrefs();
+  const queryClient = useQueryClient();
   const { data: llm } = useQuery({
     queryKey: ["llmStatus"],
     queryFn: () => api.llmStatus(),
+  });
+  // 使うかどうかは、その場で切り替えられるようにする。環境変数だと起動し直しになり、
+  // 打ち間違いも起きる
+  const switchLlm = useMutation({
+    mutationFn: (enabled: boolean) => api.setLlmEnabled(enabled),
+    onSuccess: (status) => queryClient.setQueryData(["llmStatus"], status),
   });
 
   return (
@@ -77,10 +84,24 @@ export default function SettingsPage() {
           外の事業者へは、明示して許すまで一切送りません。設定の仕方は
           docs/LOCAL_LLM.md にあります。
         </p>
-        {llm && !llm.enabled && (
-          <p className="muted">
-            いまは使わない設定です（NETVISION_LLM_ENABLED=false）。規則ベースだけで動きます。
-          </p>
+        {llm && (
+          <div className="actions">
+            <button
+              className={llm.enabled ? "" : "primary"}
+              onClick={() => switchLlm.mutate(!llm.enabled)}
+              disabled={switchLlm.isPending}
+            >
+              {llm.enabled ? "モデルを使わない" : "モデルを使う"}
+            </button>
+            <span className="muted">
+              {llm.enabled
+                ? "いまは使う設定です。置いてあれば下書きに使います"
+                : "いまは使わない設定です。規則ベースだけで動きます"}
+            </span>
+          </div>
+        )}
+        {switchLlm.error && (
+          <div className="error">{(switchLlm.error as Error).message}</div>
         )}
         {llm === undefined ? (
           <p className="muted">確認しています…</p>

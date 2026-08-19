@@ -1,6 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -238,6 +239,26 @@ def preview(payload: DiffPreviewRequest) -> DiffRead:
 @router.get("/llm/status", response_model=LlmStatusRead)
 def llm_status() -> LlmStatusRead:
     """モデルを置いてあるか。画面に「下書きを作る」を出すかの判断に使う。"""
+    return LlmStatusRead.model_validate(llm.status())
+
+
+class LlmSwitchRequest(BaseModel):
+    """モデルを使うかどうかの切り替え。"""
+
+    enabled: bool
+
+
+@router.post("/llm/enabled", response_model=LlmStatusRead)
+def switch_llm(payload: LlmSwitchRequest) -> LlmStatusRead:
+    """画面から、モデルを使うかどうかを切り替える。
+
+    規則ベースだけのときと結果を見比べたい、遅いので一時的に止めたい、という
+    場面のため。環境変数だと起動し直しになるので、その場で切れるようにする。
+    """
+    try:
+        llm.set_enabled(payload.enabled)
+    except RuntimeError as error:
+        raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(error)) from error
     return LlmStatusRead.model_validate(llm.status())
 
 
