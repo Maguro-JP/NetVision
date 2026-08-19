@@ -127,3 +127,17 @@ def test_the_launcher_module_is_bundled():
     assert (REPO / "backend" / "scripts" / "launcher.py").is_file()
     for script in (FOR_WINDOWS, POWERSHELL):
         assert "scripts" in script.read_text(encoding="utf-8")
+
+
+def test_a_way_to_see_the_error_is_bundled():
+    """窓のある起動は、失敗しても何も出ないまま消える。
+
+    黒い画面で動かす道を必ず同梱し、記録も残す。原因が見えないと、
+    渡した相手の手元で何も分からなくなる。
+    """
+    for script in (FOR_WINDOWS, POWERSHELL):
+        text = script.read_text(encoding="utf-8")
+        assert "NetVision-check.bat" in text, f"{script.name} に診断用の起動が無い"
+    assert "launcher.log" in (REPO / "backend" / "scripts" / "launcher.py").read_text(
+        encoding="utf-8"
+    )

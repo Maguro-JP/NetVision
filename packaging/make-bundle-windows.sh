@@ -137,6 +137,24 @@ start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
 """
 (stage / "NetVision.bat").write_bytes(bat.replace("\n", "\r\n").encode("cp932"))
 
+diag = """@echo off
+rem うまく起動しないときに使います。黒い画面のまま動かし、
+rem 何が起きているかをその場に表示します。
+setlocal
+cd /d "%~dp0"
+set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
+echo NetVision を、様子が見える形で起動します。
+echo 止めるときは、この画面を閉じてください。
+echo.
+"%~dp0python\\python.exe" -m scripts.standalone
+echo.
+echo 終了しました。上に出ている内容を控えてください。
+pause
+"""
+(stage / "NetVision-check.bat").write_bytes(
+    diag.replace("\n", "\r\n").encode("cp932")
+)
+
 readme = f"""NetVision （インストール不要版）
 ====================================
 
@@ -151,6 +169,14 @@ readme = f"""NetVision （インストール不要版）
 
   小さな窓が1つ出ます。止めるときは、その窓の「終了する」を押すか、
   窓を閉じてください。黒い画面は出ません。
+
+■ うまく起動しないとき
+
+  「NetVision-check.bat」をダブルクリックしてください。黒い画面のまま動かし、
+  何が起きているかをその場に表示します。表示された内容を控えてください。
+  起動の記録は次の場所にも残ります。
+
+    C:\\Users\\（あなたのユーザー名）\\.netvision\\launcher.log
 
 ■ データの保存先
 
