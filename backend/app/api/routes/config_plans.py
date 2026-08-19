@@ -12,6 +12,7 @@ from app.schemas.config_plans import (
     ConfigPlanCreate,
     ConfigPlanRead,
     ConfigPlanUpdate,
+    ConfigReviewRequest,
     DiffPreviewRequest,
     DiffRead,
     DraftLineRead,
@@ -271,3 +272,60 @@ def draft_config(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> 
         notes=result.notes,
         model=result.model,
     )
+
+
+def _draft_read(device: Device, result) -> ConfigDraftRead:
+    return ConfigDraftRead(
+        device_id=device.id,
+        vendor=result.vendor,
+        body=result.body,
+        lines=[
+            DraftLineRead(text=line.text, grounded=line.grounded, risks=line.risks)
+            for line in result.lines
+        ],
+        sources=[
+            DraftSourceRead(
+                document_id=source.document_id,
+                title=source.title,
+                heading=source.heading,
+                commands=source.commands[:20],
+            )
+            for source in result.sources
+        ],
+        risks=result.risks,
+        notes=result.notes,
+        model=result.model,
+    )
+
+
+@router.post("/devices/{device_id}/config-draft/prompt", response_model=ConfigDraftRead)
+def draft_prompt(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> ConfigDraftRead:
+    """手元にモデルを置けない場合に、人が AI へ貼るための依頼文を作る。
+
+    資料の該当箇所と現行 Config を材料として並べる。返ってきた設定は
+    `/config-draft/review` に貼り戻すと、こちらで検める。
+    """
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
+    if not payload.request.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+
+    result = config_draft.prompt_for(db, device, payload.request, base=payload.base)
+    return _draft_read(device, result)
+
+
+@router.post("/devices/{device_id}/config-draft/review", response_model=ConfigDraftRead)
+def review_draft(device_id: int, payload: ConfigReviewRequest, db: DbSession) -> ConfigDraftRead:
+    """よそで書いた設定を、資料と突き合わせて検める。
+
+    どこで書かれたものでも通す道は同じにする。書いた場所によって確かめ方が
+    変わると、確かめ漏れがそこに溜まる。
+    """
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
+    if not payload.body.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "設定を貼ってください")
+
+    return _draft_read(device, config_draft.review(db, device, payload.request, payload.body))

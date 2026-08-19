@@ -810,6 +810,18 @@ export const api = {
       body: JSON.stringify(body),
     }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
+  /** 手元にモデルを置けないとき、承認済みの AI へ貼るための依頼文 */
+  draftPrompt: (deviceId: number, body: { request: string; base?: string }) =>
+    request<ConfigDraft>(`/devices/${deviceId}/config-draft/prompt`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** よそで書いた設定を、資料と突き合わせて検める */
+  reviewDraft: (deviceId: number, body: { request: string; body: string }) =>
+    request<ConfigDraft>(`/devices/${deviceId}/config-draft/review`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   planDownloadUrl: (
     id: number,
     kind: "current" | "future" | "diff" | "rollback",

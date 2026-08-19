@@ -15,6 +15,15 @@
 資料から拾ったコマンドを手がかりとして返す。
 
 生成するだけで、実機には投入しない。
+
+## 手元にモデルを置けない場合
+
+端末に何も入れられない職場がある。その場合でも、会社が承認している AI
+（M365 Copilot など）を人が使うことはできる。そこで、材料を組み立てた
+依頼文を出して人に渡し、返ってきた Config を貼り戻してもらう道を用意する。
+
+生成をどこでやっても、検める側（資料との突き合わせと、差分・リスク判定）は
+こちらに残る。ここが本体で、モデルは差し替えのきく部品として扱う。
 """
 
 from __future__ import annotations
@@ -199,6 +208,69 @@ def draft(db: Session, device: Device, request: str, *, base: str | None = None)
     result.lines, result.risks = _check(result.body, sources, vendor)
 
     if result.ungrounded:
+        result.notes.append(
+            f"資料に同じ書き方が見つからない行が {len(result.ungrounded)} 行あります。"
+            "投入前にその行を確かめてください"
+        )
+    result.notes.append("ここで作るのは下書きだけです。実機へは投入しません")
+    return result
+
+
+def prompt_for(db: Session, device: Device, request: str, *, base: str | None = None) -> Draft:
+    """人が AI へ貼るための依頼文を組み立てる。
+
+    モデルを置けない端末では、承認済みの AI を人が使うほうが現実的なため。
+    `body` に依頼文を入れて返す（下書きそのものではない）。
+    """
+    snapshot = config_plans.latest_snapshot(db, device.id)
+    current = base if base is not None else (snapshot.content if snapshot else "")
+    vendor = (snapshot.vendor if snapshot and snapshot.vendor else "") or (
+        config_plans.vendor_from_name(device.vendor)
+    )
+    sources = _find_sections(db, device, request)
+
+    machine = f"{device.vendor} {device.model}".strip() or "ネットワーク機器"
+    header = (
+        f"{machine} の設定を書いてください。\n"
+        "下に貼る資料の抜粋に書かれている書き方だけを使ってください。\n"
+        "出力は投入するコマンドの行だけにしてください（説明・囲みは不要）。\n"
+        "資料に書き方が無い部分は、その行を書かずに ! で始まる行に不足として残してください。\n"
+    )
+    result = Draft(
+        body=header + "\n" + _material(sources, current, request),
+        sources=sources,
+        vendor=vendor,
+    )
+    if not sources:
+        result.notes.append(
+            "依頼に関係する資料が見つかりませんでした。資料を登録すると、"
+            "その中身を根拠として依頼文に載せます"
+        )
+    result.notes.append(
+        "この文を AI に貼り、返ってきた設定をこの画面に貼り戻してください。"
+        "資料との突き合わせと、通信に影響する行の印は、こちらで付けます"
+    )
+    result.notes.append("実機の情報を外へ出すことになります。職場の決まりを確かめてください")
+    return result
+
+
+def review(db: Session, device: Device, request: str, body: str) -> Draft:
+    """人が持ち帰った設定を検める。
+
+    どこで書かれたものでも、通す道は同じにしておく。書いた場所によって
+    確かめ方が変わると、確かめ漏れがそこに溜まる。
+    """
+    snapshot = config_plans.latest_snapshot(db, device.id)
+    vendor = (snapshot.vendor if snapshot and snapshot.vendor else "") or (
+        config_plans.vendor_from_name(device.vendor)
+    )
+    sources = _find_sections(db, device, request) if request.strip() else []
+    result = Draft(body=_strip_fences(body).strip(), sources=sources, vendor=vendor)
+    result.lines, result.risks = _check(result.body, sources, vendor)
+
+    if not sources:
+        result.notes.append("突き合わせる資料がありません。行の裏付けは確かめられていません")
+    elif result.ungrounded:
         result.notes.append(
             f"資料に同じ書き方が見つからない行が {len(result.ungrounded)} 行あります。"
             "投入前にその行を確かめてください"
