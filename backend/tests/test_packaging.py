@@ -108,18 +108,20 @@ def test_both_bundles_write_the_same_launcher():
     assert _bat_from_shell() == _bat_from_powershell()
 
 
-def test_the_launcher_opens_a_window_instead_of_a_console():
-    """黒い画面を出さず、窓から止められる形にする。
+def test_the_default_launcher_shows_what_is_happening():
+    """既定は黒い画面のまま動かす。
 
-    黒い画面だと止め方が Ctrl+C しか無く、そのあとに Windows が出す
-    「バッチ ジョブを終了しますか」は、Y でも N でも意図とずれる。
-    ふつうのアプリと同じく、窓の「終了する」で止められるようにする。
+    窓だけの起動にしたところ、失敗しても何も出ないまま消えて、原因が
+    分からなくなった。まずは様子が見えることを優先する。
+    窓から止めたい人向けに、別の起動を用意してある。
     """
     bat = _bat_from_shell()
-    assert "pythonw.exe" in bat, "黒い画面の出ない起動になっていない"
-    assert "scripts.launcher" in bat
-    assert "pause" not in bat
-    assert "Ctrl+C" not in bat
+    assert "scripts.standalone" in bat
+    assert "pause" in bat, "終わったあとに内容が読めない"
+    for script in (FOR_WINDOWS, POWERSHELL):
+        text = script.read_text(encoding="utf-8")
+        assert "NetVision-window.bat" in text, f"{script.name} に窓つきの起動が無い"
+        assert "scripts.launcher" in text
 
 
 def test_the_launcher_module_is_bundled():
@@ -129,15 +131,8 @@ def test_the_launcher_module_is_bundled():
         assert "scripts" in script.read_text(encoding="utf-8")
 
 
-def test_a_way_to_see_the_error_is_bundled():
-    """窓のある起動は、失敗しても何も出ないまま消える。
-
-    黒い画面で動かす道を必ず同梱し、記録も残す。原因が見えないと、
-    渡した相手の手元で何も分からなくなる。
-    """
-    for script in (FOR_WINDOWS, POWERSHELL):
-        text = script.read_text(encoding="utf-8")
-        assert "NetVision-check.bat" in text, f"{script.name} に診断用の起動が無い"
+def test_the_windowed_launcher_leaves_a_record():
+    """窓のある起動は、失敗しても何も出ないまま消える。記録だけが手がかりになる。"""
     assert "launcher.log" in (REPO / "backend" / "scripts" / "launcher.py").read_text(
         encoding="utf-8"
     )
