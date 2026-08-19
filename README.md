@@ -858,6 +858,8 @@ NETVISION_LLM_PROFILES=[
 
 ### 資料を根拠に Config を下書きする
 
+手順は [docs/LOCAL_LLM.md](docs/LOCAL_LLM.md) にまとめてあります。
+
 モデルを置くと、「Config 計画」の将来フルを編集しているときに、やりたいことを
 言葉で書いて下書きを作れます。作りは3段です。
 
