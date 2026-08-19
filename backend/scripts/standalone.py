@@ -40,6 +40,23 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def on_synced_folder() -> str | None:
+    """アプリの置き場所が、同期フォルダやネットワークドライブか。
+
+    OneDrive の中や Z: に置くと、Python が中間ファイルを書くたびに同期が走り、
+    起動が戻ってこないことがある。実際に、起動しないという形で踏んだ。
+    黙って遅いより、置き場所が悪いと言えたほうが早い。
+    """
+    text = str(REPO)
+    for needle in ("OneDrive", "Dropbox", "Google ドライブ", "GoogleDrive", "Box"):
+        if needle.lower() in text.lower():
+            return f"{needle} の中に置かれています"
+    # Windows のネットワークドライブ（\\server\share か、C 以外の割り当て）
+    if text.startswith("\\\\"):
+        return "ネットワークの共有フォルダに置かれています"
+    return None
+
+
 def prepare(data_dir: str, *, demo: bool = False) -> Path:
     """置き場所を決めて、環境変数に反映する。
 
@@ -91,6 +108,12 @@ def main(argv: list[str] | None = None) -> int:
         print(
             "  ※ 自分の端末以外からも見える設定です。"
             "まだ認証が無いので、置き場所と回線に注意してください"
+        )
+    warning = on_synced_folder()
+    if warning:
+        print(
+            f"  ※ アプリの置き場所が {warning}。起動や取り込みが極端に遅くなることが"
+            "あります。C ドライブの、同期していないフォルダへ移してください"
         )
     print("止めるときは Ctrl+C")
 

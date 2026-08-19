@@ -141,3 +141,15 @@ def test_a_way_to_see_the_error_is_bundled():
     assert "launcher.log" in (REPO / "backend" / "scripts" / "launcher.py").read_text(
         encoding="utf-8"
     )
+
+
+def test_the_bundle_avoids_writing_bytecode_at_runtime():
+    """同期フォルダに置かれたときに、中間ファイルの書き込みで固まらないこと。
+
+    先に作って同梱し、実行時には書かせない。OneDrive の中で起動が戻って
+    こない、という形で実際に踏んだ。
+    """
+    for script in (FOR_WINDOWS, POWERSHELL):
+        text = script.read_text(encoding="utf-8")
+        assert "compileall" in text, f"{script.name} が中間ファイルを作っていない"
+        assert "PYTHONDONTWRITEBYTECODE" in text, f"{script.name} が実行時に書かせている"

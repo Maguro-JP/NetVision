@@ -132,6 +132,10 @@ if ($LASTEXITCODE -ne 0) { throw "ライブラリの取得に失敗しました"
 Get-ChildItem (Join-Path $Stage "lib") -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
+# 中間ファイル（.pyc）を先に作っておく。置き場所が OneDrive などの同期フォルダだと、
+# 初回起動時にこれを書く処理が同期に巻き込まれて、何分も戻ってこないことがある
+& $python -m compileall -q (Join-Path $Stage "backend") (Join-Path $Stage "lib") | Out-Null
+
 # pip はここで役目を終える。閉域へ持ち込むものに残す理由が無いので外す
 foreach ($leftover in "python\Lib", "python\Scripts") {
     $path = Join-Path $Stage $leftover
@@ -150,6 +154,9 @@ rem 黒い画面は出しません。小さな窓が出るので、終了はそ�
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
+rem 置き場所が OneDrive などの同期フォルダだと、Python が書く中間ファイルの
+rem 同期で固まる。中間ファイルは同梱済みなので、実行時には書かせない
+set PYTHONDONTWRITEBYTECODE=1
 start "" "%~dp0python\pythonw.exe" -m scripts.launcher
 '@
 $diag = @'
@@ -159,6 +166,9 @@ rem 何が起きているかをその場に表示します。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
+rem 置き場所が OneDrive などの同期フォルダだと、Python が書く中間ファイルの
+rem 同期で固まる。中間ファイルは同梱済みなので、実行時には書かせない
+set PYTHONDONTWRITEBYTECODE=1
 echo NetVision を、様子が見える形で起動します。
 echo 止めるときは、この画面を閉じてください。
 echo.
@@ -192,6 +202,12 @@ NetVision （インストール不要版）
 
   小さな窓が1つ出ます。止めるときは、その窓の「終了する」を押すか、
   窓を閉じてください。黒い画面は出ません。
+
+■ 置き場所について
+
+  OneDrive などの同期フォルダや、ネットワークドライブ（Z: など）には
+  置かないでください。起動が何分も戻ってこない、途中で失敗する、といった
+  ことが起きます。C ドライブの中の、同期していないフォルダに置いてください。
 
 ■ うまく起動しないとき
 
