@@ -250,24 +250,42 @@ def busiest_device_ids(
     台数が多いと全体図は描けないが、そこで「出せません」とだけ返すと、
     台帳と結線表を入れた直後に何も出ない図を見ることになる。
     人が拠点を選べるようになるまでの入口として、線の多いところを出す。
+
+    数えるのは結線の表だけにする。16万台の台帳を1台ずつ数えると、図を1つ
+    出すのに何秒もかかる。結線の無い機器は、そもそも図に出す価値が無い。
     """
     from app.models.topology import Link
 
-    counted = (
+    ends = (
         select(Link.a_device_id.label("device_id"))
         .union_all(select(Link.b_device_id.label("device_id")))
         .subquery()
     )
+    ranked = (
+        select(ends.c.device_id, func.count().label("links"))
+        .group_by(ends.c.device_id)
+        .order_by(func.count().desc(), ends.c.device_id)
+        .limit(limit * 2)
+        .subquery()
+    )
     stmt = (
-        select(Device.id, func.count(counted.c.device_id).label("links"))
-        .outerjoin(counted, counted.c.device_id == Device.id)
-        .group_by(Device.id)
-        .order_by(func.count(counted.c.device_id).desc(), Device.id)
+        select(Device.id)
+        .join(ranked, ranked.c.device_id == Device.id)
+        .order_by(ranked.c.links.desc(), Device.id)
         .limit(limit)
     )
     if not include_retired:
         stmt = stmt.where(Device.status != DeviceStatus.RETIRED)
-    return {row[0] for row in db.execute(stmt)}
+    found = {row[0] for row in db.execute(stmt)}
+    if found:
+        return found
+
+    # 結線が1本も無いなら、台帳の先頭から出す。真っ白よりはましで、
+    # ここから拠点を選んでもらう
+    fallback = select(Device.id).order_by(Device.id).limit(limit)
+    if not include_retired:
+        fallback = fallback.where(Device.status != DeviceStatus.RETIRED)
+    return {row[0] for row in db.execute(fallback)}
 
 
 def get_graph(
@@ -710,9 +728,12 @@ def _rank_from_adjacency(
 
     ranks: dict[int, int] = {}
     remaining = set(adjacency)
-    while remaining:
-        # 島ごとに求める。繋がっていない機器同士の上下は比べようがない
-        seed = min(remaining)
+    # 島ごとに求める。繋がっていない機器同士の上下は比べようがない。
+    # 起点は昇順に1度だけなめる。毎回 min(remaining) を取ると、島の数だけ
+    # 全体を数え直すことになり、5万本の結線で数秒かかっていた
+    for seed in sorted(adjacency):
+        if seed not in remaining:
+            continue
         end_a, _ = _far(seed, adjacency)
         end_b, from_a = _far(end_a, adjacency)
         _, from_b = _far(end_b, adjacency)
