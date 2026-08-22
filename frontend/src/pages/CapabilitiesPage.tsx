@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api/client";
+import HouseStylePanel from "../components/HouseStylePanel";
 import type { Capability } from "../api/types";
 
 /**
@@ -102,6 +103,8 @@ export default function CapabilitiesPage() {
       ))}
 
       <p className="muted">○ はひととおり、△ は一部、— は扱っていません。</p>
+
+      <HouseStylePanel />
     </>
   );
 }

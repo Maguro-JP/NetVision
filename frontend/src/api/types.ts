@@ -1286,3 +1286,22 @@ export interface AskResult {
   questions: string[];
   plan: AdditionPlan | null;
 }
+
+/** 取り込んだ Config から覚えた、その現場の流儀。 */
+export interface HouseStyle {
+  devices_seen: number;
+  vlan_step: number | null;
+  hostname_pattern: string | null;
+  syslog_hosts: string[];
+  ntp_hosts: string[];
+  stp_mode: string | null;
+  baseline_lines: string[];
+  learned: {
+    topic: string;
+    value: string;
+    seen: number;
+    total: number;
+    share: number;
+    detail: string;
+  }[];
+}

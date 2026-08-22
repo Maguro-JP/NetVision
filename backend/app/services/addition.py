@@ -122,7 +122,7 @@ def read_upstream(db: Session, device: Device) -> tuple[ParsedConfig | None, str
 # ---------------------------------------------------------------------------
 
 
-def pick_vlan_id(used: set[int]) -> int:
+def pick_vlan_id(used: set[int], *, step: int | None = None) -> int:
     """使われていない VLAN 番号を1つ選ぶ。
 
     既存が10刻みなら10刻みで続ける。現場の台帳は「10=事務所 20=無線」の
@@ -130,8 +130,9 @@ def pick_vlan_id(used: set[int]) -> int:
     後から読む人が困る。
     """
     numbered = sorted(v for v in used if 1 < v <= _VLAN_MAX)
-    step = _VLAN_STEP
-    if len(numbered) >= 2:
+    if step is None:
+        step = _VLAN_STEP
+    if step == _VLAN_STEP and len(numbered) >= 2:
         gaps = {b - a for a, b in zip(numbered, numbered[1:], strict=False) if b > a}
         if gaps and min(gaps) < _VLAN_STEP:
             step = min(gaps)
@@ -235,7 +236,11 @@ def free_ports(parsed: ParsedConfig) -> list[str]:
 
 
 def build(db: Session, request: AdditionRequest) -> AdditionPlan:
-    """上位機器を根拠に、足す1台ぶんの設計を起こす。"""
+    """上位機器を根拠に、足す1台ぶんの設計を起こす。
+
+    決め方には、取り込んである Config から覚えた現場の流儀も使う。
+    一般的な書き方より、その現場で揃っている書き方のほうが正しい。
+    """
     upstream = db.get(Device, request.upstream_device_id)
     if upstream is None:
         raise ValueError("つなぐ先の機器が見つかりません")
@@ -251,17 +256,24 @@ def build(db: Session, request: AdditionRequest) -> AdditionPlan:
         )
         parsed = ParsedConfig()
 
-    _decide_vlan(db, plan, parsed, request)
+    from app.services import conventions as conventions_module
+
+    house = conventions_module.learn(db)
+    _decide_vlan(db, plan, parsed, request, house)
     _decide_subnet(plan, parsed, request)
     _decide_port(plan, parsed, request, upstream)
     _decide_routing(plan, parsed)
-    _write_configs(plan, parsed, request, upstream)
+    _write_configs(plan, parsed, request, upstream, house)
     _add_checks(plan)
     return plan
 
 
 def _decide_vlan(
-    db: Session, plan: AdditionPlan, parsed: ParsedConfig, request: AdditionRequest
+    db: Session,
+    plan: AdditionPlan,
+    parsed: ParsedConfig,
+    request: AdditionRequest,
+    house=None,  # noqa: ANN001  conventions.Conventions（循環を避ける）
 ) -> None:
     used = set(parsed.vlans)
     used |= {v.vlan_id for v in db.scalars(select(Vlan))}
@@ -277,15 +289,23 @@ def _decide_vlan(
             )
         plan.add("VLAN 番号", str(request.vlan_id), "指定された番号をそのまま使いました。")
     else:
-        plan.vlan_id = pick_vlan_id(used)
+        step = getattr(house, "vlan_step", None)
+        plan.vlan_id = pick_vlan_id(used, step=step)
         existing = ", ".join(str(v) for v in sorted(used)[:8]) or "（既存なし）"
-        plan.add(
-            "VLAN 番号",
-            str(plan.vlan_id),
+        evidence = [f"上位で使用中の VLAN: {existing}"]
+        why = (
             "既存で使われている番号を避け、同じ刻みで続く番号にしました。"
-            "刻みを変えると、番号から用途が読めなくなります。",
-            [f"上位で使用中の VLAN: {existing}"],
+            "刻みを変えると、番号から用途が読めなくなります。"
         )
+        if step:
+            why = (
+                f"この現場は VLAN を {step} 刻みで採番しているので、それに合わせました。"
+                "刻みを変えると、番号から用途が読めなくなります。"
+            )
+            evidence.append(
+                f"取り込んである {house.devices_seen} 台の Config から、{step} 刻みと判断"
+            )
+        plan.add("VLAN 番号", str(plan.vlan_id), why, evidence)
 
     plan.vlan_name = _vlan_name(request.purpose, plan.vlan_id)
 
@@ -449,6 +469,7 @@ def _write_configs(
     parsed: ParsedConfig,
     request: AdditionRequest,
     upstream: Device,
+    house=None,  # noqa: ANN001  conventions.Conventions（循環を避ける）
 ) -> None:
     upstream_vendor = vendor_of(upstream)
     device_vendor = _vendor_from_name(request.vendor) if request.vendor else upstream_vendor
@@ -457,6 +478,27 @@ def _write_configs(
         plan, parsed, upstream_vendor, upstream
     )
     plan.device_config, plan.device_notes = _device_config(plan, device_vendor, request)
+
+    if house is not None and house.baseline_lines and plan.device_config:
+        plan.device_config = _with_baseline(plan.device_config, house.baseline_lines)
+        plan.device_notes.append(
+            f"どの機器にも入っている行（{len(house.baseline_lines)} 行）を、"
+            f"取り込んである {house.devices_seen} 台の Config から写しました。"
+            "パスワードや鍵は写していません。"
+        )
+
+
+def _with_baseline(body: str, lines: list[str]) -> str:
+    """覚えた決まり文句を、まだ入っていないものだけ足す。
+
+    既に書いてある行を二重に足さない。同じ行が2回出てくる Config は、
+    貼った人が間違えたように見える。
+    """
+    existing = {line.strip() for line in body.splitlines()}
+    missing = [line for line in lines if line not in existing]
+    if not missing:
+        return body
+    return body.rstrip("\n") + "\n" + "\n".join(missing) + "\n!\n"
 
 
 def _vendor_from_name(name: str) -> Vendor:

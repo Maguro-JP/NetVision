@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  HouseStyle,
   AskResult,
   GlossaryTerm,
   LinkCandidate,
@@ -702,6 +703,9 @@ export const api = {
     request<GlossaryTerm[]>(
       `/glossary${q ? `?q=${encodeURIComponent(q)}` : ""}`,
     ),
+
+  /** 取り込んだ Config から覚えた、その現場の流儀。 */
+  conventions: () => request<HouseStyle>("/conventions"),
 
   /** 何にどこまで対応しているか。できないことも返る。 */
   capabilities: () => request<CapabilityIndex>("/capabilities"),

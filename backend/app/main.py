@@ -10,6 +10,7 @@ from app.api.routes import (
     changes,
     config_plans,
     configs,
+    conventions,
     dashboard,
     devices,
     documents,
@@ -84,6 +85,7 @@ app.include_router(jobs.router, prefix=api)
 app.include_router(blueprint.router, prefix=api)
 app.include_router(capabilities.router, prefix=api)
 app.include_router(glossary.router, prefix=api)
+app.include_router(conventions.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",
