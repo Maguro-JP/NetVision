@@ -1,5 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 
+import { Link } from "react-router-dom";
+
 import { api } from "../api/client";
 import type { L3Finding } from "../api/types";
 
@@ -57,7 +59,12 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
 
   return (
     <>
-      <h2>経路（L3）</h2>
+      <h2>経路と機能</h2>
+      <p className="muted" style={{ marginTop: -8 }}>
+        言葉が分からないときは
+        <Link to="/glossary"> 言葉の説明</Link>
+        を見てください。「切り替わらない」のように、困っていることからも探せます。
+      </p>
 
       {findings.length > 0 && (
         <>

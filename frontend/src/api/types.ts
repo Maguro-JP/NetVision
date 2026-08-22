@@ -1239,3 +1239,12 @@ export interface LinkCandidate {
   why: string;
   evidence: string[];
 }
+
+/** 画面に出てくる言葉の説明。何なのかと、狂うと何が起きるか。 */
+export interface GlossaryTerm {
+  term: string;
+  reading: string;
+  plain: string;
+  matters: string;
+  also: string[];
+}

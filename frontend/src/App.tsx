@@ -16,6 +16,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
         // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
         { to: "/insights", label: "最適化の指摘" },
         { to: "/capabilities", label: "対応している機能" },
+        { to: "/glossary", label: "言葉の説明" },
       ],
     },
     {

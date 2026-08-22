@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  GlossaryTerm,
   LinkCandidate,
   CapabilityIndex,
   Blueprint,
@@ -694,6 +695,12 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ pairs: pairs ?? null }),
     }),
+
+  /** 画面に出てくる言葉の説明。用語を知らないまま使えるようにするため。 */
+  glossary: (q?: string) =>
+    request<GlossaryTerm[]>(
+      `/glossary${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+    ),
 
   /** 何にどこまで対応しているか。できないことも返る。 */
   capabilities: () => request<CapabilityIndex>("/capabilities"),
