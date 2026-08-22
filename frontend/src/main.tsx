@@ -8,6 +8,7 @@ import { isRetryableError } from "./api/client";
 import App from "./App";
 import SchemaGate from "./SchemaGate";
 import ChangesPage from "./pages/ChangesPage";
+import AskPage from "./pages/AskPage";
 import BlueprintPage from "./pages/BlueprintPage";
 import CapabilitiesPage from "./pages/CapabilitiesPage";
 import GlossaryPage from "./pages/GlossaryPage";
@@ -61,6 +62,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/" element={<App />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="ask" element={<AskPage />} />
               <Route path="blueprint" element={<BlueprintPage />} />
               <Route path="capabilities" element={<CapabilitiesPage />} />
               <Route path="glossary" element={<GlossaryPage />} />

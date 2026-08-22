@@ -544,3 +544,123 @@ def read_l3(device_id: int, db: DbSession) -> L3Read:
             for f in report.findings
         ],
     )
+
+
+# ---------------------------------------------------------------------------
+# ことばで頼む
+# ---------------------------------------------------------------------------
+
+
+class AskBody(BaseModel):
+    text: str = Field(
+        description="やりたいこと。例:「本社の core-sw-01 の下に floor3-sw-01 を増設したい」"
+    )
+    #: 読み取りを人が直したとき。指定があればそちらを使う
+    upstream_device_id: int | None = None
+    new_hostname: str | None = None
+    purpose: str | None = None
+
+
+class ReadingRead(BaseModel):
+    site: str | None
+    site_id: int | None
+    upstream_hostname: str | None
+    upstream_device_id: int | None
+    new_hostname: str | None
+    purpose: str
+    notes: list[str]
+
+
+class AskRead(BaseModel):
+    """読み取った内容と、そこから起こした設計。
+
+    読み取りは必ず返す。人が見て違っていれば直せる形にするため。
+    """
+
+    reading: ReadingRead
+    upstream_choices: list[dict]
+    questions: list[str]
+    plan: AdditionPlanRead | None
+
+
+@router.post("/ask/addition", response_model=AskRead)
+def ask_addition(payload: AskBody, db: DbSession) -> AskRead:
+    """書いた文章から、増設の設計を起こす。
+
+    台帳にある名前が文章に出てきたときだけ当てる。文章から意味を推し量って
+    別の機器の設計を出すのが、いちばん困るため。1つに絞れないときは
+    候補を返して、設計は起こさない。
+    """
+    from app.services import addition, askplan
+
+    understanding = askplan.understand(db, payload.text)
+    reading = understanding.reading
+
+    # 人が直した内容があれば、そちらを優先する
+    if payload.upstream_device_id is not None:
+        device = db.get(Device, payload.upstream_device_id)
+        if device is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "その機器は台帳にありません")
+        reading.upstream_device_id = device.id
+        reading.upstream_hostname = device.hostname
+        understanding.upstream_choices = []
+        understanding.questions = [q for q in understanding.questions if "どの機器の下" not in q]
+    if payload.new_hostname:
+        reading.new_hostname = payload.new_hostname.strip()
+        understanding.questions = [q for q in understanding.questions if "足す機器の名前" not in q]
+    if payload.purpose is not None:
+        reading.purpose = payload.purpose.strip()
+
+    read = ReadingRead(
+        site=reading.site,
+        site_id=reading.site_id,
+        upstream_hostname=reading.upstream_hostname,
+        upstream_device_id=reading.upstream_device_id,
+        new_hostname=reading.new_hostname,
+        purpose=reading.purpose,
+        notes=reading.notes,
+    )
+
+    if reading.upstream_device_id is None or not reading.new_hostname:
+        return AskRead(
+            reading=read,
+            upstream_choices=understanding.upstream_choices,
+            questions=understanding.questions,
+            plan=None,
+        )
+
+    plan = addition.build(
+        db,
+        addition.AdditionRequest(
+            upstream_device_id=reading.upstream_device_id,
+            hostname=reading.new_hostname,
+            purpose=reading.purpose,
+        ),
+    )
+    return AskRead(
+        reading=read,
+        upstream_choices=[],
+        questions=understanding.questions,
+        plan=AdditionPlanRead(
+            upstream_hostname=plan.upstream_hostname,
+            hostname=plan.hostname,
+            vlan_id=plan.vlan_id,
+            vlan_name=plan.vlan_name,
+            subnet=plan.subnet,
+            gateway_ip=plan.gateway_ip,
+            device_ip=plan.device_ip,
+            upstream_interface=plan.upstream_interface,
+            device_uplink=plan.device_uplink,
+            routing=plan.routing,
+            decisions=[
+                DecisionRead(topic=d.topic, choice=d.choice, why=d.why, evidence=d.evidence)
+                for d in plan.decisions
+            ],
+            warnings=plan.warnings,
+            checks=plan.checks,
+            upstream_config=plan.upstream_config,
+            device_config=plan.device_config,
+            upstream_notes=plan.upstream_notes,
+            device_notes=plan.device_notes,
+        ),
+    )

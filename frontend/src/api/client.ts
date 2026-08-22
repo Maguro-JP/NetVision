@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  AskResult,
   GlossaryTerm,
   LinkCandidate,
   CapabilityIndex,
@@ -741,6 +742,18 @@ export const api = {
 
   /** その機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
   deviceL3: (deviceId: number) => request<L3Report>(`/devices/${deviceId}/l3`),
+
+  /** 書いた文章から、増設の設計を起こす。読み取った内容も返る。 */
+  askAddition: (body: {
+    text: string;
+    upstream_device_id?: number | null;
+    new_hostname?: string | null;
+    purpose?: string | null;
+  }) =>
+    request<AskResult>("/ask/addition", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   /** その機器の下に1台足すときの設計。決めた理由と根拠つきで返る。 */
   planAddition: (

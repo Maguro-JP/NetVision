@@ -1248,3 +1248,25 @@ export interface GlossaryTerm {
   matters: string;
   also: string[];
 }
+
+/** 文章をどう読み取ったか。人が見て直せるように必ず返る。 */
+export interface AskReading {
+  site: string | null;
+  site_id: number | null;
+  upstream_hostname: string | null;
+  upstream_device_id: number | null;
+  new_hostname: string | null;
+  purpose: string;
+  notes: string[];
+}
+
+export interface AskResult {
+  reading: AskReading;
+  upstream_choices: {
+    device_id: number;
+    hostname: string;
+    site: string | null;
+  }[];
+  questions: string[];
+  plan: AdditionPlan | null;
+}
