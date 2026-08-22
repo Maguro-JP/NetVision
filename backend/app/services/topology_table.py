@@ -35,7 +35,11 @@ HEADERS = (
     "備考",
 )
 
-_ORIGIN_LABEL = {LinkOrigin.DISCOVERED: "自動推定", LinkOrigin.MANUAL: "手動"}
+_ORIGIN_LABEL = {
+    LinkOrigin.DISCOVERED: "自動推定",
+    LinkOrigin.MANUAL: "手動",
+    LinkOrigin.INFERRED: "経路から推定",
+}
 
 
 def rows(db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = None) -> list[list[str]]:

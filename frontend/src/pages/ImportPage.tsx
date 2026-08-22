@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api, type ImportKeyField } from "../api/client";
 import type { ImportField } from "../api/types";
+import LinkCandidates from "../components/LinkCandidates";
 import LinkSheetImport from "../components/LinkSheetImport";
 import SiteSheetImport from "../components/SiteSheetImport";
 import WindowLink from "../components/WindowLink";
@@ -620,6 +621,8 @@ export default function ImportPage() {
 
       <hr />
       <LinkSheetImport />
+
+      <LinkCandidates />
 
       <SiteSheetImport />
     </>

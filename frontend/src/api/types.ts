@@ -237,7 +237,7 @@ export interface NetworkInterface {
   enabled: boolean;
 }
 
-export type LinkOrigin = "discovered" | "manual";
+export type LinkOrigin = "discovered" | "manual" | "inferred";
 
 export interface TopologyNode {
   device_id: number;
@@ -1224,4 +1224,18 @@ export interface TestSite {
   id: number;
   name: string;
   devices: number;
+}
+
+/** 経路の情報から見つけた、線の候補。 */
+export interface LinkCandidate {
+  a_device_id: number;
+  a_hostname: string;
+  a_interface: string;
+  b_device_id: number;
+  b_hostname: string;
+  b_interface: string;
+  segment: string;
+  confidence: "high" | "medium";
+  why: string;
+  evidence: string[];
 }

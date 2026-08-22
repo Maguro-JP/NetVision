@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  LinkCandidate,
   CapabilityIndex,
   Blueprint,
   BlueprintCondition,
@@ -685,6 +686,14 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 経路の情報から見つけた線の候補。LLDP が無い現場でも図を立ち上げる。 */
+  linkCandidates: () => request<LinkCandidate[]>("/topology/link-candidates"),
+  applyLinkCandidates: (pairs?: [number, number][]) =>
+    request<{ created: number }>("/topology/link-candidates/apply", {
+      method: "POST",
+      body: JSON.stringify({ pairs: pairs ?? null }),
+    }),
 
   /** 何にどこまで対応しているか。できないことも返る。 */
   capabilities: () => request<CapabilityIndex>("/capabilities"),

@@ -637,3 +637,63 @@ def update_link(link_id: int, payload: LinkUpdate, db: DbSession) -> Link:
 def delete_link(link_id: int, db: DbSession) -> None:
     db.delete(_load(db, link_id))
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 経路から結線を推定する
+# ---------------------------------------------------------------------------
+
+
+class LinkCandidateRead(BaseModel):
+    """経路の情報から見つけた、線の候補。"""
+
+    a_device_id: int
+    a_hostname: str
+    a_interface: str
+    b_device_id: int
+    b_hostname: str
+    b_interface: str
+    segment: str
+    confidence: str
+    why: str
+    evidence: list[str]
+
+
+class ApplyCandidatesBody(BaseModel):
+    #: 入れる組。空なら言い切れるものだけ入れる
+    pairs: list[tuple[int, int]] | None = None
+
+
+@router.get("/link-candidates", response_model=list[LinkCandidateRead])
+def list_link_candidates(db: DbSession) -> list[LinkCandidateRead]:
+    """同じセグメントにいる組を、線の候補として返す。
+
+    LLDP を切っている現場では、running-config だけが手元に来る。それでも
+    L3 の情報は必ず書いてあるので、そこから引ける線を出す。
+    """
+    from app.services import l3links
+
+    return [
+        LinkCandidateRead(
+            a_device_id=c.a_device_id,
+            a_hostname=c.a_hostname,
+            a_interface=c.a_interface,
+            b_device_id=c.b_device_id,
+            b_hostname=c.b_hostname,
+            b_interface=c.b_interface,
+            segment=c.segment,
+            confidence=c.confidence,
+            why=c.why,
+            evidence=c.evidence,
+        )
+        for c in l3links.candidates(db)
+    ]
+
+
+@router.post("/link-candidates/apply", response_model=dict)
+def apply_link_candidates(payload: ApplyCandidatesBody, db: DbSession) -> dict:
+    """候補を線にする。組を選ばなければ、言い切れるものだけ入れる。"""
+    from app.services import l3links
+
+    created = l3links.apply(db, payload.pairs)
+    return {"created": created}
