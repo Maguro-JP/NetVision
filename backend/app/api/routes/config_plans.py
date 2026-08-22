@@ -487,3 +487,53 @@ def plan_addition(device_id: int, payload: AdditionRequestBody, db: DbSession) -
         upstream_config=plan.upstream_config,
         device_config=plan.device_config,
     )
+
+
+# ---------------------------------------------------------------------------
+# L3 の中身と、気になるところ
+# ---------------------------------------------------------------------------
+
+
+class FindingRead(BaseModel):
+    level: str
+    title: str
+    why: str
+    evidence: list[str]
+
+
+class L3Read(BaseModel):
+    hostname: str
+    has_config: bool
+    routes: list[dict]
+    ospf: dict | None
+    bgp: dict | None
+    redundancy: list[dict]
+    findings: list[FindingRead]
+
+
+@router.get("/devices/{device_id}/l3", response_model=L3Read)
+def read_l3(device_id: int, db: DbSession) -> L3Read:
+    """その機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。
+
+    経路の設定は、間違っていても半分は動く。だから気づくのが遅れる。
+    Config から読み取れる範囲で、先に挙げておく。
+    """
+    from app.services import l3review
+
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"device {device_id} が見つかりません")
+
+    report = l3review.review(db, device)
+    return L3Read(
+        hostname=report.hostname,
+        has_config=report.has_config,
+        routes=report.routes,
+        ospf=report.ospf,
+        bgp=report.bgp,
+        redundancy=report.redundancy,
+        findings=[
+            FindingRead(level=f.level, title=f.title, why=f.why, evidence=f.evidence)
+            for f in report.findings
+        ],
+    )

@@ -1107,3 +1107,51 @@ export interface AdditionPlan {
   upstream_config: string;
   device_config: string;
 }
+
+/** L3 で気になったこと1件。理由と、根拠にした行が必ず付く。 */
+export interface L3Finding {
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
+export interface L3Report {
+  hostname: string;
+  has_config: boolean;
+  routes: {
+    destination: string;
+    next_hop: string | null;
+    interface: string | null;
+    distance: number | null;
+    vrf: string | null;
+    is_default: boolean;
+  }[];
+  ospf: {
+    process_id: string | null;
+    router_id: string | null;
+    areas: { area: string; networks: string[] }[];
+    passive_default: boolean;
+    passive_interfaces: string[];
+    redistributes: string[];
+  } | null;
+  bgp: {
+    local_as: string | null;
+    router_id: string | null;
+    networks: string[];
+    neighbors: {
+      address: string;
+      remote_as: string | null;
+      description: string | null;
+    }[];
+  } | null;
+  redundancy: {
+    interface: string;
+    group: string | null;
+    virtual_ip: string | null;
+    priority: number | null;
+    protocol: string;
+  }[];
+  findings: L3Finding[];
+}

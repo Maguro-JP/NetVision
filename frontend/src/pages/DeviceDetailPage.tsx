@@ -4,6 +4,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
 import AdditionPlanner from "../components/AdditionPlanner";
+import L3Panel from "../components/L3Panel";
 import type { MaintenanceContract } from "../api/types";
 import ConfigDropZone from "../components/ConfigDropZone";
 import ChangeLogTable from "../components/ChangeLogTable";
@@ -279,6 +280,8 @@ export default function DeviceDetailPage() {
           )}
         </>
       )}
+
+      <L3Panel deviceId={device.id} />
 
       <AdditionPlanner deviceId={device.id} />
 

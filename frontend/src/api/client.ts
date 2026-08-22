@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  L3Report,
   AppSettings,
   ChangeLog,
   LinkImportResult,
@@ -680,6 +681,9 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** その機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
+  deviceL3: (deviceId: number) => request<L3Report>(`/devices/${deviceId}/l3`),
 
   /** その機器の下に1台足すときの設計。決めた理由と根拠つきで返る。 */
   planAddition: (
