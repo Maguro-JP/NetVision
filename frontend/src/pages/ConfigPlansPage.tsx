@@ -130,11 +130,42 @@ export default function ConfigPlansPage() {
     onSuccess: (result) => setSuggestion(result),
   });
 
+  // 下書きは、手元のモデルだと数十秒かかる。押した瞬間に受け付けて、
+  // 進み具合を出しながら裏で作る（画面が固まったように見せない）
+  const [jobId, setJobId] = useState<string | null>(null);
+
   const suggest = useMutation({
     mutationFn: () =>
-      api.draftConfig(selected!.device_id, { request: wish, base: draft }),
-    onSuccess: (result) => setSuggestion(result),
+      api.draftConfigInBackground(selected!.device_id, {
+        request: wish,
+        base: draft,
+      }),
+    onSuccess: (started) => {
+      setSuggestion(null);
+      setJobId(started.id);
+    },
   });
+
+  const { data: job } = useQuery({
+    queryKey: ["draftJob", jobId],
+    queryFn: () => api.job(jobId!),
+    enabled: jobId !== null,
+    // 終わるまで1秒ごとに様子を聞く
+    refetchInterval: (query) =>
+      query.state.data &&
+      ["done", "error", "cancelled"].includes(query.state.data.status)
+        ? false
+        : 1000,
+  });
+
+  useEffect(() => {
+    if (job?.status === "done" && job.draft) {
+      setSuggestion(job.draft);
+      setJobId(null);
+    }
+  }, [job]);
+
+  const waiting = jobId !== null && job?.status !== "done";
 
   const diff = outputs?.diff;
   const bodyFor = (key: (typeof OUTPUT_TABS)[number]["key"]) => {
@@ -350,14 +381,35 @@ export default function ConfigPlansPage() {
                   <button
                     className="primary"
                     onClick={() => suggest.mutate()}
-                    disabled={!wish.trim() || suggest.isPending}
+                    disabled={!wish.trim() || suggest.isPending || waiting}
                   >
-                    {suggest.isPending ? "探しています…" : "下書きを作る"}
+                    下書きを作る
                   </button>
+                  {waiting && (
+                    <>
+                      <span className="muted">
+                        作っています…（{Math.round(job?.seconds ?? 0)} 秒）。
+                        この画面は触れます
+                      </span>
+                      <button
+                        onClick={() => {
+                          if (jobId) api.cancelJob(jobId);
+                          setJobId(null);
+                        }}
+                      >
+                        待つのをやめる
+                      </button>
+                    </>
+                  )}
                 </div>
                 {suggest.error && (
                   <div className="error">
                     {(suggest.error as Error).message}
+                  </div>
+                )}
+                {job?.status === "error" && (
+                  <div className="error">
+                    下書きを作れませんでした: {job.error}
                   </div>
                 )}
 

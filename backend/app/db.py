@@ -49,6 +49,15 @@ engine = make_engine(settings.database_url)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 
+def new_session() -> Session:
+    """要求とは別に、その場限りの接続を開く。
+
+    裏で走らせる処理は、画面の要求が終わったあとも動き続ける。要求と同じ
+    つなぎを使うと、先に閉じられて途中で落ちる。
+    """
+    return SessionLocal()
+
+
 def get_db() -> Iterator[Session]:
     # 起動時に Alembic で表を最新にする。サーバーレスでは lifespan が
     # 走る保証が無いため、最初の DB 利用でも同じ処理を見る。

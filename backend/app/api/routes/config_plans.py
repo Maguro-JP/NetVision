@@ -21,7 +21,7 @@ from app.schemas.config_plans import (
     LlmStatusRead,
     PlanOutputRead,
 )
-from app.services import config_draft, llm
+from app.services import config_draft, jobs, llm
 from app.services import config_plans as service
 from app.services.api_helpers import diff_read
 from app.services.configdiff import DiffResult, build
@@ -350,3 +350,87 @@ def review_draft(device_id: int, payload: ConfigReviewRequest, db: DbSession) ->
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "設定を貼ってください")
 
     return _draft_read(device, config_draft.review(db, device, payload.request, payload.body))
+
+
+# ---------------------------------------------------------------------------
+# 裏で走らせる（下書きは数十秒かかることがある）
+# ---------------------------------------------------------------------------
+
+
+class JobRead(BaseModel):
+    """裏の処理の様子。"""
+
+    id: str
+    kind: str
+    status: str
+    seconds: float
+    error: str | None = None
+    draft: ConfigDraftRead | None = None
+
+
+def _job_read(job) -> JobRead:
+    return JobRead(
+        id=job.id,
+        kind=job.kind,
+        status=job.status,
+        seconds=round(job.seconds, 1),
+        error=job.error,
+        draft=job.result if isinstance(job.result, ConfigDraftRead) else None,
+    )
+
+
+@router.post("/devices/{device_id}/config-draft/async", response_model=JobRead)
+def draft_config_in_background(
+    device_id: int, payload: ConfigDraftRequest, db: DbSession
+) -> JobRead:
+    """下書きを裏で作る。受け付けたらすぐ番号を返す。
+
+    手元のモデルに頼むと CPU では数十秒かかる。そのあいだ画面が固まったように
+    見えるのを避ける。様子は `/jobs/{id}` で聞く。
+    """
+    device = db.get(Device, device_id)
+    if device is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
+    if not payload.request.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+
+    device_id_value = device.id
+    request_text = payload.request
+    base_text = payload.base
+
+    def work() -> ConfigDraftRead:
+        # 裏では、その場限りの接続を使う。画面の要求とつなぎを共有すると、
+        # 先に閉じられて途中で落ちる
+        from app.db import new_session
+
+        with new_session() as session:
+            target = session.get(Device, device_id_value)
+            if target is None:
+                raise RuntimeError("対象の機器が見つかりません")
+            return _draft_read(
+                target, config_draft.draft(session, target, request_text, base=base_text)
+            )
+
+    return _job_read(jobs.start("config-draft", work))
+
+
+@router.get("/jobs/{job_id}", response_model=JobRead)
+def read_job(job_id: str) -> JobRead:
+    """裏の処理の様子。終わっていれば中身も返す。"""
+    job = jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "その処理は残っていません")
+    return _job_read(job)
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=JobRead)
+def cancel_job(job_id: str) -> JobRead:
+    """待つのをやめる。
+
+    モデルの生成そのものは途中で切れないので、結果を捨てるだけ。
+    画面を待たせ続けないための操作。
+    """
+    job = jobs.cancel(job_id)
+    if job is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "その処理は残っていません")
+    return _job_read(job)

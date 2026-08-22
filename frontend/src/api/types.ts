@@ -1012,6 +1012,16 @@ export interface LinkImportResult {
   committed: boolean;
 }
 
+/** 裏で走らせている処理の様子。 */
+export interface Job {
+  id: string;
+  kind: string;
+  status: "pending" | "running" | "done" | "error" | "cancelled";
+  seconds: number;
+  error: string | null;
+  draft: ConfigDraft | null;
+}
+
 /** 画面から決める設定。環境変数は初期値として扱う。 */
 export interface AppSettings {
   warning_days: number;

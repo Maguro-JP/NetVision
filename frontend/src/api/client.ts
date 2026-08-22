@@ -19,6 +19,7 @@ import type {
   IngestResult,
   InsightReport,
   ImportResult,
+  Job,
   LlmStatus,
   MaintenanceContract,
   NetworkInterface,
@@ -830,6 +831,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ enabled }),
     }),
+  /** 下書きを裏で作る。受け取った番号で様子を聞く */
+  draftConfigInBackground: (deviceId: number, body: { request: string; base?: string }) =>
+    request<Job>(`/devices/${deviceId}/config-draft/async`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  job: (jobId: string) => request<Job>(`/jobs/${jobId}`),
+  cancelJob: (jobId: string) => request<Job>(`/jobs/${jobId}/cancel`, { method: "POST" }),
   /** 手元にモデルを置けないとき、承認済みの AI へ貼るための依頼文 */
   draftPrompt: (deviceId: number, body: { request: string; base?: string }) =>
     request<ConfigDraft>(`/devices/${deviceId}/config-draft/prompt`, {
