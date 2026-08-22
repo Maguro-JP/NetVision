@@ -213,6 +213,21 @@ $diagCrlf = ($diag -replace "`r`n", "`n") -replace "`n", "`r`n"
     (Join-Path $Stage "NetVision-window.bat"),
     [Text.Encoding]::GetEncoding(932).GetBytes($diagCrlf))
 
+$mcp = @'
+@echo off
+rem NetVision を、AI から呼べる道具として立ち上げます。
+rem 画面は出ません。AI の側の設定から呼ばれて動きます（docs/MCP.md）。
+setlocal
+cd /d "%~dp0"
+set NETVISION_DATA_DIR=
+set PYTHONDONTWRITEBYTECODE=1
+"%~dp0python\python.exe" -m app.mcp_server
+'@
+$mcpCrlf = ($mcp -replace "`r`n", "`n") -replace "`n", "`r`n"
+[IO.File]::WriteAllBytes(
+    (Join-Path $Stage "NetVision-mcp.bat"),
+    [Text.Encoding]::GetEncoding(932).GetBytes($mcpCrlf))
+
 $readme = @"
 NetVision （インストール不要版）
 ====================================
@@ -255,6 +270,12 @@ NetVision （インストール不要版）
   の行に置き場所を書いてください（例: set NETVISION_DATA_DIR=Z:\NetVision-data）。
   同期される場所に DB を置く場合は、書いている最中に同期へ持っていかれると
   壊れることがあるので、データフォルダのコピーをこまめに取ってください。
+
+■ AI から台帳を引かせたいとき（任意）
+
+  「NetVision-mcp.bat」は、AI の側から NetVision を道具として呼ぶための口です。
+  読むだけで、台帳は書き換わりません。使い方は docs\MCP.md にあります。
+  普段の利用では使いません。
 
 ■ 黒い画面を出したくないとき
 
