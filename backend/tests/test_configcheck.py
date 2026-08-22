@@ -244,3 +244,72 @@ def test_an_empty_file_is_refused(client):
         files=[("files", ("empty.txt", io.BytesIO(b"   ").read(), "text/plain"))],
     )
     assert res.status_code == 422
+
+
+# ---------------------------------------------------------------------------
+# 出した結果について聞き返す
+# ---------------------------------------------------------------------------
+
+
+def test_a_word_question_is_answered_without_a_model(db_session):
+    """モデルを通すより速く、毎回同じ答えになり、人が直せる。"""
+    from app.services import askback
+
+    result = askback.ask(db_session, "HSRP")
+    assert result.source == "glossary"
+    assert "引き継ぐ" in result.answer
+    assert "狂うと何が起きるか" in result.answer
+
+
+def test_an_empty_question_asks_for_one(db_session):
+    from app.services import askback
+
+    assert "書いてください" in askback.ask(db_session, "  ").answer
+
+
+def test_without_a_model_it_hands_back_something_to_paste(db_session):
+    """端末にモデルを置けない職場では、これが唯一の道になる。"""
+    from app.services import askback
+    from app.services.l3review import HIGH, Finding
+
+    result = askback.ask(
+        db_session,
+        "この構成でインターネットに出られますか",
+        findings=[Finding(level=HIGH, title="届きません", why="隣に居ません", evidence=["A"])],
+        context="hostname sw-01\n",
+    )
+    assert result.source == "prompt"
+    assert result.prompt
+    assert "届きません" in result.prompt
+    assert "hostname sw-01" in result.prompt
+    assert "社外に出してよい内容か" in result.note
+
+
+def test_the_material_says_to_use_only_what_is_given(db_session):
+    """材料に無いことを足されると、確かめようがない答えになる。"""
+    from app.services import askback
+
+    result = askback.ask(db_session, "この構成でインターネットに出られますか", context="x")
+    assert "この材料に書いてあることだけを使って答えてください" in (result.prompt or "")
+
+
+def test_the_api_answers_and_says_how(client):
+    res = client.post(
+        f"{API}/config-check/ask",
+        json={"question": "トランクって何ですか", "context": ""},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["source"] == "glossary"
+    assert body["used"] == ["トランク"]
+
+
+def test_the_api_takes_the_config_as_the_subject(client):
+    res = client.post(
+        f"{API}/config-check/ask",
+        json={"question": "この機器は外に出られますか", "context": MESSY},
+    )
+    body = res.json()
+    assert body["source"] in {"model", "prompt"}
+    if body["source"] == "prompt":
+        assert "届きません" in body["prompt"]

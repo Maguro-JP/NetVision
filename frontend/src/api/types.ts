@@ -1340,3 +1340,14 @@ export interface ConfigCheck {
   differences: L3Finding[];
   notes: string[];
 }
+
+/** 出した結果について聞き返したときの答え。 */
+export interface AskBackAnswer {
+  answer: string;
+  /** どうやって答えたか。glossary / model / prompt */
+  source: string;
+  used: string[];
+  /** モデルが無いとき、承認済みの AI へ貼るための依頼文 */
+  prompt: string | null;
+  note: string;
+}

@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  AskBackAnswer,
   ConfigCheck,
   ConfigTemplateDraft,
   HouseStyle,
@@ -733,6 +734,13 @@ export const api = {
     for (const file of files) form.append("files", file);
     return upload<ConfigCheck[]>("/config-check/upload", form);
   },
+
+  /** 出した結果について聞き返す。 */
+  askBack: (question: string, context = "") =>
+    request<AskBackAnswer>("/config-check/ask", {
+      method: "POST",
+      body: JSON.stringify({ question, context }),
+    }),
 
   /** 取り込んだ Config から覚えた、その現場の流儀。 */
   conventions: () => request<HouseStyle>("/conventions"),

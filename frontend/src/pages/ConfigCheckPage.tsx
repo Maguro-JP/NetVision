@@ -3,7 +3,7 @@ import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
-import type { ConfigCheck, L3Finding } from "../api/types";
+import type { AskBackAnswer, ConfigCheck, L3Finding } from "../api/types";
 import { LEVEL_LABEL, sortFindings } from "../components/L3Panel";
 
 /**
@@ -15,6 +15,13 @@ import { LEVEL_LABEL, sortFindings } from "../components/L3Panel";
  * 台帳には何も書かない。見るだけのつもりが機器を増やしていた、が
  * いちばん困る。
  */
+
+/** どうやって答えたかの呼び名。答えの確からしさが変わるので、必ず出す。 */
+export const SOURCE_LABEL: Record<string, string> = {
+  glossary: "言葉の説明から",
+  model: "手元のモデルが",
+  prompt: "答えられません",
+};
 
 /** 見た結果を1行で。何個も放り込んだときに、開く前に当たりを付けられる。 */
 export function summaryOf(check: ConfigCheck): string {
@@ -65,6 +72,8 @@ export default function ConfigCheckPage() {
   const [over, setOver] = useState(false);
   const [text, setText] = useState("");
   const [results, setResults] = useState<ConfigCheck[]>([]);
+  const [question, setQuestion] = useState("");
+  const [answer, setAnswer] = useState<AskBackAnswer | null>(null);
 
   const drop = useMutation({
     mutationFn: (files: File[]) => api.checkConfigFiles(files),
@@ -73,6 +82,11 @@ export default function ConfigCheckPage() {
   const paste = useMutation({
     mutationFn: () => api.checkConfigText(text),
     onSuccess: (data) => setResults((current) => [data, ...current]),
+  });
+
+  const askBack = useMutation({
+    mutationFn: () => api.askBack(question, text || ""),
+    onSuccess: setAnswer,
   });
 
   const take = (list: FileList | null) => {
@@ -194,6 +208,47 @@ export default function ConfigCheckPage() {
           ))}
         </div>
       ))}
+
+      <h2>聞いてみる</h2>
+      <p className="muted" style={{ marginTop: -6 }}>
+        出した結果について聞き返せます。言葉の意味なら、その場で答えます。それ以外は
+        手元のモデルが答えます。モデルが無いときは、会社で認められている AI
+        へ貼るための 依頼文を出します。
+      </p>
+      <div className="toolbar">
+        <input
+          value={question}
+          onChange={(e) => setQuestion(e.target.value)}
+          placeholder="例: トランクって何ですか / なぜこの経路は使われないのですか"
+          style={{ minWidth: 420 }}
+        />
+        <button
+          disabled={!question.trim() || askBack.isPending}
+          onClick={() => askBack.mutate()}
+        >
+          {askBack.isPending ? "聞いています…" : "聞く"}
+        </button>
+      </div>
+      {askBack.error && (
+        <div className="error">{(askBack.error as Error).message}</div>
+      )}
+
+      {answer && (
+        <div className="card">
+          <div className="muted">
+            {SOURCE_LABEL[answer.source] ?? answer.source}
+            {answer.used.length > 0 && ` — ${answer.used.join(" / ")}`}
+          </div>
+          <p style={{ whiteSpace: "pre-wrap" }}>{answer.answer}</p>
+          {answer.prompt && (
+            <>
+              <p className="muted">この依頼文を貼って聞いてください。</p>
+              <pre className="config-preview">{answer.prompt}</pre>
+            </>
+          )}
+          {answer.note && <p className="muted">{answer.note}</p>}
+        </div>
+      )}
 
       <p className="muted" style={{ marginTop: 24 }}>
         言葉が分からないときは<Link to="/glossary"> 言葉の説明</Link>

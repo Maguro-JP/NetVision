@@ -112,3 +112,47 @@ async def check_files(
     if not out:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "読める中身がありませんでした")
     return out
+
+
+# ---------------------------------------------------------------------------
+# 出した結果について、聞き返す
+# ---------------------------------------------------------------------------
+
+
+class AskBackBody(BaseModel):
+    question: str
+    #: 何について聞いているか。見た Config をそのまま渡してよい
+    context: str = ""
+
+
+class AskBackRead(BaseModel):
+    answer: str
+    source: str
+    used: list[str]
+    prompt: str | None
+    note: str
+
+
+@router.post("/config-check/ask", response_model=AskBackRead)
+def ask_back(payload: AskBackBody, db: DbSession) -> AskBackRead:
+    """出した結果について聞き返す。
+
+    答え方は3段。用語の説明で足りるならそれを返し、手元にモデルがあれば
+    読み取った内容を材料にして答えてもらい、どちらも無ければ承認済みの AI へ
+    貼るための依頼文を返す。
+
+    どの段で答えたかは必ず返す。何を見て答えたのかが無い答えは、
+    確かめようがない。
+    """
+    from app.services import askback
+
+    text = payload.context.strip()
+    findings = service.check(db, text).findings if text else []
+    result = askback.ask(db, payload.question, findings=findings, context=text)
+    return AskBackRead(
+        answer=result.answer,
+        source=result.source,
+        used=result.used,
+        prompt=result.prompt,
+        note=result.note,
+    )
