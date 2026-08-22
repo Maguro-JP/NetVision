@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.db import get_db
 from app.models import Device, DeviceStatus, DeviceType, Site
 from app.services import exporter
-from app.services.device_query import DeviceFilters, query_devices
+from app.services.device_query import DeviceFilters, stream_devices
 from app.services.lifecycle import Severity
 
 router = APIRouter(prefix="/export", tags=["export"])
@@ -109,7 +109,7 @@ def export_devices_csv(
             "encoding は utf-8 または shift_jis を指定してください",
         )
 
-    devices = query_devices(
+    devices = stream_devices(
         db,
         _filters(
             q,
@@ -132,8 +132,15 @@ def export_devices_csv(
             incomplete=incomplete,
         ),
     )
-    data = exporter.to_csv(devices, include_status=include_status, encoding=CSV_ENCODINGS[encoding])
-    return StreamingResponse(io.BytesIO(data), media_type="text/csv", headers=_disposition("csv"))
+    # 少しずつ返す。全部組み立ててから返すと、16万台では最初の1バイトまで
+    # 40秒かかり、押しても反応が無いように見える
+    return StreamingResponse(
+        exporter.stream_csv(
+            devices, include_status=include_status, encoding=CSV_ENCODINGS[encoding]
+        ),
+        media_type="text/csv",
+        headers=_disposition("csv"),
+    )
 
 
 @router.get("/devices.xlsx")
@@ -160,7 +167,7 @@ def export_devices_xlsx(
     include_status: bool = True,
 ) -> StreamingResponse:
     """機器台帳を Excel で書き出す。日付は日付セル、金額は数値セルで入る。"""
-    devices = query_devices(
+    devices = stream_devices(
         db,
         _filters(
             q,

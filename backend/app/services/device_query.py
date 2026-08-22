@@ -294,6 +294,24 @@ def query_devices(
     return list(db.scalars(stmt))
 
 
+def stream_devices(
+    db: Session, filters: DeviceFilters, *, today: date | None = None, chunk: int = 2000
+):
+    """条件に合う機器を、少しずつ流す。
+
+    書き出しは全件が要る。16万台を一度に組み立てると、最初の1行が出るまで
+    何十秒もかかり、押しても反応が無いように見える。塊で読んで、読んだ分から
+    順に渡す。
+    """
+    stmt = (
+        build_query(filters, today=today)
+        .options(selectinload(Device.contracts), selectinload(Device.site))
+        .order_by(Device.hostname)
+        .execution_options(yield_per=chunk)
+    )
+    yield from db.scalars(stmt)
+
+
 def iter_devices(
     db: Session, filters: DeviceFilters, *, today: date | None = None, chunk: int = 200
 ):

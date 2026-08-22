@@ -103,20 +103,29 @@ def test_update_existing_false_skips_known_devices(client):
     assert body["updated"] == 0
 
 
-def test_row_errors_block_the_whole_import(client):
+def test_bad_rows_are_skipped_and_the_rest_goes_in(client):
+    """問題のある行だけを落とし、残りは取り込む。
+
+    以前は1行でも問題があれば全部を取り込まない作りだった。数十行の表なら
+    それで直せるが、16万行の台帳では重複が1組あるだけで丸ごと入らない。
+    しかも件数は「作成」と返るので、入ったように見えて実際は空になる。
+    """
     broken = (
         CSV_HEADER + CSV_ROWS + "acc-sw-01,Cisco,C2960X,スイッチ,稼働中,15.2,本社DC,未定,,,,,\n"
     )
     body = upload(client, broken, path="/import/devices").json()
 
-    assert body["committed"] is False
+    assert body["committed"] is True
     assert body["errors"] == 1
     error_row = next(r for r in body["rows"] if r["action"] == "error")
     assert error_row["row_number"] == 4
     assert "日付として解釈できません" in error_row["issues"][0]["message"]
 
-    # 1行でもエラーがあれば正常行も取り込まない
-    assert client.get(f"{API}/devices").json() == []
+    # 問題の無い行は入っている
+    hostnames = [device["hostname"] for device in client.get(f"{API}/devices").json()]
+    assert hostnames, "正常な行まで落ちている"
+    assert "acc-sw-01" not in hostnames, "問題のある行が入っている"
+
 
 
 def test_missing_required_column_is_reported(client):

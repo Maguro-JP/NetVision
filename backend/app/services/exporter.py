@@ -134,24 +134,62 @@ def to_csv(
     return buffer.getvalue().encode(encoding, errors="replace")
 
 
-def to_xlsx(devices: list[Device], *, include_status: bool = True) -> bytes:
+def stream_csv(
+    devices, *, include_status: bool = True, encoding: str = "utf-8-sig", chunk: int = 2000
+):
+    """CSV を少しずつ返す。
+
+    16万台では、全部を組み立ててから返すと最初の1バイトが出るまで40秒かかる。
+    その間ブラウザは何も表示しないので、押しても反応が無いように見える。
+    数千行ごとに返せば、押した直後から保存が始まる。
+    """
+    buffer = io.StringIO(newline="")
+    writer = csv.writer(buffer, lineterminator="\r\n")
+    # 印（BOM）は先頭に1つだけ。塊ごとに付けると、その都度ゴミの行が増える
+    body_encoding = "utf-8" if encoding == "utf-8-sig" else encoding
+
+    def take() -> bytes:
+        text = buffer.getvalue()
+        buffer.seek(0)
+        buffer.truncate(0)
+        # Shift_JIS に無い文字（絵文字や一部の記号）で落ちないよう、代替する
+        return text.encode(body_encoding, errors="replace")
+
+    if encoding == "utf-8-sig":
+        yield "\ufeff".encode()
+
+    writer.writerow(build_headers(include_status))
+    yield take()
+
+    for index, device in enumerate(devices, start=1):
+        writer.writerow([_text(v) for v in build_row(device, include_status)])
+        if index % chunk == 0:
+            yield take()
+    rest = take()
+    if rest:
+        yield rest
+
+
+def to_xlsx(devices, *, include_status: bool = True) -> bytes:
+    """機器台帳を Excel で書き出す。
+
+    16万台では、ふつうの組み立て方だと全行をメモリに持ったまま最後に書くので、
+    1分以上かかる。openpyxl の「書き出し専用」で、行を書いたそばから流す。
+    そのぶん、書いたあとにセルへ戻って飾りを足すことはできないので、
+    列幅と日付の書式は最初に決めておく。
+    """
     from openpyxl import Workbook
+    from openpyxl.cell import WriteOnlyCell
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
+    from openpyxl.worksheet.dimensions import ColumnDimension
 
-    workbook = Workbook()
-    sheet = workbook.active
-    sheet.title = "機器台帳"
+    workbook = Workbook(write_only=True)
+    sheet = workbook.create_sheet("機器台帳")
+    # 見出しの固定は、行を書く前に決める（書き出し専用ではあとから戻れない）
+    sheet.freeze_panes = "A2"
 
     headers = build_headers(include_status)
-    sheet.append(headers)
-    for cell in sheet[1]:
-        cell.font = Font(bold=True)
-
-    for device in devices:
-        # 日付は Excel の日付セルとして書き、数値は数値のまま入れる
-        sheet.append(build_row(device, include_status))
-
     date_headers = {
         FIELD_LABELS[f]
         for f in (
@@ -163,15 +201,31 @@ def to_xlsx(devices: list[Device], *, include_status: bool = True) -> bytes:
         )
     } | {STATUS_COLUMNS[0][1]}
 
+    # 列幅と日付の書式は、行を書く前に決める（あとから戻れないため）
     for index, header in enumerate(headers, start=1):
         letter = get_column_letter(index)
-        sheet.column_dimensions[letter].width = min(max(len(header) * 2, 12), 40)
-        if header in date_headers:
-            for cell in sheet[letter][1:]:
-                cell.number_format = "yyyy/mm/dd"
+        sheet.column_dimensions[letter] = ColumnDimension(
+            sheet, index=letter, width=min(max(len(header) * 2, 12), 40)
+        )
 
-    sheet.freeze_panes = "A2"
-    sheet.auto_filter.ref = sheet.dimensions
+    head = []
+    for header in headers:
+        cell = WriteOnlyCell(sheet, value=header)
+        cell.font = Font(bold=True)
+        head.append(cell)
+    sheet.append(head)
+
+    date_columns = {index for index, header in enumerate(headers) if header in date_headers}
+    for device in devices:
+        row = []
+        for index, value in enumerate(build_row(device, include_status)):
+            if index in date_columns and value is not None:
+                cell = WriteOnlyCell(sheet, value=value)
+                cell.number_format = "yyyy/mm/dd"
+                row.append(cell)
+            else:
+                row.append(value)
+        sheet.append(row)
 
     buffer = io.BytesIO()
     workbook.save(buffer)

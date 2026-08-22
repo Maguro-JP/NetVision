@@ -4,7 +4,11 @@ import { useSearchParams } from "react-router-dom";
 
 import { api, type DeviceFilters } from "../api/client";
 import QueryError from "../components/QueryError";
-import { DEVICE_TYPE_LABEL, SITE_STATUS_LABEL, formatDate } from "../lib/format";
+import {
+  DEVICE_TYPE_LABEL,
+  SITE_STATUS_LABEL,
+  formatDate,
+} from "../lib/format";
 
 /**
  * 出力をまとめて選ぶ画面。
@@ -72,7 +76,11 @@ const KIND_NOTE: Record<Kind, string> = {
 
 export default function ExportPage() {
   const [params] = useSearchParams();
-  const [kind, setKind] = useState<Kind>((params.get("kind") as Kind) || "svg");
+  // 何を出すかは、開いた画面から渡ってくる。渡っていないときは機器一覧にする。
+  // 図から開いたときだけ layer が付くので、そこは図（SVG）を既定にする
+  const [kind, setKind] = useState<Kind>(
+    (params.get("kind") as Kind) || (params.get("layer") ? "svg" : "devices"),
+  );
   const [deviceFormat, setDeviceFormat] = useState<DeviceFormat>("xlsx");
 
   const layer = params.get("layer") ?? "physical";
@@ -103,7 +111,8 @@ export default function ExportPage() {
     (deviceFilters as Record<string, string | number>)[key] =
       key === "site_id" ? Number(value) : value;
   }
-  if (siteId && deviceFilters.site_id === undefined) deviceFilters.site_id = siteId;
+  if (siteId && deviceFilters.site_id === undefined)
+    deviceFilters.site_id = siteId;
 
   const deviceUrl =
     deviceFormat === "xlsx"
@@ -121,7 +130,10 @@ export default function ExportPage() {
     sites:
       deviceFormat === "xlsx"
         ? api.siteExportUrl("xlsx")
-        : api.siteExportUrl("csv", deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8"),
+        : api.siteExportUrl(
+            "csv",
+            deviceFormat === "csv-sjis" ? "shift_jis" : "utf-8",
+          ),
   };
 
   // 図の中身。結線表の下見にも使う（出すものと同じ絞り込みで取る）。
@@ -196,12 +208,16 @@ export default function ExportPage() {
             ))}
           </div>
           <p className="muted export-note">
-            CSV は直してそのまま取り込み直せます（文字コードは取り込みのときに自動で判別します）。
+            CSV
+            は直してそのまま取り込み直せます（文字コードは取り込みのときに自動で判別します）。
             {deviceFormat === "csv-sjis" ? (
               <>
                 {" "}
                 いまは Shift_JIS で出します。
-                <button className="link-button" onClick={() => setDeviceFormat("csv")}>
+                <button
+                  className="link-button"
+                  onClick={() => setDeviceFormat("csv")}
+                >
                   ふつうの CSV に戻す
                 </button>
               </>
@@ -209,7 +225,10 @@ export default function ExportPage() {
               <>
                 {" "}
                 UTF-8 を読めない古いツールへ渡すときは、
-                <button className="link-button" onClick={() => setDeviceFormat("csv-sjis")}>
+                <button
+                  className="link-button"
+                  onClick={() => setDeviceFormat("csv-sjis")}
+                >
                   Shift_JIS の CSV
                 </button>
                 を使ってください。
@@ -258,7 +277,8 @@ function SvgPreview({ url }: { url: string }) {
         setSrc(objectUrl);
       })
       .catch((error: unknown) => {
-        if (alive) setFailed(error instanceof Error ? error.message : String(error));
+        if (alive)
+          setFailed(error instanceof Error ? error.message : String(error));
       });
     return () => {
       alive = false;
@@ -266,7 +286,8 @@ function SvgPreview({ url }: { url: string }) {
     };
   }, [url]);
 
-  if (failed) return <div className="error">図を作れませんでした: {failed}</div>;
+  if (failed)
+    return <div className="error">図を作れませんでした: {failed}</div>;
   if (!src) return <div className="muted">図を作っています…</div>;
   return (
     <div className="export-preview">
@@ -322,10 +343,15 @@ function WorkbookPreview({
 function LinkPreview({
   graph,
 }: {
-  graph?: { nodes: { device_id: number; hostname: string }[]; edges: unknown[] };
+  graph?: {
+    nodes: { device_id: number; hostname: string }[];
+    edges: unknown[];
+  };
 }) {
   if (!graph) return <div className="muted">読み込んでいます…</div>;
-  const name = new Map(graph.nodes.map((node) => [node.device_id, node.hostname]));
+  const name = new Map(
+    graph.nodes.map((node) => [node.device_id, node.hostname]),
+  );
   const rows = graph.edges as {
     id: number;
     source: number;
@@ -356,14 +382,17 @@ function LinkPreview({
                 <td className="mono">{row.source_interface ?? "—"}</td>
                 <td>{name.get(row.target) ?? row.target}</td>
                 <td className="mono">{row.target_interface ?? "—"}</td>
-                <td className="muted">{row.confirmed_both_ways ? "両側" : "片側"}</td>
+                <td className="muted">
+                  {row.confirmed_both_ways ? "両側" : "片側"}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="muted">
-        全 {rows.length} 本のうち {head.length} 本を出しています。保存すると全部入ります。
+        全 {rows.length} 本のうち {head.length}{" "}
+        本を出しています。保存すると全部入ります。
       </p>
     </>
   );
@@ -381,11 +410,13 @@ function PortsNote() {
 /** 下見に出す行数。全部出すと保存する前にここで読み終えてしまう */
 const PREVIEW_ROWS = 30;
 
-
 /** 機器一覧の下見。出す表と同じ絞り込みで、頭の分だけ見せる。 */
 /** 拠点一覧の下見。拠点は絞り込みが無いので、頭から並べるだけでよい。 */
 function SitePreview() {
-  const sites = useQuery({ queryKey: ["export-sites"], queryFn: api.listSites });
+  const sites = useQuery({
+    queryKey: ["export-sites"],
+    queryFn: api.listSites,
+  });
 
   if (sites.isError) return <QueryError error={sites.error} />;
   if (!sites.data) return <div className="muted">読み込んでいます…</div>;
@@ -418,8 +449,8 @@ function SitePreview() {
         </table>
       </div>
       <p className="muted">
-        全 {sites.data.length.toLocaleString()} 拠点のうち {shown.length} 件を出しています。
-        保存すると全部入ります。
+        全 {sites.data.length.toLocaleString()} 拠点のうち {shown.length}{" "}
+        件を出しています。 保存すると全部入ります。
       </p>
     </>
   );
@@ -452,19 +483,24 @@ function DevicePreview({ filters }: { filters: DeviceFilters }) {
             {items.map((device) => (
               <tr key={device.id}>
                 <td>{device.hostname}</td>
-                <td className="muted">{DEVICE_TYPE_LABEL[device.device_type]}</td>
+                <td className="muted">
+                  {DEVICE_TYPE_LABEL[device.device_type]}
+                </td>
                 <td className="muted">{device.site_name ?? "—"}</td>
                 <td className="muted">
                   {`${device.vendor} ${device.model}`.trim() || "—"}
                 </td>
-                <td className="mono">{formatDate(device.lifecycle.maintenance_end)}</td>
+                <td className="mono">
+                  {formatDate(device.lifecycle.maintenance_end)}
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
       <p className="muted">
-        全 {total.toLocaleString()} 台のうち {items.length} 台を出しています。保存すると全部入ります。
+        全 {total.toLocaleString()} 台のうち {items.length}{" "}
+        台を出しています。保存すると全部入ります。
       </p>
     </>
   );

@@ -848,7 +848,14 @@ def _run_import(
 
         results.append(result)
 
-    if commit and errors == 0:
+    if commit:
+        # 問題のある行だけを落とし、残りは取り込む。
+        #
+        # 以前は1行でも問題があれば全部を取り込まない作りだった。数十行の表なら
+        # それで直せるが、16万行の台帳では、重複が1組あるだけで丸ごと入らない。
+        # しかも「◯件 作成」と返るので、入ったように見えて実際は空、という
+        # いちばん困る形になっていた。
+        #
         # 確認だけなら、16万件を flush してから rollback する必要はない。
         # 件数と行結果はすでに揃っている。反映するときだけまとめて書く。
         if pending:
@@ -867,7 +874,7 @@ def _run_import(
         db.commit()
         committed = True
     else:
-        # プレビューやエラー時は、既存機器への途中変更を捨てる
+        # 下見のときは、既存機器への途中変更を捨てる
         db.rollback()
         committed = False
 

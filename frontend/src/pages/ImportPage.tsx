@@ -244,7 +244,7 @@ export default function ImportPage() {
                   内部IDと管理IDが入った状態で出るので、同じ機器として戻せる */}
               <WindowLink
                 className="button"
-                to="/export"
+                to="/export?kind=devices"
                 name="netvision-export"
                 width={1200}
                 height={900}

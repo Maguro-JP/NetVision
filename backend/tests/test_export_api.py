@@ -173,3 +173,19 @@ def test_export_empty_database_returns_headers_only(client):
     assert "内部ID（書き出した行を戻すとき用）" in headers
     assert "拠点ID（任意）" in headers
     assert "ホスト名" in headers
+
+
+def test_the_csv_starts_coming_back_before_it_is_finished(client):
+    """CSV は少しずつ返す。
+
+    16万台では、全部を組み立ててから返すと最初の1バイトまで40秒かかる。
+    その間ブラウザは何も表示しないので、押しても反応が無いように見える。
+    """
+    from app.services import exporter
+
+    chunks = list(exporter.stream_csv([], include_status=False))
+    assert len(chunks) >= 2, "1つにまとめて返している"
+    assert chunks[0] == "﻿".encode(), "先頭の印が付いていない"
+
+    # 印は先頭だけ。塊ごとに付くと、そのたびにゴミの行が増える
+    assert all(b"\xef\xbb\xbf" not in chunk for chunk in chunks[1:])
