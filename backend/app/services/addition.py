@@ -85,6 +85,9 @@ class AdditionPlan:
     checks: list[str] = field(default_factory=list)
     upstream_config: str = ""
     device_config: str = ""
+    #: Config そのものには書かない補足。画面で Config の隣に出す
+    upstream_notes: list[str] = field(default_factory=list)
+    device_notes: list[str] = field(default_factory=list)
 
     def add(self, topic: str, choice: str, why: str, evidence: list[str] | None = None) -> None:
         self.decisions.append(
@@ -450,8 +453,10 @@ def _write_configs(
     upstream_vendor = vendor_of(upstream)
     device_vendor = _vendor_from_name(request.vendor) if request.vendor else upstream_vendor
 
-    plan.upstream_config = _upstream_config(plan, parsed, upstream_vendor, upstream)
-    plan.device_config = _device_config(plan, device_vendor, request)
+    plan.upstream_config, plan.upstream_notes = _upstream_config(
+        plan, parsed, upstream_vendor, upstream
+    )
+    plan.device_config, plan.device_notes = _device_config(plan, device_vendor, request)
 
 
 def _vendor_from_name(name: str) -> Vendor:
@@ -467,18 +472,15 @@ def _vendor_from_name(name: str) -> Vendor:
     return Vendor.UNKNOWN
 
 
-def _header(comment: str, title: str, plan: AdditionPlan) -> list[str]:
-    return [
-        f"{comment} {title}",
-        f"{comment} {plan.upstream_hostname} に {plan.hostname} を足す設計から起こしました。",
-        f"{comment} 実機には投入されません。内容を確かめてから使ってください。",
-        comment,
-    ]
-
-
 def _upstream_config(
     plan: AdditionPlan, parsed: ParsedConfig, vendor: Vendor, upstream: Device
-) -> str:
+) -> tuple[str, list[str]]:
+    """上位に足す分。返すのはコマンドだけで、説明はコメントに混ぜない。
+
+    生成した Config はそのまま貼って使う。説明や「要記入」の断り書きを
+    行に混ぜると、貼る前に消す手間が要るうえ、消し忘れが機器に入る。
+    伝えたいことは注記として別に返し、画面で Config の隣に出す。
+    """
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _upstream_cisco(plan, parsed)
     if vendor is Vendor.NEC_QX:
@@ -486,10 +488,13 @@ def _upstream_config(
     return _upstream_outline(plan, vendor, upstream)
 
 
-def _upstream_cisco(plan: AdditionPlan, parsed: ParsedConfig) -> str:
-    lines = _header("!", f"{plan.upstream_hostname} に足す分（Cisco IOS 系）", plan)
+def _upstream_cisco(plan: AdditionPlan, parsed: ParsedConfig) -> tuple[str, list[str]]:
+    lines: list[str] = []
+    notes = [
+        f"最初の塊（vlan {plan.vlan_id} と {plan.upstream_interface or 'ポート'}）"
+        "までを入れれば繋がります。",
+    ]
 
-    lines.append("! 1. 最低限つながる分")
     lines.append(f"vlan {plan.vlan_id}")
     lines.append(f" name {plan.vlan_name}")
     lines.append("!")
@@ -507,7 +512,6 @@ def _upstream_cisco(plan: AdditionPlan, parsed: ParsedConfig) -> str:
         lines.append(" no shutdown")
         lines.append("!")
 
-    lines.append("! 2. 経路")
     if plan.routing == "ospf" and plan.subnet and parsed.ospf:
         area = parsed.ospf.areas[0].area if parsed.ospf.areas else "0"
         lines.append(f"router ospf {parsed.ospf.process_id or 1}")
@@ -517,24 +521,25 @@ def _upstream_cisco(plan: AdditionPlan, parsed: ParsedConfig) -> str:
         )
         if parsed.ospf.passive_default:
             lines.append(f" passive-interface Vlan{plan.vlan_id}")
-            lines.append("! 端末しか居ないセグメントは passive にします。")
-            lines.append("! ここから OSPF を喋らせる必要はなく、喋らせると余計な隣接ができます。")
+            notes.append(
+                f"Vlan{plan.vlan_id} は passive にしています。端末しか居ないセグメントから"
+                "OSPF を喋らせても、余計な隣接ができるだけだからです。"
+            )
         lines.append("!")
     else:
-        lines.append("! 直結なので、上位に足す経路はありません。")
-        lines.append("!")
+        notes.append("上位に足す経路はありません。新しいセグメントを直接持つので直結です。")
 
-    lines.append("! 3. セキュリティ（最低限）")
-    lines.append(f"! 使わないポートは shutdown のままにしてください（{TODO}）")
-    lines.append("! 管理アクセス（SSH / SNMP / ACL）は、既存機器と同じ設定に合わせてください。")
-    lines.append(f"! この設計からは既存の値を読み取れません（{TODO}）")
-    return "\n".join(lines) + "\n"
+    notes.extend(_security_notes())
+    return "\n".join(lines) + "\n", notes
 
 
-def _upstream_comware(plan: AdditionPlan, parsed: ParsedConfig) -> str:
-    lines = _header("#", f"{plan.upstream_hostname} に足す分（NEC QX / Comware 系）", plan)
+def _upstream_comware(plan: AdditionPlan, parsed: ParsedConfig) -> tuple[str, list[str]]:
+    lines: list[str] = []
+    notes = [
+        f"最初の塊（vlan {plan.vlan_id} と {plan.upstream_interface or 'ポート'}）"
+        "までを入れれば繋がります。",
+    ]
 
-    lines.append("# 1. 最低限つながる分")
     lines.append(f"vlan {plan.vlan_id}")
     lines.append(f" name {plan.vlan_name}")
     lines.append("#")
@@ -552,7 +557,6 @@ def _upstream_comware(plan: AdditionPlan, parsed: ParsedConfig) -> str:
         lines.append(" undo shutdown")
         lines.append("#")
 
-    lines.append("# 2. 経路")
     if plan.routing == "ospf" and plan.subnet and parsed.ospf:
         area = parsed.ospf.areas[0].area if parsed.ospf.areas else "0.0.0.0"
         lines.append(f"ospf {parsed.ospf.process_id or 1}")
@@ -563,32 +567,41 @@ def _upstream_comware(plan: AdditionPlan, parsed: ParsedConfig) -> str:
         )
         lines.append("#")
     else:
-        lines.append("# 直結なので、上位に足す経路はありません。")
-        lines.append("#")
+        notes.append("上位に足す経路はありません。新しいセグメントを直接持つので直結です。")
 
-    lines.append("# 3. セキュリティ（最低限）")
-    lines.append(f"# 使わないポートは shutdown のままにしてください（{TODO}）")
-    lines.append("# 管理アクセス（SSH / SNMP / ACL）は既存機器に合わせてください。")
-    return "\n".join(lines) + "\n"
+    notes.extend(_security_notes())
+    return "\n".join(lines) + "\n", notes
 
 
-def _upstream_outline(plan: AdditionPlan, vendor: Vendor, upstream: Device) -> str:
+def _security_notes() -> list[str]:
+    return [
+        "使わないポートは shutdown のままにしてください。",
+        "管理アクセス（SSH / SNMP / ACL）は既存機器と同じ設定に合わせてください。"
+        "この設計からは既存の値を読み取れないので、Config には入れていません。",
+    ]
+
+
+def _upstream_outline(
+    plan: AdditionPlan, vendor: Vendor, upstream: Device
+) -> tuple[str, list[str]]:
+    """書式を持っていないベンダー。決めた値だけを渡す。
+
+    それらしい別ベンダーの構文を出すと、そのまま貼られて事故になる。
+    """
     label = configparse.VENDOR_LABELS.get(vendor, "判別できません")
-    lines = _header("#", f"{plan.upstream_hostname} に足す分（{label}）", plan)
-    lines.append(
-        f"# このベンダーの書式では起こしていません（{upstream.vendor} {upstream.model}）。"
-    )
-    lines.append("# それらしい別ベンダーの構文を出すより、決めた内容だけを渡します。")
-    lines.append("#")
-    lines.append(f"# VLAN: {plan.vlan_id}（{plan.vlan_name}）")
-    lines.append(f"# セグメント: {plan.subnet or TODO}")
-    lines.append(f"# この機器のアドレス: {plan.gateway_ip or TODO}")
-    lines.append(f"# {plan.hostname} へ向けるポート: {plan.upstream_interface or TODO}（トランク）")
-    lines.append(f"# 経路: {plan.routing}")
-    return "\n".join(lines) + "\n"
+    notes = [
+        f"{label}（{upstream.vendor} {upstream.model}）の書式では起こしていません。"
+        "それらしい別ベンダーの構文を出すより、決めた内容だけを渡します。",
+        f"VLAN {plan.vlan_id}（{plan.vlan_name}） / セグメント {plan.subnet or TODO}",
+        f"この機器のアドレス: {plan.gateway_ip or TODO}",
+        f"{plan.hostname} へ向けるポート: {plan.upstream_interface or TODO}（トランク）",
+    ]
+    return "", notes
 
 
-def _device_config(plan: AdditionPlan, vendor: Vendor, request: AdditionRequest) -> str:
+def _device_config(
+    plan: AdditionPlan, vendor: Vendor, request: AdditionRequest
+) -> tuple[str, list[str]]:
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _device_cisco(plan)
     if vendor is Vendor.NEC_QX:
@@ -596,12 +609,12 @@ def _device_config(plan: AdditionPlan, vendor: Vendor, request: AdditionRequest)
     return _device_outline(plan, vendor, request)
 
 
-def _device_cisco(plan: AdditionPlan) -> str:
-    lines = _header("!", f"{plan.hostname}（新規・Cisco IOS 系）", plan)
+def _device_cisco(plan: AdditionPlan) -> tuple[str, list[str]]:
+    lines = [f"hostname {plan.hostname}", "!"]
+    notes = [
+        f"hostname から {plan.device_uplink} までを入れれば繋がります。",
+    ]
 
-    lines.append("! 1. 最低限つながる分")
-    lines.append(f"hostname {plan.hostname}")
-    lines.append("!")
     lines.append(f"vlan {plan.vlan_id}")
     lines.append(f" name {plan.vlan_name}")
     lines.append("!")
@@ -618,15 +631,14 @@ def _device_cisco(plan: AdditionPlan) -> str:
         lines.append(" no shutdown")
         lines.append("!")
 
-    lines.append("! 2. 経路")
     if plan.gateway_ip:
         lines.append(f"ip default-gateway {plan.gateway_ip}")
-        lines.append(
-            f"! L3 で動かす場合は ip routing と ip route 0.0.0.0 0.0.0.0 {plan.gateway_ip}"
-        )
         lines.append("!")
+        notes.append(
+            f"この機器を L3 で動かすなら、ip default-gateway ではなく ip routing と "
+            f"ip route 0.0.0.0 0.0.0.0 {plan.gateway_ip} にしてください。"
+        )
 
-    lines.append("! 3. セキュリティ（最低限）")
     lines.append("no ip http server")
     lines.append("no ip http secure-server")
     lines.append("service password-encryption")
@@ -635,18 +647,19 @@ def _device_cisco(plan: AdditionPlan) -> str:
     lines.append(" transport input ssh")
     lines.append(" exec-timeout 10 0")
     lines.append("!")
-    lines.append(f"! ユーザー・パスワード・SSH の鍵・SNMP・NTP・ログ送り先: {TODO}")
-    lines.append("! 既存機器と同じ値にしてください。ここだけ違うと運用で漏れます。")
-    lines.append(f"! 使わないポートは shutdown にしてください（{TODO}）")
-    return "\n".join(lines) + "\n"
+
+    notes.append(
+        "ユーザー・パスワード・SSH の鍵・SNMP・NTP・ログ送り先は入れていません。"
+        "既存機器と同じ値にしてください。ここだけ違うと運用で漏れます。"
+    )
+    notes.append("使わないポートは shutdown にしてください。")
+    return "\n".join(lines) + "\n", notes
 
 
-def _device_comware(plan: AdditionPlan) -> str:
-    lines = _header("#", f"{plan.hostname}（新規・NEC QX / Comware 系）", plan)
+def _device_comware(plan: AdditionPlan) -> tuple[str, list[str]]:
+    lines = [f"sysname {plan.hostname}", "#"]
+    notes = [f"sysname から {plan.device_uplink} までを入れれば繋がります。"]
 
-    lines.append("# 1. 最低限つながる分")
-    lines.append(f"sysname {plan.hostname}")
-    lines.append("#")
     lines.append(f"vlan {plan.vlan_id}")
     lines.append(f" name {plan.vlan_name}")
     lines.append("#")
@@ -662,12 +675,10 @@ def _device_comware(plan: AdditionPlan) -> str:
         lines.append(" undo shutdown")
         lines.append("#")
 
-    lines.append("# 2. 経路")
     if plan.gateway_ip:
         lines.append(f"ip route-static 0.0.0.0 0.0.0.0 {plan.gateway_ip}")
         lines.append("#")
 
-    lines.append("# 3. セキュリティ（最低限）")
     lines.append("undo ip http enable")
     lines.append("undo ip https enable")
     lines.append("#")
@@ -675,18 +686,26 @@ def _device_comware(plan: AdditionPlan) -> str:
     lines.append(" protocol inbound ssh")
     lines.append(" idle-timeout 10 0")
     lines.append("#")
-    lines.append(f"# ユーザー・パスワード・SSH の鍵・SNMP・NTP・ログ送り先: {TODO}")
-    return "\n".join(lines) + "\n"
+
+    notes.append(
+        "ユーザー・パスワード・SSH の鍵・SNMP・NTP・ログ送り先は入れていません。"
+        "既存機器と同じ値にしてください。"
+    )
+    notes.append("使わないポートは shutdown にしてください。")
+    return "\n".join(lines) + "\n", notes
 
 
-def _device_outline(plan: AdditionPlan, vendor: Vendor, request: AdditionRequest) -> str:
+def _device_outline(
+    plan: AdditionPlan, vendor: Vendor, request: AdditionRequest
+) -> tuple[str, list[str]]:
     label = configparse.VENDOR_LABELS.get(vendor, "判別できません")
-    lines = _header("#", f"{plan.hostname}（新規・{label}）", plan)
-    lines.append(f"# このベンダーの書式では起こしていません（{request.vendor} {request.model}）。")
-    lines.append("#")
-    lines.append(f"# ホスト名: {plan.hostname}")
-    lines.append(f"# VLAN: {plan.vlan_id}（{plan.vlan_name}）")
-    lines.append(f"# アドレス: {plan.device_ip or TODO} / {plan.subnet or TODO}")
-    lines.append(f"# 既定ゲートウェイ: {plan.gateway_ip or TODO}")
-    lines.append(f"# 上位へ向けるポート: {plan.device_uplink}（トランク）")
-    return "\n".join(lines) + "\n"
+    notes = [
+        f"{label}（{request.vendor} {request.model}）の書式では起こしていません。"
+        "それらしい別ベンダーの構文を出すより、決めた内容だけを渡します。",
+        f"ホスト名: {plan.hostname}",
+        f"VLAN {plan.vlan_id}（{plan.vlan_name}） / アドレス {plan.device_ip or TODO}"
+        f"（{plan.subnet or TODO}）",
+        f"既定ゲートウェイ: {plan.gateway_ip or TODO}",
+        f"上位へ向けるポート: {plan.device_uplink}（トランク）",
+    ]
+    return "", notes

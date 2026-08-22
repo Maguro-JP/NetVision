@@ -130,11 +130,27 @@ def test_a_passive_default_carries_over_to_the_new_segment(db_session, upstream)
     assert "passive-interface Vlan30" in plan.upstream_config
 
 
-def test_the_minimum_that_connects_comes_first(db_session, upstream):
-    """急ぐときは 1 だけ入れれば繋がる、と読める順に並べる。"""
-    body = _plan(db_session, upstream).device_config
-    assert body.index("1. 最低限つながる分") < body.index("2. 経路")
-    assert body.index("2. 経路") < body.index("3. セキュリティ")
+def test_the_config_carries_commands_only(db_session, upstream):
+    """貼ればそのまま通る形にする。
+
+    説明や「要記入」の断り書きを行に混ぜると、貼る前に消す手間が要るうえ、
+    消し忘れがそのまま機器に入る。伝えたいことは注記として別に返す。
+    """
+    plan = _plan(db_session, upstream)
+    for body in (plan.upstream_config, plan.device_config):
+        for line in body.splitlines():
+            stripped = line.strip()
+            if stripped in {"!", "#", ""}:
+                continue  # 区切りは Config の書式そのもの
+            assert not stripped.startswith(("!", "#")), line
+            assert addition.TODO not in line
+
+
+def test_the_minimum_that_connects_is_said_in_the_notes(db_session, upstream):
+    """急ぐときはどこまで入れれば繋がるのかを、Config の外で伝える。"""
+    plan = _plan(db_session, upstream)
+    assert any("入れれば繋がります" in note for note in plan.device_notes)
+    assert any("入れれば繋がります" in note for note in plan.upstream_notes)
 
 
 def test_both_sides_are_written_and_agree(db_session, upstream):
@@ -151,8 +167,8 @@ def test_the_new_device_gets_the_least_security_it_needs(db_session, upstream):
     plan = _plan(db_session, upstream)
     assert "transport input ssh" in plan.device_config
     assert "no ip http server" in plan.device_config
-    # 既存から読み取れない値は、埋めずに要記入と分かる形で残す
-    assert addition.TODO in plan.device_config
+    # 既存から読み取れない値は Config に入れず、注記で伝える
+    assert any("SNMP" in note for note in plan.device_notes)
 
 
 def test_what_to_verify_is_listed(db_session, upstream):
@@ -198,9 +214,11 @@ def test_a_redundant_upstream_is_flagged(db_session, upstream):
 
 
 def test_an_unsupported_vendor_gets_the_decisions_not_a_guessed_syntax(db_session, upstream):
+    """それらしい別ベンダーの構文を出すと、そのまま貼られて事故になる。"""
     plan = _plan(db_session, upstream, vendor="Juniper")
-    assert "起こしていません" in plan.device_config
-    assert "10.10.30.2" in plan.device_config
+    assert plan.device_config == ""
+    assert any("起こしていません" in note for note in plan.device_notes)
+    assert any("10.10.30.2" in note for note in plan.device_notes)
 
 
 def test_the_api_returns_the_plan_with_its_reasons(client, db_session, upstream):
@@ -213,7 +231,8 @@ def test_the_api_returns_the_plan_with_its_reasons(client, db_session, upstream)
     assert body["vlan_id"] == 30
     assert body["subnet"] == "10.10.30.0/24"
     assert body["decisions"][0]["why"]
-    assert body["upstream_config"].startswith("!")
+    assert body["upstream_config"].startswith("vlan 30")
+    assert body["device_notes"]
 
 
 def test_the_api_needs_a_name(client, upstream):

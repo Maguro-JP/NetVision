@@ -20,6 +20,31 @@ export function routingLabel(routing: string): string {
   return "上位の経路が読めないため、足す機器のデフォルト経路のみ";
 }
 
+/**
+ * Config そのものと、その補足。
+ *
+ * Config には命令だけを入れる。説明や「要記入」を行に混ぜると、貼る前に
+ * 消す手間が要るうえ、消し忘れがそのまま機器に入る。補足は下に並べる。
+ */
+function ConfigBlock({ body, notes }: { body: string; notes: string[] }) {
+  return (
+    <>
+      {body ? (
+        <pre className="config-preview">{body}</pre>
+      ) : (
+        <div className="empty">この書式では Config を起こしていません。</div>
+      )}
+      {notes.length > 0 && (
+        <ul className="muted" style={{ marginTop: 6 }}>
+          {notes.map((note) => (
+            <li key={note}>{note}</li>
+          ))}
+        </ul>
+      )}
+    </>
+  );
+}
+
 export default function AdditionPlanner({ deviceId }: { deviceId: number }) {
   const [open, setOpen] = useState(false);
   const [hostname, setHostname] = useState("");
@@ -167,10 +192,16 @@ export default function AdditionPlanner({ deviceId }: { deviceId: number }) {
               )}
 
               <h3>{plan.upstream_hostname} に足す分</h3>
-              <pre className="config-preview">{plan.upstream_config}</pre>
+              <ConfigBlock
+                body={plan.upstream_config}
+                notes={plan.upstream_notes}
+              />
 
               <h3>{plan.hostname}（新規）</h3>
-              <pre className="config-preview">{plan.device_config}</pre>
+              <ConfigBlock
+                body={plan.device_config}
+                notes={plan.device_notes}
+              />
 
               <h3>投入の前後で確かめること</h3>
               <ul>

@@ -433,6 +433,9 @@ class AdditionPlanRead(BaseModel):
     checks: list[str]
     upstream_config: str
     device_config: str
+    #: Config そのものには書かない補足。画面で Config の隣に出す
+    upstream_notes: list[str]
+    device_notes: list[str]
 
 
 @router.post("/devices/{device_id}/addition", response_model=AdditionPlanRead)
@@ -486,6 +489,8 @@ def plan_addition(device_id: int, payload: AdditionRequestBody, db: DbSession) -
         checks=plan.checks,
         upstream_config=plan.upstream_config,
         device_config=plan.device_config,
+        upstream_notes=plan.upstream_notes,
+        device_notes=plan.device_notes,
     )
 
 

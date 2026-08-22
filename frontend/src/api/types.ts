@@ -1106,6 +1106,9 @@ export interface AdditionPlan {
   checks: string[];
   upstream_config: string;
   device_config: string;
+  /** Config そのものには書かない補足。貼るときに邪魔にならないよう分けてある */
+  upstream_notes: string[];
+  device_notes: string[];
 }
 
 /** L3 で気になったこと1件。理由と、根拠にした行が必ず付く。 */
