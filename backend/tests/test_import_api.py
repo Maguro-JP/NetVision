@@ -127,7 +127,6 @@ def test_bad_rows_are_skipped_and_the_rest_goes_in(client):
     assert "acc-sw-01" not in hostnames, "問題のある行が入っている"
 
 
-
 def test_missing_required_column_is_reported(client):
     """ホスト名が無いファイルは、どの機器の行か決められない。"""
     body = upload(client, "ベンダー,型番\nCisco,C9500-40X\n").json()
