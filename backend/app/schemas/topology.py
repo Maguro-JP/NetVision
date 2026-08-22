@@ -126,6 +126,8 @@ class ConfigSnapshotRead(BaseModel):
 
 class ConfigSnapshotDetail(ConfigSnapshotRead):
     content: str
+    #: 何を伏せたか。伏せたことを黙っていると、無いものと読まれる
+    masked_note: str = ""
 
 
 class ConfigDiffRead(BaseModel):
@@ -133,6 +135,7 @@ class ConfigDiffRead(BaseModel):
     to_id: int
     diff: str
     changed: bool
+    masked_note: str = ""
 
 
 class InterfaceRead(BaseModel):

@@ -507,8 +507,11 @@ export const api = {
   },
   listConfigs: (deviceId?: number) =>
     request<ConfigSnapshot[]>(`/configs${query({ device_id: deviceId })}`),
-  getConfig: (id: number) =>
-    request<ConfigSnapshot & { content: string }>(`/configs/${id}`),
+  /** 1世代ぶんの中身。既定ではパスワードなどを伏せて返る。 */
+  getConfig: (id: number, reveal = false) =>
+    request<ConfigSnapshot & { content: string; masked_note: string }>(
+      `/configs/${id}${reveal ? "?reveal=true" : ""}`,
+    ),
   diffConfig: (id: number, against?: number) =>
     request<ConfigDiff>(`/configs/${id}/diff${query({ against })}`),
   deleteConfig: (id: number) =>

@@ -13,21 +13,34 @@ function ResultCard({ result }: { result: IngestResult }) {
 
   return (
     <div className="card" style={{ borderColor: tone, marginBottom: 10 }}>
-      <div style={{ display: "flex", gap: 10, alignItems: "baseline", flexWrap: "wrap" }}>
+      <div
+        style={{
+          display: "flex",
+          gap: 10,
+          alignItems: "baseline",
+          flexWrap: "wrap",
+        }}
+      >
         <strong>{result.filename}</strong>
         <span className="muted">{result.vendor_label}</span>
         {result.matched ? (
-          <Link to={`/devices/${result.device_id}`}>{result.device_hostname}</Link>
+          <Link to={`/devices/${result.device_id}`}>
+            {result.device_hostname}
+          </Link>
         ) : (
           <span className="badge warning">台帳に未登録</span>
         )}
-        {result.unchanged && <span className="badge unknown">前回と同じ内容</span>}
+        {result.unchanged && (
+          <span className="badge unknown">前回と同じ内容</span>
+        )}
       </div>
 
       <div className="muted" style={{ marginTop: 6 }}>
-        ホスト名 {result.hostname ?? "—"} ／ インターフェース {result.interface_count} ／ VLAN{" "}
-        {result.vlan_count} ／ 隣接 {result.neighbor_count}
-        {result.links_created > 0 && ` ／ 結線 ${result.links_created} 本を作成`}
+        ホスト名 {result.hostname ?? "—"} ／ インターフェース{" "}
+        {result.interface_count} ／ VLAN {result.vlan_count} ／ 隣接{" "}
+        {result.neighbor_count}
+        {result.links_created > 0 &&
+          ` ／ 結線 ${result.links_created} 本を作成`}
       </div>
 
       {result.message && <div style={{ marginTop: 6 }}>{result.message}</div>}
@@ -100,7 +113,10 @@ export default function ConfigsPage() {
   const [results, setResults] = useState<IngestResult[] | null>(null);
   const [diffTarget, setDiffTarget] = useState<number | null>(null);
   const [over, setOver] = useState(false);
-  const [progress, setProgress] = useState<{ done: number; total: number } | null>(null);
+  const [progress, setProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const takeFiles = (list: FileList | File[] | null) => {
@@ -110,7 +126,10 @@ export default function ConfigsPage() {
     setResults(null);
   };
 
-  const { data: snapshots } = useQuery({ queryKey: ["configs"], queryFn: () => api.listConfigs() });
+  const { data: snapshots } = useQuery({
+    queryKey: ["configs"],
+    queryFn: () => api.listConfigs(),
+  });
   const { data: diff } = useQuery({
     queryKey: ["configDiff", diffTarget],
     queryFn: () => api.diffConfig(diffTarget!),
@@ -122,7 +141,10 @@ export default function ConfigsPage() {
       const collected: IngestResult[] = [];
       setProgress({ done: 0, total: files.length });
       for (let index = 0; index < files.length; index++) {
-        const batch = await api.uploadConfigs([files[index]], { applyInventory, createMissing });
+        const batch = await api.uploadConfigs([files[index]], {
+          applyInventory,
+          createMissing,
+        });
         collected.push(...batch);
         setProgress({ done: index + 1, total: files.length });
       }
@@ -147,13 +169,17 @@ export default function ConfigsPage() {
     <>
       <h1>Config の取り込み</h1>
       <p className="subtitle">
-        running-config や show 出力を読み込んで、機器情報・インターフェース・VLAN・隣接情報を抽出します。
-        隣接情報（LLDP / CDP）からは <Link to="/topology">トポロジー図</Link> の結線を自動で組み立てます。
+        running-config や show
+        出力を読み込んで、機器情報・インターフェース・VLAN・隣接情報を抽出します。
+        隣接情報（LLDP / CDP）からは <Link to="/topology">トポロジー図</Link>{" "}
+        の結線を自動で組み立てます。
       </p>
 
       <div className="form-grid">
         <div className="field wide config-drop">
-          <label>ファイル（複数可。Cisco / Juniper / Fortinet / NEC IX・QX）</label>
+          <label>
+            ファイル（複数可。Cisco / Juniper / Fortinet / NEC IX・QX）
+          </label>
           <div
             className={`dropzone${over ? " over" : ""}`}
             onDragOver={(e) => {
@@ -194,7 +220,9 @@ export default function ConfigsPage() {
               <span>
                 {files.length} 件を選びました
                 <br />
-                <span className="muted">{files.map((f) => f.name).join("、")}</span>
+                <span className="muted">
+                  {files.map((f) => f.name).join("、")}
+                </span>
               </span>
             )}
           </div>
@@ -222,7 +250,8 @@ export default function ConfigsPage() {
           <span className="muted">
             紐付けはファイル名ではなく、Config の中のホスト名で判断します。
             型番が読み取れなくても登録し、機器一覧に「情報不足」と表示します。
-            型番は EoL と脆弱性を引く鍵なので、<code>show version</code> の出力も
+            型番は EoL と脆弱性を引く鍵なので、<code>show version</code>{" "}
+            の出力も
             同じファイルに含めるか、あとから機器一覧で入力してください。
           </span>
         </div>
@@ -242,13 +271,18 @@ export default function ConfigsPage() {
         </button>
       </div>
 
-      {run.error && <QueryError error={run.error} onRetry={() => run.mutate()} />}
+      {run.error && (
+        <QueryError error={run.error} onRetry={() => run.mutate()} />
+      )}
 
       {results && (
         <>
           <h2>取り込み結果</h2>
           {results.map((result) => (
-            <ResultCard key={`${result.filename}-${result.snapshot_id}`} result={result} />
+            <ResultCard
+              key={`${result.filename}-${result.snapshot_id}`}
+              result={result}
+            />
           ))}
           <div className="actions">
             <Link to="/topology">
@@ -278,24 +312,34 @@ export default function ConfigsPage() {
           <tbody>
             {(snapshots ?? []).map((snapshot) => (
               <tr key={snapshot.id}>
-                <td className="muted">{formatTimestamp(snapshot.created_at)}</td>
+                <td className="muted">
+                  {formatTimestamp(snapshot.created_at)}
+                </td>
                 <td>{snapshot.filename}</td>
                 <td>
                   {snapshot.device_id ? (
-                    <Link to={`/devices/${snapshot.device_id}`}>{snapshot.hostname}</Link>
+                    <Link to={`/devices/${snapshot.device_id}`}>
+                      {snapshot.hostname}
+                    </Link>
                   ) : (
                     <span className="muted">{snapshot.hostname ?? "—"}</span>
                   )}
                 </td>
                 <td className="muted">{snapshot.vendor ?? "—"}</td>
                 <td className="muted">
-                  {snapshot.parsed_os_name ?? ""} {snapshot.parsed_os_version ?? ""}
+                  {snapshot.parsed_os_name ?? ""}{" "}
+                  {snapshot.parsed_os_version ?? ""}
                 </td>
                 <td>{snapshot.interface_count}</td>
                 <td>{snapshot.neighbor_count}</td>
                 <td>
-                  <button onClick={() => setDiffTarget(snapshot.id)}>前回との差分</button>{" "}
-                  <button className="danger" onClick={() => remove.mutate(snapshot.id)}>
+                  <button onClick={() => setDiffTarget(snapshot.id)}>
+                    前回との差分
+                  </button>{" "}
+                  <button
+                    className="danger"
+                    onClick={() => remove.mutate(snapshot.id)}
+                  >
                     削除
                   </button>
                 </td>
@@ -308,6 +352,12 @@ export default function ConfigsPage() {
       {diffTarget !== null && diff && (
         <>
           <h2>Config の差分</h2>
+          {diff.masked_note && (
+            <p className="muted" style={{ marginTop: -6 }}>
+              {diff.masked_note}。保存してあるのは原文のままで、伏せているのは
+              見せるときだけです。
+            </p>
+          )}
           {diff.changed ? (
             <pre className="diff">
               {diff.diff.split("\n").map((line, index) => (
@@ -328,7 +378,9 @@ export default function ConfigsPage() {
               ))}
             </pre>
           ) : (
-            <div className="empty">比較できる前の世代がないか、内容に差がありません</div>
+            <div className="empty">
+              比較できる前の世代がないか、内容に差がありません
+            </div>
           )}
           <div className="actions">
             <button onClick={() => setDiffTarget(null)}>差分を閉じる</button>

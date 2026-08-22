@@ -220,6 +220,8 @@ export interface ConfigDiff {
   to_id: number;
   diff: string;
   changed: boolean;
+  /** 何を伏せたか。伏せたことを黙っていると、無いものと読まれる */
+  masked_note: string;
 }
 
 export interface NetworkInterface {

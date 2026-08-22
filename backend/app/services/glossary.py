@@ -240,7 +240,7 @@ TERMS: tuple[Term, ...] = (
         "そのまま読めば何をしているか分かります。",
         matters="このツールが読んでいるのはこれです。"
         "型番などは running-config に無いので、show version も一緒に要ります。",
-        also=("コンフィグ", "設定"),
+        also=("コンフィグ", "running config"),
     ),
     Term(
         term="トポロジー",

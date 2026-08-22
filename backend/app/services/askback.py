@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from app.services import glossary, llm
+from app.services import glossary, llm, secrets
 from app.services.l3review import Finding
 
 _SYSTEM = (
@@ -129,8 +129,10 @@ def _material(question: str, findings: list[Finding], context: str) -> str:
         parts.append("")
 
     if context:
-        parts.append("対象の Config（抜粋）:")
-        parts.append(context[:4000])
+        # 貼る依頼文にも、手元のモデルに渡す材料にも、秘密は入れない
+        hidden = secrets.mask(context[:4000])
+        parts.append("対象の Config（抜粋・パスワードなどは伏せています）:")
+        parts.append(hidden.text)
         parts.append("")
 
     words = [term for term in glossary.TERMS if term.term in question]
