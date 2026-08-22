@@ -121,6 +121,14 @@ export interface ImportRowIssue {
   message: string;
 }
 
+/** 1つの項目が、いまの値から何に変わるか。 */
+export interface ImportFieldChange {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
 export interface ImportRowResult {
   row_number: number;
   key: string;
@@ -128,6 +136,8 @@ export interface ImportRowResult {
   issues: ImportRowIssue[];
   device_id: number | null;
   contract_added: boolean;
+  /** 既存を直す行で、実際に変わる項目だけ。変わらない行は空 */
+  changes: ImportFieldChange[];
 }
 
 export interface ImportResult {

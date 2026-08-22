@@ -1499,3 +1499,8 @@ a.button.export-save:focus-visible {
   flex: 1;
   overflow: auto;
 }
+
+/* 取り込みの下見で、変わるところだけを目立たせる。変わらない行は静かなまま */
+.import-change {
+  color: var(--sev-warning);
+}

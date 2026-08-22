@@ -615,3 +615,40 @@ def test_without_a_code_a_new_name_means_a_new_site(client):
     assert devices[0]["site_name"] == "本社DC"
     names = {s["name"] for s in client.get(f"{API}/sites").json()}
     assert names == {"本社DC", "本社DG"}
+
+
+def test_a_preview_shows_what_changes(client):
+    """下見で、いまの値と更新後の値が並ぶこと。
+
+    どこが変わるのか分からないまま16万行を当てるのは怖い。変わる項目だけを
+    「いま」と「更新後」で見せる。変わらない行は空にして、目立たせない。
+    """
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "code": "NW-0001", "vendor": "Cisco", "model": "C9300"},
+    )
+
+    sheet = (
+        "管理ID,ホスト名,メーカー,型番\n"
+        "NW-0001,core-sw-01,Cisco,C9500\n"  # 型番だけ変わる
+    )
+    body = upload(client, sheet, path="/import/devices/preview").json()
+
+    row = next(r for r in body["rows"] if r["key"] == "core-sw-01")
+    assert row["action"] == "update"
+    assert [(c["label"], c["before"], c["after"]) for c in row["changes"]] == [
+        ("型番", "C9300", "C9500")
+    ]
+
+
+def test_rows_that_do_not_change_show_nothing(client):
+    """同じ内容を入れ直した行は、変わるところが無いので空にする。"""
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "code": "NW-0001", "vendor": "Cisco", "model": "C9300"},
+    )
+    sheet = "管理ID,ホスト名,メーカー,型番\nNW-0001,core-sw-01,Cisco,C9300\n"
+
+    body = upload(client, sheet, path="/import/devices/preview").json()
+    row = next(r for r in body["rows"] if r["key"] == "core-sw-01")
+    assert row["changes"] == []

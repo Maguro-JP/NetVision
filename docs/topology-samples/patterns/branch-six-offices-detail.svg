@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="866" height="685" viewBox="0 0 866 685" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 配下6拠点</text>
-<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-22 11:57 JST 時点 / レイヤ: physical / 9台 8本</text>
+<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-22 12:02 JST 時点 / レイヤ: physical / 9台 8本</text>
 <polyline points="225,254 225,163 241,163 241,135" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="227.4" y="236.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
 <text class="port-label" x="244.4" y="155.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>

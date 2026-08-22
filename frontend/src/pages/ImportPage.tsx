@@ -482,6 +482,10 @@ export default function ImportPage() {
                   <th>行</th>
                   <th>キー</th>
                   <th>処理</th>
+                  {/* どこが変わるのかを、左にいまの値・右に更新後で並べる。
+                      変わらない行は空にして、変わる行だけが目に入るようにする */}
+                  <th>いまの値</th>
+                  <th>更新後</th>
                   <th>保守契約</th>
                   <th>メッセージ</th>
                 </tr>
@@ -498,6 +502,27 @@ export default function ImportPage() {
                       }}
                     >
                       {ACTION_LABEL[row.action]}
+                    </td>
+                    <td style={{ whiteSpace: "normal" }} className="muted">
+                      {row.changes.length === 0
+                        ? "—"
+                        : row.changes.map((change) => (
+                            <div key={change.field}>
+                              {change.label}: {change.before || "（空）"}
+                            </div>
+                          ))}
+                    </td>
+                    <td style={{ whiteSpace: "normal" }}>
+                      {row.changes.length === 0 ? (
+                        <span className="muted">変わりません</span>
+                      ) : (
+                        row.changes.map((change) => (
+                          <div key={change.field} className="import-change">
+                            {change.label}:{" "}
+                            <strong>{change.after || "（空）"}</strong>
+                          </div>
+                        ))
+                      )}
                     </td>
                     <td>{row.contract_added ? "追加" : "—"}</td>
                     <td style={{ whiteSpace: "normal" }}>
