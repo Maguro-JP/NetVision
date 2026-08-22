@@ -1012,6 +1012,15 @@ export interface LinkImportResult {
   committed: boolean;
 }
 
+/** 画面から決める設定。環境変数は初期値として扱う。 */
+export interface AppSettings {
+  warning_days: number;
+  critical_days: number;
+  reference_stale_days: number;
+  display_timezone: string;
+  model_dir: string;
+}
+
 /** 資料から起こしたテンプレートの下書き。 */
 export interface TemplateDraft {
   name: string;

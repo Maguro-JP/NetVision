@@ -24,6 +24,7 @@ from app.api.routes import (
     topology,
 )
 from app.api.routes import schema as schema_routes
+from app.api.routes import settings as settings_routes
 from app.config import settings
 from app.services import audit  # noqa: F401  変更履歴のフック登録
 
@@ -74,6 +75,7 @@ app.include_router(replacement.router, prefix=api)
 app.include_router(remediation.router, prefix=api)
 app.include_router(exposures.router, prefix=api)
 app.include_router(schema_routes.router, prefix=api)
+app.include_router(settings_routes.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",

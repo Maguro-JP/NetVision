@@ -1,4 +1,5 @@
 import type {
+  AppSettings,
   ChangeLog,
   LinkImportResult,
   SiteImportResult,
@@ -818,6 +819,10 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  /** 画面から決める設定 */
+  appSettings: () => request<AppSettings>("/settings"),
+  updateAppSettings: (body: Partial<AppSettings>) =>
+    request<AppSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
   /** モデルを使うかどうかの切り替え。次の起動でも残る */
   setLlmEnabled: (enabled: boolean) =>
