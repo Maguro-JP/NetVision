@@ -144,7 +144,7 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
     それらしい別ベンダーの構文を出すより害が無い。
     """
     plan = collect(db, device, vlan_ids=vlan_ids)
-    vendor = _vendor_of(device)
+    vendor = vendor_of(device)
 
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _cisco(plan)
@@ -157,7 +157,7 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
     return _outline(plan, vendor)
 
 
-def _vendor_of(device: Device) -> Vendor:
+def vendor_of(device: Device) -> Vendor:
     """台帳のベンダー名から書式を決める。"""
     name = (device.vendor or "").strip().lower()
     model = (device.model or "").upper()

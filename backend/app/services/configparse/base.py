@@ -130,6 +130,11 @@ class ParsedConfig:
     vlans: dict[int, str] = field(default_factory=dict)
     vrfs: list[ParsedVrf] = field(default_factory=list)
     tunnels: list[ParsedTunnel] = field(default_factory=list)
+    #: L3。読めなければ空のまま。無いのか読めていないのかは上位で区別しない
+    routes: list[ParsedRoute] = field(default_factory=list)
+    ospf: ParsedOspf | None = None
+    bgp: ParsedBgp | None = None
+    redundancy: list[ParsedRedundancy] = field(default_factory=list)
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""
@@ -190,3 +195,80 @@ class ParsedConfig:
                 return existing
         self.vrfs.append(vrf)
         return vrf
+
+
+@dataclass
+class ParsedRoute:
+    """静的経路1本。
+
+    「繋がらない」の原因はここに出やすい。片側だけ書いてある戻り経路、
+    宛先の機器が台帳にいないネクストホップ、といった粗を見つける材料にする。
+    """
+
+    destination: str  # "0.0.0.0/0" の形にそろえる
+    next_hop: str | None = None
+    interface: str | None = None
+    distance: int | None = None  # アドミニストレイティブ・ディスタンス
+    vrf: str | None = None
+
+    @property
+    def is_default(self) -> bool:
+        return self.destination in {"0.0.0.0/0", "::/0"}
+
+
+@dataclass
+class ParsedOspfArea:
+    area: str
+    networks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedOspf:
+    """OSPF の設定。どのエリアに何を入れているかまで持つ。
+
+    機器を足すときに「この拠点は OSPF で、エリア0 に入れている」と分かれば、
+    足す側の書き方もそれに合わせられる。
+    """
+
+    process_id: str | None = None
+    router_id: str | None = None
+    areas: list[ParsedOspfArea] = field(default_factory=list)
+    passive_interfaces: list[str] = field(default_factory=list)
+    passive_default: bool = False
+    redistributes: list[str] = field(default_factory=list)
+
+    def area_of(self, network: str) -> str | None:
+        for area in self.areas:
+            if network in area.networks:
+                return area.area
+        return None
+
+
+@dataclass
+class ParsedBgpNeighbor:
+    address: str
+    remote_as: str | None = None
+    description: str | None = None
+
+
+@dataclass
+class ParsedBgp:
+    local_as: str | None = None
+    router_id: str | None = None
+    neighbors: list[ParsedBgpNeighbor] = field(default_factory=list)
+    networks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedRedundancy:
+    """既定ゲートウェイの冗長（HSRP / VRRP）。
+
+    片方の機器にしか入っていない、優先度が両方同じ、といった粗が
+    そのまま「切り替わらない」障害になるので、機器ごとに持って突き合わせる。
+    """
+
+    interface: str
+    group: str | None = None
+    virtual_ip: str | None = None
+    priority: int | None = None
+    protocol: str = "hsrp"  # hsrp / vrrp

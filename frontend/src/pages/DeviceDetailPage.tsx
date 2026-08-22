@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
+import AdditionPlanner from "../components/AdditionPlanner";
 import type { MaintenanceContract } from "../api/types";
 import ConfigDropZone from "../components/ConfigDropZone";
 import ChangeLogTable from "../components/ChangeLogTable";
@@ -278,6 +279,8 @@ export default function DeviceDetailPage() {
           )}
         </>
       )}
+
+      <AdditionPlanner deviceId={device.id} />
 
       <h2>ポート</h2>
       <ConfigDropZone deviceId={deviceId} hostname={device.hostname} />

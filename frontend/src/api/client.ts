@@ -1,4 +1,5 @@
 import type {
+  AdditionPlan,
   AppSettings,
   ChangeLog,
   LinkImportResult,
@@ -679,6 +680,24 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** その機器の下に1台足すときの設計。決めた理由と根拠つきで返る。 */
+  planAddition: (
+    deviceId: number,
+    body: {
+      hostname: string;
+      vendor?: string;
+      model?: string;
+      purpose?: string;
+      vlan_id?: number | null;
+      subnet?: string | null;
+      uplink_interface?: string | null;
+    },
+  ) =>
+    request<AdditionPlan>(`/devices/${deviceId}/addition`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   createLink: (body: {
     a_device_id: number;
     b_device_id: number;

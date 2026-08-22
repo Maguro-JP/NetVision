@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import tunnels
+from app.services.configparse import routing, tunnels
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
@@ -81,6 +81,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_set_interfaces(text, parsed)
     _parse_lldp_table(text, parsed)
     tunnels.parse_junos(text, parsed)
+    routing.parse_junos(text, parsed)
     return parsed
 
 

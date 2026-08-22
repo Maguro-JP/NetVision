@@ -9,9 +9,15 @@ from __future__ import annotations
 from app.services.configparse import cisco, fortinet, juniper, nec
 from app.services.configparse.base import (
     NeighborProtocol,
+    ParsedBgp,
+    ParsedBgpNeighbor,
     ParsedConfig,
     ParsedInterface,
     ParsedNeighbor,
+    ParsedOspf,
+    ParsedOspfArea,
+    ParsedRedundancy,
+    ParsedRoute,
     ParsedVrf,
     Vendor,
 )
@@ -84,9 +90,15 @@ def _collect_referenced_vrfs(parsed: ParsedConfig) -> None:
 
 __all__ = [
     "NeighborProtocol",
+    "ParsedBgp",
+    "ParsedBgpNeighbor",
     "ParsedConfig",
     "ParsedInterface",
     "ParsedNeighbor",
+    "ParsedOspf",
+    "ParsedOspfArea",
+    "ParsedRedundancy",
+    "ParsedRoute",
     "ParsedVrf",
     "VENDOR_LABELS",
     "VENDOR_NAMES",

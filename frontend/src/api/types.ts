@@ -1080,3 +1080,30 @@ export interface SpaceView {
   device_total: number;
   link_total: number;
 }
+
+/** 「ここに機器を足したら」の設計で決めた1件と、その理由。 */
+export interface AdditionDecision {
+  topic: string;
+  choice: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 足す1台ぶんの設計。上位側と新機器側の Config を両方持つ。 */
+export interface AdditionPlan {
+  upstream_hostname: string;
+  hostname: string;
+  vlan_id: number | null;
+  vlan_name: string;
+  subnet: string | null;
+  gateway_ip: string | null;
+  device_ip: string | null;
+  upstream_interface: string | null;
+  device_uplink: string;
+  routing: string;
+  decisions: AdditionDecision[];
+  warnings: string[];
+  checks: string[];
+  upstream_config: string;
+  device_config: string;
+}

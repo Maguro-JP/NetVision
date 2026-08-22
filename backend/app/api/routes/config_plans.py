@@ -1,7 +1,7 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -391,3 +391,99 @@ def draft_config_in_background(
             )
 
     return job_read(jobs.start("config-draft", work, label=device.hostname))
+
+
+# ---------------------------------------------------------------------------
+# 「ここに機器を足したら」の設計
+# ---------------------------------------------------------------------------
+
+
+class AdditionRequestBody(BaseModel):
+    """足す機器の希望。決めていないところは空のままでよい。"""
+
+    hostname: str = Field(description="足す機器の名前")
+    vendor: str = Field(default="", description="空なら上位機器と同じ書式で起こす")
+    model: str = ""
+    purpose: str = Field(default="", description="用途。VLAN の名前と description に使う")
+    vlan_id: int | None = Field(default=None, ge=1, le=4094)
+    subnet: str | None = Field(default=None, description="例 10.10.30.0/24。空なら既存から決める")
+    uplink_interface: str | None = Field(default=None, description="上位のどのポートに挿すか")
+
+
+class DecisionRead(BaseModel):
+    topic: str
+    choice: str
+    why: str
+    evidence: list[str]
+
+
+class AdditionPlanRead(BaseModel):
+    upstream_hostname: str
+    hostname: str
+    vlan_id: int | None
+    vlan_name: str
+    subnet: str | None
+    gateway_ip: str | None
+    device_ip: str | None
+    upstream_interface: str | None
+    device_uplink: str
+    routing: str
+    decisions: list[DecisionRead]
+    warnings: list[str]
+    checks: list[str]
+    upstream_config: str
+    device_config: str
+
+
+@router.post("/devices/{device_id}/addition", response_model=AdditionPlanRead)
+def plan_addition(device_id: int, payload: AdditionRequestBody, db: DbSession) -> AdditionPlanRead:
+    """その機器の下に1台足すときの設計を、上位の Config を根拠に起こす。
+
+    VLAN 番号・セグメント・アドレス・使うポートを決め、上位側と新機器側の
+    両方の Config を出す。決めた理由と、その根拠にした行も一緒に返す。
+    理由が言えない提案は人が確認しようが無いため。
+
+    ここでは保存しないし、実機にも投入しない。
+    """
+    from app.services import addition
+
+    if not payload.hostname.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "足す機器の名前を書いてください")
+
+    try:
+        plan = addition.build(
+            db,
+            addition.AdditionRequest(
+                upstream_device_id=device_id,
+                hostname=payload.hostname.strip(),
+                vendor=payload.vendor,
+                model=payload.model,
+                purpose=payload.purpose,
+                vlan_id=payload.vlan_id,
+                subnet=payload.subnet,
+                uplink_interface=payload.uplink_interface,
+            ),
+        )
+    except ValueError as exc:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, str(exc)) from exc
+
+    return AdditionPlanRead(
+        upstream_hostname=plan.upstream_hostname,
+        hostname=plan.hostname,
+        vlan_id=plan.vlan_id,
+        vlan_name=plan.vlan_name,
+        subnet=plan.subnet,
+        gateway_ip=plan.gateway_ip,
+        device_ip=plan.device_ip,
+        upstream_interface=plan.upstream_interface,
+        device_uplink=plan.device_uplink,
+        routing=plan.routing,
+        decisions=[
+            DecisionRead(topic=d.topic, choice=d.choice, why=d.why, evidence=d.evidence)
+            for d in plan.decisions
+        ],
+        warnings=plan.warnings,
+        checks=plan.checks,
+        upstream_config=plan.upstream_config,
+        device_config=plan.device_config,
+    )
