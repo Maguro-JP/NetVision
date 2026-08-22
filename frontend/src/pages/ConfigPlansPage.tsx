@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 
 import { api } from "../api/client";
+import ConfigEditor from "../components/ConfigEditor";
 import { formatTimestamp } from "../lib/format";
 import type { ConfigDraft, ConfigPlan, DiffCommand } from "../api/types";
 
@@ -358,6 +359,18 @@ export default function ConfigPlansPage() {
                 onChange={(e) => setDraft(e.target.value)}
                 style={{ width: "100%", fontFamily: "monospace" }}
               />
+              <details className="card" style={{ marginTop: 12 }}>
+                <summary>選んだところを直してもらう</summary>
+                <p className="muted">
+                  直したいところを選んで、どう直したいかを書いてください。採ると、上の
+                  将来フルに反映されます（保存するまで計画は変わりません）。
+                </p>
+                <ConfigEditor
+                  body={draft}
+                  title=""
+                  onApply={(next) => setDraft(next)}
+                />
+              </details>
               <details
                 className="card"
                 style={{ marginTop: 12 }}

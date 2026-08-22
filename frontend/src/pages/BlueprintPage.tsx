@@ -3,6 +3,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
+import ConfigEditor from "../components/ConfigEditor";
 import type { Blueprint } from "../api/types";
 
 /**
@@ -293,6 +294,13 @@ export default function BlueprintPage() {
               <pre className="config-preview">
                 {plan.configs[device.hostname]}
               </pre>
+              <details>
+                <summary className="muted">選んだところを直してもらう</summary>
+                <ConfigEditor
+                  body={plan.configs[device.hostname] ?? ""}
+                  title=""
+                />
+              </details>
               <ul className="muted">
                 {(plan.notes[device.hostname] ?? []).map((note) => (
                   <li key={note}>{note}</li>

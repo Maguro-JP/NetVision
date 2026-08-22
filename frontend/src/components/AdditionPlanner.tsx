@@ -2,6 +2,7 @@ import { useMutation } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import ConfigEditor from "./ConfigEditor";
 import type { AdditionPlan } from "../api/types";
 
 /**
@@ -30,7 +31,13 @@ function ConfigBlock({ body, notes }: { body: string; notes: string[] }) {
   return (
     <>
       {body ? (
-        <pre className="config-preview">{body}</pre>
+        <>
+          <pre className="config-preview">{body}</pre>
+          <details>
+            <summary className="muted">選んだところを直してもらう</summary>
+            <ConfigEditor body={body} title="" />
+          </details>
+        </>
       ) : (
         <div className="empty">この書式では Config を起こしていません。</div>
       )}

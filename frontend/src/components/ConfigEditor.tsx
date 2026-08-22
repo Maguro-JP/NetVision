@@ -11,6 +11,12 @@ import type { ConfigEdit } from "../api/types";
  * 読み切れない。選んだ範囲だけを渡して、その範囲だけを直してもらう。
  *
  * 返ってきたものは差分で見せる。上書きした結果だけを見せると、確認が飛ばされる。
+ *
+ * Config を出す画面はいくつもある（将来フル、更改、想定 Config、起こした構成）。
+ * どこでも同じ直し方ができるように、ここだけに置いて呼び出す。
+ *
+ * `onApply` を渡すと、採った結果を呼び出し側へ返す。渡さない場合は、この中の
+ * 表示だけが変わる（元の計画や台帳には触らない）。
  */
 
 /** どう直したかの呼び名。規則で直したのかモデルが直したのかで、確かめ方が変わる。 */
@@ -29,12 +35,31 @@ export function snapToLines(text: string, start: number, end: number): string {
   return text.slice(head, tail);
 }
 
-export default function ConfigEditor({ body }: { body: string }) {
+export default function ConfigEditor({
+  body,
+  title = "選んだところを直してもらう",
+  onApply,
+}: {
+  body: string;
+  title?: string;
+  /** 採った結果の受け取り先。渡さなければ、この中の表示だけが変わる */
+  onApply?: (next: string) => void;
+}) {
   const areaRef = useRef<HTMLTextAreaElement>(null);
   const [text, setText] = useState(body);
+  const [source, setSource] = useState(body);
   const [selection, setSelection] = useState("");
   const [request, setRequest] = useState("");
   const [result, setResult] = useState<ConfigEdit | null>(null);
+
+  // 呼び出し側が別の Config を出したら、こちらも入れ替える
+  //（前の機器の設定を編集し続ける、が起きないように）
+  if (body !== source) {
+    setSource(body);
+    setText(body);
+    setSelection("");
+    setResult(null);
+  }
 
   const run = useMutation({
     mutationFn: () => api.editSelection(selection, request),
@@ -50,14 +75,16 @@ export default function ConfigEditor({ body }: { body: string }) {
 
   const take = () => {
     if (!result || !result.changed) return;
-    setText(text.replace(result.before, result.after));
+    const next = text.replace(result.before, result.after);
+    setText(next);
     setSelection("");
     setResult(null);
+    onApply?.(next);
   };
 
   return (
     <>
-      <h2>選んだところを直してもらう</h2>
+      <h2>{title}</h2>
       <p className="muted" style={{ marginTop: -6 }}>
         直したいところを選んで、どう直したいかを書いてください。選んだ範囲だけを直します。
         結果は差分で出るので、採るかどうかはそれを見て決めてください。
