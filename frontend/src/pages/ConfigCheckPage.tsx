@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { AskBackAnswer, ConfigCheck, L3Finding } from "../api/types";
+import ConfigEditor from "../components/ConfigEditor";
 import { LEVEL_LABEL, sortFindings } from "../components/L3Panel";
 
 /**
@@ -208,6 +209,8 @@ export default function ConfigCheckPage() {
           ))}
         </div>
       ))}
+
+      {text.trim() && <ConfigEditor body={text} />}
 
       <h2>聞いてみる</h2>
       <p className="muted" style={{ marginTop: -6 }}>

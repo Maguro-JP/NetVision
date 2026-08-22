@@ -1353,3 +1353,15 @@ export interface AskBackAnswer {
   prompt: string | null;
   note: string;
 }
+
+/** 選んだ範囲を直した結果。採るかどうかは人が決める。 */
+export interface ConfigEdit {
+  before: string;
+  after: string;
+  diff: string;
+  changed: boolean;
+  /** どう直したか。rule / model / prompt */
+  source: string;
+  notes: string[];
+  prompt: string | null;
+}

@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  ConfigEdit,
   AskBackAnswer,
   ConfigCheck,
   ConfigTemplateDraft,
@@ -737,6 +738,14 @@ export const api = {
     for (const file of files) form.append("files", file);
     return upload<ConfigCheck[]>("/config-check/upload", form);
   },
+
+  /** 選んだ範囲だけを直してもらう。範囲の外は触らない。 */
+  editSelection: (selection: string, instruction: string, description = "") =>
+    request<ConfigEdit>("/config-check/edit", {
+      method: "POST",
+      // 引数名を request にすると、下の request() 関数が隠れる
+      body: JSON.stringify({ selection, request: instruction, description }),
+    }),
 
   /** 出した結果について聞き返す。 */
   askBack: (question: string, context = "") =>

@@ -10,7 +10,7 @@ from __future__ import annotations
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.config import settings
@@ -155,4 +155,49 @@ def ask_back(payload: AskBackBody, db: DbSession) -> AskBackRead:
         used=result.used,
         prompt=result.prompt,
         note=result.note,
+    )
+
+
+# ---------------------------------------------------------------------------
+# 選んだところを直してもらう
+# ---------------------------------------------------------------------------
+
+
+class EditBody(BaseModel):
+    selection: str = Field(description="直したい範囲（選んだところ）")
+    request: str = Field(description="どう直したいか")
+    description: str = Field(default="", description="説明に入れる文字（任意）")
+
+
+class EditRead(BaseModel):
+    before: str
+    after: str
+    diff: str
+    changed: bool
+    source: str
+    notes: list[str]
+    prompt: str | None
+
+
+@router.post("/config-check/edit", response_model=EditRead)
+def edit_selection(payload: EditBody) -> EditRead:
+    """選んだ範囲だけを直す。範囲の外は触らない。
+
+    全部を作り直すと、どこが変わったのかを人が突き合わせることになり、
+    結局読み切れない。差分にして返し、採るかどうかは人が決める。
+    """
+    from app.services import config_edit
+
+    if not payload.request.strip():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "どう直したいかを書いてください")
+
+    result = config_edit.edit(payload.selection, payload.request, description=payload.description)
+    return EditRead(
+        before=result.before,
+        after=result.after,
+        diff=result.diff,
+        changed=result.changed,
+        source=result.source,
+        notes=result.notes,
+        prompt=result.prompt,
     )
