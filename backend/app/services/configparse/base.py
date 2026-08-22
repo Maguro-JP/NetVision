@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 
+from app.services.configparse.features import FEATURE_LABELS, ParsedFeature  # noqa: F401
 from app.services.configparse.ifname import expand, normalize, normalize_hostname
 
 
@@ -135,6 +136,8 @@ class ParsedConfig:
     ospf: ParsedOspf | None = None
     bgp: ParsedBgp | None = None
     redundancy: list[ParsedRedundancy] = field(default_factory=list)
+    #: その機器で使っている機能（ACL / NAT / DHCP / STP など）
+    features: list[ParsedFeature] = field(default_factory=list)
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""

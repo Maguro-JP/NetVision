@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device
 from app.models.topology import Link
-from app.services import configparse
+from app.services import capabilities, configparse
 from app.services.addition import read_upstream
 from app.services.configparse import ParsedConfig
 from app.services.configparse.routing import to_prefix
@@ -55,6 +55,8 @@ class L3Report:
     ospf: dict | None = None
     bgp: dict | None = None
     redundancy: list[dict] = field(default_factory=list)
+    #: その機器で使っている機能（ACL / NAT / DHCP など）
+    features: list[dict] = field(default_factory=list)
     findings: list[Finding] = field(default_factory=list)
 
 
@@ -69,6 +71,17 @@ def review(db: Session, device: Device) -> L3Report:
     report.ospf = _ospf_read(parsed)
     report.bgp = _bgp_read(parsed)
     report.redundancy = [_redundancy_read(entry) for entry in parsed.redundancy]
+    report.features = [
+        {
+            "category": feature.category,
+            "category_label": capabilities.feature_label(feature.category),
+            "name": feature.name,
+            "detail": feature.detail,
+            "count": feature.count,
+            "evidence": feature.evidence,
+        }
+        for feature in parsed.features
+    ]
 
     report.findings = _findings(db, device, parsed)
     return report

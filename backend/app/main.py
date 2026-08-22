@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     blueprint,
+    capabilities,
     changes,
     config_plans,
     configs,
@@ -80,6 +81,7 @@ app.include_router(schema_routes.router, prefix=api)
 app.include_router(settings_routes.router, prefix=api)
 app.include_router(jobs.router, prefix=api)
 app.include_router(blueprint.router, prefix=api)
+app.include_router(capabilities.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",

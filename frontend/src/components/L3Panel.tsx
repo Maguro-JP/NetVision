@@ -37,7 +37,7 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
   if (!data.has_config) {
     return (
       <>
-        <h2>経路（L3）</h2>
+        <h2>経路と機能</h2>
         <div className="empty">
           この機器の Config がまだ取り込まれていません。running-config
           を取り込むと、
@@ -52,7 +52,8 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
     data.routes.length === 0 &&
     !data.ospf &&
     !data.bgp &&
-    data.redundancy.length === 0;
+    data.redundancy.length === 0 &&
+    data.features.length === 0;
 
   return (
     <>
@@ -96,6 +97,43 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
           この Config からは経路の設定が読み取れませんでした。L2
           だけの機器なら、これで正しい状態です。
         </div>
+      )}
+
+      {data.features.length > 0 && (
+        <>
+          <h3>使っている機能</h3>
+          <p className="muted" style={{ marginTop: -8 }}>
+            入っているかどうかと、主な値まで見ています。中身（ACL
+            の1行ずつなど）は 解釈していません。
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>区分</th>
+                <th>機能</th>
+                <th>件数</th>
+                <th>主な値</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.features.map((feature) => (
+                <tr key={`${feature.category}-${feature.name}`}>
+                  <td>{feature.category_label}</td>
+                  <td>{feature.name}</td>
+                  <td>{feature.count}</td>
+                  <td>
+                    {feature.detail || "—"}
+                    {feature.evidence.length > 0 && (
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        例: {feature.evidence[0]}
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
       )}
 
       {data.routes.length > 0 && (

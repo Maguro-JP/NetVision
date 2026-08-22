@@ -9,6 +9,7 @@ import App from "./App";
 import SchemaGate from "./SchemaGate";
 import ChangesPage from "./pages/ChangesPage";
 import BlueprintPage from "./pages/BlueprintPage";
+import CapabilitiesPage from "./pages/CapabilitiesPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
 import ConfigTemplatesPage from "./pages/ConfigTemplatesPage";
 import ConfigsPage from "./pages/ConfigsPage";
@@ -60,6 +61,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route index element={<Navigate to="/dashboard" replace />} />
               <Route path="dashboard" element={<DashboardPage />} />
               <Route path="blueprint" element={<BlueprintPage />} />
+              <Route path="capabilities" element={<CapabilitiesPage />} />
               <Route path="devices" element={<DeviceListPage />} />
               <Route path="devices/new" element={<DeviceFormPage />} />
               <Route path="devices/:id" element={<DeviceDetailPage />} />

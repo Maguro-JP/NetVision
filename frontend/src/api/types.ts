@@ -1156,7 +1156,32 @@ export interface L3Report {
     priority: number | null;
     protocol: string;
   }[];
+  /** その機器で使っている機能。中身の解釈まではしていない */
+  features: {
+    category: string;
+    category_label: string;
+    name: string;
+    detail: string;
+    count: number;
+    evidence: string[];
+  }[];
   findings: L3Finding[];
+}
+
+/** 何にどこまで対応しているか。読む / 検算 / 起こす の3段階で持つ。 */
+export interface Capability {
+  area: string;
+  name: string;
+  read: string;
+  review: string;
+  generate: string;
+  note: string;
+}
+
+export interface CapabilityIndex {
+  areas: string[];
+  levels: Record<string, string>;
+  items: Capability[];
 }
 
 /** 条件から起こした構成。案であって、実機には投入しない。 */

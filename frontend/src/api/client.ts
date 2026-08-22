@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  CapabilityIndex,
   Blueprint,
   BlueprintCondition,
   TestSite,
@@ -684,6 +685,9 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 何にどこまで対応しているか。できないことも返る。 */
+  capabilities: () => request<CapabilityIndex>("/capabilities"),
 
   /** 条件から構成を起こす。案を見るだけで、台帳は触らない。 */
   blueprintConditions: () =>
