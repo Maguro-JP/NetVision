@@ -477,6 +477,11 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.native_vlan = item.native_vlan
         interface.trunk_vlans = _trunk_column(item)
         interface.vrf = item.vrf
+        interface.mtu = item.mtu
+        interface.speed = item.speed
+        interface.duplex = item.duplex
+        interface.lag_group = item.lag_group
+        interface.lag_mode = item.lag_mode
         interface.enabled = item.enabled
 
     # Config から消えたポートは実機に無いということなので削除する

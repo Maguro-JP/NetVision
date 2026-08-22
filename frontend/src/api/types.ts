@@ -1365,3 +1365,23 @@ export interface ConfigEdit {
   notes: string[];
   prompt: string | null;
 }
+
+/** 線の両端で設定がそろっているか、の指摘。 */
+export interface LinkFinding {
+  link_id: number;
+  a_hostname: string;
+  a_interface: string;
+  b_hostname: string;
+  b_interface: string;
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+export interface LinkReport {
+  links_seen: number;
+  links_with_config: number;
+  findings: LinkFinding[];
+  notes: string[];
+}

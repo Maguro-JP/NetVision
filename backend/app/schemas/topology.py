@@ -151,6 +151,11 @@ class InterfaceRead(BaseModel):
     native_vlan: int | None = None
     trunk_vlans: str | None = None
     vrf: str | None = None
+    mtu: int | None = None
+    speed: str | None = None
+    duplex: str | None = None
+    lag_group: int | None = None
+    lag_mode: str | None = None
     enabled: bool
 
 

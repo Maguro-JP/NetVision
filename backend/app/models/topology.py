@@ -87,6 +87,14 @@ class Interface(Base):
     # 行に展開せず畳んで入れる。`all`（全許可）はその語をそのまま入れる
     trunk_vlans: Mapped[str | None] = mapped_column(String(512), default=None)
     vrf: Mapped[str | None] = mapped_column(String(120), default=None, index=True)
+    #: 1回に送れる大きさ。両端で違うと、大きい荷物だけが通らない
+    mtu: Mapped[int | None] = mapped_column(Integer, default=None)
+    #: 速度と二重。片方だけ固定すると、遅くなるが通ってしまう
+    speed: Mapped[str | None] = mapped_column(String(20), default=None)
+    duplex: Mapped[str | None] = mapped_column(String(20), default=None)
+    #: 束ねているポートの番号と、その束ね方
+    lag_group: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
+    lag_mode: Mapped[str | None] = mapped_column(String(20), default=None)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(

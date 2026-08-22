@@ -31,6 +31,11 @@ _SERIAL = re.compile(r"^\s*System [Ss]erial [Nn]umber\s*:\s*(\S+)", re.MULTILINE
 _PID_SN = re.compile(r"PID:\s*(\S+)\s*,.*?SN:\s*(\S+)")
 
 _INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+#: `interface range Gi1/0/1 - 24` や `interface range Gi1/0/1 - 3, Gi1/0/8`
+_INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
+_RANGE_PART = re.compile(
+    r"^([A-Za-z][A-Za-z\-]*)\s*([\d/]*?)(\d+)(?:\s*-\s*(\d+))?$", re.IGNORECASE
+)
 _VLAN_DEF = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 
 
@@ -112,8 +117,35 @@ def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
         parsed.serial_number = match.group(2)
 
 
+def expand_range(spec: str) -> list[str]:
+    """`Gi1/0/1 - 24, Gi1/0/30` を、ポート名の一覧にする。
+
+    範囲でまとめて書いてあるポートは、現場では端末を挿す口であることが多い。
+    畳んだままだと「そのポートは何も設定されていない」と読めてしまう。
+    """
+    names: list[str] = []
+    for chunk in spec.split(","):
+        part = chunk.strip()
+        if not part:
+            continue
+        match = _RANGE_PART.match(part)
+        if not match:
+            names.append(part)
+            continue
+        head, middle, start, end = match.groups()
+        first = int(start)
+        last = int(end) if end else first
+        if last < first or last - first > 512:
+            names.append(part)
+            continue
+        names.extend(f"{head}{middle}{number}" for number in range(first, last + 1))
+    return names
+
+
 def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     current: ParsedInterface | None = None
+    #: `interface range` のときは、同じ中身を全部のポートに書く
+    group: list[ParsedInterface] = []
     # 許可 VLAN を明示したポート。書いていないトランクは「全部通す」が既定なので、
     # 「書いていない」と「none と書いた」を取り違えないよう覚えておく
     allowed_written: set[str] = set()
@@ -123,16 +155,26 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if not line:
             continue
 
+        ranged = _INTERFACE_RANGE.match(line.strip())
+        if ranged and not line.startswith(" "):
+            group = [
+                parsed.add_interface(ParsedInterface(name=name))
+                for name in expand_range(ranged.group(1))
+            ]
+            current = group[0] if group else None
+            continue
+
         match = _INTERFACE.match(line.strip())
         if match and not line.startswith(" "):
             # 既に同じポートが出ていればマージ結果を受け取る（以降の行はそちらに書く）
             current = parsed.add_interface(ParsedInterface(name=match.group(1)))
+            group = [current]
             continue
 
         if current is None:
             continue
         if not line.startswith(" "):
-            current = None  # インデントが戻ったらブロックの外
+            current, group = None, []  # インデントが戻ったらブロックの外
             continue
 
         body = line.strip()
@@ -156,14 +198,55 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             current.mode = body.rsplit(maxsplit=1)[-1]
         elif body.startswith(("vrf forwarding ", "ip vrf forwarding ")):
             current.vrf = body.rsplit(maxsplit=1)[-1]
+        elif body.startswith(("mtu ", "ip mtu ", "system mtu ")):
+            value = body.rsplit(maxsplit=1)[-1]
+            if value.isdigit():
+                current.mtu = int(value)
+        elif body.startswith("speed "):
+            current.speed = body.rsplit(maxsplit=1)[-1]
+        elif body.startswith("duplex "):
+            current.duplex = body.rsplit(maxsplit=1)[-1]
+        elif body.startswith("channel-group "):
+            parts = body.split()
+            if len(parts) >= 2 and parts[1].isdigit():
+                current.lag_group = int(parts[1])
+            if "mode" in parts and parts.index("mode") + 1 < len(parts):
+                current.lag_mode = parts[parts.index("mode") + 1]
         elif body == "shutdown":
             current.enabled = False
         elif body == "no switchport":
             current.mode = "routed"
 
+        _copy_to_group(current, group)
+
     for interface in parsed.interfaces:
         if interface.mode == "trunk" and interface.key not in allowed_written:
             interface.trunk_all = True
+
+
+def _copy_to_group(current: ParsedInterface, group: list[ParsedInterface]) -> None:
+    """範囲でまとめて書かれたときに、1つ目に書いた内容を残りへ写す。"""
+    if len(group) < 2:
+        return
+    for other in group:
+        if other is current:
+            continue
+        for name in (
+            "description",
+            "vlan",
+            "mode",
+            "native_vlan",
+            "vrf",
+            "mtu",
+            "speed",
+            "duplex",
+            "lag_group",
+            "lag_mode",
+        ):
+            setattr(other, name, getattr(current, name))
+        other.trunk_vlans = list(current.trunk_vlans)
+        other.trunk_all = current.trunk_all
+        other.enabled = current.enabled
 
 
 def _apply_allowed_vlan(interface: ParsedInterface, body: str) -> None:
