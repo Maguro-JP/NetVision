@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { api } from "../api/client";
+import TemplateFromConfig from "../components/TemplateFromConfig";
 import type { ConfigTemplate, TemplateCategory } from "../api/types";
 import { TEMPLATE_CATEGORY_LABEL, versionRange } from "../lib/docs";
 
@@ -48,7 +49,8 @@ export default function ConfigTemplatesPage() {
     queryFn: () => api.listDocuments(),
   });
 
-  const refresh = () => queryClient.invalidateQueries({ queryKey: ["configTemplates"] });
+  const refresh = () =>
+    queryClient.invalidateQueries({ queryKey: ["configTemplates"] });
 
   const create = useMutation({
     mutationFn: () =>
@@ -85,8 +87,9 @@ export default function ConfigTemplatesPage() {
       }),
   });
 
-  const set = (key: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) =>
-    setForm((prev) => ({ ...prev, [key]: e.target.value }));
+  const set =
+    (key: keyof typeof EMPTY_FORM) => (e: { target: { value: string } }) =>
+      setForm((prev) => ({ ...prev, [key]: e.target.value }));
 
   const pick = (template: ConfigTemplate) => {
     setSelected(template);
@@ -105,13 +108,18 @@ export default function ConfigTemplatesPage() {
         内容を確認して手で流し込んでください。
       </p>
 
+      <TemplateFromConfig />
+
+      <h2>手で作る</h2>
       <div className="toolbar">
         <button className="primary" onClick={() => setShowForm((v) => !v)}>
           {showForm ? "入力をやめる" : "テンプレートを作成"}
         </button>
       </div>
 
-      {create.error && <div className="error">{(create.error as Error).message}</div>}
+      {create.error && (
+        <div className="error">{(create.error as Error).message}</div>
+      )}
 
       {showForm && (
         <form
@@ -123,21 +131,37 @@ export default function ConfigTemplatesPage() {
           <div className="form-grid">
             <div className="field">
               <label htmlFor="name">テンプレート名 *</label>
-              <input id="name" required value={form.name} onChange={set("name")} />
+              <input
+                id="name"
+                required
+                value={form.name}
+                onChange={set("name")}
+              />
             </div>
             <div className="field">
               <label htmlFor="category">分類</label>
-              <select id="category" value={form.category} onChange={set("category")}>
-                {Object.entries(TEMPLATE_CATEGORY_LABEL).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
+              <select
+                id="category"
+                value={form.category}
+                onChange={set("category")}
+              >
+                {Object.entries(TEMPLATE_CATEGORY_LABEL).map(
+                  ([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ),
+                )}
               </select>
             </div>
             <div className="field">
               <label htmlFor="vendor">ベンダー *</label>
-              <input id="vendor" required value={form.vendor} onChange={set("vendor")} />
+              <input
+                id="vendor"
+                required
+                value={form.vendor}
+                onChange={set("vendor")}
+              />
             </div>
             <div className="field">
               <label htmlFor="model">型番（空ならベンダー全体）</label>
@@ -145,19 +169,35 @@ export default function ConfigTemplatesPage() {
             </div>
             <div className="field">
               <label htmlFor="os_name">OS名</label>
-              <input id="os_name" value={form.os_name} onChange={set("os_name")} />
+              <input
+                id="os_name"
+                value={form.os_name}
+                onChange={set("os_name")}
+              />
             </div>
             <div className="field">
               <label htmlFor="applies_from">適用バージョン（開始）</label>
-              <input id="applies_from" value={form.applies_from} onChange={set("applies_from")} />
+              <input
+                id="applies_from"
+                value={form.applies_from}
+                onChange={set("applies_from")}
+              />
             </div>
             <div className="field">
               <label htmlFor="applies_to">適用バージョン（終了）</label>
-              <input id="applies_to" value={form.applies_to} onChange={set("applies_to")} />
+              <input
+                id="applies_to"
+                value={form.applies_to}
+                onChange={set("applies_to")}
+              />
             </div>
             <div className="field wide">
               <label htmlFor="description">説明</label>
-              <input id="description" value={form.description} onChange={set("description")} />
+              <input
+                id="description"
+                value={form.description}
+                onChange={set("description")}
+              />
             </div>
             <div className="field wide">
               <label htmlFor="body">
@@ -175,7 +215,11 @@ export default function ConfigTemplatesPage() {
             </div>
           </div>
           <div className="actions">
-            <button className="primary" type="submit" disabled={create.isPending}>
+            <button
+              className="primary"
+              type="submit"
+              disabled={create.isPending}
+            >
               作成
             </button>
           </div>
@@ -202,7 +246,9 @@ export default function ConfigTemplatesPage() {
               <tr key={template.id}>
                 <td>
                   <strong>{template.name}</strong>
-                  {template.description && <div className="muted">{template.description}</div>}
+                  {template.description && (
+                    <div className="muted">{template.description}</div>
+                  )}
                 </td>
                 <td>{TEMPLATE_CATEGORY_LABEL[template.category]}</td>
                 <td>
@@ -219,10 +265,15 @@ export default function ConfigTemplatesPage() {
                     template.version_label,
                   )}
                 </td>
-                <td className="muted">{template.source_document_title ?? "—"}</td>
+                <td className="muted">
+                  {template.source_document_title ?? "—"}
+                </td>
                 <td>
                   <button onClick={() => pick(template)}>生成</button>{" "}
-                  <button className="danger" onClick={() => remove.mutate(template.id)}>
+                  <button
+                    className="danger"
+                    onClick={() => remove.mutate(template.id)}
+                  >
                     削除
                   </button>
                 </td>
@@ -238,7 +289,11 @@ export default function ConfigTemplatesPage() {
           <div className="form-grid">
             <div className="field">
               <label htmlFor="device">対象の機器</label>
-              <select id="device" value={deviceId} onChange={(e) => setDeviceId(e.target.value)}>
+              <select
+                id="device"
+                value={deviceId}
+                onChange={(e) => setDeviceId(e.target.value)}
+              >
                 <option value="">指定しない</option>
                 {(devices ?? []).map((d) => (
                   <option key={d.id} value={d.id}>
@@ -258,22 +313,33 @@ export default function ConfigTemplatesPage() {
                   value={variables[variable.name] ?? ""}
                   placeholder={variable.default ?? ""}
                   onChange={(e) =>
-                    setVariables((prev) => ({ ...prev, [variable.name]: e.target.value }))
+                    setVariables((prev) => ({
+                      ...prev,
+                      [variable.name]: e.target.value,
+                    }))
                   }
                 />
-                {variable.help && <span className="muted">{variable.help}</span>}
+                {variable.help && (
+                  <span className="muted">{variable.help}</span>
+                )}
               </div>
             ))}
           </div>
 
           <div className="actions">
-            <button className="primary" onClick={() => render.mutate()} disabled={render.isPending}>
+            <button
+              className="primary"
+              onClick={() => render.mutate()}
+              disabled={render.isPending}
+            >
               生成する
             </button>
             <button onClick={() => setSelected(null)}>閉じる</button>
           </div>
 
-          {render.error && <div className="error">{(render.error as Error).message}</div>}
+          {render.error && (
+            <div className="error">{(render.error as Error).message}</div>
+          )}
 
           {render.data && (
             <>
@@ -292,7 +358,9 @@ export default function ConfigTemplatesPage() {
               <pre className="diff">{render.data.rendered}</pre>
               <div className="actions">
                 <button
-                  onClick={() => navigator.clipboard?.writeText(render.data!.rendered)}
+                  onClick={() =>
+                    navigator.clipboard?.writeText(render.data!.rendered)
+                  }
                 >
                   クリップボードにコピー
                 </button>

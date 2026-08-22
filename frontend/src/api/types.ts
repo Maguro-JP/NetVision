@@ -1305,3 +1305,15 @@ export interface HouseStyle {
     detail: string;
   }[];
 }
+
+/** いま動いている Config から起こしたテンプレートの下書き。 */
+export interface ConfigTemplateDraft {
+  name: string;
+  vendor: string;
+  body: string;
+  variables: { name: string; label: string; default: string; help: string }[];
+  devices_seen: number;
+  hostnames: string[];
+  notes: string[];
+  skipped: number;
+}

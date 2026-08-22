@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  ConfigTemplateDraft,
   HouseStyle,
   AskResult,
   GlossaryTerm,
@@ -703,6 +704,22 @@ export const api = {
     request<GlossaryTerm[]>(
       `/glossary${q ? `?q=${encodeURIComponent(q)}` : ""}`,
     ),
+
+  /** 似た機器の Config を重ねて、テンプレートの下書きを作る。 */
+  templateFromConfig: (body: { hostname_prefix?: string; vendor?: string }) =>
+    request<ConfigTemplateDraft>("/config-templates/from-config", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  saveTemplateFromConfig: (body: {
+    hostname_prefix?: string;
+    vendor?: string;
+    name?: string;
+  }) =>
+    request<ConfigTemplate>("/config-templates/from-config/save", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   /** 取り込んだ Config から覚えた、その現場の流儀。 */
   conventions: () => request<HouseStyle>("/conventions"),
