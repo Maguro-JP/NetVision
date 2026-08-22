@@ -55,6 +55,8 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
     !data.ospf &&
     !data.bgp &&
     data.redundancy.length === 0 &&
+    data.protocols.length === 0 &&
+    data.policies.length === 0 &&
     data.features.length === 0;
 
   return (
@@ -223,6 +225,64 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
                   <td>{neighbor.address}</td>
                   <td>{neighbor.remote_as ?? "—"}</td>
                   <td>{neighbor.description ?? "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {data.protocols.length > 0 && (
+        <>
+          <h3>ほかの経路プロトコル</h3>
+          <table>
+            <thead>
+              <tr>
+                <th>種類</th>
+                <th>番号</th>
+                <th>流している範囲</th>
+                <th>喋らせていないポート</th>
+                <th>他から取り込み</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.protocols.map((protocol) => (
+                <tr key={`${protocol.name}-${protocol.identifier ?? ""}`}>
+                  <td>{protocol.name.toUpperCase()}</td>
+                  <td>{protocol.identifier ?? "—"}</td>
+                  <td>{protocol.networks.join(" / ") || "—"}</td>
+                  <td>{protocol.passive_interfaces.join(" / ") || "—"}</td>
+                  <td>{protocol.redistributes.join(" / ") || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {data.policies.length > 0 && (
+        <>
+          <h3>経路を選ぶ道具</h3>
+          <p className="muted" style={{ marginTop: -8 }}>
+            「広告しているはずなのに相手に届かない」の原因は、たいていここにあります。
+            名前と、どこで使われているかまで見ています。中身の評価はしていません。
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>種類</th>
+                <th>名前</th>
+                <th>大きさ</th>
+                <th>どこで使われているか</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.policies.map((policy) => (
+                <tr key={`${policy.kind}-${policy.name}`}>
+                  <td>{policy.kind}</td>
+                  <td>{policy.name}</td>
+                  <td>{policy.detail}</td>
+                  <td>{policy.used_by.join(" / ") || "見当たりません"}</td>
                 </tr>
               ))}
             </tbody>

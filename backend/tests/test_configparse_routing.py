@@ -186,3 +186,72 @@ def test_a_config_without_l3_leaves_it_empty_rather_than_guessing():
     assert parsed.ospf is None
     assert parsed.bgp is None
     assert parsed.redundancy == []
+
+
+# ---------------------------------------------------------------------------
+# OSPF / BGP 以外の経路プロトコルと、経路を選ぶ道具
+# ---------------------------------------------------------------------------
+
+OTHERS = """hostname core-rt-01
+!
+router eigrp 100
+ network 10.10.0.0 0.0.255.255
+ passive-interface Vlan10
+ redistribute static
+!
+router rip
+ network 192.168.0.0
+!
+router isis CORE
+ net 49.0001.0000.0000.0001.00
+!
+route-map TO-ISP permit 10
+ match ip address prefix-list ADVERTISE
+!
+ip prefix-list ADVERTISE seq 5 permit 10.10.0.0/16
+!
+route-map UNUSED permit 10
+!
+interface Vlan20
+ ip policy route-map BRANCH-OUT
+!
+route-map BRANCH-OUT permit 10
+!
+router bgp 65001
+ neighbor 203.0.113.1 remote-as 65000
+ neighbor 203.0.113.1 route-map TO-ISP out
+"""
+
+
+def test_the_protocols_still_running_in_the_field_are_read():
+    """EIGRP や RIP が読めないと、経路がどこから来ているのか説明できない。"""
+    parsed = configparse.parse(OTHERS)
+    found = {p.name: p for p in parsed.protocols}
+    assert found["eigrp"].identifier == "100"
+    assert found["eigrp"].networks == ["10.10.0.0/16"]
+    assert found["eigrp"].passive_interfaces == ["Vlan10"]
+    assert found["eigrp"].redistributes == ["static"]
+    assert found["isis"].router_id == "49.0001.0000.0000.0001.00"
+
+
+def test_a_network_without_a_mask_is_not_read_as_one_address():
+    """書いていないものを /32 と読むと、1台ぶんの意味になってしまう。"""
+    parsed = configparse.parse(OTHERS)
+    rip = next(p for p in parsed.protocols if p.name == "rip")
+    assert rip.networks == ["192.168.0.0/24"]
+
+
+def test_the_tools_that_pick_routes_are_kept_with_where_they_are_used():
+    """「広告しているはずなのに届かない」の原因はたいていここにある。"""
+    parsed = configparse.parse(OTHERS)
+    policies = {p.name: p for p in parsed.policies}
+    assert "BGP" in policies["TO-ISP"].used_by
+    assert "route-map TO-ISP" in policies["ADVERTISE"].used_by
+    assert policies["BRANCH-OUT"].kind == "policy-based-routing"
+    assert "interface Vlan20" in policies["BRANCH-OUT"].used_by
+
+
+def test_one_that_nobody_uses_is_left_visible():
+    parsed = configparse.parse(OTHERS)
+    unused = next(p for p in parsed.policies if p.name == "UNUSED")
+    assert unused.used_by == []

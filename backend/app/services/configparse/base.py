@@ -135,6 +135,10 @@ class ParsedConfig:
     routes: list[ParsedRoute] = field(default_factory=list)
     ospf: ParsedOspf | None = None
     bgp: ParsedBgp | None = None
+    #: OSPF / BGP 以外の経路プロトコル（EIGRP / RIP / IS-IS）
+    protocols: list[ParsedRoutingProtocol] = field(default_factory=list)
+    #: 経路の選び方・配り方を決める道具
+    policies: list[ParsedPolicy] = field(default_factory=list)
     redundancy: list[ParsedRedundancy] = field(default_factory=list)
     #: その機器で使っている機能（ACL / NAT / DHCP / STP など）
     features: list[ParsedFeature] = field(default_factory=list)
@@ -260,6 +264,36 @@ class ParsedBgp:
     router_id: str | None = None
     neighbors: list[ParsedBgpNeighbor] = field(default_factory=list)
     networks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedRoutingProtocol:
+    """OSPF / BGP 以外の経路プロトコル1つ。
+
+    現場では EIGRP や RIP がまだ動いている。読めないと、その機器の経路が
+    どこから来ているのか説明できず、更改のときに再現できない。
+    """
+
+    name: str  # eigrp / rip / isis
+    identifier: str | None = None  # AS 番号・プロセス番号など
+    router_id: str | None = None
+    networks: list[str] = field(default_factory=list)
+    passive_interfaces: list[str] = field(default_factory=list)
+    redistributes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedPolicy:
+    """経路の選び方・配り方を決める道具（route-map / prefix-list / ACL 参照）。
+
+    「広告しているはずなのに相手に届かない」の原因はたいていここにある。
+    中身の評価まではしないが、名前と、どこで使われているかは持っておく。
+    """
+
+    kind: str  # route-map / prefix-list / policy-based-routing
+    name: str
+    detail: str = ""
+    used_by: list[str] = field(default_factory=list)
 
 
 @dataclass

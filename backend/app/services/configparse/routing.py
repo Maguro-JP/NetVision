@@ -22,8 +22,10 @@ from app.services.configparse.base import (
     ParsedConfig,
     ParsedOspf,
     ParsedOspfArea,
+    ParsedPolicy,
     ParsedRedundancy,
     ParsedRoute,
+    ParsedRoutingProtocol,
 )
 from app.services.configparse.ifname import expand
 
@@ -116,6 +118,8 @@ def parse_cisco(text: str, parsed: ParsedConfig) -> None:
     _cisco_ospf(text, parsed)
     _cisco_bgp(text, parsed)
     _cisco_fhrp(text, parsed)
+    parse_other_protocols(text, parsed)
+    parse_policies(text, parsed)
 
 
 def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
@@ -262,6 +266,8 @@ _QX_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
 
 
 def parse_comware(text: str, parsed: ParsedConfig) -> None:
+    parse_other_protocols(text, parsed)
+    parse_policies(text, parsed)
     for line in text.splitlines():
         match = _QX_ROUTE.match(line.strip())
         if not match:
@@ -466,3 +472,159 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
         if re.match(r"^next$", line, re.IGNORECASE):
             parsed.routes.append(current)
             current = None
+
+
+# ---------------------------------------------------------------------------
+# OSPF / BGP 以外の経路プロトコル
+# ---------------------------------------------------------------------------
+
+_IOS_EIGRP = re.compile(r"^router eigrp\s+(\S+)", re.IGNORECASE)
+_IOS_RIP = re.compile(r"^router rip\s*$", re.IGNORECASE)
+_IOS_ISIS = re.compile(r"^router isis(?:\s+(\S+))?", re.IGNORECASE)
+_QX_RIP = re.compile(r"^rip(?:\s+(\d+))?\s*$", re.IGNORECASE)
+_QX_ISIS = re.compile(r"^isis(?:\s+(\d+))?\s*$", re.IGNORECASE)
+
+
+def parse_other_protocols(text: str, parsed: ParsedConfig) -> None:
+    """EIGRP / RIP / IS-IS を読む。
+
+    現場ではまだ動いている。読めないと、その機器の経路がどこから来ている
+    のか説明できず、更改のときに同じものを再現できない。
+    """
+    for head, body in _blocks(text, _IOS_EIGRP):
+        parsed.protocols.append(_protocol("eigrp", head.group(1), body))
+    for _head, body in _blocks(text, _IOS_RIP):
+        parsed.protocols.append(_protocol("rip", None, body))
+    for head, body in _blocks(text, _IOS_ISIS):
+        parsed.protocols.append(_protocol("isis", head.group(1), body))
+    for head, body in _blocks(text, _QX_RIP):
+        parsed.protocols.append(_protocol("rip", head.group(1), body))
+    for head, body in _blocks(text, _QX_ISIS):
+        parsed.protocols.append(_protocol("isis", head.group(1), body))
+
+
+def _classful(address: str, mask: str | None) -> str | None:
+    """マスクを書かない流儀（RIP や EIGRP）を、昔ながらの区切りで補う。
+
+    書いていないものを /32 と読むと、1台ぶんの意味になってしまう。
+    実際には「その帯ぜんぶ」を指しているので、先頭の数字から区切りを決める。
+    """
+    if mask:
+        return to_prefix(address, mask)
+    try:
+        first = int(address.split(".")[0])
+    except (ValueError, IndexError):
+        return to_prefix(address)
+    length = 8 if first < 128 else (16 if first < 192 else 24)
+    return to_prefix(address, f"/{length}")
+
+
+def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRoutingProtocol:
+    protocol = ParsedRoutingProtocol(name=name, identifier=identifier)
+    for line in body:
+        router_id = re.match(r"^(?:router-id|net)\s+(\S+)", line, re.IGNORECASE)
+        if router_id:
+            protocol.router_id = router_id.group(1)
+            continue
+        network = re.match(r"^network\s+(\S+)(?:\s+(\S+))?", line, re.IGNORECASE)
+        if network:
+            prefix = _classful(network.group(1), network.group(2))
+            if prefix and prefix not in protocol.networks:
+                protocol.networks.append(prefix)
+            continue
+        passive = re.match(r"^passive-interface\s+(\S+)", line, re.IGNORECASE)
+        if passive:
+            protocol.passive_interfaces.append(expand(passive.group(1)))
+            continue
+        redistribute = re.match(r"^(?:redistribute|import-route)\s+(\S+)", line, re.IGNORECASE)
+        if redistribute:
+            protocol.redistributes.append(redistribute.group(1))
+    return protocol
+
+
+# ---------------------------------------------------------------------------
+# 経路の選び方・配り方を決める道具
+# ---------------------------------------------------------------------------
+
+_ROUTE_MAP = re.compile(r"^route-map\s+(\S+)(?:\s+(permit|deny))?(?:\s+(\d+))?", re.IGNORECASE)
+_PREFIX_LIST = re.compile(r"^ip prefix-list\s+(\S+)\s", re.IGNORECASE)
+_QX_ROUTE_POLICY = re.compile(r"^route-policy\s+(\S+)\s+(permit|deny)\s+node\s+(\d+)", re.I)
+_POLICY_APPLY = re.compile(r"^\s*ip policy route-map\s+(\S+)", re.IGNORECASE)
+
+
+def parse_policies(text: str, parsed: ParsedConfig) -> None:
+    """route-map / prefix-list と、その使われ方を拾う。
+
+    「広告しているはずなのに相手に届かない」の原因はたいていここにある。
+    中身の評価まではしないが、名前と、どこで使われているかは持っておく。
+    """
+    counts: dict[tuple[str, str], int] = {}
+    for line in text.splitlines():
+        stripped = line.strip()
+        for pattern, kind in (
+            (_ROUTE_MAP, "route-map"),
+            (_PREFIX_LIST, "prefix-list"),
+            (_QX_ROUTE_POLICY, "route-map"),
+        ):
+            match = pattern.match(stripped)
+            if match:
+                key = (kind, match.group(1))
+                counts[key] = counts.get(key, 0) + 1
+                break
+
+    for (kind, name), count in counts.items():
+        parsed.policies.append(ParsedPolicy(kind=kind, name=name, detail=f"{count} 行"))
+
+    _mark_usage(text, parsed)
+
+
+def _mark_usage(text: str, parsed: ParsedConfig) -> None:
+    """どこで使われているかを、名前ごとに書き足す。
+
+    使われていない道具が残っていること自体は珍しくないが、それが
+    「消し忘れ」なのか「これから使う」のかは、使われ方を見ないと言えない。
+    """
+    by_name = {policy.name: policy for policy in parsed.policies}
+    interface = None
+    route_map = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        head = re.match(r"^interface\s+(\S+)", line, re.IGNORECASE)
+        if head:
+            interface, route_map = expand(head.group(1)), None
+            continue
+        in_map = _ROUTE_MAP.match(line.strip()) if not line.startswith((" ", "\t")) else None
+        if in_map:
+            interface, route_map = None, in_map.group(1)
+            continue
+        if not line.startswith((" ", "\t")) and line.strip():
+            interface, route_map = None, None
+
+        # route-map の中で参照されている道具にも、使われ方を書き足す
+        referenced = re.match(
+            r"^\s*match\s+ip\s+address\s+prefix-list\s+(\S+)", line, re.IGNORECASE
+        )
+        if referenced and route_map and referenced.group(1) in by_name:
+            where = f"route-map {route_map}"
+            if where not in by_name[referenced.group(1)].used_by:
+                by_name[referenced.group(1)].used_by.append(where)
+            continue
+
+        applied = _POLICY_APPLY.match(line)
+        if applied and applied.group(1) in by_name:
+            where = f"interface {interface}" if interface else "policy"
+            by_name[applied.group(1)].used_by.append(where)
+            by_name[applied.group(1)].kind = "policy-based-routing"
+            continue
+
+        for pattern, label in (
+            (r"^\s*(?:neighbor\s+\S+\s+)?route-map\s+(\S+)\s+(?:in|out)\b", "BGP"),
+            (r"^\s*redistribute\s+\S+.*?route-map\s+(\S+)", "再配布"),
+            (r"^\s*(?:neighbor\s+\S+\s+)?prefix-list\s+(\S+)\s+(?:in|out)\b", "BGP"),
+        ):
+            found = re.match(pattern, line, re.IGNORECASE)
+            if found and found.group(1) in by_name:
+                policy = by_name[found.group(1)]
+                if label not in policy.used_by:
+                    policy.used_by.append(label)
+                break

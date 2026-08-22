@@ -54,6 +54,10 @@ class L3Report:
     routes: list[dict] = field(default_factory=list)
     ospf: dict | None = None
     bgp: dict | None = None
+    #: OSPF / BGP 以外の経路プロトコル（EIGRP / RIP / IS-IS）
+    protocols: list[dict] = field(default_factory=list)
+    #: 経路の選び方・配り方を決める道具（route-map / prefix-list）
+    policies: list[dict] = field(default_factory=list)
     redundancy: list[dict] = field(default_factory=list)
     #: その機器で使っている機能（ACL / NAT / DHCP など）
     features: list[dict] = field(default_factory=list)
@@ -70,6 +74,26 @@ def review(db: Session, device: Device) -> L3Report:
     report.routes = [_route_read(route) for route in parsed.routes]
     report.ospf = _ospf_read(parsed)
     report.bgp = _bgp_read(parsed)
+    report.protocols = [
+        {
+            "name": protocol.name,
+            "identifier": protocol.identifier,
+            "router_id": protocol.router_id,
+            "networks": protocol.networks,
+            "passive_interfaces": protocol.passive_interfaces,
+            "redistributes": protocol.redistributes,
+        }
+        for protocol in parsed.protocols
+    ]
+    report.policies = [
+        {
+            "kind": policy.kind,
+            "name": policy.name,
+            "detail": policy.detail,
+            "used_by": policy.used_by,
+        }
+        for policy in parsed.policies
+    ]
     report.redundancy = [_redundancy_read(entry) for entry in parsed.redundancy]
     report.features = [
         {
@@ -150,6 +174,7 @@ def _findings(db: Session, device: Device, parsed: ParsedConfig) -> list[Finding
     findings.extend(_same_destination_twice(parsed))
     findings.extend(_segments_nobody_advertises(parsed, local))
     findings.extend(_redundancy_only_on_one_side(db, device, parsed))
+    findings.extend(_unused_policies(parsed))
     return findings
 
 
@@ -410,6 +435,28 @@ def _redundancy_only_on_one_side(
             )
         )
     return out
+
+
+def _unused_policies(parsed: ParsedConfig) -> list[Finding]:
+    """定義してあるのに、どこからも使われていない道具。
+
+    消し忘れなら消せばよいだけだが、「使っているつもりで当て先を書き忘れて
+    いる」場合は、絞れていない・広告できていない状態がそのまま残る。
+    見分けるには人が要るので、挙げるだけにする。
+    """
+    unused = [p for p in parsed.policies if not p.used_by]
+    if not unused:
+        return []
+    return [
+        Finding(
+            level=LOW,
+            title="どこからも使われていない route-map / prefix-list があります",
+            why="定義はあるのに、当てている場所が見当たりません。"
+            "消し忘れなら害はありませんが、使っているつもりで当て先を書き忘れて"
+            "いる場合は、絞れていない・広告できていない状態がそのまま残ります。",
+            evidence=[f"{p.kind} {p.name}（{p.detail}）" for p in unused[:5]],
+        )
+    ]
 
 
 def _peer_devices(db: Session, device: Device) -> list[Device]:

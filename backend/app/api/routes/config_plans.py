@@ -513,6 +513,8 @@ class L3Read(BaseModel):
     ospf: dict | None
     bgp: dict | None
     redundancy: list[dict]
+    protocols: list[dict]
+    policies: list[dict]
     features: list[dict]
     findings: list[FindingRead]
 
@@ -538,6 +540,8 @@ def read_l3(device_id: int, db: DbSession) -> L3Read:
         ospf=report.ospf,
         bgp=report.bgp,
         redundancy=report.redundancy,
+        protocols=report.protocols,
+        policies=report.policies,
         features=report.features,
         findings=[
             FindingRead(level=f.level, title=f.title, why=f.why, evidence=f.evidence)

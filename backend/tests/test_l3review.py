@@ -244,3 +244,33 @@ def test_the_api_returns_the_l3_and_the_findings(client, db_session, core):
 
 def test_the_api_404s_for_an_unknown_device(client):
     assert client.get(f"{API}/devices/9999/l3").status_code == 404
+
+
+def test_a_tool_nobody_uses_is_mentioned_but_not_alarmed_about(db_session):
+    """消し忘れなら害はないが、当て先の書き忘れなら絞れていないまま残る。"""
+    device = _device(db_session, "rt-07")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-07\n!\ninterface Vlan10\n ip address 10.10.10.1 255.255.255.0\n!\n"
+        "route-map UNUSED permit 10\n!\nip route 0.0.0.0 0.0.0.0 10.10.10.254\n",
+        "7" * 64,
+    )
+    report = l3review.review(db_session, device)
+    finding = next(f for f in report.findings if "使われていない" in f.title)
+    assert finding.level == l3review.LOW
+    assert any("UNUSED" in line for line in finding.evidence)
+
+
+def test_the_other_protocols_show_up_in_the_report(db_session):
+    device = _device(db_session, "rt-08")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-08\n!\ninterface Vlan10\n ip address 10.10.10.1 255.255.255.0\n!\n"
+        "router eigrp 100\n network 10.10.0.0 0.0.255.255\n",
+        "8" * 64,
+    )
+    report = l3review.review(db_session, device)
+    assert report.protocols[0]["name"] == "eigrp"
+    assert report.protocols[0]["networks"] == ["10.10.0.0/16"]

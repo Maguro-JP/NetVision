@@ -86,15 +86,34 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=PARTIAL,
         review=NONE,
         generate=NONE,
-        note="AS とピアまで。経路広告のポリシー（route-map / prefix-list）は読んでいません。",
+        note="AS・ピア・広告するネットワークと、当てている route-map の名前まで。"
+        "route-map の中身の評価はしていません。",
     ),
     Capability(
         area="経路",
         name="EIGRP / IS-IS / RIP",
-        read=NONE,
+        read=FULL,
         review=NONE,
         generate=NONE,
-        note="読んでいません。使っている現場が分かった時点で足します。",
+        note="流している範囲・passive・再配布まで読みます。"
+        "設定の妥当性（メトリックの設計など）は見ていません。",
+    ),
+    Capability(
+        area="経路",
+        name="route-map / prefix-list",
+        read=PARTIAL,
+        review=PARTIAL,
+        generate=NONE,
+        note="名前と、どこで使われているかまで。中身の評価はしていません。"
+        "どこからも使われていないものは指摘します。",
+    ),
+    Capability(
+        area="経路",
+        name="ポリシールーティング",
+        read=PARTIAL,
+        review=NONE,
+        generate=NONE,
+        note="どのポートに当てているかまで。中身は読んでいません。",
     ),
     Capability(
         area="経路",

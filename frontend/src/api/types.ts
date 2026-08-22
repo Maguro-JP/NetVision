@@ -1156,6 +1156,22 @@ export interface L3Report {
     priority: number | null;
     protocol: string;
   }[];
+  /** OSPF / BGP 以外の経路プロトコル */
+  protocols: {
+    name: string;
+    identifier: string | null;
+    router_id: string | null;
+    networks: string[];
+    passive_interfaces: string[];
+    redistributes: string[];
+  }[];
+  /** 経路の選び方・配り方を決める道具 */
+  policies: {
+    kind: string;
+    name: string;
+    detail: string;
+    used_by: string[];
+  }[];
   /** その機器で使っている機能。中身の解釈まではしていない */
   features: {
     category: string;
