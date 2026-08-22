@@ -1016,10 +1016,22 @@ export interface LinkImportResult {
 export interface Job {
   id: string;
   kind: string;
+  /** 種類の呼び名。「機器台帳の取り込み」など */
+  kind_label: string;
+  /** 何に対する仕事か。ファイル名や機器名 */
+  label: string;
   status: "pending" | "running" | "done" | "error" | "cancelled";
   seconds: number;
+  started_at: string | null;
+  done: number;
+  total: number | null;
+  /** 何割まで来たか。総数が分からないうちは null */
+  percent: number | null;
+  note: string | null;
   error: string | null;
   draft: ConfigDraft | null;
+  device_import: ImportResult | null;
+  link_import: LinkImportResult | null;
 }
 
 /** 画面から決める設定。環境変数は初期値として扱う。 */

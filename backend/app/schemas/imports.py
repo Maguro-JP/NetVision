@@ -60,3 +60,20 @@ class ImportResult(BaseModel):
     rows_total: int = Field(
         default=0, description="行結果の実数。rows は画面が固まらないよう一部だけ返す"
     )
+
+
+class LinkImportIssueRead(BaseModel):
+    row_number: int
+    message: str
+
+
+class LinkImportResultRead(BaseModel):
+    """結線表の取り込み結果。下見と実行で同じ形を返す。"""
+
+    total_rows: int
+    linked: int
+    already: int
+    pending: int
+    issues: list[LinkImportIssueRead]
+    unmapped_columns: list[str]
+    committed: bool

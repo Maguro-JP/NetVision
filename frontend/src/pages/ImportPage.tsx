@@ -8,7 +8,7 @@ import LinkSheetImport from "../components/LinkSheetImport";
 import SiteSheetImport from "../components/SiteSheetImport";
 import WindowLink from "../components/WindowLink";
 import { saveBlob } from "../lib/download";
-import type { ImportResult, ImportRowAction } from "../api/types";
+import type { ImportResult, ImportRowAction, Job } from "../api/types";
 
 const ACTION_LABEL: Record<ImportRowAction, string> = {
   create: "新規",
@@ -77,6 +77,9 @@ export default function ImportPage() {
   const [mapping, setMapping] = useState<Record<string, string>>({});
   const [result, setResult] = useState<ImportResult | null>(null);
   const [elapsedSec, setElapsedSec] = useState(0);
+  // 取り込みそのものは裏で走らせる。16万行だと数十秒かかり、待っているあいだに
+  // ブラウザ側で先に切れることがあった
+  const [jobId, setJobId] = useState<string | null>(null);
 
   const { data: fields } = useQuery({
     queryKey: ["importFields"],
@@ -90,24 +93,50 @@ export default function ImportPage() {
   });
   const hasDevices = (ledger?.total ?? 0) > 0;
 
-  const run = useMutation({
-    mutationFn: (commit: boolean) =>
-      api.importDevices({
+  const run = useMutation<ImportResult | Job, Error, boolean>({
+    mutationFn: (commit: boolean) => {
+      const options = {
         file: file!,
         keyField,
         updateExisting,
         mapping: Object.keys(mapping).length ? mapping : undefined,
         commit,
-      }),
-    onSuccess: (data) => {
-      setResult(data);
-      if (data.committed) {
-        queryClient.invalidateQueries({ queryKey: ["devices"] });
-        queryClient.invalidateQueries({ queryKey: ["sites"] });
-        queryClient.invalidateQueries({ queryKey: ["summary"] });
+      };
+      return commit
+        ? api.importDevicesInBackground(options)
+        : api.importDevices(options);
+    },
+    onSuccess: (data, commit) => {
+      if (commit) {
+        setResult(null);
+        setJobId((data as Job).id);
+        return;
       }
+      setResult(data as ImportResult);
     },
   });
+
+  // 裏の取り込みの様子を聞く。終わったら結果に差し替える
+  const { data: job } = useQuery({
+    queryKey: ["importJob", jobId],
+    queryFn: () => api.job(jobId!),
+    enabled: jobId !== null,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      return status === "pending" || status === "running" ? 1000 : false;
+    },
+  });
+
+  useEffect(() => {
+    if (!job || job.status !== "done" || !job.device_import) return;
+    setResult(job.device_import);
+    setJobId(null);
+    queryClient.invalidateQueries({ queryKey: ["devices"] });
+    queryClient.invalidateQueries({ queryKey: ["devicesExist"] });
+    queryClient.invalidateQueries({ queryKey: ["sites"] });
+    queryClient.invalidateQueries({ queryKey: ["summary"] });
+    queryClient.invalidateQueries({ queryKey: ["jobs"] });
+  }, [job, queryClient]);
 
   const downloadErrors = useMutation({
     mutationFn: async (encoding: "utf-8" | "shift_jis") => {
@@ -159,7 +188,11 @@ export default function ImportPage() {
   const blocked =
     !result || result.errors > 0 || result.missing_required_fields.length > 0;
   const keyHint = KEY_OPTIONS.find((o) => o.value === keyField)?.hint;
-  const busy = run.isPending || downloadErrors.isPending;
+  const waiting =
+    jobId !== null &&
+    (job?.status ?? "running") !== "error" &&
+    job?.status !== "cancelled";
+  const busy = run.isPending || downloadErrors.isPending || waiting;
   const largeFile = Boolean(file && file.size >= LARGE_FILE_BYTES);
   const excelFile = Boolean(file && /\.xlsx?$/i.test(file.name));
 
@@ -289,16 +322,57 @@ export default function ImportPage() {
           disabled={blocked || busy}
           onClick={() => run.mutate(true)}
         >
-          {run.isPending && run.variables === true ? "取り込み中…" : "取り込む"}
+          {waiting || (run.isPending && run.variables === true)
+            ? "取り込み中…"
+            : "取り込む"}
         </button>
       </div>
 
-      {busy && (
-        <p className="muted" style={{ marginTop: 12 }} role="status">
-          処理中です（{formatElapsed(elapsedSec)}
-          ）。行数が多いと数分かかることがあります。
-          画面を閉じず、そのまま待ってください。
-        </p>
+      {waiting ? (
+        <div className="card" style={{ marginTop: 12 }} role="status">
+          <p className="muted" style={{ margin: 0 }}>
+            裏で取り込んでいます（{formatElapsed(Math.round(job?.seconds ?? 0))}
+            ）。 この画面は触れます。ダッシュボードからも様子を見られます。
+          </p>
+          <p style={{ margin: "6px 0 0" }}>
+            {job?.note ?? "受け付けました"}
+            {job?.total
+              ? ` — ${job.done.toLocaleString()} / ${job.total.toLocaleString()} 行`
+              : ""}
+            {job?.percent !== null && job?.percent !== undefined
+              ? `（${job.percent}%）`
+              : ""}
+          </p>
+          <button
+            style={{ marginTop: 8 }}
+            onClick={() => {
+              if (jobId) api.cancelJob(jobId);
+              setJobId(null);
+            }}
+          >
+            待つのをやめる
+          </button>
+        </div>
+      ) : (
+        busy && (
+          <p className="muted" style={{ marginTop: 12 }} role="status">
+            処理中です（{formatElapsed(elapsedSec)}
+            ）。行数が多いと数分かかることがあります。
+            画面を閉じず、そのまま待ってください。
+          </p>
+        )
+      )}
+
+      {job?.status === "error" && (
+        <div className="error" style={{ marginTop: 12 }}>
+          取り込みに失敗しました: {job.error}
+        </div>
+      )}
+
+      {job?.status === "cancelled" && (
+        <div className="error" style={{ marginTop: 12 }}>
+          取り込みをやめました。途中まで書いたぶんは入っていません。
+        </div>
       )}
 
       {run.error && <div className="error">{(run.error as Error).message}</div>}

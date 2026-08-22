@@ -21,6 +21,7 @@ from app.schemas.config_plans import (
     LlmStatusRead,
     PlanOutputRead,
 )
+from app.schemas.jobs import JobRead, job_read
 from app.services import config_draft, jobs, llm
 from app.services import config_plans as service
 from app.services.api_helpers import diff_read
@@ -357,28 +358,6 @@ def review_draft(device_id: int, payload: ConfigReviewRequest, db: DbSession) ->
 # ---------------------------------------------------------------------------
 
 
-class JobRead(BaseModel):
-    """裏の処理の様子。"""
-
-    id: str
-    kind: str
-    status: str
-    seconds: float
-    error: str | None = None
-    draft: ConfigDraftRead | None = None
-
-
-def _job_read(job) -> JobRead:
-    return JobRead(
-        id=job.id,
-        kind=job.kind,
-        status=job.status,
-        seconds=round(job.seconds, 1),
-        error=job.error,
-        draft=job.result if isinstance(job.result, ConfigDraftRead) else None,
-    )
-
-
 @router.post("/devices/{device_id}/config-draft/async", response_model=JobRead)
 def draft_config_in_background(
     device_id: int, payload: ConfigDraftRequest, db: DbSession
@@ -398,7 +377,7 @@ def draft_config_in_background(
     request_text = payload.request
     base_text = payload.base
 
-    def work() -> ConfigDraftRead:
+    def work(_job) -> ConfigDraftRead:  # noqa: ANN001
         # 裏では、その場限りの接続を使う。画面の要求とつなぎを共有すると、
         # 先に閉じられて途中で落ちる
         from app.db import new_session
@@ -411,26 +390,4 @@ def draft_config_in_background(
                 target, config_draft.draft(session, target, request_text, base=base_text)
             )
 
-    return _job_read(jobs.start("config-draft", work))
-
-
-@router.get("/jobs/{job_id}", response_model=JobRead)
-def read_job(job_id: str) -> JobRead:
-    """裏の処理の様子。終わっていれば中身も返す。"""
-    job = jobs.get(job_id)
-    if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "その処理は残っていません")
-    return _job_read(job)
-
-
-@router.post("/jobs/{job_id}/cancel", response_model=JobRead)
-def cancel_job(job_id: str) -> JobRead:
-    """待つのをやめる。
-
-    モデルの生成そのものは途中で切れないので、結果を捨てるだけ。
-    画面を待たせ続けないための操作。
-    """
-    job = jobs.cancel(job_id)
-    if job is None:
-        raise HTTPException(status.HTTP_404_NOT_FOUND, "その処理は残っていません")
-    return _job_read(job)
+    return job_read(jobs.start("config-draft", work, label=device.hostname))

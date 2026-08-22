@@ -391,6 +391,22 @@ export const api = {
     );
   },
 
+  /** 取り込みを裏で走らせる。番号だけ返るので、様子は job() で聞く。 */
+  importDevicesInBackground: (options: ImportOptions) => {
+    const form = new FormData();
+    form.append("file", options.file);
+    form.append("key_field", options.keyField);
+    form.append("update_existing", String(options.updateExisting));
+    if (options.mapping)
+      form.append("mapping", JSON.stringify(options.mapping));
+    return upload<Job>("/import/devices/async", form, IMPORT_TIMEOUT_MS);
+  },
+  importLinksInBackground: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<Job>("/import/links/async", form, IMPORT_TIMEOUT_MS);
+  },
+
   /** エラー行だけを抽出したCSVを取得する（Blob で受けてブラウザに保存させる）。 */
   importErrorsCsv: async (
     options: ImportOptions & { encoding?: "utf-8" | "shift_jis" },
@@ -823,7 +839,10 @@ export const api = {
   /** 画面から決める設定 */
   appSettings: () => request<AppSettings>("/settings"),
   updateAppSettings: (body: Partial<AppSettings>) =>
-    request<AppSettings>("/settings", { method: "PATCH", body: JSON.stringify(body) }),
+    request<AppSettings>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
   /** モデルを使うかどうかの切り替え。次の起動でも残る */
   setLlmEnabled: (enabled: boolean) =>
@@ -832,13 +851,19 @@ export const api = {
       body: JSON.stringify({ enabled }),
     }),
   /** 下書きを裏で作る。受け取った番号で様子を聞く */
-  draftConfigInBackground: (deviceId: number, body: { request: string; base?: string }) =>
+  draftConfigInBackground: (
+    deviceId: number,
+    body: { request: string; base?: string },
+  ) =>
     request<Job>(`/devices/${deviceId}/config-draft/async`, {
       method: "POST",
       body: JSON.stringify(body),
     }),
   job: (jobId: string) => request<Job>(`/jobs/${jobId}`),
-  cancelJob: (jobId: string) => request<Job>(`/jobs/${jobId}/cancel`, { method: "POST" }),
+  /** 裏で走らせた仕事の一覧。新しい順 */
+  jobs: (limit = 20) => request<Job[]>(`/jobs?limit=${limit}`),
+  cancelJob: (jobId: string) =>
+    request<Job>(`/jobs/${jobId}/cancel`, { method: "POST" }),
   /** 手元にモデルを置けないとき、承認済みの AI へ貼るための依頼文 */
   draftPrompt: (deviceId: number, body: { request: string; base?: string }) =>
     request<ConfigDraft>(`/devices/${deviceId}/config-draft/prompt`, {

@@ -13,6 +13,7 @@ from __future__ import annotations
 import enum
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -527,6 +528,8 @@ class RowResult:
 #: 行ごとの結果を返す上限。件数・内訳は全件から出すが、中身を全部返すと
 #: 16万行で応答が数十MBになり、画面側が固まる。エラー行を優先して残す
 _ROW_SAMPLE = 200
+#: 経過を知らせる間隔。細かすぎると取り込みそのものが遅くなる
+_PROGRESS_STEP = 500
 
 
 @dataclass
@@ -622,6 +625,7 @@ def run_import(
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ImportOutcome:
     """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
@@ -629,6 +633,9 @@ def run_import(
 
     `keep_rows` は返す行結果の上限。件数や内訳は全件から出す。エラー行の
     CSV 書き出しなど、全行が必要な呼び出しでは None を渡す。
+
+    `on_progress` を渡すと、区切りごとに（済んだ行数, 全行数, いま何をして
+    いるか）で呼ぶ。裏で走らせるときに、画面へ経過を見せるために使う。
     """
     with audit_context(ChangeSource.IMPORT, note="台帳の取り込み"):
         return _run_import(
@@ -640,6 +647,7 @@ def run_import(
             update_existing=update_existing,
             commit=commit,
             keep_rows=keep_rows,
+            on_progress=on_progress,
         )
 
 
@@ -653,7 +661,15 @@ def _run_import(
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ImportOutcome:
+    total_rows = len(table_rows)
+
+    def progress(done: int, note: str) -> None:
+        if on_progress is not None:
+            on_progress(done, total_rows, note)
+
+    progress(0, "列の対応を見ています")
     mapping = detect_mapping(table_headers)
     for column, target in (mapping_override or {}).items():
         if target:
@@ -687,9 +703,12 @@ def _run_import(
 
     # 行の変換は1回だけやる。以前は既存引きのたびにやり直しており、
     # 日付列がある台帳では行数の数倍だけ strptime が走っていた
+    progress(0, "行を読み取っています")
     extracted: list[tuple[dict[str, object], list[RowIssue]]] = [
         _extract(raw, mapping) for raw in table_rows
     ]
+
+    progress(0, "台帳の既存分を引いています")
 
     site_cache = {s.name: s for s in db.scalars(select(Site))}
     for site in list(site_cache.values()):
@@ -738,6 +757,8 @@ def _run_import(
     created = updated = skipped = errors = contracts_added = 0
 
     for index, (values, issues) in enumerate(extracted, start=2):
+        if index % _PROGRESS_STEP == 0:
+            progress(index - 1, "1行ずつ見ています")
         key_value = str(values.get(str(key_field)) or "").strip()
 
         # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
@@ -866,6 +887,8 @@ def _run_import(
             pending.append((result, device))
 
         results.append(result)
+
+    progress(total_rows, "台帳に書いています" if commit else "結果をまとめています")
 
     if commit:
         # 問題のある行だけを落とし、残りは取り込む。

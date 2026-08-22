@@ -25,7 +25,7 @@ def _wait(job_id: str, timeout: float = 5.0):
 
 def test_it_returns_at_once_and_finishes_later():
     """受け付けた時点で番号が返り、処理は裏で進む。"""
-    job = jobs.start("test", lambda: (time.sleep(0.1), "できました")[1])
+    job = jobs.start("test", lambda _job: (time.sleep(0.1), "できました")[1])
     assert job.status in {jobs.PENDING, jobs.RUNNING}
 
     done = _wait(job.id)
@@ -37,7 +37,7 @@ def test_it_returns_at_once_and_finishes_later():
 def test_a_failure_is_kept_as_a_message():
     """裏で落ちても道具は止めず、理由を残す。"""
 
-    def broken():
+    def broken(_job):
         raise RuntimeError("読めませんでした")
 
     job = jobs.start("test", broken)
@@ -48,7 +48,7 @@ def test_a_failure_is_kept_as_a_message():
 
 def test_waiting_can_be_given_up():
     """待つのをやめられること。生成そのものは切れないので、結果を捨てる。"""
-    job = jobs.start("test", lambda: (time.sleep(1), "遅い")[1])
+    job = jobs.start("test", lambda _job: (time.sleep(1), "遅い")[1])
     cancelled = jobs.cancel(job.id)
     assert cancelled is not None
     assert cancelled.status == jobs.CANCELLED

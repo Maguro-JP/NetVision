@@ -11,8 +11,13 @@ from sqlalchemy.orm import Session
 
 from app.config import settings
 from app.db import get_db
-from app.schemas.imports import ImportFieldInfo, ImportResult
-from app.services import importer, linkimport, siteimport
+from app.schemas.imports import (
+    ImportFieldInfo,
+    ImportResult,
+    LinkImportResultRead,
+)
+from app.schemas.jobs import JobRead, job_read
+from app.services import importer, jobs, linkimport, siteimport
 from app.services.tablefile import Table, TableFileError, read_table
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -239,21 +244,6 @@ async def download_error_rows(
     )
 
 
-class LinkImportIssueRead(BaseModel):
-    row_number: int
-    message: str
-
-
-class LinkImportResultRead(BaseModel):
-    total_rows: int
-    linked: int
-    already: int
-    pending: int
-    issues: list[LinkImportIssueRead]
-    unmapped_columns: list[str]
-    committed: bool
-
-
 @router.get("/links/template.xlsx")
 def link_template() -> Response:
     """結線表の記入用ひな形。
@@ -354,3 +344,113 @@ async def commit_site_import(
     拠点に紐づく機器は触らない。
     """
     return await _run_sites(db, file, commit=True)
+
+
+# ---------------------------------------------------------------------------
+# 裏で走らせる（16万行の台帳は数十秒かかる）
+# ---------------------------------------------------------------------------
+
+
+def _parse_options(
+    mapping: str | None, key_field: str
+) -> tuple[dict[str, str] | None, importer.KeyField]:
+    """下見と同じ検査を、受け付けの時点で通す。
+
+    裏に回してから「列名が違う」と分かっても、待ったぶんが無駄になる。
+    形の誤りはその場で返す。
+    """
+    mapping_override: dict[str, str] | None = None
+    if mapping:
+        try:
+            parsed = json.loads(mapping)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は JSON で指定してください"
+            ) from exc
+        if not isinstance(parsed, dict):
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は {列名: 項目名} の形式です"
+            )
+        unknown = [v for v in parsed.values() if v and v not in importer.IMPORTABLE_FIELDS]
+        if unknown:
+            raise HTTPException(
+                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                f"未知の項目が指定されています: {', '.join(unknown)}",
+            )
+        mapping_override = {str(k): str(v) if v else "" for k, v in parsed.items()}
+    try:
+        key = importer.KeyField(key_field)
+    except ValueError as exc:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "key_field は code / hostname / serial_number を指定してください",
+        ) from exc
+    return mapping_override, key
+
+
+@router.post("/devices/async", response_model=JobRead)
+async def commit_import_in_background(
+    file: UploadFile = File(description="CSV / TSV / Excel(.xlsx) の台帳ファイル"),
+    mapping: str | None = Form(default=None),
+    key_field: str = Form(default="hostname"),
+    update_existing: bool = Form(default=True),
+) -> JobRead:
+    """台帳の取り込みを裏で走らせる。受け付けたらすぐ番号を返す。
+
+    16万行の台帳は数十秒かかる。そのあいだ画面を止めておくと、押しても
+    反応が無いように見えるうえ、ブラウザ側で先に切れることもある。
+    様子は `/jobs/{id}` で聞く。
+    """
+    content = await file.read()
+    if len(content) > _max_upload_bytes():
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+    mapping_override, key = _parse_options(mapping, key_field)
+    filename = file.filename or "devices"
+
+    def work(job) -> ImportResult:  # noqa: ANN001
+        from app.db import new_session
+
+        with new_session() as session:
+            try:
+                table = read_table(filename, content)
+            except TableFileError as exc:
+                raise RuntimeError(str(exc)) from exc
+            job.advance(0, len(table.rows), "読み込みました")
+            outcome = importer.run_import(
+                session,
+                table.headers,
+                table.rows,
+                mapping_override=mapping_override,
+                key_field=key,
+                update_existing=update_existing,
+                commit=True,
+                on_progress=job.advance,
+            )
+            return ImportResult.model_validate(outcome, from_attributes=True)
+
+    return job_read(jobs.start("device-import", work, label=filename))
+
+
+@router.post("/links/async", response_model=JobRead)
+async def commit_link_import_in_background(
+    file: UploadFile = File(description="結線表（CSV / Excel）"),
+) -> JobRead:
+    """結線表の取り込みを裏で走らせる。様子は `/jobs/{id}` で聞く。"""
+    content = await file.read()
+    if len(content) > _max_upload_bytes():
+        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+    filename = file.filename or "links"
+
+    def work(job) -> LinkImportResultRead:  # noqa: ANN001
+        from app.db import new_session
+
+        with new_session() as session:
+            try:
+                outcome = linkimport.run_import(
+                    session, filename, content, commit=True, on_progress=job.advance
+                )
+            except TableFileError as exc:
+                raise RuntimeError(str(exc)) from exc
+            return LinkImportResultRead.model_validate(outcome, from_attributes=True)
+
+    return job_read(jobs.start("link-import", work, label=filename))
