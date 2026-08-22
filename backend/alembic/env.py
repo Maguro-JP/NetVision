@@ -6,7 +6,9 @@ from app.config import settings
 from app.db import Base, engine
 
 config = context.config
-if config.config_file_name is not None:
+# 呼び出し側が黙らせたいときは、記録の設定を読み直さない。読み直すと
+# alembic.ini の指定（INFO）に戻り、黙らせたはずの記録がまた出てくる
+if config.config_file_name is not None and config.attributes.get("configure_logger", True):
     fileConfig(config.config_file_name)
 
 target_metadata = Base.metadata

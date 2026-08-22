@@ -464,8 +464,10 @@ crypto isakmp key <伏せています> address 203.0.113.1
 情報が入るので、置き場所は Config と同じ扱いで守ってください。
 
 DB ファイルそのものをどう守るか（ディスク暗号化・DB の暗号化・原文を
-持たない）の比較は [docs/DATA_PROTECTION.md](docs/DATA_PROTECTION.md) に
-まとめてあります。
+持たない・持ち出すときの手当て）の比較は
+[docs/DATA_PROTECTION.md](docs/DATA_PROTECTION.md) にまとめてあります。
+「このツールでしか開けない」形にできるか、という話もそこに書いてあります
+（できます。どこまで守れるかは鍵の置き場所で決まります）。
 
 ### Config を放り込んで、その場で見てもらう
 

@@ -26,6 +26,22 @@ def _schema_apply_disabled() -> bool:
     return os.environ.get("PYTEST_CURRENT_TEST") is not None
 
 
+def _announce_pending(engine) -> None:  # noqa: ANN001  Engine（起動を重くしない）
+    """表の更新が要るときだけ、要る分だけを知らせる。
+
+    何も要らないときに版を並べても読み飛ばされるだけで、本当に更新が要る
+    ときの1行まで一緒に読み飛ばされる。
+    """
+    from app.schema_alembic import pending_steps
+
+    steps = pending_steps(engine)
+    if not steps:
+        return
+    logger.info("表の更新が %d 件あります", len(steps))
+    for step in steps:
+        logger.info("  - %s", step["summary"])
+
+
 def ensure_ready() -> None:
     """空なら表を作る。デモならデモデータも入れる。差分がある既存 DB は触らない。"""
     global _ready
@@ -43,16 +59,23 @@ def ensure_ready() -> None:
         )
 
         if settings.demo_mode or is_empty(engine):
-            apply_schema()
+            # まっさらなので、全部の版が順に当たる。その一覧を出しても
+            # 初めて使う人には何の情報でもないので、黙って作って1行で言う
+            apply_schema(quiet=True)
+            logger.info("データの置き場所を作りました")
             if settings.demo_mode and "devices" in inspect(engine).get_table_names():
                 from scripts.seed import seed
 
                 seed()
-        elif current_revision(engine) is None:
+        else:
+            _announce_pending(engine)
+
+        if current_revision(engine) is None:
             inferred = infer_legacy_revision(engine)
             if inferred == head_revision():
-                # 列は揃っていて版の記録だけ無い。データの形は変わらないのでここで付ける
-                apply_schema()
+                # 列は揃っていて版の記録だけ無い。データの形は変わらないので
+                # ここで付ける。人には何も起きていないので、黙って付ける
+                apply_schema(quiet=True)
         _ready = True
     except ModuleNotFoundError as exc:
         if exc.name == "alembic":
