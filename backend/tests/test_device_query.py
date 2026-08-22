@@ -274,3 +274,47 @@ def test_severity_counts_agree_with_evaluate(db_session):
     assert [d.hostname for d in query_upcoming(db_session, 5, today=TODAY)] == [
         d.hostname for d in alerting[:5]
     ]
+
+
+def test_two_words_narrow_the_result(db_session):
+    """空白で区切った語は、すべて当たるものだけを出す。
+
+    「拠点名 機種」のように2語で打つと0件になっていた。現場では、まず拠点で
+    当たりを付けてから機種で絞る、という打ち方をする。
+    """
+    from app.models import Device, Site
+    from app.services.device_query import DeviceFilters, query_devices
+
+    site = Site(name="本社DC")
+    db_session.add(site)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Device(hostname="hq-sw-01", vendor="NEC", model="QX-S5500G", site_id=site.id),
+            Device(hostname="hq-rt-01", vendor="NEC", model="IX2215", site_id=site.id),
+        ]
+    )
+    db_session.commit()
+
+    both = query_devices(db_session, DeviceFilters(q="本社DC QX"))
+    assert [d.hostname for d in both] == ["hq-sw-01"]
+
+
+def test_symbols_are_taken_as_written(db_session):
+    """`%` や `_` は打った文字として扱う。
+
+    そのまま渡すと「何にでも当たる」記号になり、`%` だけで全件が出ていた。
+    """
+    from app.models import Device
+    from app.services.device_query import DeviceFilters, query_devices
+
+    db_session.add_all(
+        [
+            Device(hostname="sw-01", vendor="NEC", model="QX"),
+            Device(hostname="sw-02", vendor="NEC", model="QX", notes="使用率 90%"),
+        ]
+    )
+    db_session.commit()
+
+    assert len(query_devices(db_session, DeviceFilters(q="%"))) == 1
+    assert query_devices(db_session, DeviceFilters(q="90%"))[0].hostname == "sw-02"
