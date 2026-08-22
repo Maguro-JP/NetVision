@@ -15,6 +15,7 @@ from app.schemas.topology import (
     InterfaceRead,
 )
 from app.services import configs as service
+from app.services import secrets
 from app.services.configparse import VENDOR_LABELS, Vendor
 
 router = APIRouter(prefix="/configs", tags=["configs"])
@@ -184,8 +185,26 @@ def _load(db: Session, snapshot_id: int) -> ConfigSnapshot:
 
 
 @router.get("/{snapshot_id}", response_model=ConfigSnapshotDetail)
-def get_snapshot(snapshot_id: int, db: DbSession) -> ConfigSnapshot:
-    return _load(db, snapshot_id)
+def get_snapshot(
+    snapshot_id: int,
+    db: DbSession,
+    reveal: bool = Query(default=False, description="伏せずに原文を出す（持ち出しに注意）"),
+) -> ConfigSnapshotDetail:
+    """1世代ぶんの中身。
+
+    既定では、パスワードや鍵・コミュニティ名を伏せて返す。保存してあるのは
+    原文のままで、伏せるのは見せるときだけ。画面共有やファイル受け渡しの
+    たびに秘密が一緒に出ていくのを止めるため。
+    """
+    snapshot = _load(db, snapshot_id)
+    read = ConfigSnapshotDetail.model_validate(snapshot, from_attributes=True)
+    if reveal:
+        read.masked_note = ""
+        return read
+    hidden = secrets.mask(snapshot.content)
+    read.content = hidden.text
+    read.masked_note = secrets.describe(hidden.counts)
+    return read
 
 
 @router.get("/{snapshot_id}/diff", response_model=ConfigDiffRead)
@@ -215,7 +234,15 @@ def diff_snapshot(
         older, newer = newer, older
 
     diff = service.diff_snapshots(older, newer)
-    return ConfigDiffRead(from_id=older.id, to_id=newer.id, diff=diff, changed=bool(diff))
+    # 差分にも秘密がそのまま出る。むしろ「変わった行」として目立つ位置に出る
+    hidden = secrets.mask(diff)
+    return ConfigDiffRead(
+        from_id=older.id,
+        to_id=newer.id,
+        diff=hidden.text,
+        changed=bool(diff),
+        masked_note=secrets.describe(hidden.counts),
+    )
 
 
 @router.delete("/{snapshot_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -121,6 +121,14 @@ export interface ImportRowIssue {
   message: string;
 }
 
+/** 1つの項目が、いまの値から何に変わるか。 */
+export interface ImportFieldChange {
+  field: string;
+  label: string;
+  before: string;
+  after: string;
+}
+
 export interface ImportRowResult {
   row_number: number;
   key: string;
@@ -128,6 +136,8 @@ export interface ImportRowResult {
   issues: ImportRowIssue[];
   device_id: number | null;
   contract_added: boolean;
+  /** 既存を直す行で、実際に変わる項目だけ。変わらない行は空 */
+  changes: ImportFieldChange[];
 }
 
 export interface ImportResult {
@@ -210,6 +220,8 @@ export interface ConfigDiff {
   to_id: number;
   diff: string;
   changed: boolean;
+  /** 何を伏せたか。伏せたことを黙っていると、無いものと読まれる */
+  masked_note: string;
 }
 
 export interface NetworkInterface {
@@ -227,7 +239,7 @@ export interface NetworkInterface {
   enabled: boolean;
 }
 
-export type LinkOrigin = "discovered" | "manual";
+export type LinkOrigin = "discovered" | "manual" | "inferred";
 
 export interface TopologyNode {
   device_id: number;
@@ -349,6 +361,10 @@ export interface TopologyGraph {
   edges: TopologyEdge[];
   unplaced_count: number;
   groups?: TopologyGroup[];
+  /** 台数が多いので、サーバー側で見どころを選んで返したか */
+  auto_scoped?: boolean;
+  /** そのときの断り書き */
+  note?: string | null;
 }
 
 export interface TopologyStats {
@@ -766,6 +782,8 @@ export interface ConfigDraft {
 
 export interface LlmModel {
   role: string;
+  /** 使えないときの理由 */
+  note: string;
   model: string;
   endpoint: string;
   local: boolean;
@@ -996,6 +1014,37 @@ export interface LinkImportResult {
   committed: boolean;
 }
 
+/** 裏で走らせている処理の様子。 */
+export interface Job {
+  id: string;
+  kind: string;
+  /** 種類の呼び名。「機器台帳の取り込み」など */
+  kind_label: string;
+  /** 何に対する仕事か。ファイル名や機器名 */
+  label: string;
+  status: "pending" | "running" | "done" | "error" | "cancelled";
+  seconds: number;
+  started_at: string | null;
+  done: number;
+  total: number | null;
+  /** 何割まで来たか。総数が分からないうちは null */
+  percent: number | null;
+  note: string | null;
+  error: string | null;
+  draft: ConfigDraft | null;
+  device_import: ImportResult | null;
+  link_import: LinkImportResult | null;
+}
+
+/** 画面から決める設定。環境変数は初期値として扱う。 */
+export interface AppSettings {
+  warning_days: number;
+  critical_days: number;
+  reference_stale_days: number;
+  display_timezone: string;
+  model_dir: string;
+}
+
 /** 資料から起こしたテンプレートの下書き。 */
 export interface TemplateDraft {
   name: string;
@@ -1032,4 +1081,287 @@ export interface SpaceView {
   edges: { a: number | null; b: number | null; count: number }[];
   device_total: number;
   link_total: number;
+}
+
+/** 「ここに機器を足したら」の設計で決めた1件と、その理由。 */
+export interface AdditionDecision {
+  topic: string;
+  choice: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 足す1台ぶんの設計。上位側と新機器側の Config を両方持つ。 */
+export interface AdditionPlan {
+  upstream_hostname: string;
+  hostname: string;
+  vlan_id: number | null;
+  vlan_name: string;
+  subnet: string | null;
+  gateway_ip: string | null;
+  device_ip: string | null;
+  upstream_interface: string | null;
+  device_uplink: string;
+  routing: string;
+  decisions: AdditionDecision[];
+  warnings: string[];
+  checks: string[];
+  upstream_config: string;
+  device_config: string;
+  /** Config そのものには書かない補足。貼るときに邪魔にならないよう分けてある */
+  upstream_notes: string[];
+  device_notes: string[];
+}
+
+/** L3 で気になったこと1件。理由と、根拠にした行が必ず付く。 */
+export interface L3Finding {
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
+export interface L3Report {
+  hostname: string;
+  has_config: boolean;
+  routes: {
+    destination: string;
+    next_hop: string | null;
+    interface: string | null;
+    distance: number | null;
+    vrf: string | null;
+    is_default: boolean;
+  }[];
+  ospf: {
+    process_id: string | null;
+    router_id: string | null;
+    areas: { area: string; networks: string[] }[];
+    passive_default: boolean;
+    passive_interfaces: string[];
+    redistributes: string[];
+  } | null;
+  bgp: {
+    local_as: string | null;
+    router_id: string | null;
+    networks: string[];
+    neighbors: {
+      address: string;
+      remote_as: string | null;
+      description: string | null;
+    }[];
+  } | null;
+  redundancy: {
+    interface: string;
+    group: string | null;
+    virtual_ip: string | null;
+    priority: number | null;
+    protocol: string;
+  }[];
+  /** OSPF / BGP 以外の経路プロトコル */
+  protocols: {
+    name: string;
+    identifier: string | null;
+    router_id: string | null;
+    networks: string[];
+    passive_interfaces: string[];
+    redistributes: string[];
+  }[];
+  /** 経路の選び方・配り方を決める道具 */
+  policies: {
+    kind: string;
+    name: string;
+    detail: string;
+    used_by: string[];
+  }[];
+  /** その機器で使っている機能。中身の解釈まではしていない */
+  features: {
+    category: string;
+    category_label: string;
+    name: string;
+    detail: string;
+    count: number;
+    evidence: string[];
+  }[];
+  findings: L3Finding[];
+}
+
+/** 何にどこまで対応しているか。読む / 検算 / 起こす の3段階で持つ。 */
+export interface Capability {
+  area: string;
+  name: string;
+  read: string;
+  review: string;
+  generate: string;
+  note: string;
+}
+
+export interface CapabilityIndex {
+  areas: string[];
+  levels: Record<string, string>;
+  items: Capability[];
+}
+
+/** 条件から起こした構成。案であって、実機には投入しない。 */
+export interface Blueprint {
+  title: string;
+  conditions: { name: string; label: string }[];
+  devices: {
+    role: string;
+    hostname: string;
+    device_type: string;
+    purpose: string;
+  }[];
+  links: {
+    a_hostname: string;
+    a_interface: string;
+    b_hostname: string;
+    b_interface: string;
+    description: string;
+  }[];
+  segments: {
+    name: string;
+    vlan_id: number | null;
+    subnet: string;
+    gateway: string | null;
+    members: string[];
+  }[];
+  routes: { hostname: string; destination: string; next_hop: string }[];
+  decisions: { topic: string; choice: string; why: string }[];
+  warnings: string[];
+  configs: Record<string, string>;
+  notes: Record<string, string[]>;
+}
+
+export interface BlueprintCondition {
+  name: string;
+  label: string;
+}
+
+export interface TestSite {
+  id: number;
+  name: string;
+  devices: number;
+}
+
+/** 経路の情報から見つけた、線の候補。 */
+export interface LinkCandidate {
+  a_device_id: number;
+  a_hostname: string;
+  a_interface: string;
+  b_device_id: number;
+  b_hostname: string;
+  b_interface: string;
+  segment: string;
+  confidence: "high" | "medium";
+  why: string;
+  evidence: string[];
+}
+
+/** 画面に出てくる言葉の説明。何なのかと、狂うと何が起きるか。 */
+export interface GlossaryTerm {
+  term: string;
+  reading: string;
+  plain: string;
+  matters: string;
+  also: string[];
+}
+
+/** 文章をどう読み取ったか。人が見て直せるように必ず返る。 */
+export interface AskReading {
+  site: string | null;
+  site_id: number | null;
+  upstream_hostname: string | null;
+  upstream_device_id: number | null;
+  new_hostname: string | null;
+  purpose: string;
+  notes: string[];
+}
+
+export interface AskResult {
+  reading: AskReading;
+  upstream_choices: {
+    device_id: number;
+    hostname: string;
+    site: string | null;
+  }[];
+  questions: string[];
+  plan: AdditionPlan | null;
+}
+
+/** 取り込んだ Config から覚えた、その現場の流儀。 */
+export interface HouseStyle {
+  devices_seen: number;
+  vlan_step: number | null;
+  hostname_pattern: string | null;
+  syslog_hosts: string[];
+  ntp_hosts: string[];
+  stp_mode: string | null;
+  baseline_lines: string[];
+  learned: {
+    topic: string;
+    value: string;
+    seen: number;
+    total: number;
+    share: number;
+    detail: string;
+  }[];
+}
+
+/** いま動いている Config から起こしたテンプレートの下書き。 */
+export interface ConfigTemplateDraft {
+  name: string;
+  vendor: string;
+  body: string;
+  variables: { name: string; label: string; default: string; help: string }[];
+  devices_seen: number;
+  hostnames: string[];
+  notes: string[];
+  skipped: number;
+}
+
+/** 放り込んだ Config を、その場で見た結果。台帳には何も書かない。 */
+export interface ConfigCheck {
+  filename: string;
+  vendor: string;
+  vendor_label: string;
+  hostname: string | null;
+  model: string | null;
+  os_version: string | null;
+  interfaces: number;
+  vlans: number;
+  routes: number;
+  features: {
+    category_label: string;
+    name: string;
+    detail: string;
+    count: number;
+  }[];
+  findings: L3Finding[];
+  /** 覚えた流儀と違うところ。間違いとは言い切れないので分けて返る */
+  differences: L3Finding[];
+  notes: string[];
+}
+
+/** 出した結果について聞き返したときの答え。 */
+export interface AskBackAnswer {
+  answer: string;
+  /** どうやって答えたか。glossary / model / prompt */
+  source: string;
+  used: string[];
+  /** モデルが無いとき、承認済みの AI へ貼るための依頼文 */
+  prompt: string | null;
+  note: string;
+}
+
+/** 選んだ範囲を直した結果。採るかどうかは人が決める。 */
+export interface ConfigEdit {
+  before: string;
+  after: string;
+  diff: string;
+  changed: boolean;
+  /** どう直したか。rule / model / prompt */
+  source: string;
+  notes: string[];
+  prompt: string | null;
 }

@@ -19,6 +19,15 @@ class ImportRowIssue(BaseModel):
     message: str
 
 
+class ImportFieldChange(BaseModel):
+    """1つの項目が、いまの値から何に変わるか。"""
+
+    field: str
+    label: str
+    before: str
+    after: str
+
+
 class ImportRowResult(BaseModel):
     row_number: int
     key: str
@@ -26,6 +35,8 @@ class ImportRowResult(BaseModel):
     issues: list[ImportRowIssue] = []
     device_id: int | None = None
     contract_added: bool = False
+    #: 既存を直す行で、実際に変わる項目だけ。変わらない行は空
+    changes: list[ImportFieldChange] = []
 
 
 class ImportResult(BaseModel):
@@ -49,3 +60,20 @@ class ImportResult(BaseModel):
     rows_total: int = Field(
         default=0, description="行結果の実数。rows は画面が固まらないよう一部だけ返す"
     )
+
+
+class LinkImportIssueRead(BaseModel):
+    row_number: int
+    message: str
+
+
+class LinkImportResultRead(BaseModel):
+    """結線表の取り込み結果。下見と実行で同じ形を返す。"""
+
+    total_rows: int
+    linked: int
+    already: int
+    pending: int
+    issues: list[LinkImportIssueRead]
+    unmapped_columns: list[str]
+    committed: bool

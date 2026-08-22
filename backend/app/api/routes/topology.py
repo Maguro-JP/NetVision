@@ -62,15 +62,16 @@ def get_topology(
     only = service.scoped_device_ids(db, site_id=site_id, q=q)
     # 物理の全体図だけ止める。L2 / L3 / 論理は中身が絞られるので、
     # 台帳全体の台数では判断しない（論理は全国のトンネルを一度に見たい）
-    if (
+    # 台数が多いと全体図は描けない。ただし「出せません」とだけ返すと、
+    # 台帳と結線表を入れた直後に、何も出ない図を見ることになる。
+    # こちらで線の多いところを選んで出し、絞り込みの入口にする
+    auto_scoped = (
         only is None
         and layer == service.DEFAULT_LAYER
         and service.unscoped_graph_too_wide(db, include_retired=include_retired)
-    ):
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            "機器が多すぎて全体図は出せません。拠点か機器名で絞ってください",
-        )
+    )
+    if auto_scoped:
+        only = service.busiest_device_ids(db, include_retired=include_retired)
     graph = service.load_diagram(
         db,
         layer,
@@ -79,7 +80,14 @@ def get_topology(
         site_id=site_id,
         q=q,
         scope=scope,
+        only=only if auto_scoped else None,
     )
+    if auto_scoped:
+        graph.auto_scoped = True
+        graph.note = (
+            "台数が多いので、結線の多いところだけを出しています。"
+            "拠点か機器名で絞ると、その範囲を出します"
+        )
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 
@@ -629,3 +637,63 @@ def update_link(link_id: int, payload: LinkUpdate, db: DbSession) -> Link:
 def delete_link(link_id: int, db: DbSession) -> None:
     db.delete(_load(db, link_id))
     db.commit()
+
+
+# ---------------------------------------------------------------------------
+# 経路から結線を推定する
+# ---------------------------------------------------------------------------
+
+
+class LinkCandidateRead(BaseModel):
+    """経路の情報から見つけた、線の候補。"""
+
+    a_device_id: int
+    a_hostname: str
+    a_interface: str
+    b_device_id: int
+    b_hostname: str
+    b_interface: str
+    segment: str
+    confidence: str
+    why: str
+    evidence: list[str]
+
+
+class ApplyCandidatesBody(BaseModel):
+    #: 入れる組。空なら言い切れるものだけ入れる
+    pairs: list[tuple[int, int]] | None = None
+
+
+@router.get("/link-candidates", response_model=list[LinkCandidateRead])
+def list_link_candidates(db: DbSession) -> list[LinkCandidateRead]:
+    """同じセグメントにいる組を、線の候補として返す。
+
+    LLDP を切っている現場では、running-config だけが手元に来る。それでも
+    L3 の情報は必ず書いてあるので、そこから引ける線を出す。
+    """
+    from app.services import l3links
+
+    return [
+        LinkCandidateRead(
+            a_device_id=c.a_device_id,
+            a_hostname=c.a_hostname,
+            a_interface=c.a_interface,
+            b_device_id=c.b_device_id,
+            b_hostname=c.b_hostname,
+            b_interface=c.b_interface,
+            segment=c.segment,
+            confidence=c.confidence,
+            why=c.why,
+            evidence=c.evidence,
+        )
+        for c in l3links.candidates(db)
+    ]
+
+
+@router.post("/link-candidates/apply", response_model=dict)
+def apply_link_candidates(payload: ApplyCandidatesBody, db: DbSession) -> dict:
+    """候補を線にする。組を選ばなければ、言い切れるものだけ入れる。"""
+    from app.services import l3links
+
+    created = l3links.apply(db, payload.pairs)
+    return {"created": created}

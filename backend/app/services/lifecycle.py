@@ -11,6 +11,7 @@ from datetime import date
 
 from app.config import settings
 from app.models import Device
+from app.services import appsettings
 
 
 class Severity(enum.StrEnum):
@@ -47,9 +48,9 @@ def severity_for(target: date | None, today: date | None = None) -> Severity:
         return Severity.UNKNOWN
     if remaining < 0:
         return Severity.EXPIRED
-    if remaining <= settings.critical_days:
+    if remaining <= appsettings.number("critical_days", settings.critical_days):
         return Severity.CRITICAL
-    if remaining <= settings.warning_days:
+    if remaining <= appsettings.number("warning_days", settings.warning_days):
         return Severity.WARNING
     return Severity.OK
 

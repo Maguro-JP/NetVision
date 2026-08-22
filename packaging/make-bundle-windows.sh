@@ -67,7 +67,9 @@ cp -r "$REPO/backend/scripts" "$STAGE/backend/scripts"
 cp -r "$REPO/backend/alembic" "$STAGE/backend/alembic"
 cp "$REPO/backend/alembic.ini" "$STAGE/backend/"
 cp -r "$REPO/frontend/dist" "$STAGE/frontend/dist"
-cp "$REPO/docs/INSTALL.md" "$REPO/docs/OPERATIONS.md" "$STAGE/docs/" 2>/dev/null || true
+# 手引きは丸ごと持ち込む。個別に並べていると、新しく書いたものが入らない
+# （実際に LOCAL_LLM.md が抜けた）
+cp "$REPO"/docs/*.md "$STAGE/docs/" 2>/dev/null || true
 find "$STAGE" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 echo "==> インストール不要の Python を取得します（$PY_VERSION）"
@@ -193,6 +195,17 @@ start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
     diag.replace("\n", "\r\n").encode("cp932")
 )
 
+mcp = """@echo off
+rem NetVision を、AI から呼べる道具として立ち上げます。
+rem 画面は出ません。AI の側の設定から呼ばれて動きます（docs/MCP.md）。
+setlocal
+cd /d "%~dp0"
+set NETVISION_DATA_DIR=
+set PYTHONDONTWRITEBYTECODE=1
+"%~dp0python\\python.exe" -m app.mcp_server
+"""
+(stage / "NetVision-mcp.bat").write_bytes(mcp.replace("\n", "\r\n").encode("cp932"))
+
 readme = f"""NetVision （インストール不要版）
 ====================================
 
@@ -235,6 +248,12 @@ readme = f"""NetVision （インストール不要版）
   同期される場所に DB を置く場合は、書いている最中に同期へ持っていかれると
   壊れることがあるので、データフォルダのコピーをこまめに取ってください。
 
+■ AI から台帳を引かせたいとき（任意）
+
+  「NetVision-mcp.bat」は、AI の側から NetVision を道具として呼ぶための口です。
+  読むだけで、台帳は書き換わりません。使い方は docs\\MCP.md にあります。
+  普段の利用では使いません。
+
 ■ 黒い画面を出したくないとき
 
   「NetVision-window.bat」を使ってください。小さな窓が1つ出るだけになり、
@@ -262,7 +281,7 @@ readme = f"""NetVision （インストール不要版）
   lib\\       このアプリが使うライブラリ
   backend\\   アプリ本体
   frontend\\  画面
-  docs\\      導入手順書・運用手順書
+  docs\\      手引き（導入・運用・AI の使い方など）
 
 版数: {version}
 """

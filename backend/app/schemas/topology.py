@@ -126,6 +126,8 @@ class ConfigSnapshotRead(BaseModel):
 
 class ConfigSnapshotDetail(ConfigSnapshotRead):
     content: str
+    #: 何を伏せたか。伏せたことを黙っていると、無いものと読まれる
+    masked_note: str = ""
 
 
 class ConfigDiffRead(BaseModel):
@@ -133,6 +135,7 @@ class ConfigDiffRead(BaseModel):
     to_id: int
     diff: str
     changed: bool
+    masked_note: str = ""
 
 
 class InterfaceRead(BaseModel):
@@ -216,6 +219,10 @@ class TopologyGraphRead(BaseModel):
     edges: list[TopologyEdgeRead]
     unplaced_count: int
     groups: list[TopologyGroupRead] = []
+    #: 台数が多いので、こちらで見どころを選んで出したか
+    auto_scoped: bool = False
+    #: そのときの断り書き
+    note: str | None = None
 
 
 class NodePosition(BaseModel):

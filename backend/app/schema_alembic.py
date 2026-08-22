@@ -126,14 +126,35 @@ def stamp_legacy_create_all(engine: Engine, cfg) -> None:
     command.stamp(cfg, matched)
 
 
-def apply_schema() -> None:
-    """Alembic を head まで当てる。create_all の試用 DB は版を補ってから差分を当てる。"""
+def apply_schema(*, quiet: bool = False) -> None:
+    """Alembic を head まで当てる。create_all の試用 DB は版を補ってから差分を当てる。
+
+    `quiet` を立てると、当てている最中の記録を出さない。まっさらな DB を
+    作るときは全部の版が順に当たるので、そのまま出すと画面が版の名前で
+    埋まる。初めて使う人には、それは何の情報でもない。
+    """
+    import logging
+
+    logger_alembic = logging.getLogger("alembic")
+    before = logger_alembic.level
+    if quiet:
+        # alembic は取り込まれた時点でも記録を出す。先に黙らせてから読み込む
+        logger_alembic.setLevel(logging.WARNING)
+
     from alembic import command
     from app.db import engine
 
     cfg = alembic_config()
     stamp_legacy_create_all(engine, cfg)
-    command.upgrade(cfg, "head")
+
+    if quiet:
+        # env.py が記録の設定を読み直さないようにする。読み直すと
+        # alembic.ini の指定（INFO）に戻り、黙らせたはずの記録がまた出る
+        cfg.attributes["configure_logger"] = False
+    try:
+        command.upgrade(cfg, "head")
+    finally:
+        logger_alembic.setLevel(before)
 
 
 def pending_steps(engine: Engine) -> list[dict[str, str]]:

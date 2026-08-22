@@ -103,20 +103,28 @@ def test_update_existing_false_skips_known_devices(client):
     assert body["updated"] == 0
 
 
-def test_row_errors_block_the_whole_import(client):
+def test_bad_rows_are_skipped_and_the_rest_goes_in(client):
+    """問題のある行だけを落とし、残りは取り込む。
+
+    以前は1行でも問題があれば全部を取り込まない作りだった。数十行の表なら
+    それで直せるが、16万行の台帳では重複が1組あるだけで丸ごと入らない。
+    しかも件数は「作成」と返るので、入ったように見えて実際は空になる。
+    """
     broken = (
         CSV_HEADER + CSV_ROWS + "acc-sw-01,Cisco,C2960X,スイッチ,稼働中,15.2,本社DC,未定,,,,,\n"
     )
     body = upload(client, broken, path="/import/devices").json()
 
-    assert body["committed"] is False
+    assert body["committed"] is True
     assert body["errors"] == 1
     error_row = next(r for r in body["rows"] if r["action"] == "error")
     assert error_row["row_number"] == 4
     assert "日付として解釈できません" in error_row["issues"][0]["message"]
 
-    # 1行でもエラーがあれば正常行も取り込まない
-    assert client.get(f"{API}/devices").json() == []
+    # 問題の無い行は入っている
+    hostnames = [device["hostname"] for device in client.get(f"{API}/devices").json()]
+    assert hostnames, "正常な行まで落ちている"
+    assert "acc-sw-01" not in hostnames, "問題のある行が入っている"
 
 
 def test_missing_required_column_is_reported(client):
@@ -606,3 +614,40 @@ def test_without_a_code_a_new_name_means_a_new_site(client):
     assert devices[0]["site_name"] == "本社DC"
     names = {s["name"] for s in client.get(f"{API}/sites").json()}
     assert names == {"本社DC", "本社DG"}
+
+
+def test_a_preview_shows_what_changes(client):
+    """下見で、いまの値と更新後の値が並ぶこと。
+
+    どこが変わるのか分からないまま16万行を当てるのは怖い。変わる項目だけを
+    「いま」と「更新後」で見せる。変わらない行は空にして、目立たせない。
+    """
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "code": "NW-0001", "vendor": "Cisco", "model": "C9300"},
+    )
+
+    sheet = (
+        "管理ID,ホスト名,メーカー,型番\n"
+        "NW-0001,core-sw-01,Cisco,C9500\n"  # 型番だけ変わる
+    )
+    body = upload(client, sheet, path="/import/devices/preview").json()
+
+    row = next(r for r in body["rows"] if r["key"] == "core-sw-01")
+    assert row["action"] == "update"
+    assert [(c["label"], c["before"], c["after"]) for c in row["changes"]] == [
+        ("型番", "C9300", "C9500")
+    ]
+
+
+def test_rows_that_do_not_change_show_nothing(client):
+    """同じ内容を入れ直した行は、変わるところが無いので空にする。"""
+    client.post(
+        f"{API}/devices",
+        json={"hostname": "core-sw-01", "code": "NW-0001", "vendor": "Cisco", "model": "C9300"},
+    )
+    sheet = "管理ID,ホスト名,メーカー,型番\nNW-0001,core-sw-01,Cisco,C9300\n"
+
+    body = upload(client, sheet, path="/import/devices/preview").json()
+    row = next(r for r in body["rows"] if r["key"] == "core-sw-01")
+    assert row["changes"] == []

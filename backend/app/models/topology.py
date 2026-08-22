@@ -97,6 +97,9 @@ class Interface(Base):
 class LinkOrigin(enum.StrEnum):
     DISCOVERED = "discovered"  # LLDP/CDP から自動推定
     MANUAL = "manual"  # 人が図に引いた線
+    #: 経路の情報から推定した線。LLDP が無い現場でも図を立ち上げるため。
+    #: 「同じセグメントにいる」までは確かだが、間に何か挟まっている場合がある
+    INFERRED = "inferred"
 
 
 class Link(Base):

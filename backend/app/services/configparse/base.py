@@ -5,6 +5,7 @@ from __future__ import annotations
 import enum
 from dataclasses import dataclass, field
 
+from app.services.configparse.features import FEATURE_LABELS, ParsedFeature  # noqa: F401
 from app.services.configparse.ifname import expand, normalize, normalize_hostname
 
 
@@ -130,6 +131,17 @@ class ParsedConfig:
     vlans: dict[int, str] = field(default_factory=dict)
     vrfs: list[ParsedVrf] = field(default_factory=list)
     tunnels: list[ParsedTunnel] = field(default_factory=list)
+    #: L3。読めなければ空のまま。無いのか読めていないのかは上位で区別しない
+    routes: list[ParsedRoute] = field(default_factory=list)
+    ospf: ParsedOspf | None = None
+    bgp: ParsedBgp | None = None
+    #: OSPF / BGP 以外の経路プロトコル（EIGRP / RIP / IS-IS）
+    protocols: list[ParsedRoutingProtocol] = field(default_factory=list)
+    #: 経路の選び方・配り方を決める道具
+    policies: list[ParsedPolicy] = field(default_factory=list)
+    redundancy: list[ParsedRedundancy] = field(default_factory=list)
+    #: その機器で使っている機能（ACL / NAT / DHCP / STP など）
+    features: list[ParsedFeature] = field(default_factory=list)
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""
@@ -190,3 +202,110 @@ class ParsedConfig:
                 return existing
         self.vrfs.append(vrf)
         return vrf
+
+
+@dataclass
+class ParsedRoute:
+    """静的経路1本。
+
+    「繋がらない」の原因はここに出やすい。片側だけ書いてある戻り経路、
+    宛先の機器が台帳にいないネクストホップ、といった粗を見つける材料にする。
+    """
+
+    destination: str  # "0.0.0.0/0" の形にそろえる
+    next_hop: str | None = None
+    interface: str | None = None
+    distance: int | None = None  # アドミニストレイティブ・ディスタンス
+    vrf: str | None = None
+
+    @property
+    def is_default(self) -> bool:
+        return self.destination in {"0.0.0.0/0", "::/0"}
+
+
+@dataclass
+class ParsedOspfArea:
+    area: str
+    networks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedOspf:
+    """OSPF の設定。どのエリアに何を入れているかまで持つ。
+
+    機器を足すときに「この拠点は OSPF で、エリア0 に入れている」と分かれば、
+    足す側の書き方もそれに合わせられる。
+    """
+
+    process_id: str | None = None
+    router_id: str | None = None
+    areas: list[ParsedOspfArea] = field(default_factory=list)
+    passive_interfaces: list[str] = field(default_factory=list)
+    passive_default: bool = False
+    redistributes: list[str] = field(default_factory=list)
+
+    def area_of(self, network: str) -> str | None:
+        for area in self.areas:
+            if network in area.networks:
+                return area.area
+        return None
+
+
+@dataclass
+class ParsedBgpNeighbor:
+    address: str
+    remote_as: str | None = None
+    description: str | None = None
+
+
+@dataclass
+class ParsedBgp:
+    local_as: str | None = None
+    router_id: str | None = None
+    neighbors: list[ParsedBgpNeighbor] = field(default_factory=list)
+    networks: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedRoutingProtocol:
+    """OSPF / BGP 以外の経路プロトコル1つ。
+
+    現場では EIGRP や RIP がまだ動いている。読めないと、その機器の経路が
+    どこから来ているのか説明できず、更改のときに再現できない。
+    """
+
+    name: str  # eigrp / rip / isis
+    identifier: str | None = None  # AS 番号・プロセス番号など
+    router_id: str | None = None
+    networks: list[str] = field(default_factory=list)
+    passive_interfaces: list[str] = field(default_factory=list)
+    redistributes: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedPolicy:
+    """経路の選び方・配り方を決める道具（route-map / prefix-list / ACL 参照）。
+
+    「広告しているはずなのに相手に届かない」の原因はたいていここにある。
+    中身の評価まではしないが、名前と、どこで使われているかは持っておく。
+    """
+
+    kind: str  # route-map / prefix-list / policy-based-routing
+    name: str
+    detail: str = ""
+    used_by: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedRedundancy:
+    """既定ゲートウェイの冗長（HSRP / VRRP）。
+
+    片方の機器にしか入っていない、優先度が両方同じ、といった粗が
+    そのまま「切り替わらない」障害になるので、機器ごとに持って突き合わせる。
+    """
+
+    interface: str
+    group: str | None = None
+    virtual_ip: str | None = None
+    priority: int | None = None
+    protocol: str = "hsrp"  # hsrp / vrrp

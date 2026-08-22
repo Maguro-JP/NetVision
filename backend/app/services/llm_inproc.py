@@ -41,9 +41,12 @@ def model_dirs() -> list[Path]:
     モデルが残るようにするため、また、アプリ側が書けない場所に置かれていても
     データ側に置けば使えるようにするため。
     """
-    named = os.environ.get(MODEL_DIR_ENV)
-    if named:
-        return [Path(named).expanduser()]
+    from app.services import appsettings
+
+    # 画面で決めた置き場所が勝つ。次に環境変数、無ければ既定の2か所
+    chosen = appsettings.text("model_dir", os.environ.get(MODEL_DIR_ENV) or "")
+    if chosen:
+        return [Path(chosen).expanduser()]
 
     from scripts.standalone import default_data_dir
 

@@ -88,3 +88,27 @@ def test_a_device_placed_by_hand_is_left_alone():
     _stack_outside([inside, fixed, moving], [_edge(1, 1, 2), _edge(2, 1, 3)])
 
     assert fixed.y == -400.0
+
+
+def test_ranking_does_not_slow_down_with_many_islands():
+    """島が多くても、上下の計算が重くならないこと。
+
+    起点を選ぶたびに残り全体から最小を取り直していたため、島の数だけ
+    全体を数え直していた。5万本の結線で7秒かかり、図が出るまで待たされた。
+    """
+    import time
+
+    from app.services.topology import _rank_from_adjacency
+
+    # 2台1組の島を1万個。実際の台帳でも、離れた拠点はこの形になる
+    adjacency = {}
+    for index in range(0, 20_000, 2):
+        adjacency[index] = {index + 1}
+        adjacency[index + 1] = {index}
+
+    start = time.time()
+    ranks = _rank_from_adjacency(adjacency)
+    took = time.time() - start
+
+    assert len(ranks) == 20_000
+    assert took < 3.0, f"{took:.1f}s かかっている"

@@ -36,9 +36,20 @@ def db_session():
 @pytest.fixture()
 def client(db_session):
     app.dependency_overrides[get_db] = lambda: db_session
+    # 裏で走らせる処理は、その場限りの接続を開く。試験ではそれも同じ DB を
+    # 指すようにする（本物の接続先を触らせない）
+    import app.db as db_module
+
+    original_new_session = db_module.new_session
+    # 同じ DB を指す別のつなぎを返す。db_session そのものを返すと、
+    # 裏の処理が閉じたときに試験側のつなぎまで閉じてしまう
+    db_module.new_session = lambda: sessionmaker(
+        bind=db_session.get_bind(), autoflush=False, expire_on_commit=False
+    )()
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
+    db_module.new_session = original_new_session
 
 
 @pytest.fixture()

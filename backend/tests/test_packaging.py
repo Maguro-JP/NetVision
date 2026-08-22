@@ -161,3 +161,17 @@ def test_the_model_can_be_bundled_without_adding_an_executable():
         text = script.read_text(encoding="utf-8")
         assert "llama-cpp-python" in text, f"{script.name} にモデルを動かす道が無い"
         assert "models" in text
+
+
+def test_the_bundle_carries_every_guide():
+    """手引きは丸ごと持ち込むこと。
+
+    個別に並べていると、新しく書いたものが入らない。実際に LOCAL_LLM.md が
+    抜けたまま配りかけた。渡した相手の手元では、書いてあるはずの手順が無い、
+    という形で困る。
+    """
+    for script in (FOR_WINDOWS, POWERSHELL):
+        text = script.read_text(encoding="utf-8")
+        assert "docs/*.md" in text or "docs\\*.md" in text, (
+            f"{script.name} が手引きを個別に並べている"
+        )

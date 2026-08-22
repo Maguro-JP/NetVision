@@ -4,6 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import type { Severity } from "../api/types";
 import DeviceTable from "../components/DeviceTable";
+import JobPanel from "../components/JobPanel";
 import QueryError from "../components/QueryError";
 import { SEVERITY_LABEL } from "../lib/format";
 
@@ -24,7 +25,9 @@ export default function DashboardPage() {
     return (
       <>
         <h1>ダッシュボード</h1>
-        <p className="subtitle">まだ機器がありません。どれか1つから始められます。</p>
+        <p className="subtitle">
+          まだ機器がありません。どれか1つから始められます。
+        </p>
         <div className="empty empty-start">
           <p>Config か台帳を取り込むと、図も期限もそこから育ちます。</p>
           <div className="actions" style={{ justifyContent: "center" }}>
@@ -39,6 +42,7 @@ export default function DashboardPage() {
             </Link>
           </div>
         </div>
+        <JobPanel />
       </>
     );
   }
@@ -46,7 +50,9 @@ export default function DashboardPage() {
   return (
     <>
       <h1>ダッシュボード</h1>
-      <p className="subtitle">保守期限とサポート終了（EoL）の状況を一覧します。</p>
+      <p className="subtitle">
+        保守期限とサポート終了（EoL）の状況を一覧します。
+      </p>
 
       <div className="cards">
         <div className="card">
@@ -69,11 +75,16 @@ export default function DashboardPage() {
             </div>
           </div>
         ))}
-        <div className="card clickable" onClick={() => navigate("/devices?severity=unknown")}>
+        <div
+          className="card clickable"
+          onClick={() => navigate("/devices?severity=unknown")}
+        >
           <div className="label">ライフサイクル情報未登録</div>
           <div className="value">{data.devices_without_lifecycle_data}</div>
         </div>
       </div>
+
+      <JobPanel />
 
       <h2>期限が近い機器</h2>
       {data.upcoming.length === 0 ? (

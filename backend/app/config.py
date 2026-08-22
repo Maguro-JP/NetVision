@@ -81,6 +81,9 @@ class Settings(BaseSettings):
     llm_profiles: str | None = None
     # 外の事業者へ出してよいか。既定は閉域なので不可。人が明示したときだけ許す
     llm_allow_external: bool = False
+    # 出してよい宛先（カンマ区切り）。並べると、そこ以外へは出さない。
+    # 「外向き可」を1つ立てただけで、どこへでも送れる状態にしないため
+    llm_allowed_hosts: str | None = None
 
 
 settings = Settings()

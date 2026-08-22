@@ -19,6 +19,7 @@ Config を先に取り込んだ場合の扱い（configs.adopt_orphan_snapshots�
 from __future__ import annotations
 
 import io
+from collections.abc import Callable
 from dataclasses import dataclass, field
 
 from openpyxl import Workbook
@@ -29,6 +30,9 @@ from app.models import Device, PendingLink
 from app.models.topology import LinkOrigin
 from app.services.configparse import normalize, normalize_hostname
 from app.services.tablefile import read_table
+
+#: 経過を知らせる間隔
+_PROGRESS_STEP = 500
 
 #: ひな形の列。表の見出しはこの順で出す
 COLUMNS = ("機器A", "ポートA", "機器B", "ポートB", "備考")
@@ -164,10 +168,25 @@ def _map_columns(headers: list[str]) -> tuple[dict[str, str], list[str]]:
 
 
 def run_import(
-    db: Session, filename: str, content: bytes, *, commit: bool = False
+    db: Session,
+    filename: str,
+    content: bytes,
+    *,
+    commit: bool = False,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> LinkImportResult:
-    """結線表を取り込む。commit=False なら中身を見るだけで DB は変えない。"""
+    """結線表を取り込む。commit=False なら中身を見るだけで DB は変えない。
+
+    `on_progress` を渡すと、区切りごとに（済んだ行数, 全行数, いま何をして
+    いるか）で呼ぶ。裏で走らせるときに経過を見せるために使う。
+    """
     table = read_table(filename, content)
+
+    def progress(done: int, note: str) -> None:
+        if on_progress is not None:
+            on_progress(done, len(table.rows), note)
+
+    progress(0, "列の対応を見ています")
     mapping, unmapped = _map_columns(table.headers)
     result = LinkImportResult(total_rows=len(table.rows), unmapped_columns=unmapped)
 
@@ -191,6 +210,8 @@ def run_import(
     devices = _device_lookup(db)
 
     for index, raw in enumerate(table.rows, start=2):
+        if index % _PROGRESS_STEP == 0:
+            progress(index - 1, "1行ずつ見ています")
         values = {mapping[h]: str(raw.get(h) or "").strip() for h in mapping}
         a_host, b_host = values.get("a_hostname", ""), values.get("b_hostname", "")
         a_port, b_port = values.get("a_interface", ""), values.get("b_interface", "")

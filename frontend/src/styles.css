@@ -153,13 +153,50 @@ a:hover {
 }
 
 .brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   font-size: 20px;
   font-weight: 700;
-  padding: 0 20px 20px;
+  padding: 0 16px 20px 20px;
   letter-spacing: 0.5px;
 }
-.brand span {
+.brand-name span {
   color: var(--accent);
+}
+/* 設定はロゴの隣。毎日押すものではないので、字は出さず歯車だけにする */
+.brand-settings {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  color: var(--muted);
+  font-size: 16px;
+}
+.brand-settings:hover {
+  background: var(--panel-2);
+  color: var(--text);
+  text-decoration: none;
+}
+.brand-settings.active {
+  background: var(--panel-2);
+  color: var(--accent);
+}
+
+/* メニューを隠しているときだけ、上の行に名前を出す */
+.topbar-brand {
+  display: none;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.topbar-brand span {
+  color: var(--accent);
+}
+.layout.collapsed .topbar-brand {
+  display: inline;
 }
 
 .nav a {
@@ -344,13 +381,6 @@ td.wrap {
   margin-left: 0;
   padding: 20px 24px;
 }
-/* 設定はメニューの一番下。上の並びと切り離して置く */
-.nav-settings {
-  margin-top: auto;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
 .toolbar {
   display: flex;
   gap: 8px;
@@ -1468,4 +1498,9 @@ a.button.export-save:focus-visible {
 .export-window .export-rows {
   flex: 1;
   overflow: auto;
+}
+
+/* 取り込みの下見で、変わるところだけを目立たせる。変わらない行は静かなまま */
+.import-change {
+  color: var(--sev-warning);
 }

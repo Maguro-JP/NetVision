@@ -76,3 +76,38 @@ def test_the_model_can_be_switched_off(monkeypatch, tmp_path):
     assert llm.configured() is False
     assert llm.ask("こんにちは") is None
     assert llm.status()["enabled"] is False
+
+
+def test_the_reason_is_shown_when_it_cannot_be_used(monkeypatch, tmp_path):
+    """使えないときは理由を返す。
+
+    「設定が足りません」だけでは、何を直せばいいのか分からない。
+    ライブラリが無いのか、切ってあるのかで、やることが違う。
+    """
+    monkeypatch.setenv(llm_inproc.MODEL_DIR_ENV, str(tmp_path))
+    (tmp_path / "qwen3-8b-q4_k_m.gguf").write_bytes(b"dummy")
+    monkeypatch.setattr(llm_inproc, "runtime_ready", lambda: False)
+
+    inside = [row for row in llm.status()["models"] if row["endpoint"] == "アプリの中"]
+    assert inside
+    assert all("ライブラリ" in row["note"] for row in inside)
+
+
+def test_it_can_be_switched_from_the_screen(client, tmp_path, monkeypatch):
+    """画面のボタンで切り替えられること。
+
+    環境変数だと起動し直しになる。試している最中に何度も切り替えたいので、
+    その場で効いて、次の起動でも残る形にする。
+    """
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "documents"))
+
+    off = client.post("/api/v1/llm/enabled", json={"enabled": False})
+    assert off.status_code == 200
+    assert off.json()["enabled"] is False
+    assert llm.enabled() is False
+
+    on = client.post("/api/v1/llm/enabled", json={"enabled": True})
+    assert on.json()["enabled"] is True
+    assert llm.enabled() is True

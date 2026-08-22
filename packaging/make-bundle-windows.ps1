@@ -92,10 +92,9 @@ Copy-Item (Join-Path $Repo "backend\scripts") (Join-Path $Stage "backend\scripts
 Copy-Item (Join-Path $Repo "backend\alembic") (Join-Path $Stage "backend\alembic") -Recurse
 Copy-Item (Join-Path $Repo "backend\alembic.ini") (Join-Path $Stage "backend\alembic.ini")
 Copy-Item $dist (Join-Path $Stage "frontend\dist") -Recurse
-foreach ($doc in "INSTALL.md", "OPERATIONS.md", "WINDOWS_BEGINNER.md") {
-    $path = Join-Path $Repo "docs\$doc"
-    if (Test-Path $path) { Copy-Item $path (Join-Path $Stage "docs") }
-}
+# 手引きは丸ごと持ち込む。個別に並べていると、新しく書いたものが入らない
+# （実際に LOCAL_LLM.md が抜けた）
+Copy-Item (Join-Path $Repo "docs\*.md") (Join-Path $Stage "docs")
 Get-ChildItem $Stage -Recurse -Directory -Filter "__pycache__" |
     Remove-Item -Recurse -Force -ErrorAction SilentlyContinue
 
@@ -214,6 +213,21 @@ $diagCrlf = ($diag -replace "`r`n", "`n") -replace "`n", "`r`n"
     (Join-Path $Stage "NetVision-window.bat"),
     [Text.Encoding]::GetEncoding(932).GetBytes($diagCrlf))
 
+$mcp = @'
+@echo off
+rem NetVision を、AI から呼べる道具として立ち上げます。
+rem 画面は出ません。AI の側の設定から呼ばれて動きます（docs/MCP.md）。
+setlocal
+cd /d "%~dp0"
+set NETVISION_DATA_DIR=
+set PYTHONDONTWRITEBYTECODE=1
+"%~dp0python\python.exe" -m app.mcp_server
+'@
+$mcpCrlf = ($mcp -replace "`r`n", "`n") -replace "`n", "`r`n"
+[IO.File]::WriteAllBytes(
+    (Join-Path $Stage "NetVision-mcp.bat"),
+    [Text.Encoding]::GetEncoding(932).GetBytes($mcpCrlf))
+
 $readme = @"
 NetVision （インストール不要版）
 ====================================
@@ -257,6 +271,12 @@ NetVision （インストール不要版）
   同期される場所に DB を置く場合は、書いている最中に同期へ持っていかれると
   壊れることがあるので、データフォルダのコピーをこまめに取ってください。
 
+■ AI から台帳を引かせたいとき（任意）
+
+  「NetVision-mcp.bat」は、AI の側から NetVision を道具として呼ぶための口です。
+  読むだけで、台帳は書き換わりません。使い方は docs\MCP.md にあります。
+  普段の利用では使いません。
+
 ■ 黒い画面を出したくないとき
 
   「NetVision-window.bat」を使ってください。小さな窓が1つ出るだけになり、
@@ -284,7 +304,7 @@ NetVision （インストール不要版）
   lib\       このアプリが使うライブラリ
   backend\   アプリ本体
   frontend\  画面
-  docs\      導入手順書・運用手順書
+  docs\      手引き（導入・運用・AI の使い方など）
 
 版数: $Version
 "@

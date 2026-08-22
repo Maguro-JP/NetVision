@@ -52,7 +52,7 @@ import urllib.request
 from dataclasses import dataclass
 
 from app.config import settings
-from app.services import llm_inproc
+from app.services import appsettings, llm_audit, llm_inproc, llm_safety
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +74,8 @@ class Profile:
     url: str
     model: str
     api_key: str | None = None
+    #: 事業者の作法。OpenAI 互換なら "openai"。増やすときは _PROVIDERS に足す
+    provider: str = "openai"
 
     @property
     def local(self) -> bool:
@@ -81,7 +83,13 @@ class Profile:
 
     @property
     def usable(self) -> bool:
-        return bool(self.url and self.model) and (self.local or settings.llm_allow_external)
+        if not (self.url and self.model):
+            return False
+        if self.provider not in _PROVIDERS:
+            return False
+        if self.local:
+            return True
+        return settings.llm_allow_external and host_allowed(self.url)
 
 
 def profiles() -> list[Profile]:
@@ -99,6 +107,7 @@ def profiles() -> list[Profile]:
                 url=str(item.get("url") or ""),
                 model=str(item.get("model") or ""),
                 api_key=item.get("api_key") or settings.llm_api_key,
+                provider=str(item.get("provider") or "openai"),
             )
             for item in items
             if isinstance(item, dict)
@@ -120,13 +129,27 @@ def profiles() -> list[Profile]:
     return []
 
 
+#: 画面から切り替えたときの保存先の名前
+ENABLED_KEY = "llm_enabled"
+
+
 def enabled() -> bool:
     """モデルを使う設定になっているか。
 
     置いてあっても切れるようにしておく。規則ベースだけのときと見比べたい、
     遅いので一時的に止めたい、という場面が必ず来る。
+
+    画面で決めたことが勝つ。環境変数は初期値として扱う。
     """
+    chosen = appsettings.get(ENABLED_KEY)
+    if isinstance(chosen, bool):
+        return chosen
     return bool(settings.llm_enabled)
+
+
+def set_enabled(value: bool) -> None:
+    """画面からの切り替え。次の起動でも残る。"""
+    appsettings.set_value(ENABLED_KEY, bool(value))
 
 
 def pick(role: str = QUICK) -> Profile | None:
@@ -162,14 +185,20 @@ def status() -> dict[str, object]:
     """画面に出す状態。鍵そのものは返さない。"""
     items = profiles()
     on = enabled()
+    ready = llm_inproc.runtime_ready()
     inside = [
         {
             "role": role,
             "model": path.stem,
             "endpoint": "アプリの中",
             "local": True,
-            "usable": on and llm_inproc.runtime_ready(),
+            "usable": on and ready,
             "blocked_external": False,
+            # 使えない理由。「設定が足りません」だけでは、何を直せばいいのか
+            # 分からない
+            "note": ""
+            if on and ready
+            else ("使わない設定です" if not on else "モデルを読むライブラリが入っていません"),
         }
         for role in (QUICK, DEEP)
         if (path := llm_inproc.pick_file(role)) is not None
@@ -188,40 +217,44 @@ def status() -> dict[str, object]:
                 "blocked_external": bool(item.url)
                 and not item.local
                 and not settings.llm_allow_external,
+                "note": ""
+                if on and item.usable
+                else (
+                    "使わない設定です"
+                    if not on
+                    else (
+                        "外向きの宛先なので止めています"
+                        if bool(item.url) and not item.local
+                        else "宛先かモデル名が空です"
+                    )
+                ),
             }
             for item in items
         ],
     }
 
 
-def ask(
-    prompt: str,
-    *,
-    system: str | None = None,
-    role: str = QUICK,
-    temperature: float = 0.1,
-) -> Answer | None:
-    """1問1答。使えないときは None を返し、呼び出し側は規則ベースへ落ちる。
+def host_allowed(url: str) -> bool:
+    """外へ出してよい宛先か。
 
-    例外は投げない。モデルが落ちていても、道具そのものは動き続ける必要がある。
+    「外向き可」を1つ立てただけで、どこへでも送れる状態にはしない。
+    許可した宛先を並べてあるときは、そこ以外へは出さない。並べていなければ、
+    従来どおり「外向き可」の判断だけで通す。
     """
-    profile = pick(role)
-    if profile is None:
-        # 宛先が無いときは、アプリの中で動かせるかを見る。端末に新しいソフトを
-        # 入れられない職場では、こちらだけが使える道になる
-        if not enabled():
-            return None
-        inside = llm_inproc.ask(prompt, system=system, role=role, temperature=temperature)
-        if inside is None:
-            return None
-        text, name = inside
-        return Answer(text=text, model=name, role=role)
+    allowed = [item.strip().lower() for item in (settings.llm_allowed_hosts or "").split(",")]
+    allowed = [item for item in allowed if item]
+    if not allowed:
+        return True
+    host = (urllib.parse.urlparse(url).hostname or "").lower()
+    return any(host == item or host.endswith("." + item) for item in allowed)
 
-    messages = []
-    if system:
-        messages.append({"role": "system", "content": system})
-    messages.append({"role": "user", "content": prompt})
 
+def _ask_openai(profile: Profile, messages: list[dict], temperature: float) -> str | None:
+    """OpenAI 互換の作法（/chat/completions に鍵を付けて POST）。
+
+    事業者が独自の作法を持つ場合は、同じ形の関数を足して _PROVIDERS に載せる。
+    呼び出し側は変えなくてよい。
+    """
     body = json.dumps(
         {
             "model": profile.model,
@@ -247,12 +280,75 @@ def ask(
         return None
 
     try:
-        text = payload["choices"][0]["message"]["content"]
+        return str(payload["choices"][0]["message"]["content"])
     except (KeyError, IndexError, TypeError):
         logger.warning("モデルの返事を読めませんでした。規則ベースで続けます")
         return None
-    return Answer(
-        text=str(text).strip(),
-        model=str(payload.get("model") or profile.model),
-        role=profile.role,
+
+
+#: 事業者ごとの作法。増やすときはここに足すだけで、呼び出し側は変えない
+_PROVIDERS: dict[str, object] = {"openai": _ask_openai}
+
+
+def providers() -> list[str]:
+    """使える作法の一覧。画面の案内に使う。"""
+    return sorted(_PROVIDERS)
+
+
+def ask(
+    prompt: str,
+    *,
+    system: str | None = None,
+    role: str = QUICK,
+    temperature: float = 0.1,
+) -> Answer | None:
+    """1問1答。使えないときは None を返し、呼び出し側は規則ベースへ落ちる。
+
+    例外は投げない。モデルが落ちていても、道具そのものは動き続ける必要がある。
+
+    外へ出す宛先のときは、送る前に伏せる（管理IP・鍵・コミュニティ名）。
+    手元やアプリの中で動かすときは伏せない。伏せると答えが役に立たなくなるし、
+    そもそも外へ出ていないため。
+    """
+    profile = pick(role)
+    if profile is None:
+        # 宛先が無いときは、アプリの中で動かせるかを見る。端末に新しいソフトを
+        # 入れられない職場では、こちらだけが使える道になる
+        if not enabled():
+            return None
+        inside = llm_inproc.ask(prompt, system=system, role=role, temperature=temperature)
+        if inside is None:
+            return None
+        text, name = inside
+        return Answer(text=text, model=name, role=role)
+
+    sent = prompt
+    hidden: dict[str, int] = {}
+    if not profile.local:
+        result = llm_safety.mask(prompt)
+        sent, hidden = result.text, result.counts
+
+    messages = []
+    if system:
+        messages.append({"role": "system", "content": system})
+    messages.append({"role": "user", "content": sent})
+
+    handler = _PROVIDERS.get(profile.provider)
+    if handler is None:
+        logger.warning("知らない作法です（%s）。規則ベースで続けます", profile.provider)
+        return None
+
+    text = handler(profile, messages, temperature)  # type: ignore[operator]
+    llm_audit.record(
+        role=role,
+        provider=profile.provider,
+        url=profile.url,
+        model=profile.model,
+        local=profile.local,
+        sent_chars=len(sent),
+        masked=hidden,
+        answered=text is not None,
     )
+    if text is None:
+        return None
+    return Answer(text=text.strip(), model=profile.model, role=profile.role)

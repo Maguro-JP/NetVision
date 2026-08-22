@@ -3,6 +3,9 @@ import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 
 import { api } from "../api/client";
+import AdditionPlanner from "../components/AdditionPlanner";
+import ConfigEditor from "../components/ConfigEditor";
+import L3Panel from "../components/L3Panel";
 import type { MaintenanceContract } from "../api/types";
 import ConfigDropZone from "../components/ConfigDropZone";
 import ChangeLogTable from "../components/ChangeLogTable";
@@ -269,6 +272,10 @@ export default function DeviceDetailPage() {
                 </div>
               )}
               <pre className="config-preview">{designConfig.data.body}</pre>
+              <details className="card" style={{ marginTop: 12 }}>
+                <summary>選んだところを直してもらう</summary>
+                <ConfigEditor body={designConfig.data.body} title="" />
+              </details>
               <p className="muted">
                 そのまま投入せず、内容を確認してください。計画として残す場合は
                 <Link to="/config-plans"> Config計画</Link>
@@ -278,6 +285,10 @@ export default function DeviceDetailPage() {
           )}
         </>
       )}
+
+      <L3Panel deviceId={device.id} />
+
+      <AdditionPlanner deviceId={device.id} />
 
       <h2>ポート</h2>
       <ConfigDropZone deviceId={deviceId} hostname={device.hostname} />

@@ -24,8 +24,8 @@ from app.schemas.reference import (
     VulnerabilityRead,
     VulnerabilitySummary,
 )
+from app.services import appsettings, versions
 from app.services import reference as service
-from app.services import versions
 from app.services.device_query import DeviceFilters, query_devices
 from app.services.tablefile import TableFileError, read_table
 
@@ -34,6 +34,11 @@ router = APIRouter(prefix="/reference", tags=["reference"])
 DbSession = Annotated[Session, Depends(get_db)]
 
 MAX_UPLOAD_BYTES = 50 * 1024 * 1024
+
+
+def _stale_days() -> int:
+    """リファレンスが古いと見なす日数。画面で決めた値を優先する。"""
+    return appsettings.number("reference_stale_days", settings.reference_stale_days)
 
 
 def _device_counts(db: Session) -> dict[tuple[str, str], int]:
@@ -66,7 +71,7 @@ def _to_product_read(
             (versions.normalize_name(product.vendor), versions.normalize_name(product.model)), 0
         ),
         age_days=age,
-        stale=age is None or age > settings.reference_stale_days,
+        stale=age is None or age > _stale_days(),
     )
 
 
@@ -338,7 +343,7 @@ def freshness(db: DbSession) -> ReferenceFreshness:
     運用者が意識できるようにしておく必要がある。
     """
     today = date.today()
-    threshold = today - timedelta(days=settings.reference_stale_days)
+    threshold = today - timedelta(days=_stale_days())
 
     products = list(db.scalars(select(ProductReference)))
     vulnerabilities = list(db.scalars(select(Vulnerability)))
@@ -375,7 +380,7 @@ def freshness(db: DbSession) -> ReferenceFreshness:
             1 for v in vulnerabilities if v.fetched_at is None or v.fetched_at < threshold
         ),
         oldest_vulnerability_fetch=min(vulnerability_dates) if vulnerability_dates else None,
-        stale_after_days=settings.reference_stale_days,
+        stale_after_days=_stale_days(),
         devices_total=len(devices),
         devices_with_product_reference=len(covered),
         devices_without_reference=uncovered,

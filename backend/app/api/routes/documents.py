@@ -5,7 +5,7 @@ from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -506,3 +506,77 @@ def create_template_from_document(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "その下書きはありません")
 
     return _to_template_read(template_from_docs.save(db, drafts[payload.index]))
+
+
+# ---------------------------------------------------------------------------
+# いま動いている Config からテンプレートを起こす
+# ---------------------------------------------------------------------------
+
+
+class ConfigTemplateDraftRead(BaseModel):
+    name: str
+    vendor: str
+    body: str
+    variables: list[dict]
+    devices_seen: int
+    hostnames: list[str]
+    notes: list[str]
+    skipped: int
+
+
+class FromConfigRequest(BaseModel):
+    vendor: str | None = None
+    hostname_prefix: str | None = Field(
+        default=None, description="同じ役割の機器に絞る（例: hq-sw-）"
+    )
+    name: str | None = None
+
+
+@router.post("/config-templates/from-config", response_model=ConfigTemplateDraftRead)
+def draft_template_from_config(payload: FromConfigRequest, db: DbSession):
+    """似た機器の Config を重ねて、テンプレートの下書きを作る。
+
+    同じ役割の機器の Config は、たいてい8割が同じ。その共通部分がその現場の
+    テンプレートになる。人が最初から書くより、いま動いているものから起こす
+    ほうが早く、少なくとも動く形にはなっている。
+    """
+    from app.services import template_from_config
+
+    drafted = template_from_config.draft(
+        db, vendor=payload.vendor, hostname_prefix=payload.hostname_prefix
+    )
+    if drafted is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "重ねられる Config が足りません。同じ役割の機器を2台ぶん以上取り込んでください。",
+        )
+    return ConfigTemplateDraftRead(
+        name=payload.name or drafted.name,
+        vendor=drafted.vendor,
+        body=drafted.body,
+        variables=drafted.variables,
+        devices_seen=drafted.devices_seen,
+        hostnames=drafted.hostnames,
+        notes=drafted.notes,
+        skipped=len(drafted.skipped),
+    )
+
+
+@router.post(
+    "/config-templates/from-config/save",
+    response_model=ConfigTemplateRead,
+    status_code=status.HTTP_201_CREATED,
+)
+def save_template_from_config(payload: FromConfigRequest, db: DbSession) -> ConfigTemplateRead:
+    """起こした下書きを、テンプレートとして登録する。"""
+    from app.services import template_from_config
+
+    drafted = template_from_config.draft(
+        db, vendor=payload.vendor, hostname_prefix=payload.hostname_prefix
+    )
+    if drafted is None:
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            "重ねられる Config が足りません。同じ役割の機器を2台ぶん以上取り込んでください。",
+        )
+    return _to_template_read(template_from_config.save(db, drafted, name=payload.name))

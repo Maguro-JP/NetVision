@@ -28,6 +28,7 @@ from app.config import settings
 from app.models import Device, DeviceStatus, DeviceType, Site
 from app.models.maintenance import MaintenanceContract
 from app.models.reference import ProductReference
+from app.services import appsettings
 from app.services.lifecycle import Severity
 
 # 一覧の探す欄で日本語の呼び名でも当たるようにする。画面の表示名と同じ語。
@@ -85,7 +86,14 @@ class DeviceFilters:
 
 
 def _like(value: str) -> str:
-    return f"%{value}%"
+    """部分一致の形にする。
+
+    `%` と `_` は「何にでも当たる」記号なので、そのまま渡すと打った文字と
+    違うものに当たる。実際、`%` だけで全件が出ていた。打った文字として
+    扱うためにエスケープする（`ilike(..., escape="\\")` と対で使う）。
+    """
+    escaped = value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
 
 
 def _enums_matching(needle: str, mapping: dict) -> list:
@@ -103,8 +111,16 @@ def _rank_of(column, today: date):
     return case(
         (column.is_(None), Severity.UNKNOWN.rank),
         (column < today, Severity.EXPIRED.rank),
-        (column <= today + timedelta(days=settings.critical_days), Severity.CRITICAL.rank),
-        (column <= today + timedelta(days=settings.warning_days), Severity.WARNING.rank),
+        (
+            column
+            <= today + timedelta(days=appsettings.number("critical_days", settings.critical_days)),
+            Severity.CRITICAL.rank,
+        ),
+        (
+            column
+            <= today + timedelta(days=appsettings.number("warning_days", settings.warning_days)),
+            Severity.WARNING.rank,
+        ),
         else_=Severity.OK.rank,
     )
 
@@ -158,6 +174,46 @@ def _overall_rank(today: date):
     return case((Device.status == DeviceStatus.RETIRED, Severity.OK.rank), else_=worse)
 
 
+def _text_match(word: str, today: date | None):
+    """探す語1つが、どこかの項目に当たるか。
+
+    項目ごとに OR で並べる。語が複数あるときは、この結果を AND で重ねる。
+    """
+    like = _like(word)
+    hits = [
+        Device.hostname.ilike(like, escape="\\"),
+        Device.code.ilike(like, escape="\\"),
+        Device.label.ilike(like, escape="\\"),
+        Device.vendor.ilike(like, escape="\\"),
+        Device.model.ilike(like, escape="\\"),
+        Device.serial_number.ilike(like, escape="\\"),
+        Device.os_name.ilike(like, escape="\\"),
+        Device.os_version.ilike(like, escape="\\"),
+        Device.firmware_version.ilike(like, escape="\\"),
+        Device.rack.ilike(like, escape="\\"),
+        Device.rack_unit.ilike(like, escape="\\"),
+        Device.mgmt_ip.ilike(like, escape="\\"),
+        Device.notes.ilike(like, escape="\\"),
+        Site.name.ilike(like, escape="\\"),
+        Site.code.ilike(like, escape="\\"),
+        Site.address.ilike(like, escape="\\"),
+        cast(Device.install_date, String).ilike(like, escape="\\"),
+        cast(Device.eos_date, String).ilike(like, escape="\\"),
+        cast(Device.eol_date, String).ilike(like, escape="\\"),
+        cast(_maintenance_end_expr(), String).ilike(like, escape="\\"),
+    ]
+    type_hits = _enums_matching(word, _DEVICE_TYPE_SEARCH)
+    if type_hits:
+        hits.append(Device.device_type.in_(type_hits))
+    status_hits = _enums_matching(word, _DEVICE_STATUS_SEARCH)
+    if status_hits:
+        hits.append(Device.status.in_(status_hits))
+    severity_hits = _enums_matching(word, _SEVERITY_SEARCH)
+    if severity_hits:
+        hits.append(_overall_rank(today or date.today()).in_([s.rank for s in severity_hits]))
+    return or_(*hits)
+
+
 def build_query(filters: DeviceFilters, *, today: date | None = None) -> Select:
     """条件だけを組み立てる（並べ替えや件数の切り出しは呼ぶ側で）。"""
     stmt = select(Device)
@@ -168,68 +224,45 @@ def build_query(filters: DeviceFilters, *, today: date | None = None) -> Select:
         stmt = stmt.outerjoin(Site, Device.site_id == Site.id)
 
     if filters.q:
-        like = _like(filters.q)
-        text_hits = [
-            Device.hostname.ilike(like),
-            Device.code.ilike(like),
-            Device.vendor.ilike(like),
-            Device.model.ilike(like),
-            Device.serial_number.ilike(like),
-            Device.os_name.ilike(like),
-            Device.os_version.ilike(like),
-            Device.firmware_version.ilike(like),
-            Device.rack.ilike(like),
-            Device.rack_unit.ilike(like),
-            Device.mgmt_ip.ilike(like),
-            Device.notes.ilike(like),
-            Site.name.ilike(like),
-            Site.code.ilike(like),
-            Site.address.ilike(like),
-            cast(Device.install_date, String).ilike(like),
-            cast(Device.eos_date, String).ilike(like),
-            cast(Device.eol_date, String).ilike(like),
-            cast(_maintenance_end_expr(), String).ilike(like),
-        ]
-        type_hits = _enums_matching(filters.q, _DEVICE_TYPE_SEARCH)
-        if type_hits:
-            text_hits.append(Device.device_type.in_(type_hits))
-        status_hits = _enums_matching(filters.q, _DEVICE_STATUS_SEARCH)
-        if status_hits:
-            text_hits.append(Device.status.in_(status_hits))
-        severity_hits = _enums_matching(filters.q, _SEVERITY_SEARCH)
-        if severity_hits:
-            ranks = [s.rank for s in severity_hits]
-            text_hits.append(_overall_rank(today or date.today()).in_(ranks))
-        stmt = stmt.where(or_(*text_hits))
+        # 空白で区切った語は、すべて当たるものだけを出す（AND）。
+        # 「拠点名 機種」のように2語で打つと、以前は0件になっていた
+        words = [word for word in filters.q.split() if word] or [filters.q]
+        for word in words:
+            stmt = stmt.where(_text_match(word, today))
 
     # 列フィルターはすべて部分一致。Excel で値の一部を打って絞るのと同じ
     if filters.hostname:
-        stmt = stmt.where(Device.hostname.ilike(_like(filters.hostname)))
+        stmt = stmt.where(Device.hostname.ilike(_like(filters.hostname), escape="\\"))
     if filters.vendor:
-        stmt = stmt.where(Device.vendor.ilike(_like(filters.vendor)))
+        stmt = stmt.where(Device.vendor.ilike(_like(filters.vendor), escape="\\"))
     if filters.model:
-        stmt = stmt.where(Device.model.ilike(_like(filters.model)))
+        stmt = stmt.where(Device.model.ilike(_like(filters.model), escape="\\"))
     if filters.serial_number:
-        stmt = stmt.where(Device.serial_number.ilike(_like(filters.serial_number)))
+        stmt = stmt.where(Device.serial_number.ilike(_like(filters.serial_number), escape="\\"))
     if filters.os_version:
-        stmt = stmt.where(Device.os_version.ilike(_like(filters.os_version)))
+        stmt = stmt.where(Device.os_version.ilike(_like(filters.os_version), escape="\\"))
     if filters.mgmt_ip:
-        stmt = stmt.where(Device.mgmt_ip.ilike(_like(filters.mgmt_ip)))
+        stmt = stmt.where(Device.mgmt_ip.ilike(_like(filters.mgmt_ip), escape="\\"))
     if filters.rack:
         stmt = stmt.where(
-            or_(Device.rack.ilike(_like(filters.rack)), Device.rack_unit.ilike(_like(filters.rack)))
+            or_(
+                Device.rack.ilike(_like(filters.rack), escape="\\"),
+                Device.rack_unit.ilike(_like(filters.rack), escape="\\"),
+            )
         )
     if filters.notes:
-        stmt = stmt.where(Device.notes.ilike(_like(filters.notes)))
+        stmt = stmt.where(Device.notes.ilike(_like(filters.notes), escape="\\"))
     if filters.product:
         like = _like(filters.product)
         stmt = stmt.where(or_(Device.vendor.ilike(like), Device.model.ilike(like)))
     if filters.site_name:
-        stmt = stmt.where(Site.name.ilike(_like(filters.site_name)))
+        stmt = stmt.where(Site.name.ilike(_like(filters.site_name), escape="\\"))
     if filters.maintenance:
-        stmt = stmt.where(cast(_maintenance_end_expr(), String).ilike(_like(filters.maintenance)))
+        stmt = stmt.where(
+            cast(_maintenance_end_expr(), String).ilike(_like(filters.maintenance), escape="\\")
+        )
     if filters.eol:
-        stmt = stmt.where(cast(_eol_expr(), String).ilike(_like(filters.eol)))
+        stmt = stmt.where(cast(_eol_expr(), String).ilike(_like(filters.eol), escape="\\"))
 
     if filters.device_type:
         stmt = stmt.where(Device.device_type == filters.device_type)
@@ -283,6 +316,24 @@ def query_devices(
     if limit is not None:
         stmt = stmt.limit(limit)
     return list(db.scalars(stmt))
+
+
+def stream_devices(
+    db: Session, filters: DeviceFilters, *, today: date | None = None, chunk: int = 2000
+):
+    """条件に合う機器を、少しずつ流す。
+
+    書き出しは全件が要る。16万台を一度に組み立てると、最初の1行が出るまで
+    何十秒もかかり、押しても反応が無いように見える。塊で読んで、読んだ分から
+    順に渡す。
+    """
+    stmt = (
+        build_query(filters, today=today)
+        .options(selectinload(Device.contracts), selectinload(Device.site))
+        .order_by(Device.hostname)
+        .execution_options(yield_per=chunk)
+    )
+    yield from db.scalars(stmt)
 
 
 def iter_devices(

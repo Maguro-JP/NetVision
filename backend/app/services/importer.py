@@ -13,6 +13,7 @@ from __future__ import annotations
 import enum
 import re
 import unicodedata
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
@@ -503,6 +504,16 @@ class RowIssue:
 
 
 @dataclass
+class FieldChange:
+    """1つの項目が、いまの値から何に変わるか。"""
+
+    field: str
+    label: str
+    before: str
+    after: str
+
+
+@dataclass
 class RowResult:
     row_number: int  # ヘッダを1行目としたときの行番号
     key: str
@@ -510,11 +521,15 @@ class RowResult:
     issues: list[RowIssue] = field(default_factory=list)
     device_id: int | None = None
     contract_added: bool = False
+    #: 既存の機器を直す行で、実際に変わる項目だけ。変わらない行は空
+    changes: list[FieldChange] = field(default_factory=list)
 
 
 #: 行ごとの結果を返す上限。件数・内訳は全件から出すが、中身を全部返すと
 #: 16万行で応答が数十MBになり、画面側が固まる。エラー行を優先して残す
 _ROW_SAMPLE = 200
+#: 経過を知らせる間隔。細かすぎると取り込みそのものが遅くなる
+_PROGRESS_STEP = 500
 
 
 @dataclass
@@ -610,6 +625,7 @@ def run_import(
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ImportOutcome:
     """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
@@ -617,6 +633,9 @@ def run_import(
 
     `keep_rows` は返す行結果の上限。件数や内訳は全件から出す。エラー行の
     CSV 書き出しなど、全行が必要な呼び出しでは None を渡す。
+
+    `on_progress` を渡すと、区切りごとに（済んだ行数, 全行数, いま何をして
+    いるか）で呼ぶ。裏で走らせるときに、画面へ経過を見せるために使う。
     """
     with audit_context(ChangeSource.IMPORT, note="台帳の取り込み"):
         return _run_import(
@@ -628,6 +647,7 @@ def run_import(
             update_existing=update_existing,
             commit=commit,
             keep_rows=keep_rows,
+            on_progress=on_progress,
         )
 
 
@@ -641,7 +661,15 @@ def _run_import(
     update_existing: bool = True,
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
+    on_progress: Callable[[int, int, str], None] | None = None,
 ) -> ImportOutcome:
+    total_rows = len(table_rows)
+
+    def progress(done: int, note: str) -> None:
+        if on_progress is not None:
+            on_progress(done, total_rows, note)
+
+    progress(0, "列の対応を見ています")
     mapping = detect_mapping(table_headers)
     for column, target in (mapping_override or {}).items():
         if target:
@@ -675,9 +703,12 @@ def _run_import(
 
     # 行の変換は1回だけやる。以前は既存引きのたびにやり直しており、
     # 日付列がある台帳では行数の数倍だけ strptime が走っていた
+    progress(0, "行を読み取っています")
     extracted: list[tuple[dict[str, object], list[RowIssue]]] = [
         _extract(raw, mapping) for raw in table_rows
     ]
+
+    progress(0, "台帳の既存分を引いています")
 
     site_cache = {s.name: s for s in db.scalars(select(Site))}
     for site in list(site_cache.values()):
@@ -726,6 +757,8 @@ def _run_import(
     created = updated = skipped = errors = contracts_added = 0
 
     for index, (values, issues) in enumerate(extracted, start=2):
+        if index % _PROGRESS_STEP == 0:
+            progress(index - 1, "1行ずつ見ています")
         key_value = str(values.get(str(key_field)) or "").strip()
 
         # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
@@ -811,7 +844,14 @@ def _run_import(
                 results.append(result)
                 continue
 
+        # 既存を直す行は、変わる前の値を控える。どこが変わるのかを人が
+        # 見てから取り込めるようにするため（変わらない行は出さない）
+        before = _snapshot(device, values) if existing is not None else {}
+
         _apply_values(device, values, db, site_cache)
+
+        if existing is not None:
+            result.changes = _changes_between(before, _snapshot(device, values))
 
         if device.eos_date and device.eol_date and device.eol_date < device.eos_date:
             result.issues.append(
@@ -848,7 +888,16 @@ def _run_import(
 
         results.append(result)
 
-    if commit and errors == 0:
+    progress(total_rows, "台帳に書いています" if commit else "結果をまとめています")
+
+    if commit:
+        # 問題のある行だけを落とし、残りは取り込む。
+        #
+        # 以前は1行でも問題があれば全部を取り込まない作りだった。数十行の表なら
+        # それで直せるが、16万行の台帳では、重複が1組あるだけで丸ごと入らない。
+        # しかも「◯件 作成」と返るので、入ったように見えて実際は空、という
+        # いちばん困る形になっていた。
+        #
         # 確認だけなら、16万件を flush してから rollback する必要はない。
         # 件数と行結果はすでに揃っている。反映するときだけまとめて書く。
         if pending:
@@ -867,7 +916,7 @@ def _run_import(
         db.commit()
         committed = True
     else:
-        # プレビューやエラー時は、既存機器への途中変更を捨てる
+        # 下見のときは、既存機器への途中変更を捨てる
         db.rollback()
         committed = False
 
@@ -913,6 +962,45 @@ def _extract(
             issues.append(RowIssue(column=target, message=str(exc)))
 
     return values, issues
+
+
+def _snapshot(device: Device, values: dict[str, object]) -> dict[str, str]:
+    """その行が触る項目の、いまの値。"""
+    taken: dict[str, str] = {}
+    for name in values:
+        if name in {"site", "site_code"}:
+            site = getattr(device, "site", None)
+            taken["site"] = site.name if site is not None else ""
+            continue
+        if not hasattr(device, name):
+            continue
+        taken[name] = _as_text(getattr(device, name))
+    return taken
+
+
+def _as_text(value: object) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, enum.Enum):
+        return str(value.value)
+    return str(value)
+
+
+def _changes_between(before: dict[str, str], after: dict[str, str]) -> list[FieldChange]:
+    """変わった項目だけを並べる。順番は台帳の並びに合わせる。"""
+    order = list(FIELD_LABELS)
+    changed = [
+        FieldChange(
+            field=name,
+            label=FIELD_LABELS.get(name, name),
+            before=before.get(name, ""),
+            after=after.get(name, ""),
+        )
+        for name in after
+        if before.get(name, "") != after.get(name, "")
+    ]
+    changed.sort(key=lambda item: order.index(item.field) if item.field in order else len(order))
+    return changed
 
 
 def _flush_renames(db: Session, devices: list[Device]) -> None:

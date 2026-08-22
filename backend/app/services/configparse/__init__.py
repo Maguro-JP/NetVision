@@ -6,12 +6,20 @@
 
 from __future__ import annotations
 
-from app.services.configparse import cisco, fortinet, juniper, nec
+from app.services.configparse import cisco, features, fortinet, juniper, nec
 from app.services.configparse.base import (
+    FEATURE_LABELS,
     NeighborProtocol,
+    ParsedBgp,
+    ParsedBgpNeighbor,
     ParsedConfig,
+    ParsedFeature,
     ParsedInterface,
     ParsedNeighbor,
+    ParsedOspf,
+    ParsedOspfArea,
+    ParsedRedundancy,
+    ParsedRoute,
     ParsedVrf,
     Vendor,
 )
@@ -67,6 +75,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed.os_name = None
 
     _collect_referenced_vrfs(parsed)
+    # 機能の拾い出しはベンダーに依らない。どの経路で来ても最後に通す
+    parsed.features = features.parse(text)
     return parsed
 
 
@@ -83,10 +93,18 @@ def _collect_referenced_vrfs(parsed: ParsedConfig) -> None:
 
 
 __all__ = [
+    "FEATURE_LABELS",
     "NeighborProtocol",
+    "ParsedBgp",
+    "ParsedBgpNeighbor",
     "ParsedConfig",
+    "ParsedFeature",
     "ParsedInterface",
     "ParsedNeighbor",
+    "ParsedOspf",
+    "ParsedOspfArea",
+    "ParsedRedundancy",
+    "ParsedRoute",
     "ParsedVrf",
     "VENDOR_LABELS",
     "VENDOR_NAMES",

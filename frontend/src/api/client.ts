@@ -1,4 +1,19 @@
 import type {
+  AdditionPlan,
+  ConfigEdit,
+  AskBackAnswer,
+  ConfigCheck,
+  ConfigTemplateDraft,
+  HouseStyle,
+  AskResult,
+  GlossaryTerm,
+  LinkCandidate,
+  CapabilityIndex,
+  Blueprint,
+  BlueprintCondition,
+  TestSite,
+  L3Report,
+  AppSettings,
   ChangeLog,
   LinkImportResult,
   SiteImportResult,
@@ -18,6 +33,7 @@ import type {
   IngestResult,
   InsightReport,
   ImportResult,
+  Job,
   LlmStatus,
   MaintenanceContract,
   NetworkInterface,
@@ -389,6 +405,22 @@ export const api = {
     );
   },
 
+  /** 取り込みを裏で走らせる。番号だけ返るので、様子は job() で聞く。 */
+  importDevicesInBackground: (options: ImportOptions) => {
+    const form = new FormData();
+    form.append("file", options.file);
+    form.append("key_field", options.keyField);
+    form.append("update_existing", String(options.updateExisting));
+    if (options.mapping)
+      form.append("mapping", JSON.stringify(options.mapping));
+    return upload<Job>("/import/devices/async", form, IMPORT_TIMEOUT_MS);
+  },
+  importLinksInBackground: (file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<Job>("/import/links/async", form, IMPORT_TIMEOUT_MS);
+  },
+
   /** エラー行だけを抽出したCSVを取得する（Blob で受けてブラウザに保存させる）。 */
   importErrorsCsv: async (
     options: ImportOptions & { encoding?: "utf-8" | "shift_jis" },
@@ -476,8 +508,11 @@ export const api = {
   },
   listConfigs: (deviceId?: number) =>
     request<ConfigSnapshot[]>(`/configs${query({ device_id: deviceId })}`),
-  getConfig: (id: number) =>
-    request<ConfigSnapshot & { content: string }>(`/configs/${id}`),
+  /** 1世代ぶんの中身。既定ではパスワードなどを伏せて返る。 */
+  getConfig: (id: number, reveal = false) =>
+    request<ConfigSnapshot & { content: string; masked_note: string }>(
+      `/configs/${id}${reveal ? "?reveal=true" : ""}`,
+    ),
   diffConfig: (id: number, against?: number) =>
     request<ConfigDiff>(`/configs/${id}/diff${query({ against })}`),
   deleteConfig: (id: number) =>
@@ -661,6 +696,136 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 経路の情報から見つけた線の候補。LLDP が無い現場でも図を立ち上げる。 */
+  linkCandidates: () => request<LinkCandidate[]>("/topology/link-candidates"),
+  applyLinkCandidates: (pairs?: [number, number][]) =>
+    request<{ created: number }>("/topology/link-candidates/apply", {
+      method: "POST",
+      body: JSON.stringify({ pairs: pairs ?? null }),
+    }),
+
+  /** 画面に出てくる言葉の説明。用語を知らないまま使えるようにするため。 */
+  glossary: (q?: string) =>
+    request<GlossaryTerm[]>(
+      `/glossary${q ? `?q=${encodeURIComponent(q)}` : ""}`,
+    ),
+
+  /** 似た機器の Config を重ねて、テンプレートの下書きを作る。 */
+  templateFromConfig: (body: { hostname_prefix?: string; vendor?: string }) =>
+    request<ConfigTemplateDraft>("/config-templates/from-config", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  saveTemplateFromConfig: (body: {
+    hostname_prefix?: string;
+    vendor?: string;
+    name?: string;
+  }) =>
+    request<ConfigTemplate>("/config-templates/from-config/save", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** Config をその場で見る。台帳には何も書かない。 */
+  checkConfigText: (text: string, filename = "config.txt") =>
+    request<ConfigCheck>("/config-check", {
+      method: "POST",
+      body: JSON.stringify({ text, filename }),
+    }),
+  checkConfigFiles: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    return upload<ConfigCheck[]>("/config-check/upload", form);
+  },
+
+  /** 選んだ範囲だけを直してもらう。範囲の外は触らない。 */
+  editSelection: (selection: string, instruction: string, description = "") =>
+    request<ConfigEdit>("/config-check/edit", {
+      method: "POST",
+      // 引数名を request にすると、下の request() 関数が隠れる
+      body: JSON.stringify({ selection, request: instruction, description }),
+    }),
+
+  /** 出した結果について聞き返す。 */
+  askBack: (question: string, context = "") =>
+    request<AskBackAnswer>("/config-check/ask", {
+      method: "POST",
+      body: JSON.stringify({ question, context }),
+    }),
+
+  /** 取り込んだ Config から覚えた、その現場の流儀。 */
+  conventions: () => request<HouseStyle>("/conventions"),
+
+  /** 何にどこまで対応しているか。できないことも返る。 */
+  capabilities: () => request<CapabilityIndex>("/capabilities"),
+
+  /** 条件から構成を起こす。案を見るだけで、台帳は触らない。 */
+  blueprintConditions: () =>
+    request<BlueprintCondition[]>("/blueprint/conditions"),
+  drawBlueprint: (body: {
+    a_name: string;
+    b_name: string;
+    conditions: string[];
+    base?: string | null;
+    vendor?: string;
+  }) =>
+    request<Blueprint>("/blueprint", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** 起こした構成を、テスト拠点として台帳に置く。図で見られるようになる。 */
+  applyBlueprint: (body: {
+    a_name: string;
+    b_name: string;
+    conditions: string[];
+    base?: string | null;
+    vendor?: string;
+  }) =>
+    request<{
+      site_id: number;
+      site_name: string;
+      device_count: number;
+      link_count: number;
+    }>("/blueprint/apply", { method: "POST", body: JSON.stringify(body) }),
+  testSites: () => request<TestSite[]>("/blueprint/test-sites"),
+  removeTestSite: (siteId: number) =>
+    request<{ removed_devices: number }>(`/blueprint/test-sites/${siteId}`, {
+      method: "DELETE",
+    }),
+
+  /** その機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
+  deviceL3: (deviceId: number) => request<L3Report>(`/devices/${deviceId}/l3`),
+
+  /** 書いた文章から、増設の設計を起こす。読み取った内容も返る。 */
+  askAddition: (body: {
+    text: string;
+    upstream_device_id?: number | null;
+    new_hostname?: string | null;
+    purpose?: string | null;
+  }) =>
+    request<AskResult>("/ask/addition", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  /** その機器の下に1台足すときの設計。決めた理由と根拠つきで返る。 */
+  planAddition: (
+    deviceId: number,
+    body: {
+      hostname: string;
+      vendor?: string;
+      model?: string;
+      purpose?: string;
+      vlan_id?: number | null;
+      subnet?: string | null;
+      uplink_interface?: string | null;
+    },
+  ) =>
+    request<AdditionPlan>(`/devices/${deviceId}/addition`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   createLink: (body: {
     a_device_id: number;
     b_device_id: number;
@@ -818,7 +983,34 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  /** 画面から決める設定 */
+  appSettings: () => request<AppSettings>("/settings"),
+  updateAppSettings: (body: Partial<AppSettings>) =>
+    request<AppSettings>("/settings", {
+      method: "PATCH",
+      body: JSON.stringify(body),
+    }),
   llmStatus: () => request<LlmStatus>("/llm/status"),
+  /** モデルを使うかどうかの切り替え。次の起動でも残る */
+  setLlmEnabled: (enabled: boolean) =>
+    request<LlmStatus>("/llm/enabled", {
+      method: "POST",
+      body: JSON.stringify({ enabled }),
+    }),
+  /** 下書きを裏で作る。受け取った番号で様子を聞く */
+  draftConfigInBackground: (
+    deviceId: number,
+    body: { request: string; base?: string },
+  ) =>
+    request<Job>(`/devices/${deviceId}/config-draft/async`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  job: (jobId: string) => request<Job>(`/jobs/${jobId}`),
+  /** 裏で走らせた仕事の一覧。新しい順 */
+  jobs: (limit = 20) => request<Job[]>(`/jobs?limit=${limit}`),
+  cancelJob: (jobId: string) =>
+    request<Job>(`/jobs/${jobId}/cancel`, { method: "POST" }),
   /** 手元にモデルを置けないとき、承認済みの AI へ貼るための依頼文 */
   draftPrompt: (deviceId: number, body: { request: string; base?: string }) =>
     request<ConfigDraft>(`/devices/${deviceId}/config-draft/prompt`, {

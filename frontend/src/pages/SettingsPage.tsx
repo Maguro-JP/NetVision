@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api } from "../api/client";
+import type { AppSettings } from "../api/types";
 import {
   DEFAULT_PREFS,
   OPEN_TARGET_LABEL,
@@ -19,9 +20,37 @@ import {
  */
 export default function SettingsPage() {
   const [prefs, setPrefs] = usePrefs();
+  const queryClient = useQueryClient();
   const { data: llm } = useQuery({
     queryKey: ["llmStatus"],
     queryFn: () => api.llmStatus(),
+  });
+  // 使うかどうかは、その場で切り替えられるようにする。環境変数だと起動し直しになり、
+  // 打ち間違いも起きる
+  const { data: app } = useQuery({
+    queryKey: ["appSettings"],
+    queryFn: () => api.appSettings(),
+  });
+  // 決めた値はその場で効く。起動し直しを求めない
+  const saveApp = useMutation({
+    mutationFn: (body: Partial<AppSettings>) => api.updateAppSettings(body),
+    onSuccess: (next) => {
+      queryClient.setQueryData(["appSettings"], next);
+      for (const key of [
+        "devices",
+        "summary",
+        "alerts",
+        "referenceFreshness",
+        "llmStatus",
+      ]) {
+        queryClient.invalidateQueries({ queryKey: [key] });
+      }
+    },
+  });
+
+  const switchLlm = useMutation({
+    mutationFn: (enabled: boolean) => api.setLlmEnabled(enabled),
+    onSuccess: (status) => queryClient.setQueryData(["llmStatus"], status),
   });
 
   return (
@@ -68,6 +97,108 @@ export default function SettingsPage() {
         )}
       </div>
 
+      {/* 運用しながら変えるものは画面から決める。環境変数を触らせると、
+          打ち間違いが起きるし、そこで詰まる人も出る */}
+      <div className="card settings-card">
+        <h2>期限の見せ方と、時刻の地域</h2>
+        <p className="muted">
+          決めた値はその場で効きます（起動し直しは要りません）。この端末だけでなく、
+          同じ NetVision を見ている全員に効きます。
+        </p>
+        {app === undefined ? (
+          <p className="muted">読み込み中…</p>
+        ) : (
+          <div className="form-grid">
+            <div className="field">
+              <label htmlFor="warning-days">「要計画」にする日数</label>
+              <input
+                id="warning-days"
+                type="number"
+                min={1}
+                max={3650}
+                defaultValue={app.warning_days}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.warning_days)
+                    saveApp.mutate({ warning_days: value });
+                }}
+              />
+              <span className="muted">
+                保守期限・EoL がこの日数以内なら「要計画」
+              </span>
+            </div>
+            <div className="field">
+              <label htmlFor="critical-days">「要対応」にする日数</label>
+              <input
+                id="critical-days"
+                type="number"
+                min={1}
+                max={3650}
+                defaultValue={app.critical_days}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.critical_days)
+                    saveApp.mutate({ critical_days: value });
+                }}
+              />
+              <span className="muted">
+                「要計画」より短い日数にしてください
+              </span>
+            </div>
+            <div className="field">
+              <label htmlFor="stale-days">リファレンスが古いと見なす日数</label>
+              <input
+                id="stale-days"
+                type="number"
+                min={1}
+                max={3650}
+                defaultValue={app.reference_stale_days}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.reference_stale_days)
+                    saveApp.mutate({ reference_stale_days: value });
+                }}
+              />
+              <span className="muted">
+                閉域では自動で更新されないので、鮮度を出します
+              </span>
+            </div>
+            <div className="field">
+              <label htmlFor="timezone">時刻の地域</label>
+              <input
+                id="timezone"
+                defaultValue={app.display_timezone}
+                onBlur={(e) => {
+                  if (e.target.value !== app.display_timezone)
+                    saveApp.mutate({ display_timezone: e.target.value });
+                }}
+              />
+              <span className="muted">
+                画面と書き出しに出す時刻（例: Asia/Tokyo）
+              </span>
+            </div>
+            <div className="field">
+              <label htmlFor="model-dir">モデルの置き場所</label>
+              <input
+                id="model-dir"
+                defaultValue={app.model_dir}
+                onBlur={(e) => {
+                  if (e.target.value !== app.model_dir)
+                    saveApp.mutate({ model_dir: e.target.value });
+                }}
+              />
+              <span className="muted">
+                ここに .gguf を置くと、下書きに使います
+              </span>
+            </div>
+          </div>
+        )}
+        {saveApp.error && (
+          <div className="error">{(saveApp.error as Error).message}</div>
+        )}
+        {saveApp.isSuccess && <p className="ok">保存しました。</p>}
+      </div>
+
       <div className="card settings-card">
         <h2>資料を読ませるモデル</h2>
         <p className="muted">
@@ -77,10 +208,24 @@ export default function SettingsPage() {
           外の事業者へは、明示して許すまで一切送りません。設定の仕方は
           docs/LOCAL_LLM.md にあります。
         </p>
-        {llm && !llm.enabled && (
-          <p className="muted">
-            いまは使わない設定です（NETVISION_LLM_ENABLED=false）。規則ベースだけで動きます。
-          </p>
+        {llm && (
+          <div className="actions">
+            <button
+              className={llm.enabled ? "" : "primary"}
+              onClick={() => switchLlm.mutate(!llm.enabled)}
+              disabled={switchLlm.isPending}
+            >
+              {llm.enabled ? "モデルを使わない" : "モデルを使う"}
+            </button>
+            <span className="muted">
+              {llm.enabled
+                ? "いまは使う設定です。置いてあれば下書きに使います"
+                : "いまは使わない設定です。規則ベースだけで動きます"}
+            </span>
+          </div>
+        )}
+        {switchLlm.error && (
+          <div className="error">{(switchLlm.error as Error).message}</div>
         )}
         {llm === undefined ? (
           <p className="muted">確認しています…</p>
@@ -115,7 +260,9 @@ export default function SettingsPage() {
                         外向きのため止めています
                       </span>
                     ) : (
-                      <span className="badge">設定が足りません</span>
+                      <span className="badge" title={model.note}>
+                        {model.note || "設定が足りません"}
+                      </span>
                     )}
                   </td>
                 </tr>
