@@ -1,5 +1,8 @@
 import type {
   AdditionPlan,
+  Blueprint,
+  BlueprintCondition,
+  TestSite,
   L3Report,
   AppSettings,
   ChangeLog,
@@ -681,6 +684,40 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 条件から構成を起こす。案を見るだけで、台帳は触らない。 */
+  blueprintConditions: () =>
+    request<BlueprintCondition[]>("/blueprint/conditions"),
+  drawBlueprint: (body: {
+    a_name: string;
+    b_name: string;
+    conditions: string[];
+    base?: string | null;
+    vendor?: string;
+  }) =>
+    request<Blueprint>("/blueprint", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** 起こした構成を、テスト拠点として台帳に置く。図で見られるようになる。 */
+  applyBlueprint: (body: {
+    a_name: string;
+    b_name: string;
+    conditions: string[];
+    base?: string | null;
+    vendor?: string;
+  }) =>
+    request<{
+      site_id: number;
+      site_name: string;
+      device_count: number;
+      link_count: number;
+    }>("/blueprint/apply", { method: "POST", body: JSON.stringify(body) }),
+  testSites: () => request<TestSite[]>("/blueprint/test-sites"),
+  removeTestSite: (siteId: number) =>
+    request<{ removed_devices: number }>(`/blueprint/test-sites/${siteId}`, {
+      method: "DELETE",
+    }),
 
   /** その機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
   deviceL3: (deviceId: number) => request<L3Report>(`/devices/${deviceId}/l3`),

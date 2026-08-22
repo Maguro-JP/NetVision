@@ -8,6 +8,7 @@ import { isRetryableError } from "./api/client";
 import App from "./App";
 import SchemaGate from "./SchemaGate";
 import ChangesPage from "./pages/ChangesPage";
+import BlueprintPage from "./pages/BlueprintPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
 import ConfigTemplatesPage from "./pages/ConfigTemplatesPage";
 import ConfigsPage from "./pages/ConfigsPage";
@@ -57,30 +58,34 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route path="/export" element={<ExportPage />} />
             <Route path="/" element={<App />}>
               <Route index element={<Navigate to="/dashboard" replace />} />
-            <Route path="dashboard" element={<DashboardPage />} />
-            <Route path="devices" element={<DeviceListPage />} />
-            <Route path="devices/new" element={<DeviceFormPage />} />
-            <Route path="devices/:id" element={<DeviceDetailPage />} />
-            <Route path="devices/:id/edit" element={<DeviceFormPage />} />
-            <Route path="sites" element={<SitesPage />} />
-            <Route path="import" element={<ImportPage />} />
-            <Route path="topology" element={<TopologyPage />} />
-            <Route path="space" element={<SpacePage />} />
-            <Route path="vlans" element={<VlansPage />} />
-            <Route path="configs" element={<ConfigsPage />} />
-            <Route path="changes" element={<ChangesPage />} />
-            <Route path="insights" element={<InsightsPage />} />
-            <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
-            <Route path="reference" element={<ReferencePage />} />
-            <Route path="documents" element={<DocumentsPage />} />
-            <Route path="config-templates" element={<ConfigTemplatesPage />} />
-            <Route path="config-plans" element={<ConfigPlansPage />} />
-            <Route path="replacement" element={<ReplacementPage />} />
-            <Route path="remediation" element={<RemediationPage />} />
-            <Route path="exposures" element={<ExposuresPage />} />
-            <Route path="scenarios" element={<ScenariosPage />} />
-            <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
-            <Route path="settings" element={<SettingsPage />} />
+              <Route path="dashboard" element={<DashboardPage />} />
+              <Route path="blueprint" element={<BlueprintPage />} />
+              <Route path="devices" element={<DeviceListPage />} />
+              <Route path="devices/new" element={<DeviceFormPage />} />
+              <Route path="devices/:id" element={<DeviceDetailPage />} />
+              <Route path="devices/:id/edit" element={<DeviceFormPage />} />
+              <Route path="sites" element={<SitesPage />} />
+              <Route path="import" element={<ImportPage />} />
+              <Route path="topology" element={<TopologyPage />} />
+              <Route path="space" element={<SpacePage />} />
+              <Route path="vlans" element={<VlansPage />} />
+              <Route path="configs" element={<ConfigsPage />} />
+              <Route path="changes" element={<ChangesPage />} />
+              <Route path="insights" element={<InsightsPage />} />
+              <Route path="vulnerabilities" element={<VulnerabilitiesPage />} />
+              <Route path="reference" element={<ReferencePage />} />
+              <Route path="documents" element={<DocumentsPage />} />
+              <Route
+                path="config-templates"
+                element={<ConfigTemplatesPage />}
+              />
+              <Route path="config-plans" element={<ConfigPlansPage />} />
+              <Route path="replacement" element={<ReplacementPage />} />
+              <Route path="remediation" element={<RemediationPage />} />
+              <Route path="exposures" element={<ExposuresPage />} />
+              <Route path="scenarios" element={<ScenariosPage />} />
+              <Route path="scenarios/:id" element={<ScenarioDetailPage />} />
+              <Route path="settings" element={<SettingsPage />} />
             </Route>
           </Route>
         </Routes>

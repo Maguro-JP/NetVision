@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.api.routes import (
+    blueprint,
     changes,
     config_plans,
     configs,
@@ -78,6 +79,7 @@ app.include_router(exposures.router, prefix=api)
 app.include_router(schema_routes.router, prefix=api)
 app.include_router(settings_routes.router, prefix=api)
 app.include_router(jobs.router, prefix=api)
+app.include_router(blueprint.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",

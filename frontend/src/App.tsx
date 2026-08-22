@@ -37,6 +37,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
       label: "計画・変更",
       items: [
         { to: "/replacement", label: "更改支援" },
+        { to: "/blueprint", label: "構成を起こす" },
         { to: "/scenarios", label: "将来構成シナリオ" },
         { to: "/config-plans", label: "Config計画（差分生成）" },
         { to: "/config-templates", label: "Configテンプレート" },

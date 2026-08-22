@@ -1158,3 +1158,45 @@ export interface L3Report {
   }[];
   findings: L3Finding[];
 }
+
+/** 条件から起こした構成。案であって、実機には投入しない。 */
+export interface Blueprint {
+  title: string;
+  conditions: { name: string; label: string }[];
+  devices: {
+    role: string;
+    hostname: string;
+    device_type: string;
+    purpose: string;
+  }[];
+  links: {
+    a_hostname: string;
+    a_interface: string;
+    b_hostname: string;
+    b_interface: string;
+    description: string;
+  }[];
+  segments: {
+    name: string;
+    vlan_id: number | null;
+    subnet: string;
+    gateway: string | null;
+    members: string[];
+  }[];
+  routes: { hostname: string; destination: string; next_hop: string }[];
+  decisions: { topic: string; choice: string; why: string }[];
+  warnings: string[];
+  configs: Record<string, string>;
+  notes: Record<string, string[]>;
+}
+
+export interface BlueprintCondition {
+  name: string;
+  label: string;
+}
+
+export interface TestSite {
+  id: number;
+  name: string;
+  devices: number;
+}
