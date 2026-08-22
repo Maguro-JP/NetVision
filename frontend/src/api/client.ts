@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  ConfigCheck,
   ConfigTemplateDraft,
   HouseStyle,
   AskResult,
@@ -720,6 +721,18 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+
+  /** Config をその場で見る。台帳には何も書かない。 */
+  checkConfigText: (text: string, filename = "config.txt") =>
+    request<ConfigCheck>("/config-check", {
+      method: "POST",
+      body: JSON.stringify({ text, filename }),
+    }),
+  checkConfigFiles: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    return upload<ConfigCheck[]>("/config-check/upload", form);
+  },
 
   /** 取り込んだ Config から覚えた、その現場の流儀。 */
   conventions: () => request<HouseStyle>("/conventions"),

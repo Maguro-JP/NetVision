@@ -1317,3 +1317,26 @@ export interface ConfigTemplateDraft {
   notes: string[];
   skipped: number;
 }
+
+/** 放り込んだ Config を、その場で見た結果。台帳には何も書かない。 */
+export interface ConfigCheck {
+  filename: string;
+  vendor: string;
+  vendor_label: string;
+  hostname: string | null;
+  model: string | null;
+  os_version: string | null;
+  interfaces: number;
+  vlans: number;
+  routes: number;
+  features: {
+    category_label: string;
+    name: string;
+    detail: string;
+    count: number;
+  }[];
+  findings: L3Finding[];
+  /** 覚えた流儀と違うところ。間違いとは言い切れないので分けて返る */
+  differences: L3Finding[];
+  notes: string[];
+}

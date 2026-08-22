@@ -11,6 +11,7 @@ import ChangesPage from "./pages/ChangesPage";
 import AskPage from "./pages/AskPage";
 import BlueprintPage from "./pages/BlueprintPage";
 import CapabilitiesPage from "./pages/CapabilitiesPage";
+import ConfigCheckPage from "./pages/ConfigCheckPage";
 import GlossaryPage from "./pages/GlossaryPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
 import ConfigTemplatesPage from "./pages/ConfigTemplatesPage";
@@ -65,6 +66,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="ask" element={<AskPage />} />
               <Route path="blueprint" element={<BlueprintPage />} />
               <Route path="capabilities" element={<CapabilitiesPage />} />
+              <Route path="config-check" element={<ConfigCheckPage />} />
               <Route path="glossary" element={<GlossaryPage />} />
               <Route path="devices" element={<DeviceListPage />} />
               <Route path="devices/new" element={<DeviceFormPage />} />
