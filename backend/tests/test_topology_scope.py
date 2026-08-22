@@ -447,8 +447,13 @@ def test_children_are_placed_in_port_order(db_session):
     assert placed["zzz-rt-01"] < placed["mmm-rt-01"] < placed["aaa-rt-01"]
 
 
-def test_unscoped_topology_is_rejected_when_too_wide(client, db_session):
-    """全体図は台数が増えると画面が固まるので、API 側でも出さない。"""
+def test_a_wide_ledger_still_shows_something(client, db_session):
+    """台数が多くても、図が真っ白にならないこと。
+
+    全体図は描けないが、そこで「出せません」とだけ返すと、台帳と結線表を
+    入れた直後に何も出ない図を見ることになる。こちらで結線の多いところを
+    選んで出し、絞り込みの入口にする。
+    """
     from app.models.device import Device, DeviceType
     from app.services.topology import UNSCOPED_GRAPH_LIMIT
 
@@ -466,10 +471,9 @@ def test_unscoped_topology_is_rejected_when_too_wide(client, db_session):
     )
     db_session.commit()
 
-    blocked = client.get(f"{API}/topology")
-    assert blocked.status_code == 400
-    assert "絞って" in blocked.json()["detail"]
-
-    scoped = client.get(f"{API}/topology", params={"q": "sw-000"})
-    assert scoped.status_code == 200
-    assert len(scoped.json()["nodes"]) == 1
+    res = client.get(f"{API}/topology")
+    assert res.status_code == 200
+    body = res.json()
+    assert body["auto_scoped"] is True
+    assert body["note"]
+    assert 0 < len(body["nodes"]) <= UNSCOPED_GRAPH_LIMIT

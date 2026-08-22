@@ -349,6 +349,10 @@ export interface TopologyGraph {
   edges: TopologyEdge[];
   unplaced_count: number;
   groups?: TopologyGroup[];
+  /** 台数が多いので、サーバー側で見どころを選んで返したか */
+  auto_scoped?: boolean;
+  /** そのときの断り書き */
+  note?: string | null;
 }
 
 export interface TopologyStats {

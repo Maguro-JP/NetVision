@@ -28,6 +28,7 @@ from app.config import settings
 from app.models import Device, DeviceStatus, DeviceType, Site
 from app.models.maintenance import MaintenanceContract
 from app.models.reference import ProductReference
+from app.services import appsettings
 from app.services.lifecycle import Severity
 
 # 一覧の探す欄で日本語の呼び名でも当たるようにする。画面の表示名と同じ語。
@@ -103,8 +104,16 @@ def _rank_of(column, today: date):
     return case(
         (column.is_(None), Severity.UNKNOWN.rank),
         (column < today, Severity.EXPIRED.rank),
-        (column <= today + timedelta(days=settings.critical_days), Severity.CRITICAL.rank),
-        (column <= today + timedelta(days=settings.warning_days), Severity.WARNING.rank),
+        (
+            column
+            <= today + timedelta(days=appsettings.number("critical_days", settings.critical_days)),
+            Severity.CRITICAL.rank,
+        ),
+        (
+            column
+            <= today + timedelta(days=appsettings.number("warning_days", settings.warning_days)),
+            Severity.WARNING.rank,
+        ),
         else_=Severity.OK.rank,
     )
 

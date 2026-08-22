@@ -216,6 +216,10 @@ class TopologyGraphRead(BaseModel):
     edges: list[TopologyEdgeRead]
     unplaced_count: int
     groups: list[TopologyGroupRead] = []
+    #: 台数が多いので、こちらで見どころを選んで出したか
+    auto_scoped: bool = False
+    #: そのときの断り書き
+    note: str | None = None
 
 
 class NodePosition(BaseModel):

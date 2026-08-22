@@ -14,6 +14,7 @@ from datetime import UTC, datetime, tzinfo
 from zoneinfo import ZoneInfo
 
 from app.config import settings
+from app.services import appsettings
 
 logger = logging.getLogger(__name__)
 
@@ -31,13 +32,13 @@ def zone() -> tzinfo:
     """
     global _warned
     try:
-        return ZoneInfo(settings.display_timezone)
+        return ZoneInfo(appsettings.text("display_timezone", settings.display_timezone))
     except Exception:
         if not _warned:
             logger.warning(
                 "表示用のタイムゾーン %s を読めませんでした。UTC で表示します。"
                 "（Windows では tzdata が必要です）",
-                settings.display_timezone,
+                appsettings.text("display_timezone", settings.display_timezone),
             )
             _warned = True
         return UTC

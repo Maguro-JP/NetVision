@@ -116,10 +116,6 @@ const PORT_STYLES: { value: PortStyle; label: string; hint: string }[] = [
 /** 表示の好みは人によって違う。毎回選び直さずに済むよう端末に覚えさせる。 */
 const VIEW_KEY = "netvision.topology.view";
 
-// これを超えたら、絞らずに全体を描かない。全国規模になると全体図は読めないし、
-// 描くだけで重い。拠点を選ぶか、名前で探してもらう
-const WIDE_LIMIT = 40;
-
 /** 配置のマス目。画面の線・自動配置・整頓で使う。手で置くときは吸着しない。 */
 /**
  * マス目の大きさ。
@@ -1153,15 +1149,13 @@ function TopologyEditor() {
   // 保存のたびに fitView すると、置いた位置がリセットされたように見える
   const shouldFit = useRef(true);
 
-  const scoped = selectedSite !== "" || appliedSearch.trim() !== "";
   const { data: stats } = useQuery({
     queryKey: ["topologyStats", layer],
     queryFn: () => api.getTopologyStats(layer),
   });
-  // 全体図は台数が増えると読めないし、描くだけで重い。
-  // 絞っていないときは、物理だけ自動で止める（L2/L3/論理は中身が絞られる）
-  const tooWide =
-    !scoped && layer === "physical" && (stats?.device_count ?? 0) > WIDE_LIMIT;
+  // 全体図は台数が増えると読めないし、描くだけで重い。ただしここで止めると、
+  // 台帳と結線表を入れた直後に何も出ない図を見ることになる。サーバー側が
+  // 見どころを選んで返すので、それを出して断り書きを添える
 
   const { data: graph, isLoading } = useQuery({
     queryKey: [
@@ -1178,7 +1172,6 @@ function TopologyEditor() {
         q: appliedSearch.trim() || undefined,
         scope,
       }),
-    enabled: !tooWide,
   });
   const { data: tunnelInfo } = useQuery({
     queryKey: ["topologyTunnels"],
@@ -1198,18 +1191,9 @@ function TopologyEditor() {
     queryFn: () => api.listSites(),
   });
 
-  // 物理の全体図が出せない規模なら、最初から本社を選ぶ。
-  // 「表示できる機器がありません」だけのデモにはしない。
-  useEffect(() => {
-    if (selectedSite !== "") return;
-    if (params.get("site")) return;
-    if (layer !== "physical") return;
-    if (!sites?.length || !stats) return;
-    if (stats.device_count <= WIDE_LIMIT) return;
-    const hq = sites.find((site) => site.name.includes("本社")) ?? sites[0];
-    setSelectedSite(hq.id);
-  }, [sites, stats, selectedSite, layer, params]);
-
+  // 拠点を勝手に選ぶことはしない。選んだ拠点に機器が無ければ、そこで図が
+  // 空になり、原因が分からなくなる。台数が多いときは、サーバー側が
+  // 見どころを選んで返す
   useEffect(() => {
     if (!graph) return;
     graphRef.current = graph;
@@ -2141,9 +2125,9 @@ function TopologyEditor() {
                 <button
                   className={placing ? "primary" : ""}
                   onClick={() => {
-                    if (tooWide) {
+                    if (graph?.auto_scoped) {
                       setNotice(
-                        "全体図では置けません。拠点を選んでから機器を置いてください",
+                        "いまは一部だけを出しています。拠点を選んでから機器を置いてください",
                       );
                       return;
                     }
@@ -2352,25 +2336,17 @@ function TopologyEditor() {
         </div>
       )}
 
+      {graph?.auto_scoped && (
+        <div className="demo-banner">
+          <strong>台数が多いので、結線の多いところだけを出しています。</strong>
+          {stats &&
+            ` 台帳には ${stats.device_count.toLocaleString()} 台あります。`}
+          拠点を選ぶか、拠点名・機器名で探すと、その範囲を出します。
+        </div>
+      )}
+
       <div className={`topo-canvas${placing ? " placing" : ""}`} ref={canvas}>
-        {tooWide ? (
-          // 全国規模では全体図は読めない。拠点を選ぶか名前で探す方が早い。
-          // それでも見たい人のために、出す手段は残しておく
-          <div className="empty" style={{ margin: 40 }}>
-            <p>
-              機器が {stats?.device_count}{" "}
-              台あります。全体図は読めないし、描くと画面が止まるので、
-              <strong>拠点を選ぶ</strong>か
-              <strong>拠点名・機器名で探して</strong>ください。
-            </p>
-            <p className="muted">
-              選んだ拠点の対向（直接つながっている上位）までは自動で出ます。
-            </p>
-            <p className="muted">
-              L2 / L3 / 論理構成は、中身が絞られるので全体のままでも開けます。
-            </p>
-          </div>
-        ) : isLoading ? (
+        {isLoading ? (
           <p className="muted" style={{ padding: 20 }}>
             読み込み中…
           </p>

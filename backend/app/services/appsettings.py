@@ -46,6 +46,33 @@ def get(key: str, default: Any = None) -> Any:
     return load().get(key, default)
 
 
+#: 画面から決められるもの。ここに無いものは環境変数のまま
+#: （DB の接続先や待ち受けアドレスのように、起動時にしか決められないもの、
+#: 間違えると外から見える状態になるものは、画面に出さない）
+EDITABLE: dict[str, type] = {
+    "llm_enabled": bool,
+    "warning_days": int,
+    "critical_days": int,
+    "reference_stale_days": int,
+    "display_timezone": str,
+    "model_dir": str,
+}
+
+
+def number(key: str, fallback: int) -> int:
+    """画面で決めた数。決めていなければ環境変数の値。"""
+    value = load().get(key)
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return fallback
+    return value
+
+
+def text(key: str, fallback: str) -> str:
+    """画面で決めた文字列。空や未設定なら環境変数の値。"""
+    value = load().get(key)
+    return value if isinstance(value, str) and value.strip() else fallback
+
+
 def set_value(key: str, value: Any) -> None:
     """1つ書き換える。書けなければ、その旨を記録して黙って諦めない。"""
     data = load()
