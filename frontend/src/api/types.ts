@@ -1385,3 +1385,28 @@ export interface LinkReport {
   findings: LinkFinding[];
   notes: string[];
 }
+
+/** ログを読んでまとめたもの。1行ずつ眺めるためのものではない。 */
+export interface LogReport {
+  lines: number;
+  parsed: number;
+  unreadable: number;
+  first_at: string | null;
+  last_at: string | null;
+  by_severity: Record<string, number>;
+  by_host: { host: string; count: number; heavy: number }[];
+  patterns: {
+    code: string;
+    count: number;
+    severity: number | null;
+    severity_label: string;
+    meaning: string;
+    hosts: string[];
+    first_at: string | null;
+    last_at: string | null;
+    sample: string;
+  }[];
+  known_hosts: string[];
+  unknown_hosts: string[];
+  notes: string[];
+}

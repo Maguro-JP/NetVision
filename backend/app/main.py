@@ -27,6 +27,7 @@ from app.api.routes import (
     replacement,
     scenarios,
     sites,
+    syslog,
     topology,
 )
 from app.api.routes import schema as schema_routes
@@ -88,6 +89,7 @@ app.include_router(capabilities.router, prefix=api)
 app.include_router(glossary.router, prefix=api)
 app.include_router(conventions.router, prefix=api)
 app.include_router(configcheck.router, prefix=api)
+app.include_router(syslog.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",

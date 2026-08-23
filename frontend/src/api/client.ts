@@ -1,5 +1,6 @@
 import type {
   AdditionPlan,
+  LogReport,
   LinkReport,
   ConfigEdit,
   AskBackAnswer,
@@ -697,6 +698,18 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 貼ったログを読む。台帳には何も書かない。 */
+  readSyslog: (text: string) =>
+    request<LogReport>("/syslog", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  readSyslogFiles: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    return upload<LogReport>("/syslog/upload", form);
+  },
 
   /** 線の両端で、設定がそろっているか。 */
   linkCheck: () => request<LinkReport>("/topology/link-check"),
