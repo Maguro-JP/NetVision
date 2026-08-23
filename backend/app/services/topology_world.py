@@ -40,6 +40,7 @@ from app.services.topology import (
     _busiest_sides,
     _compact,
     _snap_to_grid,
+    _unstick_visual_pairs,
     _visual_bottom,
     _visual_left,
     _visual_right,
@@ -59,6 +60,9 @@ MAX_RATIO = 4.0
 
 #: 折り返し幅の候補をいくつ試すか。多くしても答えは変わらないので上限を置く
 MAX_TRIES = 32
+
+#: 置き直す回数の上限。1回では決まらない（下のコメントを参照）
+MAX_ROUNDS = 5
 
 
 @dataclass
@@ -124,36 +128,95 @@ def arrange(
     if len(blocks) < 2:
         return report
 
-    # 箱の広がりは結線の本数で決まる。ブロックの中を組んでから測る
-    tb, lr = _busiest_sides(nodes, edges)
-    _measure(blocks, tb, lr)
+    # 1回では決まらない。箱の大きさは「その機器のどの辺に何本来るか」で
+    # 決まり、辺は相手がどちらにいるかで決まる。置き直すと相手の向きが
+    # 変わり、箱の大きさも変わる。そこで、置く → 数え直す → 条件を確かめる、
+    # を繰り返す。満たしたら止め、満たさなければ拠点どうしを広げて次を試す。
     between = _links_between(blocks, edges)
+    spacing = BLOCK_GAP
+    for _ in range(MAX_ROUNDS):
+        tb, lr = _busiest_sides(nodes, edges)
+        # 拠点をまたぐ線もその機器の辺を使う。中を組んだときは拠点の中の
+        # 線しか見ていないので、広がった分だけ中の機器を離し直す
+        for block in blocks:
+            _unstick_visual_pairs(
+                block.nodes,
+                tb_of=_counter(tb),
+                lr_of=_counter(lr),
+                horizontal=orientation == "horizontal",
+            )
+        _measure(blocks, tb, lr)
 
-    best: tuple[float, list[tuple[float, float]], float] | None = None
-    for limit in _width_candidates(blocks):
-        report.tries += 1
-        placed = _place_rows(blocks, limit)
-        if _violations(blocks, placed):
-            continue
-        score = _score(blocks, placed, between)
-        if best is None or score < best[0]:
-            best = (score, placed, limit)
+        best: tuple[float, list[tuple[float, float]], float] | None = None
+        for limit in _width_candidates(blocks, spacing):
+            report.tries += 1
+            placed = _place_rows(blocks, limit, spacing)
+            if _violations(blocks, placed):
+                continue
+            score = _score(blocks, placed, between)
+            if best is None or score < best[0]:
+                best = (score, placed, limit)
 
-    if best is None:
-        # どの折り返し幅でも条件を満たせなかった。1段1行に落とす（必ず置ける形）
-        placed = _place_rows(blocks, 0.0)
-        best = (_score(blocks, placed, between), placed, 0.0)
-        report.violations = _violations(blocks, placed)
+        if best is None:
+            # どの折り返し幅でも条件を満たせなかった。1段1行に落とす（必ず置ける形）
+            placed = _place_rows(blocks, 0.0, spacing)
+            best = (_score(blocks, placed, between), placed, 0.0)
+            report.violations = _violations(blocks, placed)
 
-    score, placed, limit = best
-    for block, (x, y) in zip(blocks, placed, strict=True):
-        block.x, block.y = x, y
-    _apply(blocks, tb, lr)
+        score, placed, limit = best
+        for block, (x, y) in zip(blocks, placed, strict=True):
+            block.x, block.y = x, y
+        _apply(blocks, tb, lr)
 
-    report.columns = max(_row_sizes(placed), default=0)
-    report.score = score
-    report.width, report.height = _extent(blocks, placed)
+        report.columns = max(_row_sizes(placed), default=0)
+        report.score = score
+        report.width, report.height = _extent(blocks, placed)
+
+        # 置いたあとの座標で数え直す。ここで初めて分かる食い込みがある
+        too_close = _too_close(nodes, edges)
+        if not too_close:
+            report.violations = []
+            return report
+        report.violations = too_close
+        # 足りないのは拠点どうしのすき間。広げてもう一度
+        spacing += BLOCK_GAP / 2
     return report
+
+
+def _counter(counts: dict[int, int]):
+    """その機器の辺に来る本数を返す小さな関数。箱の広がりの元になる。"""
+
+    def of(node: TopologyNodeView) -> int:
+        return counts.get(node.device_id, 0)
+
+    return of
+
+
+def _too_close(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> list[str]:
+    """置いたあとの座標で、箱が近すぎる組を挙げる。
+
+    箱の大きさは辺に来る本数で決まり、本数は相手がどちらにいるかで決まる。
+    つまり置いてみるまで確定しない。置く前の見積もりだけで済ませていた
+    ときは、隣の拠点の箱と 12px まで寄っていた。
+    """
+    tb, lr = _busiest_sides(nodes, edges)
+    boxes = [
+        (
+            _visual_left(node.x, tb.get(node.device_id, 0)),
+            _visual_top(node.y, lr.get(node.device_id, 0)),
+            _visual_right(node.x, tb.get(node.device_id, 0)),
+            _visual_bottom(node.y, lr.get(node.device_id, 0)),
+            node,
+        )
+        for node in nodes
+    ]
+    out: list[str] = []
+    for index, a in enumerate(boxes):
+        for b in boxes[index + 1 :]:
+            gap = max(a[0] - b[2], b[0] - a[2], a[1] - b[3], b[1] - a[3])
+            if gap < MIN_BOX_GAP:
+                out.append(f"{a[4].hostname} と {b[4].hostname} が近すぎる")
+    return out
 
 
 def _build_blocks(
@@ -226,7 +289,7 @@ def _measure(blocks: list[Block], tb: dict[int, int], lr: dict[int, int]) -> Non
             node.y -= top
 
 
-def _width_candidates(blocks: list[Block]) -> list[float]:
+def _width_candidates(blocks: list[Block], spacing: float = BLOCK_GAP) -> list[float]:
     """折り返す幅の候補。
 
     「1行に何個」ではなく「幅いくつで折り返すか」で試す。拠点の大きさは
@@ -237,14 +300,16 @@ def _width_candidates(blocks: list[Block]) -> list[float]:
     if not blocks:
         return []
     widest = max(block.width for block in blocks)
-    total = sum(block.width + BLOCK_GAP for block in blocks)
+    total = sum(block.width + spacing for block in blocks)
     if total <= widest:
         return [widest]
     step = (total - widest) / MAX_TRIES
     return [widest + step * i for i in range(MAX_TRIES + 1)]
 
 
-def _place_rows(blocks: list[Block], limit: float) -> list[tuple[float, float]]:
+def _place_rows(
+    blocks: list[Block], limit: float, spacing: float = BLOCK_GAP
+) -> list[tuple[float, float]]:
     """段ごとに、指定の幅で折り返して置く。
 
     段（rank）が変わるところでは必ず行を変える。上位と配下が同じ行に並ぶと、
@@ -263,7 +328,7 @@ def _place_rows(blocks: list[Block], limit: float) -> list[tuple[float, float]]:
         nonlocal y, row, row_x
         if not row:
             return
-        y += max(blocks[i].height for i in row) + BLOCK_GAP
+        y += max(blocks[i].height for i in row) + spacing
         rows.append(row)
         row = []
         row_x = 0.0
@@ -276,22 +341,21 @@ def _place_rows(blocks: list[Block], limit: float) -> list[tuple[float, float]]:
             flush()
         current_rank = block.rank
         placed.append((row_x, y))
-        row_x += block.width + BLOCK_GAP
+        row_x += block.width + spacing
         row.append(index)
     flush()
 
-    return _center_rows(blocks, placed, rows)
+    return _center_rows(blocks, placed, rows, spacing)
 
 
 def _center_rows(
     blocks: list[Block],
     placed: list[tuple[float, float]],
     rows: list[list[int]],
+    spacing: float = BLOCK_GAP,
 ) -> list[tuple[float, float]]:
     """行ごとに、全体の真ん中へ寄せる。"""
-    widths = [
-        sum(blocks[i].width + BLOCK_GAP for i in row) - BLOCK_GAP if row else 0.0 for row in rows
-    ]
+    widths = [sum(blocks[i].width + spacing for i in row) - spacing if row else 0.0 for row in rows]
     span = max(widths, default=0.0)
     out = list(placed)
     for row, width in zip(rows, widths, strict=True):

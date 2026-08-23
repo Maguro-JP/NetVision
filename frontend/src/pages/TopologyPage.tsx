@@ -204,15 +204,21 @@ interface LabelOptions {
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
 const SAME_ROW = 60;
 
-/** 一段下（または上）と見なす縦の差。親の真下の配下はここから上下で結ぶ。 */
-const TIER = 100;
-
 /**
  * 右の列（拠点の対向など）と見なす横の差。
  * 1列分（240）だと、コアの隣のアクセスまで横扱いになり箱を貫く。
  * 対向の列は通り道を挟んでもう一段先なので、それより大きく取る。
  */
 const COLUMN = 400;
+
+/**
+ * 「横にいる」と見なす比。縦の差のこの倍だけ横へ離れていれば横から出す。
+ *
+ * 距離だけで切っていたときは、対向の列が 380px（COLUMN 未満）のところに
+ * あると下から出すことになり、配下への線を何本もまたいでいた。
+ * 比でも見ておけば、列の間隔が変わっても同じ判断になる。
+ */
+const SIDEWAYS = 1.5;
 
 /** 箱の既定の幅・高さ（styles.css の .topo-node と合わせること）。 */
 export const DEFAULT_WIDTH = 210;
@@ -300,8 +306,11 @@ export function sideToward(from: TopologyNode, to: TopologyNode): Side {
   const dx = to.x - from.x;
   const dy = to.y - from.y;
   if (Math.abs(dy) < SAME_ROW) return dx > 0 ? "right" : "left";
+  // 横への離れ方が縦より十分に大きければ横から。右の列にいる対向がこれ。
+  // 固定の距離（400px）で切っていたときは、列が 380px のところにあると
+  // 下から出すことになり、配下への線を何本もまたいでいた。
   if (Math.abs(dx) >= COLUMN) return dx > 0 ? "right" : "left";
-  if (Math.abs(dy) >= TIER) return dy > 0 ? "bottom" : "top";
+  if (Math.abs(dx) >= SIDEWAYS * Math.abs(dy)) return dx > 0 ? "right" : "left";
   return dy > 0 ? "bottom" : "top";
 }
 

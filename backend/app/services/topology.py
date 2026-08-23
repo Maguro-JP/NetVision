@@ -1827,6 +1827,9 @@ _SAME_ROW = 60.0
 _TIER = 100.0
 _COLUMN = 400.0
 
+#: 「横にいる」と見なす比。縦の差のこれ倍だけ横へ離れていれば横から出す
+_SIDEWAYS = 1.5
+
 
 def _box_width(links: int) -> float:
     """上下の辺の最大結線本数から、画面上の箱幅を出す（frontend の widthFor と同じ）。"""
@@ -1849,10 +1852,13 @@ def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:
     dx, dy = tx - fx, ty - fy
     if abs(dy) < _SAME_ROW:
         return "right" if dx > 0 else "left"
+    # 横への離れ方が縦より十分に大きければ、横から出す。右の列にいる対向が
+    # これにあたる。固定の距離（400px）で切っていたときは、列が 380px の
+    # ところにあると下から出すことになり、配下への線を何本もまたいでいた。
     if abs(dx) >= _COLUMN:
         return "right" if dx > 0 else "left"
-    if abs(dy) >= _TIER:
-        return "bottom" if dy > 0 else "top"
+    if abs(dx) >= _SIDEWAYS * abs(dy):
+        return "right" if dx > 0 else "left"
     return "bottom" if dy > 0 else "top"
 
 

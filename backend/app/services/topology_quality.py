@@ -189,8 +189,10 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
     if not pierced:
         findings.append(Finding(True, "no_pierce", "線が箱を貫いていない"))
 
-    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）
-    too_bent = any(max(0, len(wire) - 2) > 2 for wire in wires)
+    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）。
+    # 口へ差し込む短い枝は折れとして数えない。数えると、迂回1回で上限を
+    # 超えてしまい、貫くしかなくなる
+    too_bent = any(_bends(wire) > 2 for wire in wires)
     if too_bent:
         findings.append(Finding(False, "too_bent", "線の折れが多すぎる"))
     else:
@@ -246,6 +248,29 @@ def _touching_boxes(
             if worst is None or gap < worst[1]:
                 worst = (f"({ax:.0f},{ay:.0f}) と ({bx:.0f},{by:.0f})", gap)
     return worst
+
+
+#: 口に差し込む短い枝の長さ。これ以下の端の枝は折れとして数えない
+_STUB = 24.0
+
+
+def _bends(wire: list[tuple[float, float]]) -> int:
+    """人が「折れ」として読む回数。
+
+    箱の口へ差し込む短い枝（16px）は、読む側には折れに見えない。そこまで
+    数えると、上位を回り込む1回の迂回（上へ・横へ・下へ）が上限を超えてしまい、
+    通せる線が無くなる。両端の短い枝を落としてから数える。
+    """
+    points = list(wire)
+    while len(points) > 2 and _length(points[0], points[1]) <= _STUB:
+        points.pop(0)
+    while len(points) > 2 and _length(points[-2], points[-1]) <= _STUB:
+        points.pop()
+    return max(0, len(points) - 2)
+
+
+def _length(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
 
 
 def _contains(

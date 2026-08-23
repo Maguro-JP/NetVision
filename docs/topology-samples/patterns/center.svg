@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1286" height="458" viewBox="0 0 1286 458" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<rect width="100%" height="100%" fill="#ffffff"/>
+<text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">センター 物理構成</text>
+<text x="1238" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-24 05:45 JST 時点 / 6台 8本</text>
+<polyline points="241,82 241,54 1045,54 1045,116" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="243.2" y="64.3" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="1038.4" y="100.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="258,107 620,107 620,143 648,143" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="271.0" y="111.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/1/0</title>ge0/1/0</text>
+<text class="port-label" x="638.0" y="151.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/1/0</title>ge0/1/0</text>
+<polyline points="1028,201 891,201" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<polyline points="877,201 286,201 286,158 258,158" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1015.9" y="206.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="266.3" y="167.6" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="1028,245 886,245 886,101 858,101" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1020.5" y="255.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="871.4" y="104.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="1028,281 887,281" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<polyline points="877,281 286,281 286,176 258,176" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1015.9" y="286.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="264.2" y="186.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<polyline points="1028,325 882,325 882,286" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<polyline points="882,276 882,143 858,143" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1020.5" y="335.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="868.0" y="151.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<polyline points="1028,361 286,361 286,194 258,194" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1015.9" y="366.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="262.2" y="205.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
+<polyline points="1028,405 882,405 882,366" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<polyline points="882,356 882,185 858,185" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="1020.5" y="415.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="863.2" y="195.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
+<g><rect x="48" y="82" width="210" height="122" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="153" y="148" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">east-core-rt-01</text></g>
+<g><rect x="648" y="93" width="210" height="100" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="753" y="148" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">east-core-rt-02</text></g>
+<g><rect x="1028" y="116" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="1133" y="143" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">edge-rt-01</text><text x="1133" y="161" font-size="10" fill="#6b6b6b" text-anchor="middle">本社データセンター</text></g>
+<g><rect x="1028" y="196" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="1133" y="223" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">hkd-br-rt-01</text><text x="1133" y="241" font-size="10" fill="#6b6b6b" text-anchor="middle">hkd支社</text></g>
+<g><rect x="1028" y="276" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="1133" y="303" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">thk-br-rt-01</text><text x="1133" y="321" font-size="10" fill="#6b6b6b" text-anchor="middle">thk支社</text></g>
+<g><rect x="1028" y="356" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="1133" y="383" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">knt-br-rt-01</text><text x="1133" y="401" font-size="10" fill="#6b6b6b" text-anchor="middle">knt支社</text></g>
+</svg>
