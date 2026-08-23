@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import { TAPS_TO_OPEN, opensAt } from "./HiddenPage";
@@ -304,16 +304,39 @@ export default function SettingsPage() {
  */
 function HiddenDoor() {
   const [taps, setTaps] = useState(0);
-  const navigate = useNavigate();
+  const opened = opensAt(taps);
+
+  if (opened) {
+    return (
+      <div className="card settings-card" style={{ opacity: 0.85 }}>
+        <h2>表に出していない場所</h2>
+        <p className="muted">
+          メニューには置いていないものです。作業用の画面ではないので、本番の判断には
+          使わないでください。
+        </p>
+        <ul>
+          <li>
+            <Link to="/space">立体で眺める</Link>
+            <div className="muted">
+              拠点ごとのまとまりを立体で見ます。全体の形をつかむためのもので、
+              流れている光は実際の通信量ではありません。
+            </div>
+          </li>
+          <li>
+            <Link to="/hidden">途中のもの</Link>
+            <div className="muted">
+              まだ確かめきれていない機能と、いまの版の情報です。
+            </div>
+          </li>
+        </ul>
+      </div>
+    );
+  }
 
   return (
     <div
       aria-hidden
-      onClick={() => {
-        const next = taps + 1;
-        setTaps(next);
-        if (opensAt(next)) navigate("/hidden");
-      }}
+      onClick={() => setTaps(taps + 1)}
       style={{
         cursor: "default",
         height: 48,
