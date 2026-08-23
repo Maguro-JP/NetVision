@@ -40,6 +40,7 @@ import type {
   MaintenanceContract,
   NetworkInterface,
   AppMeta,
+  CalcReport,
   DeviceRemediation,
   ExposureRow,
   ExposureSummary,
@@ -1094,6 +1095,9 @@ export const api = {
     request<ReplacementPlan>(`/replacement/plan${query({ years })}`),
   replacementImpact: (deviceId: number) =>
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
+
+  /** 数えれば分かること。セグメントの空き・VLAN 番号・ポートの残りなど。 */
+  calc: () => request<CalcReport>("/calc"),
 
   meta: () => request<AppMeta>("/meta"),
   // プレビューの初回は表の作成とデモ投入が走る。8秒だと「起動できませんでした」になる

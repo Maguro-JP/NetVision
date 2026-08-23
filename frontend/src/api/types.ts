@@ -1410,3 +1410,58 @@ export interface LogReport {
   unknown_hosts: string[];
   notes: string[];
 }
+
+/** 数えれば分かること。推測は入っていない。 */
+export interface SubnetUsage {
+  subnet: string;
+  capacity: number;
+  used: number;
+  free: number;
+  ratio: number;
+  crowded: boolean;
+  vlan_id: number | null;
+  vlan_name: string | null;
+  devices: string[];
+  basis: string;
+}
+
+export interface VlanNumbers {
+  used: number[];
+  free_next: number[];
+  used_count: number;
+  basis: string;
+}
+
+export interface PortUsage {
+  device_id: number;
+  hostname: string;
+  total: number;
+  in_use: number;
+  free: number;
+  ratio: number;
+  basis: string;
+}
+
+export interface LagUsage {
+  device_id: number;
+  hostname: string;
+  group: number;
+  members: number;
+  total_mbps: number | null;
+  remaining_mbps: number | null;
+  note: string;
+}
+
+export interface DuplicateAddress {
+  address: string;
+  places: string[];
+}
+
+export interface CalcReport {
+  subnets: SubnetUsage[];
+  vlans: VlanNumbers | null;
+  ports: PortUsage[];
+  lags: LagUsage[];
+  duplicates: DuplicateAddress[];
+  notes: string[];
+}
