@@ -6,6 +6,7 @@ import {
   Panel,
   ReactFlow,
   ReactFlowProvider,
+  useNodesInitialized,
   addEdge,
   useEdgesState,
   useNodesState,
@@ -284,6 +285,22 @@ export function heightFor(
  * 何本もまたぐことになる。横から出せばまたがずに済み、線も短い。
  * 右の列にいる対向は横から。一段下のアクセスは、横にずれていても下から。
  */
+/**
+ * 画面に、その図の機器がそろって並び終えたか。
+ *
+ * 拠点を選び直した直後は、画面にまだ前の拠点の箱が出ている。数が合う前に
+ * 全体を収めると、前の図に合わせてしまう。枠（ラック・部屋）は機器では
+ * ないので数えない。
+ */
+export function readyToFit(
+  drawn: { id: string; measured?: { width?: number } | null }[],
+  expected: number,
+): boolean {
+  const devices = drawn.filter((node) => !String(node.id).startsWith("g-"));
+  if (devices.length !== expected) return false;
+  return devices.every((node) => (node.measured?.width ?? 0) > 0);
+}
+
 export function sideToward(from: TopologyNode, to: TopologyNode): Side {
   return sideBetween(to.x - from.x, to.y - from.y);
 }
@@ -1131,6 +1148,10 @@ function TopologyEditor() {
   // 図を開いたとき・拠点を変えたときだけ全体を収める。
   // 保存のたびに fitView すると、置いた位置がリセットされたように見える
   const shouldFit = useRef(true);
+  // 箱の大きさが決まったか。決まる前に収めると、前の拠点の大きさで計算される
+  const nodesReady = useNodesInitialized();
+  // 最後に収めた範囲。同じ範囲で何度も収め直さないための目印
+  const fittedView = useRef<string | null>(null);
 
   const { data: stats } = useQuery({
     queryKey: ["topologyStats", layer],
@@ -1140,7 +1161,7 @@ function TopologyEditor() {
   // 台帳と結線表を入れた直後に何も出ない図を見ることになる。サーバー側が
   // 見どころを選んで返すので、それを出して断り書きを添える
 
-  const { data: graph, isLoading } = useQuery({
+  const { data: graph, isLoading, isFetching: fetchingGraph } = useQuery({
     queryKey: [
       "topology",
       layer,
@@ -1299,11 +1320,39 @@ function TopologyEditor() {
     shouldFit.current = true;
   }, [layer, selectedSite, appliedSearch, orientation, scope]);
 
+  // いま見ている範囲の合言葉。これが変わったら収め直す
+  const viewKey = `${layer}|${selectedSite}|${appliedSearch}|${orientation}|${scope}`;
+
+  // 収めるのは、その範囲の図が届いて、箱の大きさも決まってから。
+  //
+  // 選んだ直後に呼ぶと、画面にはまだ前の拠点の図が出ている。そちらに合わせて
+  // 収めてしまうと、次に来た図は隅で小さいまま残り、毎回「全体を表示」を押す
+  // 羽目になる（実際そうなっていた。全体図のあと拠点を選ぶと 0.11 倍のまま）。
+  //
+  // 図が入れ替わったかどうかは、React Flow が持っている箱の数と大きさで見る。
+  // 揃うまで数フレーム待つ。待っても揃わないときは、そこで収める（永遠に
+  // 収めないより、少しずれても収めるほうがよい）。
   useEffect(() => {
-    if (!graph || !instance.current || !shouldFit.current) return;
-    instance.current.fitView({ padding: 0.2 });
-    shouldFit.current = false;
-  }, [graph, nodes.length]);
+    if (!graph || !instance.current || fetchingGraph) return;
+    if (fittedView.current === viewKey && !shouldFit.current) return;
+
+    let cancelled = false;
+    const tryFit = (attempt: number) => {
+      const flow = instance.current;
+      if (cancelled || !flow) return;
+      if (!readyToFit(flow.getNodes(), graph.nodes.length) && attempt < 20) {
+        requestAnimationFrame(() => tryFit(attempt + 1));
+        return;
+      }
+      flow.fitView({ padding: 0.2 });
+      fittedView.current = viewKey;
+      shouldFit.current = false;
+    };
+    tryFit(0);
+    return () => {
+      cancelled = true;
+    };
+  }, [graph, nodes, nodesReady, fetchingGraph, viewKey]);
 
   // 選んだ表示を覚えておく。線に沿わせるかどうかは好みが分かれるところなので、
   // 毎回チェックし直さずに済むようにする
