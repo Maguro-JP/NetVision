@@ -47,6 +47,9 @@ interface Vlan10
 !
 no ip http server
 !
+logging host 10.10.10.9
+ntp server 10.10.10.9
+!
 ip route 0.0.0.0 0.0.0.0 10.10.10.254
 !
 line vty 0 15
@@ -178,8 +181,13 @@ def test_a_line_this_site_always_has_is_pointed_out_when_missing(learned):
 
 
 def test_a_missing_log_destination_is_separate_from_a_mistake(learned):
-    """間違いとは言い切れないので、指摘とは分けて出す。"""
-    result = configcheck.check(learned, TIDY)
+    """間違いとは言い切れないので、指摘とは分けて出す。
+
+    単体でも「入っていません」は言えるが、現場の送り先まで書けるこちらの
+    ほうが直しやすい。同じことを2度言わないよう、単体の側からは外す。
+    """
+    body = "\n".join(line for line in TIDY.splitlines() if not line.startswith(("logging", "ntp")))
+    result = configcheck.check(learned, body)
     assert any("ログの送り先が入っていません" in f.title for f in result.differences)
     assert not any("ログの送り先" in f.title for f in result.findings)
 
@@ -313,3 +321,88 @@ def test_the_api_takes_the_config_as_the_subject(client):
     assert body["source"] in {"model", "prompt"}
     if body["source"] == "prompt":
         assert "届きません" in body["prompt"]
+
+
+# ---------------------------------------------------------------------------
+# 単体で言える検算（機器に紐づかなくても分かること）
+# ---------------------------------------------------------------------------
+
+RISKY = """hostname risky-sw-01
+!
+no service password-encryption
+ip source-route
+ip ssh version 1
+snmp-server community s3cret RW
+username ops password ops123
+!
+vlan 10
+ name OFFICE
+vlan 30
+ name UNUSED
+!
+interface GigabitEthernet1/0/1
+ description uplink
+ switchport mode trunk
+ switchport trunk allowed vlan 10
+ speed 1000
+!
+interface Vlan10
+ description office
+ ip address 10.10.10.1 255.255.255.0
+!
+logging host 10.0.0.9
+ntp server 10.0.0.10
+!
+ip route 0.0.0.0 0.0.0.0 10.10.10.254
+!
+line vty 0 15
+ transport input ssh
+ exec-timeout 0 0
+"""
+
+
+def test_a_writable_snmp_is_heavier_than_a_readable_one(db_session):
+    """合言葉を知られた時点で、設定を変えられる。"""
+    result = configcheck.check(db_session, RISKY)
+    finding = next(f for f in result.findings if "書き換えられます" in f.title)
+    assert finding.level == HIGH
+
+
+def test_the_old_ssh_and_the_plain_passwords_are_called_out(db_session):
+    titles = " / ".join(_titles(configcheck.check(db_session, RISKY)))
+    assert "SSH が古い方式" in titles
+    assert "そのまま見える" in titles
+    assert "元に戻せる形" in titles
+
+
+def test_a_session_that_never_closes_is_called_out(db_session):
+    result = configcheck.check(db_session, RISKY)
+    assert any("いつまでも閉じません" in title for title in _titles(result))
+
+
+def test_the_untagged_vlan_left_at_one_is_called_out(db_session):
+    """分けたはずのものが1つにつながる、いちばん危ない食い違い。"""
+    result = configcheck.check(db_session, RISKY)
+    finding = next(f for f in result.findings if "タグ無し VLAN" in f.title)
+    assert finding.level == MEDIUM
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+
+
+def test_a_vlan_nobody_uses_is_mentioned(db_session):
+    result = configcheck.check(db_session, RISKY)
+    finding = next(f for f in result.findings if "使っていない VLAN" in f.title)
+    assert finding.level == LOW
+    assert any("30" in line for line in finding.evidence)
+
+
+def test_speed_fixed_on_one_side_only_is_mentioned(db_session):
+    """通ってはいるので気づかれず、遅いという申告だけが残る。"""
+    result = configcheck.check(db_session, RISKY)
+    assert any("片方だけ固定" in title for title in _titles(result))
+
+
+def test_a_config_that_sends_nowhere_is_told_it_leaves_no_trace(db_session):
+    body = "\n".join(line for line in TIDY.splitlines() if not line.startswith(("logging", "ntp")))
+    titles = _titles(configcheck.check(db_session, body))
+    assert "ログの送り先が入っていません" in titles
+    assert "時刻の参照先が入っていません" in titles

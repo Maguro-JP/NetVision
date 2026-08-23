@@ -124,3 +124,87 @@ def test_plan_can_start_from_the_design(client):
 
 def test_design_config_for_unknown_device_is_404(client):
     assert client.get(f"{API}/devices/9999/design-config").status_code == 404
+
+
+def test_the_management_address_is_written_out_when_the_ledger_knows_the_subnet(client):
+    """管理IP が台帳のどの区画に入るかは計算で決まる。手で書かせると写し間違いが入る。"""
+    device = make_device(client, "sw-01", "Cisco", "C9300-48P", mgmt_ip="10.20.30.11")
+    client.put(
+        f"{API}/topology/vlans/catalog/99",
+        json={"name": "MGMT", "subnet": "10.20.30.0/24"},
+    )
+
+    body = design(client, device)["body"]
+    assert "interface Vlan99" in body
+    assert "ip address 10.20.30.11 255.255.255.0" in body
+
+
+def test_it_does_not_guess_a_subnet_it_was_not_given(client):
+    """近い VLAN を当てずっぽうで選ぶと、通らない Config が完成した形で出る。"""
+    device = make_device(client, "sw-01", "Cisco", "C9300-48P", mgmt_ip="10.20.30.11")
+    client.put(f"{API}/topology/vlans/catalog/99", json={"name": "MGMT"})
+
+    body = design(client, device)["body"]
+    assert "interface Vlan99" not in body
+    assert "管理VLAN" in body
+    assert "記入が必要" in body
+
+
+def test_the_terminal_side_port_is_left_as_an_access_port(client):
+    """端末を挿す口であることは図から分かる。番号だけが分からない。"""
+    switch = make_device(client, "acc-sw-01", "Cisco", "C9200-48P")
+    server = make_device(client, "srv-01", "Cisco", "UCS", device_type="server")
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": switch,
+            "a_interface": "GigabitEthernet1/0/10",
+            "b_device_id": server,
+            "b_interface": "eth0",
+        },
+    )
+
+    body = design(client, switch)["body"]
+    assert "switchport mode access" in body
+    assert "spanning-tree bpduguard enable" in body
+    assert "アクセス VLAN" in body
+
+
+def test_the_generated_config_starts_from_the_safe_side(client):
+    """新規構築の Config が、そのまま点検で赤くなるのはおかしい。"""
+    device = make_device(client, "sw-01", "Cisco", "C9300-48P")
+    body = design(client, device)["body"]
+
+    assert "no ip http server" in body
+    assert "transport input ssh" in body
+    assert "service password-encryption" in body
+
+
+def test_the_untagged_vlan_is_called_out_on_every_trunk(client):
+    """1 のままだと、分けたはずのものが1つにつながる。"""
+    core = make_device(client, "core-sw-01", "Cisco", "C9500-40X")
+    access = make_device(client, "acc-sw-02", "Cisco", "C9200-48P")
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": core,
+            "a_interface": "GigabitEthernet1/0/1",
+            "b_device_id": access,
+            "b_interface": "GigabitEthernet1/0/48",
+        },
+    )
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "USERS"})
+
+    body = design(client, core)["body"]
+    assert "タグ無し VLAN" in body
+    assert "1 のままにしない" in body
+
+
+def test_fortigate_gets_its_own_syntax_and_says_what_it_cannot_decide(client):
+    """FortiGate は通す通信を決めないと何も通らない。そこは設計の中身そのもの。"""
+    device = make_device(client, "fw-01", "Fortinet", "FG-100F", device_type="firewall")
+    body = design(client, device)["body"]
+
+    assert "config system global" in body
+    assert 'set hostname "fw-01"' in body
+    assert "何も通りません" in body

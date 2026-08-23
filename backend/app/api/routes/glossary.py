@@ -19,6 +19,8 @@ class TermRead(BaseModel):
     reading: str
     plain: str
     matters: str
+    #: 分野。数が増えると一覧では探せないので、画面はこれで束ねて出す
+    category: str
     also: list[str]
 
 
@@ -31,6 +33,7 @@ def list_terms(q: str | None = Query(default=None, description="語で絞る")) 
             reading=term.reading,
             plain=term.plain,
             matters=term.matters,
+            category=term.category,
             also=list(term.also),
         )
         for term in service.search(q or "")
