@@ -2,6 +2,28 @@ import { BaseEdge, EdgeLabelRenderer, Position, type EdgeProps } from "@xyflow/r
 
 import { MEDIA_COLOR, formatPort, mediaOf, type PortStyle } from "../lib/portlabel";
 
+/** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
+const SAME_ROW = 60;
+
+/** 右の列（拠点の対向など）と見なす横の差。 */
+const COLUMN = 400;
+
+/** 「横にいる」と見なす比。縦の差のこの倍だけ横へ離れていれば横から出す。 */
+const SIDEWAYS = 1.5;
+
+/**
+ * 相手がどちらにいるかで、線を出す辺を決める。
+ *
+ * 画面・線の引き回し・書き出しで同じ判断にする。別々に書いていたときは、
+ * 画面だけが古い規則のままで、右にいる相手へ下から線を出していた。
+ */
+export function sideBetween(dx: number, dy: number): Face {
+  if (Math.abs(dy) < SAME_ROW) return dx > 0 ? "right" : "left";
+  if (Math.abs(dx) >= COLUMN) return dx > 0 ? "right" : "left";
+  if (Math.abs(dx) >= SIDEWAYS * Math.abs(dy)) return dx > 0 ? "right" : "left";
+  return dy > 0 ? "bottom" : "top";
+}
+
 export interface WireBox {
   x1: number;
   y1: number;
@@ -292,6 +314,108 @@ export function segmentPiercesBox(box: WireBox, a: Pt, b: Pt): boolean {
   return t1 - t0 > 1e-4 && t0 < 1 - 1e-9 && t1 > 1e-9;
 }
 
+/** 箱の縁すれすれを通る区間の数。書き出し側の _hugs_box_count と同じ考え方。 */
+export function hugsBoxCount(points: Pt[], boxes: WireBox[], clearance = 20): number {
+  let count = 0;
+  for (let i = 1; i + 2 < points.length; i += 1) {
+    const a = points[i];
+    const b = points[i + 1];
+    for (const box of boxes) {
+      const near: WireBox = {
+        x1: box.x1 - clearance,
+        y1: box.y1 - clearance,
+        x2: box.x2 + clearance,
+        y2: box.y2 + clearance,
+      };
+      if (segmentPiercesBox(near, a, b) && !segmentPiercesBox(box, a, b)) {
+        count += 1;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
+/** 迂回するときに箱から離す距離。書き出し側の _ROUTE_CLEAR と同じ考え方。 */
+const ROUTE_CLEAR = 24;
+
+function ell(p1: Pt, p2: Pt, horizontalFirst: boolean): Pt[] {
+  const mid = horizontalFirst ? { x: p2.x, y: p1.y } : { x: p1.x, y: p2.y };
+  if (Math.abs(mid.x - p1.x) < 0.5 && Math.abs(mid.y - p1.y) < 0.5) return [p1, p2];
+  if (Math.abs(mid.x - p2.x) < 0.5 && Math.abs(mid.y - p2.y) < 0.5) return [p1, p2];
+  return [p1, mid, p2];
+}
+
+function segmentsHit(points: Pt[], boxes: WireBox[]): number {
+  let count = 0;
+  for (let i = 0; i + 1 < points.length; i += 1) {
+    for (const box of boxes) {
+      if (segmentPiercesBox(box, points[i], points[i + 1])) {
+        count += 1;
+        break;
+      }
+    }
+  }
+  return count;
+}
+
+/**
+ * 関係の無い機器の箱を避けて通る折れ線。斜めは出さない。
+ *
+ * 直線で結ぶと、間にある機器の上を通ってしまう。図の上では「通過」と
+ * 「接続」を見分けられないので、その機器にも繋がっていると読まれる。
+ * 書き出し側（topology_export の _route）と同じ考え方で、邪魔をしている箱を
+ * ひとまとめにして、その4辺の外へ逃がしてから引き直す。
+ */
+export function avoidRoute(p1: Pt, p2: Pt, boxes: WireBox[], depth = 0): Pt[] {
+  const options = [ell(p1, p2, true), ell(p1, p2, false)];
+  const clear = options.filter((route) => segmentsHit(route, boxes) === 0);
+  if (clear.length > 0) {
+    return clear.sort((a, b) => pathLength(a) - pathLength(b))[0];
+  }
+  if (depth >= 2) {
+    return options.sort(
+      (a, b) => segmentsHit(a, boxes) - segmentsHit(b, boxes) || pathLength(a) - pathLength(b),
+    )[0];
+  }
+
+  const blockers = boxes.filter((box) =>
+    options.some((route) =>
+      route.some((_, i) => i + 1 < route.length && segmentPiercesBox(box, route[i], route[i + 1])),
+    ),
+  );
+  if (blockers.length === 0) return options[0];
+
+  const hit: WireBox = {
+    x1: Math.min(...blockers.map((b) => b.x1)),
+    y1: Math.min(...blockers.map((b) => b.y1)),
+    x2: Math.max(...blockers.map((b) => b.x2)),
+    y2: Math.max(...blockers.map((b) => b.y2)),
+  };
+  const midX = (hit.x1 + hit.x2) / 2;
+  const midY = (hit.y1 + hit.y2) / 2;
+  const corners: Pt[] = [
+    { x: midX, y: hit.y1 - ROUTE_CLEAR },
+    { x: midX, y: hit.y2 + ROUTE_CLEAR },
+    { x: hit.x1 - ROUTE_CLEAR, y: midY },
+    { x: hit.x2 + ROUTE_CLEAR, y: midY },
+  ];
+  let best: Pt[] | null = null;
+  let bestCost: [number, number] | null = null;
+  for (const point of corners) {
+    const head = avoidRoute(p1, point, boxes, depth + 1);
+    const tail = avoidRoute(point, p2, boxes, depth + 1);
+    const route = [...head.slice(0, -1), ...tail];
+    const cost: [number, number] = [segmentsHit(route, boxes), pathLength(route)];
+    if (!bestCost || cost[0] < bestCost[0] || (cost[0] === bestCost[0] && cost[1] < bestCost[1])) {
+      best = route;
+      bestCost = cost;
+    }
+    if (cost[0] === 0 && depth > 0) break;
+  }
+  return best ?? options[0];
+}
+
 export function routePierceCount(points: Pt[], boxes: WireBox[]): number {
   let hits = 0;
   for (let i = 0; i < points.length - 1; i += 1) {
@@ -451,15 +575,7 @@ export function facesForEdge(input: {
   });
   const srcMid = mid(input.sourceBox);
   const dstMid = mid(input.targetBox);
-  // sideToward 相当（保存座標中心）
-  const toward = (from: Pt, to: Pt): Face => {
-    const dx = to.x - from.x;
-    const dy = to.y - from.y;
-    if (Math.abs(dy) < 60) return dx > 0 ? "right" : "left";
-    if (Math.abs(dx) >= 400) return dx > 0 ? "right" : "left";
-    if (Math.abs(dy) >= 100) return dy > 0 ? "bottom" : "top";
-    return dy > 0 ? "bottom" : "top";
-  };
+  const toward = (from: Pt, to: Pt): Face => sideBetween(to.x - from.x, to.y - from.y);
   let sourceFace = input.sourceSide ?? toward(srcMid, dstMid);
   let targetFace = input.targetSide ?? toward(dstMid, srcMid);
   if (
@@ -573,16 +689,30 @@ export function routeWire(input: {
   const iy =
     input.targetY +
     (input.targetFace === "bottom" ? out : input.targetFace === "top" ? -out : 0);
-  const horizontalFirst = input.sourceFace === "left" || input.sourceFace === "right";
-  const midX = horizontalFirst ? ox : ix;
-  const midY = horizontalFirst ? iy : oy;
-  candidates.push([
-    { x: input.sourceX, y: input.sourceY },
-    { x: ox, y: oy },
-    { x: midX, y: midY },
-    { x: ix, y: iy },
-    { x: input.targetX, y: input.targetY },
-  ]);
+  // 口の外へ一歩出てから、横→縦・縦→横の両方でつなぐ。片方だけだと、
+  // 相手の箱の中を通る経路しか残らないことがある（実際に画面で起きていた）
+  for (const horizontalFirst of [true, false]) {
+    const midX = horizontalFirst ? ox : ix;
+    const midY = horizontalFirst ? iy : oy;
+    candidates.push([
+      { x: input.sourceX, y: input.sourceY },
+      { x: ox, y: oy },
+      { x: midX, y: midY },
+      { x: ix, y: iy },
+      { x: input.targetX, y: input.targetY },
+    ]);
+  }
+
+  // 口の外へ出てから、箱を避けて相手の口の正面まで回る。L字だけでは、
+  // 間に別の拠点の箱が並んでいるときに通れる道が残らない
+  if (pierceBoxes.length > 0) {
+    const around = avoidRoute({ x: ox, y: oy }, { x: ix, y: iy }, pierceBoxes);
+    candidates.push([
+      { x: input.sourceX, y: input.sourceY },
+      ...around,
+      { x: input.targetX, y: input.targetY },
+    ]);
+  }
 
   if (pierceBoxes.length > 0) {
     for (const side of ["below", "above"] as const) {
@@ -605,6 +735,7 @@ export function routeWire(input: {
     .map((points) => ({
       points,
       pierce: routePierceCount(points, pierceBoxes),
+      hugs: hugsBoxCount(points, pierceBoxes),
       outward: exitsOutward(points, input.sourceFace) ? 0 : 1,
       arrive: arrivesFromOutside(points, input.targetFace) ? 0 : 1,
       bends: Math.max(0, points.length - 2),
@@ -613,6 +744,7 @@ export function routeWire(input: {
   scored.sort(
     (a, b) =>
       a.pierce - b.pierce ||
+      a.hugs - b.hugs ||
       a.outward - b.outward ||
       a.arrive - b.arrive ||
       a.bends - b.bends ||
