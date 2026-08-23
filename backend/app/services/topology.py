@@ -599,7 +599,7 @@ def scope_graph(
         nodes=nodes,
     )
     apply_planes(nodes, used_rank)
-    return TopologyGraph(
+    scoped = TopologyGraph(
         layer=graph.layer,
         nodes=nodes,
         # 対向どうしを結ぶ線は出さない。絞り込んだ範囲の外の話で、
@@ -612,6 +612,13 @@ def scope_graph(
         unplaced_count=graph.unplaced_count,
         groups=graph.groups,
     )
+
+    # 置き方をいくつか試し、実際に線を引いてみてから決める。置き方だけを
+    # 見ていたのでは、線が上位の段をまたいで走ることに気づけない
+    from app.services import topology_site
+
+    topology_site.polish(scoped)
+    return scoped
 
 
 #: 対向どうしの間隔。マス目1つ。

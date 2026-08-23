@@ -143,8 +143,13 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
         for node in down_peers:
             rows[node.site_id if node.site_id is not None else node.device_id].append(node)
         lefts = [min(n.x for n in members) for members in rows.values()]
-        if max(lefts) - min(lefts) < 80:
-            findings.append(Finding(True, "peer_column", "配下拠点の列が揃っている"))
+        # 列は1本とは限らない。台数が多い拠点では2列に折り返す。見たいのは
+        # 「どれかの列にきちんと揃っているか」で、列が1本かどうかではない
+        columns = _columns_of(lefts)
+        if len(columns) <= _MAX_PEER_COLUMNS:
+            findings.append(
+                Finding(True, "peer_column", f"配下拠点が {len(columns)} 列に揃っている")
+            )
         else:
             findings.append(Finding(False, "peer_not_column", "配下拠点が列になっていない"))
 
@@ -220,6 +225,23 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
         findings.append(Finding(True, "all_nodes", "画面の機器が図に残っている"))
 
     return findings
+
+
+#: 配下の対向を並べてよい列の数。これを超えると、どこを見ればよいのか
+#: 分からない散らばりになる
+_MAX_PEER_COLUMNS = 2
+
+#: 同じ列と見なす左端のずれ
+_COLUMN_TOLERANCE = 80.0
+
+
+def _columns_of(lefts: list[float]) -> list[float]:
+    """左端の並びを、列ごとにまとめる。"""
+    columns: list[float] = []
+    for left in sorted(lefts):
+        if not columns or left - columns[-1] > _COLUMN_TOLERANCE:
+            columns.append(left)
+    return columns
 
 
 #: 箱どうしに最低限空けるすき間。配置側（topology.MIN_BOX_GAP）と同じ値を使う。
