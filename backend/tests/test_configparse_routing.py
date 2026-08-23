@@ -255,3 +255,92 @@ def test_one_that_nobody_uses_is_left_visible():
     parsed = configparse.parse(OTHERS)
     unused = next(p for p in parsed.policies if p.name == "UNUSED")
     assert unused.used_by == []
+
+
+# ---------------------------------------------------------------------------
+# 線の両端で食い違うと困る値
+# ---------------------------------------------------------------------------
+
+PORTS = """hostname sw-01
+!
+interface range GigabitEthernet1/0/1 - 4
+ description office ports
+ switchport mode access
+ switchport access vlan 10
+!
+interface GigabitEthernet1/0/23
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ mtu 9198
+ speed 1000
+ duplex full
+ channel-group 1 mode active
+!
+interface Vlan10
+ ip address 10.10.10.1 255.255.255.0
+ ip mtu 1500
+"""
+
+
+def test_the_size_speed_and_way_of_bundling_are_read():
+    """両端で食い違うと「たまに固まる」形で残る。読めないと突き合わせられない。"""
+    parsed = configparse.parse(PORTS)
+    ports = {i.name: i for i in parsed.interfaces}
+    uplink = ports["GigabitEthernet1/0/23"]
+    assert uplink.mtu == 9198
+    assert uplink.speed == "1000"
+    assert uplink.duplex == "full"
+    assert uplink.lag_group == 1
+    assert uplink.lag_mode == "active"
+    assert ports["Vlan10"].mtu == 1500
+
+
+def test_ports_written_as_a_range_are_read_one_by_one():
+    """畳んだままだと「そのポートは何も設定されていない」と読めてしまう。"""
+    parsed = configparse.parse(PORTS)
+    ports = {i.name: i for i in parsed.interfaces}
+    for number in range(1, 5):
+        port = ports[f"GigabitEthernet1/0/{number}"]
+        assert port.vlan == 10
+        assert port.description == "office ports"
+        assert port.mode == "access"
+
+
+def test_a_range_with_a_comma_is_read_too():
+    from app.services.configparse.cisco import expand_range
+
+    assert expand_range("Gi1/0/1 - 3, Gi1/0/8") == [
+        "Gi1/0/1",
+        "Gi1/0/2",
+        "Gi1/0/3",
+        "Gi1/0/8",
+    ]
+
+
+def test_an_absurd_range_is_left_as_written():
+    """1万ポートのスイッチは無い。読み違えたときに台帳を埋め尽くさせない。"""
+    from app.services.configparse.cisco import expand_range
+
+    assert expand_range("Gi1/0/1 - 9999") == ["Gi1/0/1 - 9999"]
+
+
+COMWARE_PORT = """sysname qx-01
+#
+interface GigabitEthernet1/0/1
+ port link-type trunk
+ port trunk permit vlan 10 20
+ mtu 9000
+ speed 1000
+ duplex full
+ link-aggregation mode dynamic
+#
+"""
+
+
+def test_the_same_values_are_read_from_comware():
+    parsed = configparse.parse(COMWARE_PORT)
+    port = parsed.interfaces[0]
+    assert port.mtu == 9000
+    assert port.speed == "1000"
+    assert port.duplex == "full"
+    assert port.lag_mode == "active"

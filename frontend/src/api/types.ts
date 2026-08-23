@@ -768,6 +768,20 @@ export interface ConfigDraftSource {
   commands: string[];
 }
 
+/** コードで先に決めた値と、その理由。 */
+export interface ConfigDraftDecided {
+  key: string;
+  value: string;
+  why: string;
+}
+
+/** コードでは決められず、モデルか人に回したところ。 */
+export interface ConfigDraftGap {
+  key: string;
+  question: string;
+  why: string;
+}
+
 export interface ConfigDraft {
   device_id: number;
   vendor: string;
@@ -778,6 +792,10 @@ export interface ConfigDraft {
   notes: string[];
   /** 下書きを起こしたモデル。資料から拾っただけなら null */
   model: string | null;
+  /** モデルに渡す前に確定させたこと */
+  decided: ConfigDraftDecided[];
+  /** 決められず、モデルか人に回したところ */
+  gaps: ConfigDraftGap[];
 }
 
 export interface LlmModel {
@@ -1364,4 +1382,129 @@ export interface ConfigEdit {
   source: string;
   notes: string[];
   prompt: string | null;
+}
+
+/** 線の両端で設定がそろっているか、の指摘。 */
+export interface LinkFinding {
+  link_id: number;
+  a_hostname: string;
+  a_interface: string;
+  b_hostname: string;
+  b_interface: string;
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+export interface LinkReport {
+  links_seen: number;
+  links_with_config: number;
+  findings: LinkFinding[];
+  notes: string[];
+}
+
+/** ログを読んでまとめたもの。1行ずつ眺めるためのものではない。 */
+export interface LogReport {
+  lines: number;
+  parsed: number;
+  unreadable: number;
+  first_at: string | null;
+  last_at: string | null;
+  by_severity: Record<string, number>;
+  by_host: { host: string; count: number; heavy: number }[];
+  patterns: {
+    code: string;
+    count: number;
+    severity: number | null;
+    severity_label: string;
+    meaning: string;
+    hosts: string[];
+    first_at: string | null;
+    last_at: string | null;
+    sample: string;
+  }[];
+  known_hosts: string[];
+  unknown_hosts: string[];
+  notes: string[];
+}
+
+/** 数えれば分かること。推測は入っていない。 */
+export interface SubnetUsage {
+  subnet: string;
+  capacity: number;
+  used: number;
+  free: number;
+  ratio: number;
+  crowded: boolean;
+  vlan_id: number | null;
+  vlan_name: string | null;
+  devices: string[];
+  basis: string;
+}
+
+export interface VlanNumbers {
+  used: number[];
+  free_next: number[];
+  used_count: number;
+  basis: string;
+}
+
+export interface PortUsage {
+  device_id: number;
+  hostname: string;
+  total: number;
+  in_use: number;
+  free: number;
+  ratio: number;
+  basis: string;
+}
+
+export interface LagUsage {
+  device_id: number;
+  hostname: string;
+  group: number;
+  members: number;
+  total_mbps: number | null;
+  remaining_mbps: number | null;
+  note: string;
+}
+
+export interface DuplicateAddress {
+  address: string;
+  places: string[];
+}
+
+export interface CalcReport {
+  subnets: SubnetUsage[];
+  vlans: VlanNumbers | null;
+  ports: PortUsage[];
+  lags: LagUsage[];
+  duplicates: DuplicateAddress[];
+  notes: string[];
+}
+
+/** 通り道の1段。人 → AI → ロジック → AI → ロジック → AI → 人。 */
+export interface PipelineStage {
+  name: string;
+  /** ai / logic / human */
+  kind: string;
+  summary: string;
+  /** 飛ばした理由。動いた段では空 */
+  skipped: string;
+  model: string | null;
+}
+
+export interface PipelineRun {
+  request: string;
+  understood: string;
+  body: string;
+  decided: ConfigDraftDecided[];
+  gaps: ConfigDraftGap[];
+  risks: string[];
+  findings: string[];
+  ungrounded: string[];
+  explanation: string;
+  stages: PipelineStage[];
+  notes: string[];
 }

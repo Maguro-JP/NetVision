@@ -697,3 +697,61 @@ def apply_link_candidates(payload: ApplyCandidatesBody, db: DbSession) -> dict:
 
     created = l3links.apply(db, payload.pairs)
     return {"created": created}
+
+
+# ---------------------------------------------------------------------------
+# 線の両端で、設定がそろっているか
+# ---------------------------------------------------------------------------
+
+
+class LinkFindingRead(BaseModel):
+    """1本の線についての指摘。どの線かが分からないと直しに行けない。"""
+
+    link_id: int
+    a_hostname: str
+    a_interface: str
+    b_hostname: str
+    b_interface: str
+    level: str
+    title: str
+    why: str
+    evidence: list[str]
+
+
+class LinkReportRead(BaseModel):
+    links_seen: int
+    links_with_config: int
+    findings: list[LinkFindingRead]
+    notes: list[str]
+
+
+@router.get("/link-check", response_model=LinkReportRead)
+def check_links(db: DbSession) -> LinkReportRead:
+    """引けている線を、両端の設定で突き合わせる。
+
+    1台ずつの Config を見ても分からない壊れ方がある。片側だけトランク、
+    片側だけ大きい MTU、片側だけ速度を固定。どれも片方の機器の中では
+    正しいので、1台ずつ見ている限り見つからない。
+    """
+    from app.services import linkcheck
+
+    report = linkcheck.review(db)
+    return LinkReportRead(
+        links_seen=report.links_seen,
+        links_with_config=report.links_with_config,
+        findings=[
+            LinkFindingRead(
+                link_id=item.link_id,
+                a_hostname=item.a_hostname,
+                a_interface=item.a_interface,
+                b_hostname=item.b_hostname,
+                b_interface=item.b_interface,
+                level=item.finding.level,
+                title=item.finding.title,
+                why=item.finding.why,
+                evidence=item.finding.evidence,
+            )
+            for item in report.findings
+        ],
+        notes=report.notes,
+    )

@@ -34,7 +34,7 @@ from dataclasses import dataclass, field
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services import config_plans, documents, llm
+from app.services import config_plans, documents, llm, prefill
 from app.services.configdiff.dialects import for_vendor
 
 #: モデルへ渡す材料の上限。1台のサーバーで動かす前提なので、
@@ -42,6 +42,15 @@ from app.services.configdiff.dialects import for_vendor
 _MAX_SECTIONS = 6
 _MAX_BODY = 1200
 _MAX_CURRENT = 4000
+
+#: 穴を埋めてもらうときの言い方。全部を書かせず、足りない行だけを書かせる
+_FILL_SYSTEM = """あなたはネットワーク機器の設定を書く担当者です。
+すでに決まっている行はそのまま使い、足りないところの行だけを書いてください。
+
+- 出力は投入するコマンドの行だけ。説明文・記号での囲み・前置きは書かない
+- すでに決まっている行は書き直さない
+- 資料に書き方が無い部分は、その行を書かずに ! で始まる行に不足として残す
+"""
 
 _SYSTEM = """あなたはネットワーク機器の設定を書く担当者です。
 渡された資料の抜粋に書かれている書き方だけを使って、依頼された設定を書いてください。
@@ -84,6 +93,10 @@ class Draft:
     #: 下書きを起こしたモデル。規則ベースで出したときは None
     model: str | None = None
     vendor: str = ""
+    #: コードで先に決めたこと。モデルに渡す前に確定させたもの
+    decided: list[prefill.Decided] = field(default_factory=list)
+    #: コードでは決められず、モデルか人に回したところ
+    gaps: list[prefill.Gap] = field(default_factory=list)
 
     @property
     def ungrounded(self) -> list[str]:
@@ -146,6 +159,43 @@ def _material(sources: list[Source], current: str, request: str) -> str:
     return "\n\n".join(parts)
 
 
+def _merge(decided: list[str], answer: str) -> str:
+    """決まっていた行に、モデルが足した行だけを足す。
+
+    同じ行は増やさない。決まっていた行の順番は変えない。書いた場所ごとに
+    順番が変わると、差分が読めなくなる。
+    """
+    out = list(decided)
+    seen = {line.strip() for line in decided}
+    for line in answer.splitlines():
+        if line.strip() and line.strip() not in seen:
+            out.append(line)
+            seen.add(line.strip())
+    return "\n".join(out).strip()
+
+
+def _fill_material(
+    sources: list[Source], current: str, request: str, ready: prefill.Prefill
+) -> str:
+    """穴だけを埋めてもらうための材料。
+
+    決まっている行を先に見せて「ここは書き直さなくていい」と伝える。全部を
+    書かせると、決まりきったところまで毎回書き直され、そのたびに間違える
+    余地が増える。
+    """
+    parts = [_material(sources, current, request)]
+    if ready.decided:
+        parts.append("# すでに決まっていること（変えないでください）")
+        parts.append("\n".join(f"{d.key}: {d.value}" for d in ready.decided))
+    if ready.lines:
+        parts.append("# すでに書けている行（書き直さないでください）")
+        parts.append("\n".join(ready.lines))
+    if ready.gaps:
+        parts.append("# 足りないところ（ここだけ書いてください）")
+        parts.append("\n".join(f"- {gap.question}" for gap in ready.gaps))
+    return "\n\n".join(parts)
+
+
 def _check(body: str, sources: list[Source], vendor: str) -> tuple[list[Line], list[str]]:
     """行ごとに、資料の裏付けと危なさを見る。"""
     known = {_command_key(command) for source in sources for command in source.commands}
@@ -166,10 +216,18 @@ def _check(body: str, sources: list[Source], vendor: str) -> tuple[list[Line], l
     return lines, risks
 
 
-def draft(db: Session, device: Device, request: str, *, base: str | None = None) -> Draft:
+def draft(
+    db: Session,
+    device: Device,
+    request: str,
+    *,
+    base: str | None = None,
+    ready: prefill.Prefill | None = None,
+) -> Draft:
     """依頼の文と資料から、投入コマンドの下書きを作る。
 
     `base` を渡すとその config を前提に書く。省くと最新の取り込み済み config。
+    `ready` は先に済ませた下ごしらえ。渡さなければここで作る。
     """
     snapshot = config_plans.latest_snapshot(db, device.id)
     current = base if base is not None else (snapshot.content if snapshot else "")
@@ -186,23 +244,52 @@ def draft(db: Session, device: Device, request: str, *, base: str | None = None)
             "「ベンダー資料」にコマンドリファレンスを登録すると、それを根拠に書けます"
         )
 
-    answer = llm.ask(
-        _material(sources, current, request), system=_SYSTEM, role=llm.DEEP, temperature=0.0
-    )
+    # 先に、台帳と流儀から決まるものを決める。ここで決まったぶんはモデルに渡さない
+    if ready is None:
+        ready = prefill.build(db, device, request, vendor=vendor)
+    result.decided = ready.decided
+    result.gaps = ready.gaps
+    result.notes.extend(ready.notes)
+
+    if ready.complete:
+        # 穴が無いなら、モデルを呼ぶ理由がない。毎回同じ結果になり、速く、
+        # 間違えたときにどこで間違えたかが分かる
+        result.body = "\n".join(ready.lines)
+        result.lines, result.risks = _check(result.body, sources, vendor)
+        result.notes.append(
+            f"決まっていることだけで書けたので、AI は使っていません"
+            f"（決めた値 {len(ready.decided)} 件。理由は一緒に出しています）"
+        )
+        result.notes.append("ここで作るのは下書きだけです。実機へは投入しません")
+        return result
+
+    if ready.lines or ready.gaps:
+        answer = llm.ask(
+            _fill_material(sources, current, request, ready),
+            system=_FILL_SYSTEM,
+            role=llm.DEEP,
+            temperature=0.0,
+        )
+    else:
+        answer = llm.ask(
+            _material(sources, current, request), system=_SYSTEM, role=llm.DEEP, temperature=0.0
+        )
     if answer is None:
         # モデルが無くても、資料から拾ったコマンドは手がかりとして返す
-        picked: list[str] = []
+        picked = list(ready.lines)
         for source in sources:
             for command in source.commands:
                 if command not in picked:
                     picked.append(command)
         result.body = "\n".join(picked)
         result.notes.append(
-            "モデルが使えないため、資料から拾ったコマンドをそのまま並べています。"
+            "モデルが使えないため、決まったぶんの行と、資料から拾ったコマンドを並べています。"
             "順番と値は人が直してください"
         )
     else:
-        result.body = _strip_fences(answer.text).strip()
+        # 決まっていた行は残し、モデルが書いたのは足りないところだけを足す。
+        # 返ってきた本文で置き換えると、確定していた行まで書き換わる
+        result.body = _merge(ready.lines, _strip_fences(answer.text))
         result.model = answer.model
 
     result.lines, result.risks = _check(result.body, sources, vendor)
@@ -212,6 +299,8 @@ def draft(db: Session, device: Device, request: str, *, base: str | None = None)
             f"資料に同じ書き方が見つからない行が {len(result.ungrounded)} 行あります。"
             "投入前にその行を確かめてください"
         )
+    for gap in result.gaps:
+        result.notes.append(f"{gap.question}：{gap.why}")
     result.notes.append("ここで作るのは下書きだけです。実機へは投入しません")
     return result
 

@@ -6,6 +6,7 @@ from fastapi.responses import JSONResponse
 
 from app.api.routes import (
     blueprint,
+    calc,
     capabilities,
     changes,
     config_plans,
@@ -22,11 +23,13 @@ from app.api.routes import (
     insights,
     jobs,
     maintenance,
+    pipeline,
     reference,
     remediation,
     replacement,
     scenarios,
     sites,
+    syslog,
     topology,
 )
 from app.api.routes import schema as schema_routes
@@ -80,6 +83,8 @@ app.include_router(config_plans.router, prefix=api)
 app.include_router(replacement.router, prefix=api)
 app.include_router(remediation.router, prefix=api)
 app.include_router(exposures.router, prefix=api)
+app.include_router(calc.router, prefix=api)
+app.include_router(pipeline.router, prefix=api)
 app.include_router(schema_routes.router, prefix=api)
 app.include_router(settings_routes.router, prefix=api)
 app.include_router(jobs.router, prefix=api)
@@ -88,6 +93,7 @@ app.include_router(capabilities.router, prefix=api)
 app.include_router(glossary.router, prefix=api)
 app.include_router(conventions.router, prefix=api)
 app.include_router(configcheck.router, prefix=api)
+app.include_router(syslog.router, prefix=api)
 
 _SCHEMA_OPEN = (
     "/health",

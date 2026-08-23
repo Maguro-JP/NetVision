@@ -4,6 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { InsightCategory } from "../api/types";
+import LinkCheckPanel from "../components/LinkCheckPanel";
 import QueryError from "../components/QueryError";
 import SeverityBadge from "../components/SeverityBadge";
 import { formatCurrency } from "../lib/format";
@@ -60,7 +61,9 @@ export default function InsightsPage() {
                 key={key}
                 className="card clickable"
                 onClick={() => setCategory(category === key ? "" : key)}
-                style={{ borderColor: category === key ? "var(--accent)" : undefined }}
+                style={{
+                  borderColor: category === key ? "var(--accent)" : undefined,
+                }}
               >
                 <div className="label">{CATEGORY_LABEL[key]}</div>
                 <div className="value">{data.by_category[key] ?? 0}</div>
@@ -98,17 +101,32 @@ export default function InsightsPage() {
                     </td>
                     <td>
                       {insight.device_id ? (
-                        <Link to={`/devices/${insight.device_id}`}>{insight.device_hostname}</Link>
+                        <Link to={`/devices/${insight.device_id}`}>
+                          {insight.device_hostname}
+                        </Link>
                       ) : (
                         <span className="muted">全体</span>
                       )}
                     </td>
                     <td>{insight.title}</td>
-                    <td style={{ whiteSpace: "normal", maxWidth: 320 }}>{insight.detail}</td>
-                    <td style={{ color: insight.annual_saving ? "var(--sev-ok)" : undefined }}>
-                      {insight.annual_saving ? formatCurrency(insight.annual_saving) : "—"}
+                    <td style={{ whiteSpace: "normal", maxWidth: 320 }}>
+                      {insight.detail}
                     </td>
-                    <td className="muted" style={{ whiteSpace: "normal", maxWidth: 320 }}>
+                    <td
+                      style={{
+                        color: insight.annual_saving
+                          ? "var(--sev-ok)"
+                          : undefined,
+                      }}
+                    >
+                      {insight.annual_saving
+                        ? formatCurrency(insight.annual_saving)
+                        : "—"}
+                    </td>
+                    <td
+                      className="muted"
+                      style={{ whiteSpace: "normal", maxWidth: 320 }}
+                    >
                       {insight.recommendation}
                     </td>
                   </tr>
@@ -118,6 +136,7 @@ export default function InsightsPage() {
           )}
         </>
       )}
+      <LinkCheckPanel />
     </>
   );
 }

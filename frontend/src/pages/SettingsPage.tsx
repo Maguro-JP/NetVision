@@ -1,6 +1,9 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 
 import { api } from "../api/client";
+import { TAPS_TO_OPEN, opensAt } from "./HiddenPage";
 import type { AppSettings } from "../api/types";
 import {
   DEFAULT_PREFS,
@@ -286,6 +289,44 @@ export default function SettingsPage() {
           </li>
         </ul>
       </div>
+
+      <HiddenDoor />
+    </div>
+  );
+}
+
+/**
+ * 表に出していない場所への入口。
+ *
+ * 途中のものをメニューに並べると、使えるものとして本番の判断に使われる。
+ * かといって入口が無いと、置いたことごと忘れる。だから一番下の余白に、
+ * 何度か触れば開く場所だけを置いておく。
+ */
+function HiddenDoor() {
+  const [taps, setTaps] = useState(0);
+  const navigate = useNavigate();
+
+  return (
+    <div
+      aria-hidden
+      onClick={() => {
+        const next = taps + 1;
+        setTaps(next);
+        if (opensAt(next)) navigate("/hidden");
+      }}
+      style={{
+        cursor: "default",
+        height: 48,
+        opacity: taps === 0 ? 0 : 0.35,
+        paddingTop: 16,
+        textAlign: "center",
+        userSelect: "none",
+      }}
+      title=""
+    >
+      <span className="muted" style={{ fontSize: 12 }}>
+        {taps > 0 ? "・".repeat(Math.min(taps, TAPS_TO_OPEN)) : ""}
+      </span>
     </div>
   );
 }

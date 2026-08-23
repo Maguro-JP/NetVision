@@ -510,6 +510,23 @@ def _parse_qx(text: str) -> ParsedConfig:
         if binding:
             current.vrf = binding.group(1)
             continue
+        mtu = re.match(r"^\s*(?:ip\s+)?mtu\s+(\d+)\s*$", raw, re.IGNORECASE)
+        if mtu:
+            current.mtu = int(mtu.group(1))
+            continue
+        speed = re.match(r"^\s*speed\s+(\S+)\s*$", raw, re.IGNORECASE)
+        if speed:
+            current.speed = speed.group(1)
+            continue
+        duplex = re.match(r"^\s*duplex\s+(\S+)\s*$", raw, re.IGNORECASE)
+        if duplex:
+            current.duplex = duplex.group(1)
+            continue
+        lag_mode = re.match(r"^\s*link-aggregation\s+mode\s+(\S+)\s*$", raw, re.IGNORECASE)
+        if lag_mode:
+            # Comware は dynamic / static。他ベンダーの語に寄せる
+            current.lag_mode = "active" if lag_mode.group(1).lower() == "dynamic" else "on"
+            continue
         if re.match(r"^\s*shutdown\s*$", raw, re.IGNORECASE):
             current.enabled = False
 

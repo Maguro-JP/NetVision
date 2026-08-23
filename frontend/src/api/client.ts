@@ -1,5 +1,7 @@
 import type {
   AdditionPlan,
+  LogReport,
+  LinkReport,
   ConfigEdit,
   AskBackAnswer,
   ConfigCheck,
@@ -38,6 +40,8 @@ import type {
   MaintenanceContract,
   NetworkInterface,
   AppMeta,
+  CalcReport,
+  PipelineRun,
   DeviceRemediation,
   ExposureRow,
   ExposureSummary,
@@ -697,6 +701,21 @@ export const api = {
       }[];
     }>(`/devices/${deviceId}/design-config`),
 
+  /** 貼ったログを読む。台帳には何も書かない。 */
+  readSyslog: (text: string) =>
+    request<LogReport>("/syslog", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  readSyslogFiles: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    return upload<LogReport>("/syslog/upload", form);
+  },
+
+  /** 線の両端で、設定がそろっているか。 */
+  linkCheck: () => request<LinkReport>("/topology/link-check"),
+
   /** 経路の情報から見つけた線の候補。LLDP が無い現場でも図を立ち上げる。 */
   linkCandidates: () => request<LinkCandidate[]>("/topology/link-candidates"),
   applyLinkCandidates: (pairs?: [number, number][]) =>
@@ -1077,6 +1096,16 @@ export const api = {
     request<ReplacementPlan>(`/replacement/plan${query({ years })}`),
   replacementImpact: (deviceId: number) =>
     request<ImpactReport>(`/replacement/impact/${deviceId}`),
+
+  /** 数えれば分かること。セグメントの空き・VLAN 番号・ポートの残りなど。 */
+  calc: () => request<CalcReport>("/calc"),
+
+  /** やりたいことを1本通す。どの段が何をしたかも返る。 */
+  runPipeline: (deviceId: number, body: { request: string; base?: string }) =>
+    request<PipelineRun>(`/devices/${deviceId}/pipeline`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   meta: () => request<AppMeta>("/meta"),
   // プレビューの初回は表の作成とデモ投入が走る。8秒だと「起動できませんでした」になる
