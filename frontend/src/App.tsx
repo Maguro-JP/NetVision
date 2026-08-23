@@ -4,83 +4,16 @@ import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "./api/client";
 import { WINDOW_FLAG } from "./components/WindowLink";
-
-/** メニューは「何をしたいか」で束ねる。項目が増えても探す範囲が変わらない。 */
-const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
-  [
-    {
-      label: "見る",
-      items: [
-        { to: "/dashboard", label: "ダッシュボード" },
-        { to: "/topology", label: "トポロジー図" },
-        // /space（立体で眺める）は隠し機能。メニューには出さず、URL 直打ちだけ。
-        { to: "/insights", label: "最適化の指摘" },
-        { to: "/capabilities", label: "対応している機能" },
-        { to: "/glossary", label: "言葉の説明" },
-      ],
-    },
-    {
-      label: "台帳",
-      items: [
-        { to: "/devices", label: "機器一覧" },
-        { to: "/sites", label: "拠点" },
-        { to: "/vlans", label: "VLAN 台帳" },
-      ],
-    },
-    {
-      label: "セキュリティ",
-      items: [
-        { to: "/exposures", label: "対処状況" },
-        { to: "/vulnerabilities", label: "脆弱性" },
-        { to: "/remediation", label: "脆弱性への対処" },
-      ],
-    },
-    {
-      label: "計画・変更",
-      items: [
-        { to: "/replacement", label: "更改支援" },
-        { to: "/ask", label: "ことばで頼む" },
-        { to: "/pipeline", label: "頼んで、通り道を見る" },
-        { to: "/config-check", label: "Config を見てもらう" },
-        { to: "/syslog", label: "ログを読む" },
-        { to: "/calc", label: "数えれば分かること" },
-        { to: "/os", label: "版と、いまの状態" },
-        { to: "/blueprint", label: "構成を起こす" },
-        { to: "/scenarios", label: "将来構成シナリオ" },
-        { to: "/config-plans", label: "Config計画（差分生成）" },
-        { to: "/config-templates", label: "Configテンプレート" },
-        { to: "/changes", label: "変更履歴" },
-      ],
-    },
-    {
-      label: "取り込み・資料",
-      items: [
-        { to: "/configs", label: "Configの取り込み" },
-        { to: "/import", label: "台帳の取り込み" },
-        { to: "/reference", label: "製品情報（EoL・脆弱性）" },
-        { to: "/documents", label: "メーカー資料" },
-      ],
-    },
-  ];
+import { SECTIONS, isCurrent, sectionFor } from "./nav";
 
 const OPEN_KEY = "netvision.sidebar";
 const PIN_KEY = "netvision.sidebar.pinned";
-const FOLDED_KEY = "netvision.sidebar.folded";
 
 /** タブレットくらいの幅では、メニューを出しっぱなしにすると図が潰れる。 */
 const NARROW = "(max-width: 900px)";
 
 function isNarrow(): boolean {
   return window.matchMedia(NARROW).matches;
-}
-
-function readList(key: string): string[] {
-  try {
-    const saved = JSON.parse(localStorage.getItem(key) ?? "[]");
-    return Array.isArray(saved) ? saved : [];
-  } catch {
-    return [];
-  }
 }
 
 /**
@@ -112,19 +45,11 @@ export default function App() {
     if (saved === "closed") return false;
     return !isNarrow();
   });
-  // 畳んだグループ。項目が何処にあるか分からなくなるのが一番困るので、
-  // 既定は全部開いた状態にしておく
-  const [folded, setFolded] = useState<string[]>(() => readList(FOLDED_KEY));
-
   useEffect(
     () => localStorage.setItem(OPEN_KEY, open ? "open" : "closed"),
     [open],
   );
   useEffect(() => localStorage.setItem(PIN_KEY, String(pinned)), [pinned]);
-  useEffect(
-    () => localStorage.setItem(FOLDED_KEY, JSON.stringify(folded)),
-    [folded],
-  );
 
   // 狭い画面ではメニューが図に覆いかぶさるので、選んだら閉じる。
   // 常時表示にしている場合と、広い画面では閉じない
@@ -137,12 +62,8 @@ export default function App() {
     if (pinned) setOpen(true);
   }, [pinned]);
 
-  const toggleGroup = (label: string) =>
-    setFolded((current) =>
-      current.includes(label)
-        ? current.filter((item) => item !== label)
-        : [...current, label],
-    );
+  // いま開いている画面が属するまとまり。中の画面はページの上にタブで出す
+  const section = sectionFor(location.pathname);
 
   if (bare) {
     // 印刷プレビューのような窓。中身だけを出す
@@ -178,43 +99,18 @@ export default function App() {
           </NavLink>
         </div>
         <nav className="nav">
-          {NAV_GROUPS.map((group) => {
-            // 今いる画面が入っているグループは畳まない。開いて探す手間を無くす
-            const current = group.items.some(
-              (item) => item.to === location.pathname,
-            );
-            const collapsed = folded.includes(group.label) && !current;
-
-            return (
-              <div
-                key={group.label}
-                className={`nav-group ${collapsed ? "folded" : ""}`}
-              >
-                <button
-                  className="nav-group-label"
-                  onClick={() => toggleGroup(group.label)}
-                  aria-expanded={!collapsed}
-                  title={collapsed ? "開く" : "畳む"}
-                >
-                  <span className="nav-caret">{collapsed ? "▸" : "▾"}</span>
-                  {group.label}
-                  {collapsed && (
-                    <span className="nav-count">{group.items.length}</span>
-                  )}
-                </button>
-                {!collapsed &&
-                  group.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      className={({ isActive }) => (isActive ? "active" : "")}
-                    >
-                      {item.label}
-                    </NavLink>
-                  ))}
-              </div>
-            );
-          })}
+          {SECTIONS.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={() =>
+                section?.label === item.label ? "nav-section active" : "nav-section"
+              }
+            >
+              {item.label}
+              {item.hint && <span className="nav-hint">{item.hint}</span>}
+            </NavLink>
+          ))}
         </nav>
       </aside>
 
@@ -271,6 +167,24 @@ export default function App() {
             画面と操作感の確認用で、実機の情報は入れないでください。
           </div>
         )}
+        {/* まとまりの中の画面は、左ではなくここに出す。左を短く保ったまま、
+            隣に何があるのかも見える */}
+        {section && section.items.length > 1 && (
+          <nav className="section-tabs" aria-label={section.label}>
+            {section.items.map((item) => (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={() =>
+                  isCurrent(location.pathname, item.to) ? "active" : ""
+                }
+              >
+                {item.label}
+              </NavLink>
+            ))}
+          </nav>
+        )}
+
         <Outlet />
       </main>
     </div>
