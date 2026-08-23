@@ -1508,3 +1508,70 @@ export interface PipelineRun {
   stages: PipelineStage[];
   notes: string[];
 }
+
+/** SNMP で読めたポート1本の状態。 */
+export interface MibPort {
+  index: string;
+  name: string;
+  alias: string;
+  admin: string;
+  oper: string;
+  speed_mbps: number | null;
+  /** 「使う設定です / 落ちています」のような1行 */
+  state: string;
+  down_but_enabled: boolean;
+}
+
+export interface MibValue {
+  key: string;
+  oid: string;
+  index: string;
+  raw: string;
+  label: string;
+  plain: string;
+}
+
+export interface MibReport {
+  lines: number;
+  read: number;
+  unknown: number;
+  hostname: string | null;
+  descr: string | null;
+  vendor: string | null;
+  model: string | null;
+  os_version: string | null;
+  serial: string | null;
+  location: string | null;
+  uptime: string | null;
+  ports: MibPort[];
+  values: MibValue[];
+  differences: string[];
+  notes: string[];
+}
+
+/** ある機種で動いている版1つ。 */
+export interface RunningVersion {
+  version: string;
+  count: number;
+  hostnames: string[];
+  newest: boolean;
+}
+
+export interface ModelSpread {
+  model: string;
+  os_name: string;
+  devices: number;
+  versions: RunningVersion[];
+  newest: string;
+  behind: number;
+  unknown: number;
+  basis: string;
+  mixed: boolean;
+}
+
+export interface OsReport {
+  models: ModelSpread[];
+  unknown_total: number;
+  devices: number;
+  notes: string[];
+}
