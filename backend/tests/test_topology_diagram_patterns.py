@@ -280,3 +280,58 @@ def test_looking_again_does_not_move_saved_boxes(db_session):
     again = load_diagram(db_session, "physical", site_id=ids["osaka"])
     kept = next(n for n in again.nodes if n.hostname == "osaka-rt-01")
     assert (kept.x, kept.y) == (4321.0, 1234.0)
+
+
+def test_center_with_dual_homed_branches(db_session):
+    """センターから見た図。支社は2台のコアの両方につながる。
+
+    この形が長く汚かった。コアの右にいる支社へ下から線を出していたため、
+    線が箱の中を通り、切れ目の無い交差が残っていた。
+    """
+    center = Site(name="東日本センター", address="東京都")
+    hq = Site(name="本社データセンター", address="東京都")
+    db_session.add_all([center, hq])
+    db_session.flush()
+
+    def router(hostname: str, site: Site) -> Device:
+        device = Device(
+            hostname=hostname,
+            vendor="Juniper",
+            model="MX304",
+            device_type=DeviceType.ROUTER,
+            site_id=site.id,
+        )
+        db_session.add(device)
+        return device
+
+    core_a = router("east-core-rt-01", center)
+    core_b = router("east-core-rt-02", center)
+    edge = router("edge-rt-01", hq)
+    branches = []
+    for index, name in enumerate(("hkd", "thk", "knt"), start=1):
+        site = Site(name=f"{name}支社", address="日本")
+        db_session.add(site)
+        db_session.flush()
+        branches.append((index, router(f"{name}-br-rt-01", site)))
+    db_session.flush()
+
+    links = [
+        (core_a, "ge-0/0/0", edge, "ge-0/0/1"),
+        (core_a, "ge-0/1/0", core_b, "ge-0/1/0"),
+    ]
+    for index, branch in branches:
+        links.append((branch, "Gi0/0/0", core_a, f"ge-0/0/{index}"))
+        links.append((branch, "Gi0/0/2", core_b, f"ge-0/0/{index}"))
+    for a, a_if, b, b_if in links:
+        db_session.add(Link(a_device_id=a.id, a_interface=a_if, b_device_id=b.id, b_interface=b_if))
+    db_session.commit()
+
+    graph = scope_graph(get_graph(db_session), site_id=center.id)
+    _ok(graph, "センター 物理構成", "center.svg")
+
+    svg = render_svg(graph, title="センター 物理構成", style="simple")
+    placed = {n.hostname: n for n in graph.nodes}
+    # 2台のコアは横並び。縦に積むと主系・予備に見える
+    assert abs(placed["east-core-rt-01"].y - placed["east-core-rt-02"].y) < 1
+    # 右にいる支社へは、下ではなく横から出す
+    assert "Gi0/0/0" in svg and "Gi0/0/2" in svg

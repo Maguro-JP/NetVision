@@ -13,6 +13,7 @@ from dataclasses import dataclass
 from app.services.topology import (
     _DETAIL_HEIGHT,
     _OUTSIDE_HEIGHT,
+    MIN_BOX_GAP,
     TopologyGraph,
     _busiest_sides,
     _visual_bottom,
@@ -142,8 +143,13 @@ def evaluate_site_diagram(graph: TopologyGraph) -> list[Finding]:
         for node in down_peers:
             rows[node.site_id if node.site_id is not None else node.device_id].append(node)
         lefts = [min(n.x for n in members) for members in rows.values()]
-        if max(lefts) - min(lefts) < 80:
-            findings.append(Finding(True, "peer_column", "配下拠点の列が揃っている"))
+        # 列は1本とは限らない。台数が多い拠点では2列に折り返す。見たいのは
+        # 「どれかの列にきちんと揃っているか」で、列が1本かどうかではない
+        columns = _columns_of(lefts)
+        if len(columns) <= _MAX_PEER_COLUMNS:
+            findings.append(
+                Finding(True, "peer_column", f"配下拠点が {len(columns)} 列に揃っている")
+            )
         else:
             findings.append(Finding(False, "peer_not_column", "配下拠点が列になっていない"))
 
@@ -161,6 +167,18 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
 
     boxes = _svg_boxes(svg)
     wires = _svg_polylines(svg)
+
+    # 描いた箱そのもので見る。座標の上では離れていても、書き出しが別の
+    # 大きさで描けば重なる。実際にそうなっていた（対向の箱だけ簡易表示で
+    # 大きく描かれ、段の間隔より高かった）ので、出来上がりの側から見る
+    touching = _touching_boxes(boxes)
+    if touching:
+        near, gap = touching
+        findings.append(
+            Finding(False, "boxes_touch", f"箱どうしが近すぎる（すき間 {gap:.0f}px）: {near}")
+        )
+    else:
+        findings.append(Finding(True, "boxes_apart", "箱どうしが離れている"))
     pierced = False
     for wire in wires:
         for a, b in zip(wire, wire[1:], strict=False):
@@ -176,8 +194,10 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
     if not pierced:
         findings.append(Finding(True, "no_pierce", "線が箱を貫いていない"))
 
-    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）
-    too_bent = any(max(0, len(wire) - 2) > 2 for wire in wires)
+    # 1本あたり折れが多すぎると Visio の定石から外れる（同じ段の迂回は2折れ）。
+    # 口へ差し込む短い枝は折れとして数えない。数えると、迂回1回で上限を
+    # 超えてしまい、貫くしかなくなる
+    too_bent = any(_bends(wire) > 2 for wire in wires)
     if too_bent:
         findings.append(Finding(False, "too_bent", "線の折れが多すぎる"))
     else:
@@ -205,6 +225,85 @@ def evaluate_svg(svg: str, graph: TopologyGraph) -> list[Finding]:
         findings.append(Finding(True, "all_nodes", "画面の機器が図に残っている"))
 
     return findings
+
+
+#: 配下の対向を並べてよい列の数。これを超えると、どこを見ればよいのか
+#: 分からない散らばりになる
+_MAX_PEER_COLUMNS = 2
+
+#: 同じ列と見なす左端のずれ
+_COLUMN_TOLERANCE = 80.0
+
+
+def _columns_of(lefts: list[float]) -> list[float]:
+    """左端の並びを、列ごとにまとめる。"""
+    columns: list[float] = []
+    for left in sorted(lefts):
+        if not columns or left - columns[-1] > _COLUMN_TOLERANCE:
+            columns.append(left)
+    return columns
+
+
+#: 箱どうしに最低限空けるすき間。配置側（topology.MIN_BOX_GAP）と同じ値を使う。
+#: 別々に持つと、置く側と見る側で合格の線がずれる
+_MIN_BOX_GAP = MIN_BOX_GAP
+
+
+def _touching_boxes(
+    boxes: list[tuple[float, float, float, float]],
+) -> tuple[str, float] | None:
+    """描いた箱で、いちばん近い組が近すぎないか。
+
+    戻り値は (その組の位置, すき間)。すき間が負なら重なっている。
+    """
+    worst: tuple[str, float] | None = None
+    for i, a in enumerate(boxes):
+        for b in boxes[i + 1 :]:
+            # 箱の中に描いた箱（詳細表示の行）は、入れ子なので見ない
+            if _contains(a, b) or _contains(b, a):
+                continue
+            ax, ay, ax2, ay2 = a
+            bx, by, bx2, by2 = b
+            gap = max(ax - bx2, bx - ax2, ay - by2, by - ay2)
+            if gap >= _MIN_BOX_GAP:
+                continue
+            if worst is None or gap < worst[1]:
+                worst = (f"({ax:.0f},{ay:.0f}) と ({bx:.0f},{by:.0f})", gap)
+    return worst
+
+
+#: 口に差し込む短い枝の長さ。これ以下の端の枝は折れとして数えない
+_STUB = 24.0
+
+
+def _bends(wire: list[tuple[float, float]]) -> int:
+    """人が「折れ」として読む回数。
+
+    箱の口へ差し込む短い枝（16px）は、読む側には折れに見えない。そこまで
+    数えると、上位を回り込む1回の迂回（上へ・横へ・下へ）が上限を超えてしまい、
+    通せる線が無くなる。両端の短い枝を落としてから数える。
+    """
+    points = list(wire)
+    while len(points) > 2 and _length(points[0], points[1]) <= _STUB:
+        points.pop(0)
+    while len(points) > 2 and _length(points[-2], points[-1]) <= _STUB:
+        points.pop()
+    return max(0, len(points) - 2)
+
+
+def _length(a: tuple[float, float], b: tuple[float, float]) -> float:
+    return abs(a[0] - b[0]) + abs(a[1] - b[1])
+
+
+def _contains(
+    outer: tuple[float, float, float, float], inner: tuple[float, float, float, float]
+) -> bool:
+    return (
+        outer[0] <= inner[0]
+        and outer[1] <= inner[1]
+        and outer[2] >= inner[2]
+        and outer[3] >= inner[3]
+    )
 
 
 def is_acceptable(findings: list[Finding]) -> bool:

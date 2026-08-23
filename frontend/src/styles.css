@@ -100,103 +100,42 @@ a:hover {
 }
 
 /* グループごとに線で区切る。どこまでが1まとまりかを見た目で示す */
-.nav-group {
-  padding: 10px 0;
-  border-top: 1px solid var(--border);
+/* 左に出すのは「何をしに来たか」だけ。中の画面はページの上のタブに出す */
+.nav-section {
+  position: relative;
 }
-.nav-group:first-child {
-  border-top: none;
-  padding-top: 0;
-}
-.nav-group.folded {
-  padding: 4px 0;
-}
-.nav-group-label {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  width: 100%;
-  padding: 4px 20px;
-  background: transparent;
-  border: none;
-  border-radius: 0;
+.nav-hint {
+  display: block;
   color: var(--muted);
   font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-align: left;
+  margin-top: 2px;
 }
-.nav-group-label:hover {
-  color: var(--text);
-  border-color: transparent;
-}
-.nav-caret {
-  font-size: 9px;
-  opacity: 0.8;
-}
-/* 畳んだグループには件数を出す。中身が消えたわけではないと分かるように */
-.nav-count {
-  margin-left: auto;
-  padding: 0 6px;
-  border-radius: 999px;
-  background: var(--panel-2);
-  font-size: 10px;
+.nav-section.active .nav-hint {
+  color: var(--muted);
 }
 
-.sidebar-pin {
-  display: inline-flex;
-  align-items: center;
+/* まとまりの中の画面。左が短くなった分、隣に何があるかはここで見せる */
+.section-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.section-tabs a {
+  padding: 8px 14px;
   color: var(--muted);
-  font-size: 12px;
-  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
   white-space: nowrap;
 }
-
-.brand {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 20px;
-  font-weight: 700;
-  padding: 0 16px 20px 20px;
-  letter-spacing: 0.5px;
-}
-.brand-name span {
-  color: var(--accent);
-}
-/* 設定はロゴの隣。毎日押すものではないので、字は出さず歯車だけにする */
-.brand-settings {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 30px;
-  height: 30px;
-  border-radius: 8px;
-  color: var(--muted);
-  font-size: 16px;
-}
-.brand-settings:hover {
-  background: var(--panel-2);
+.section-tabs a:hover {
   color: var(--text);
   text-decoration: none;
 }
-.brand-settings.active {
-  background: var(--panel-2);
-  color: var(--accent);
-}
-
-/* メニューを隠しているときだけ、上の行に名前を出す */
-.topbar-brand {
-  display: none;
-  font-weight: 700;
-  letter-spacing: 0.5px;
-}
-.topbar-brand span {
-  color: var(--accent);
-}
-.layout.collapsed .topbar-brand {
-  display: inline;
+.section-tabs a.active {
+  color: var(--text);
+  border-bottom-color: var(--accent);
 }
 
 .nav a {

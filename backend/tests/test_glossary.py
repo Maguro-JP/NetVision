@@ -72,3 +72,63 @@ def test_the_api_can_narrow_it_down(client):
     body = client.get(f"{API}/glossary", params={"q": "VLAN"}).json()
     assert body
     assert any(item["term"] == "VLAN" for item in body)
+
+
+def test_every_term_belongs_to_a_field():
+    """数が増えると一覧では探せない。分野で束ねられること。"""
+    for term in glossary.TERMS:
+        assert term.category, term.term
+
+
+def test_the_words_a_certification_asks_about_are_covered():
+    """資格で必ず出るところは、聞かれたときに引けるようにしておく。
+
+    現場で「この言葉が分からない」と止まるのは、たいていこの辺りの言葉。
+    """
+    expected = [
+        "OSI参照モデル",
+        "MACアドレス",
+        "ARP",
+        "TCP",
+        "UDP",
+        "ポート番号",
+        "DNS",
+        "MTU",
+        "CIDR",
+        "ネイティブVLAN",
+        "タグVLAN",
+        "SVI",
+        "ルートブリッジ",
+        "ポートファスト",
+        "BPDUガード",
+        "動的経路",
+        "メトリック",
+        "アドミニストレーティブディスタンス",
+        "ロンゲストマッチ",
+        "経路集約",
+        "EIGRP",
+        "RIP",
+        "再配布",
+        "ECMP",
+        "暗黙のdeny",
+        "PAT",
+        "DMZ",
+        "802.1X",
+        "AAA",
+        "IPsec",
+        "SSH",
+        "SNMP",
+        "Syslog",
+        "NTP",
+        "QoS",
+        "PoE",
+        "MPLS",
+        "VXLAN",
+    ]
+    for word in expected:
+        assert glossary.find(word) is not None, word
+
+
+def test_the_api_hands_over_the_field(client):
+    body = client.get(f"{API}/glossary").json()
+    assert all(item["category"] for item in body)

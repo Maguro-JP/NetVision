@@ -24,6 +24,7 @@ import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
+  readyToFit,
   comparePortNames,
   keepLocalPositions,
   shiftFor,
@@ -662,5 +663,27 @@ describe("ポート名の逃がし", () => {
     const normal = portLabelPlacement(100, 100, Position.Bottom, 14, 12, false);
     expect(near.y).toBeGreaterThan(normal.y);
     expect(near.anchor).toBe(normal.anchor);
+  });
+});
+
+describe("拠点を選んだあと、いつ全体を収めるか", () => {
+  const drawn = (ids: string[], width = 210) =>
+    ids.map((id) => ({ id, measured: { width } }));
+
+  it("前の拠点の箱が残っているうちは収めない", () => {
+    // 数が合う前に収めると、前の図に合わせてしまう
+    expect(readyToFit(drawn(["1", "2", "3"]), 7)).toBe(false);
+  });
+
+  it("大きさを測れていないうちは収めない", () => {
+    expect(readyToFit(drawn(["1", "2"], 0), 2)).toBe(false);
+  });
+
+  it("枠は機器として数えない", () => {
+    expect(readyToFit([...drawn(["1", "2"]), ...drawn(["g-5"])], 2)).toBe(true);
+  });
+
+  it("そろったら収める", () => {
+    expect(readyToFit(drawn(["1", "2", "3"]), 3)).toBe(true);
   });
 });

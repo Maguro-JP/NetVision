@@ -245,11 +245,13 @@ def render_svg(
         else:
             busiest_tb[device_id] = max(busiest_tb.get(device_id, 0), count)
 
-    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる。
+    # 簡易表示でも同じ高さで描く。配置（_stack_outside）と品質判定は
+    # この高さで詰めているので、ここだけ大きく描くと箱が重なる
     heights = {
         n.device_id: _box_height(
             busiest_lr.get(n.device_id, 0),
-            OUTSIDE_H if (n.outside and not simple) else base_h,
+            OUTSIDE_H if n.outside else base_h,
         )
         for n in nodes
     }
@@ -994,6 +996,9 @@ _TIER = 100.0
 # 右の列（拠点の対向）。1列分だとコア横のアクセスまで横扱いになり箱を貫く
 _COLUMN = 400.0
 
+#: 「横にいる」と見なす比。縦の差のこれ倍だけ横へ離れていれば横から出す
+_SIDEWAYS = 1.5
+
 
 def _side_toward(
     here: tuple[float, float, float, float], there: tuple[float, float, float, float]
@@ -1005,10 +1010,13 @@ def _side_toward(
     dy = (ty + th / 2) - (hy + hh / 2)
     if abs(dy) < _SAME_ROW:
         return "right" if dx > 0 else "left"
+    # 横への離れ方が縦より十分に大きければ、横から出す。右の列にいる対向が
+    # これにあたる。固定の距離（400px）で切っていたときは、列が 380px の
+    # ところにあると下から出すことになり、配下への線を何本もまたいでいた。
     if abs(dx) >= _COLUMN:
         return "right" if dx > 0 else "left"
-    if abs(dy) >= _TIER:
-        return "bottom" if dy > 0 else "top"
+    if abs(dx) >= _SIDEWAYS * abs(dy):
+        return "right" if dx > 0 else "left"
     return "bottom" if dy > 0 else "top"
 
 
@@ -1343,6 +1351,40 @@ def _route_pierce_count(
     )
 
 
+#: 線が箱のそばを通るときに空けたいすき間。これより近いと、箱の縁を這って
+#: 見えるうえ、その箱から出る線とすぐ横で交わって切れ端になる
+_BOX_CLEARANCE = 20.0
+
+
+def _hugs_box_count(
+    route: list[tuple[float, float]], boxes: list[tuple[float, float, float, float]]
+) -> int:
+    """箱の縁すれすれを通る区間の数。
+
+    貫いてはいないが、8px 下を長々と走る線は、箱の縁と見分けが付かない。
+    その箱から出る線ともすぐ横で交わるので、切れ端だらけになる。
+    端の枝（口へ差し込む短い区間）は数えない。差し込みは必ず縁に接する。
+    """
+    count = 0
+    segments = list(zip(route, route[1:], strict=False))
+    for index, (a, b) in enumerate(segments):
+        if index == 0 or index == len(segments) - 1:
+            continue
+        for x1, y1, x2, y2 in boxes:
+            near = (
+                x1 - _BOX_CLEARANCE,
+                y1 - _BOX_CLEARANCE,
+                x2 + _BOX_CLEARANCE,
+                y2 + _BOX_CLEARANCE,
+            )
+            if _segment_pierces_box(near, a, b) and not _segment_pierces_box(
+                (x1, y1, x2, y2), a, b
+            ):
+                count += 1
+                break
+    return count
+
+
 def _crosses_at_right_angle(
     a1: tuple[float, float],
     a2: tuple[float, float],
@@ -1446,6 +1488,46 @@ def _collapse_collinear(route: list[tuple[float, float]]) -> list[tuple[float, f
     return out if len(out) > 1 else route
 
 
+def _outward(point: tuple[float, float], face: str, gap: float) -> tuple[float, float]:
+    """口から、その面の外側へ離れた点。"""
+    x, y = point
+    if face == "left":
+        return (x - gap, y)
+    if face == "right":
+        return (x + gap, y)
+    if face == "top":
+        return (x, y - gap)
+    if face == "bottom":
+        return (x, y + gap)
+    return point
+
+
+def _approach_from_outside(
+    start: tuple[float, float],
+    end: tuple[float, float],
+    src_side: str,
+    dst_side: str,
+    obstacles: list[svglayout.Rect],
+) -> list[tuple[float, float]] | None:
+    """相手の口の正面まで箱の外を回ってから、まっすぐ差し込む。
+
+    口が箱の下に決まっているのに相手が真横にいると、素直に結べば線が
+    箱の中を通る。通過と接続は図の上で見分けられないので、その機器にも
+    繋がっていると読まれてしまう。
+
+    両端とも口の外へ一歩出てから、箱を避ける経路でつなぐ。
+    """
+    if src_side not in ("left", "right", "top", "bottom"):
+        return None
+    if dst_side not in ("left", "right", "top", "bottom"):
+        return None
+    gap = 24.0
+    middle = _route(_outward(start, src_side, gap), _outward(end, dst_side, gap), obstacles)
+    if not middle:
+        return None
+    return [start, *middle, end]
+
+
 def _detour_keep_faces(
     start: tuple[float, float],
     end: tuple[float, float],
@@ -1535,6 +1617,18 @@ def _wire_path(
     consider(src_side, dst_side, bus)
     consider(src_side, dst_side, _manhattan(start, end, src_side, dst_side))
     consider(src_side, dst_side, _route(start, end, obstacles))
+    # 相手の箱そのものも避ける。obstacles は「関係の無い機器」だけなので、
+    # これを足さないと、繋ぐ相手の中を通る経路が候補に残る
+    around = [
+        *obstacles,
+        svglayout.Rect(*_xywh_bounds(src_box)),
+        svglayout.Rect(*_xywh_bounds(dst_box)),
+    ]
+    consider(
+        src_side,
+        dst_side,
+        _approach_from_outside(start, end, src_side, dst_side, around),
+    )
     # 口は描画前に固定。左右のまま上下へ迂回だけ試す（口の付け替えはしない）
     if src_side in ("left", "right") and dst_side in ("left", "right"):
         for side in ("below", "above"):
@@ -1549,6 +1643,7 @@ def _wire_path(
         bends = max(0, len(route) - 2)
         return (
             _route_pierce_count(route, pierce_boxes),
+            _hugs_box_count(route, pierce_boxes),
             0 if _exits_outward(route, face_s) else 1,
             0 if _arrives_from_outside(route, face_t) else 1,
             # 折れは Visio の定石どおり2つまで。ここを崩してまで交差は避けない
@@ -1768,55 +1863,71 @@ def _cut_segment(
 
 
 def _cut_gaps(
-    wires: list[list[tuple[float, float]]], *, radius: float = 5.0, end_keep: float = 24.0
+    wires: list[list[tuple[float, float]]], *, radius: float = 5.0, end_keep: float = 12.0
 ) -> list[list[list[tuple[float, float]]]]:
-    """後から描く線が先の線と直角に交わるとき、弧ではなく隙間を空ける。
+    """直角に交わるところは、弧ではなく隙間を空ける。
 
-    機器の口のすぐ横で切ると、切れ端が口に張り付いて線が歪んで見える。
-    端点から end_keep 以内の交点は切らない。
+    どちらを切るかは、その交点が端からどれだけ離れているかで決める。口の
+    すぐ横で切ると切れ端が口に張り付くので、端から遠い方の線を切る。
+    長い線が短い枝に道を譲る形になり、切れ端が出ない。
+
+    以前は「後から描く線を切る」だけだったので、たまたま後だった短い枝が
+    口の 8px 手前で切られ、あるいは端に近すぎて切れずに交差が残っていた。
+    どちらも「どちらが手前か読めない交差」として残る。
     """
+    segments: list[list[tuple[tuple[float, float], tuple[float, float]]]] = [
+        list(zip(wire, wire[1:], strict=False)) for wire in wires
+    ]
+    holes: list[dict[int, list[tuple[float, float]]]] = [{} for _ in wires]
+
+    def from_end(cross: tuple[float, float], wire: list[tuple[float, float]]) -> float:
+        return min(abs(cross[0] - tip[0]) + abs(cross[1] - tip[1]) for tip in (wire[0], wire[-1]))
+
+    for i, segs_i in enumerate(segments):
+        for j in range(i + 1, len(segments)):
+            for si, (a1, a2) in enumerate(segs_i):
+                for sj, (b1, b2) in enumerate(segments[j]):
+                    cross = _interior_cross(a1, a2, b1, b2)
+                    if cross is None:
+                        continue
+                    room_i = from_end(cross, wires[i])
+                    room_j = from_end(cross, wires[j])
+                    # 端から遠い方を切る。どちらも近ければ切らない
+                    # （切っても切れ端になるだけで、かえって読めない）
+                    if max(room_i, room_j) < end_keep:
+                        continue
+                    if room_j >= room_i:
+                        holes[j].setdefault(sj, []).append(cross)
+                    else:
+                        holes[i].setdefault(si, []).append(cross)
+
     out: list[list[list[tuple[float, float]]]] = []
-    earlier: list[tuple[tuple[float, float], tuple[float, float]]] = []
-
-    def near(p: tuple[float, float], q: tuple[float, float]) -> bool:
-        return abs(p[0] - q[0]) <= 0.5 and abs(p[1] - q[1]) <= 0.5
-
-    def away_from_ends(cross: tuple[float, float], wire: list[tuple[float, float]]) -> bool:
-        start, end = wire[0], wire[-1]
-        for tip in (start, end):
-            if abs(cross[0] - tip[0]) + abs(cross[1] - tip[1]) < end_keep:
-                return False
-        return True
-
-    for wire in wires:
+    for index, wire in enumerate(wires):
         pieces: list[list[tuple[float, float]]] = []
         current: list[tuple[float, float]] = [wire[0]]
-        for a, b in zip(wire, wire[1:], strict=False):
-            holes = [
-                cross
-                for seg in earlier
-                if (cross := _interior_cross(a, b, seg[0], seg[1])) is not None
-                and away_from_ends(cross, wire)
-            ]
-            chunks = _cut_segment(a, b, holes, radius)
-            for index, chunk in enumerate(chunks):
+        for position, (a, b) in enumerate(segments[index]):
+            chunks = _cut_segment(a, b, holes[index].get(position, []), radius)
+            for order, chunk in enumerate(chunks):
                 # 角の手前で切ったあとに次の辺をそのまま足すと斜めになる。
                 # 切れた端と次の始点が接しているときだけつなぐ。
-                if index == 0 and current and near(current[-1], chunk[0]):
+                if order == 0 and current and _near(current[-1], chunk[0]):
                     current.extend(chunk[1:])
                 else:
                     if len(current) >= 2:
                         pieces.append(current)
                     current = list(chunk)
-            if current and not near(current[-1], b):
+            if current and not _near(current[-1], b):
                 if len(current) >= 2:
                     pieces.append(current)
                 current = []
         if len(current) >= 2:
             pieces.append(current)
         out.append(pieces or [wire])
-        earlier.extend(zip(wire, wire[1:], strict=False))
     return out
+
+
+def _near(p: tuple[float, float], q: tuple[float, float]) -> bool:
+    return abs(p[0] - q[0]) <= 0.5 and abs(p[1] - q[1]) <= 0.5
 
 
 def _path_middle(points: list[tuple[float, float]]) -> tuple[float, float, float, float]:

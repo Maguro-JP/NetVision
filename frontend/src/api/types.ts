@@ -1282,6 +1282,8 @@ export interface GlossaryTerm {
   reading: string;
   plain: string;
   matters: string;
+  /** 分野。一覧はこれで束ねて出す */
+  category: string;
   also: string[];
 }
 

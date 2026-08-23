@@ -71,6 +71,46 @@ _HYGIENE = (
         "パスワードが読める形で入っています",
         "enable password は元に戻せる形で保存されます。enable secret を使ってください。",
     ),
+    (
+        re.compile(r"^\s*snmp-server community\s+\S+\s+(?:RW|rw)\b"),
+        HIGH,
+        "SNMP から設定を書き換えられます",
+        "RW は読むだけでなく書き込みも許す指定です。合言葉を知られた時点で、"
+        "設定を変えられます。監視で要るのは読むほうだけなので、RO で足ります。",
+    ),
+    (
+        re.compile(r"^\s*ip ssh version 1\s*$", re.IGNORECASE),
+        HIGH,
+        "SSH が古い方式のままです",
+        "version 1 は解読の方法が知られています。version 2 にしてください。",
+    ),
+    (
+        re.compile(r"^\s*no service password-encryption\s*$", re.IGNORECASE),
+        MEDIUM,
+        "設定の中のパスワードが、そのまま見える状態です",
+        "Config を渡す・保管する場面で、そのまま合言葉が読めます。"
+        "service password-encryption を入れてください（強くはありませんが、素見えは防げます）。",
+    ),
+    (
+        re.compile(r"^\s*exec-timeout 0 0\s*$", re.IGNORECASE),
+        MEDIUM,
+        "入ったままの画面が、いつまでも閉じません",
+        "席を離れても操作できる状態が残ります。"
+        "作業の途中で放置された端末が、そのまま入口になります。",
+    ),
+    (
+        re.compile(r"^\s*username\s+\S+\s+password\s+", re.IGNORECASE),
+        MEDIUM,
+        "利用者のパスワードが、元に戻せる形で入っています",
+        "username ... secret を使うと、元に戻せない形で保存されます。",
+    ),
+    (
+        re.compile(r"^\s*ip source-route\s*$", re.IGNORECASE),
+        LOW,
+        "送る側が道順を指定できる状態です",
+        "本来この機器が決める道順を、荷物の側から指定できます。"
+        "使う用途はほとんど無いので、閉じておくのが既定です（no ip source-route）。",
+    ),
 )
 
 
@@ -106,8 +146,11 @@ def check(db: Session, text: str, *, filename: str = "config.txt") -> CheckResul
             "show version の出力も一緒に渡すと、もう少し読めます。"
         )
 
-    result.findings = _findings(parsed, text)
+    # 流儀との違いを先に出す。同じことを2度言わないよう、こちらで出した分は
+    # 単体の検算から外す（現場の送り先まで書けるこちらのほうが直しやすい）
     result.differences = _differences(db, parsed, text)
+    covered = {f.title.split("が")[0] for f in result.differences}
+    result.findings = _findings(parsed, text, covered=covered)
     if not result.findings and not result.differences:
         result.notes.append(
             "見た範囲では、気になるところはありませんでした。"
@@ -117,7 +160,7 @@ def check(db: Session, text: str, *, filename: str = "config.txt") -> CheckResul
     return result
 
 
-def _findings(parsed: ParsedConfig, text: str) -> list[Finding]:
+def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = None) -> list[Finding]:
     """機器に紐づかなくてもできる検算。
 
     台帳を引く必要があるもの（対向機器と突き合わせる、向き先が台帳にいるか）
@@ -131,6 +174,8 @@ def _findings(parsed: ParsedConfig, text: str) -> list[Finding]:
     found.extend(l3review._segments_nobody_advertises(parsed, local))
     found.extend(l3review._unused_policies(parsed))
     found.extend(_hygiene(parsed, text))
+    found.extend(_operability(parsed, covered or set()))
+    found.extend(_layer2(parsed))
     return _sorted(found)
 
 
@@ -164,6 +209,118 @@ def _hygiene(parsed: ParsedConfig, text: str) -> list[Finding]:
                 why="設定だけ残して閉じてある状態です。戻し忘れなら、"
                 "そのセグメントは動いていません。意図して閉じてあるなら問題ありません。",
                 evidence=[f"{i.name}: {i.ip_address}" for i in unnumbered[:5]],
+            )
+        )
+    return out
+
+
+#: 入っていないと、後から追えなくなるもの。単体の Config だけで言える
+_MUST_SEND = (
+    (
+        "Syslog",
+        "ログの送り先",
+        "この機器の記録は再起動で消えます。障害の後から、何が起きていたのかを追えません。",
+    ),
+    (
+        "NTP",
+        "時刻の参照先",
+        "時計がずれたまま記録が残ります。複数の機器の記録を"
+        "並べても順番が分からず、原因と結果が逆に見えます。",
+    ),
+)
+
+
+def _operability(parsed: ParsedConfig, covered: set[str]) -> list[Finding]:
+    """止まってからでは間に合わないもの。
+
+    どれも動作には影響しないので、入っていなくても誰も困らない。
+    困るのは障害が起きた日で、そのときに入れても手遅れになる。
+    """
+    out: list[Finding] = []
+    names = {feature.name for feature in parsed.features}
+    for name, label, why in _MUST_SEND:
+        if name in names or label in covered:
+            continue
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title=f"{label}が入っていません",
+                why=why,
+                evidence=[f"{name} の設定が読み取れませんでした"],
+            )
+        )
+
+    half_fixed = [
+        i for i in parsed.interfaces if (i.speed and not i.duplex) or (i.duplex and not i.speed)
+    ]
+    if half_fixed:
+        out.append(
+            Finding(
+                level=LOW,
+                title="速度と二重のうち、片方だけ固定してあるポートがあります",
+                why="片方だけ固定すると、相手との相談が成立せず遅いほうに落ちます。"
+                "通ってはいるので気づかれず、遅いという申告だけが残ります。",
+                evidence=[
+                    f"{i.name}: speed={i.speed or '自動'} duplex={i.duplex or '自動'}"
+                    for i in half_fixed[:5]
+                ],
+            )
+        )
+    return out
+
+
+def _layer2(parsed: ParsedConfig) -> list[Finding]:
+    """VLAN の切り方で、あとから効いてくるもの。
+
+    どれも「間違い」ではないため機器は何も言わない。分けたはずのものが
+    つながっている、という形で後から出る。
+    """
+    out: list[Finding] = []
+    trunks = [i for i in parsed.interfaces if i.mode == "trunk"]
+
+    default_native = [i for i in trunks if (i.native_vlan or 1) == 1]
+    if default_native:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="トランクのタグ無し VLAN が 1 のままです",
+                why="1 は初期値なので、どの機器でも同じ番号です。"
+                "つないだ相手が違う意図で 1 を使っていると、分けたはずのものが1つにつながります。"
+                "使っていない番号を決めて、両端で同じにしてください。",
+                evidence=[
+                    f"{i.name}: native vlan {i.native_vlan or 1}" for i in default_native[:5]
+                ],
+            )
+        )
+
+    wide_open = [i for i in trunks if i.trunk_all and not i.trunk_excluded]
+    if wide_open:
+        out.append(
+            Finding(
+                level=LOW,
+                title="許可 VLAN を絞っていないトランクがあります",
+                why="定義したものが全部流れます。要らない VLAN まで先の機器へ広がり、"
+                "1か所で起きたことが遠くまで届きます。",
+                evidence=[f"{i.name}: 許可 VLAN の指定なし" for i in wide_open[:5]],
+            )
+        )
+
+    used: set[int] = set()
+    for i in parsed.interfaces:
+        used |= i.carried_vlans()
+        if i.name.lower().startswith("vlan"):
+            digits = "".join(c for c in i.name if c.isdigit())
+            if digits:
+                used.add(int(digits))
+    idle = sorted(v for v in parsed.vlans if v not in used and v != 1)
+    if idle:
+        out.append(
+            Finding(
+                level=LOW,
+                title="定義してあるだけで、どこにも使っていない VLAN があります",
+                why="消し忘れなら消せます。これから使う予定のものなら問題ありません。"
+                "残したままだと、番号が空いているのか使われているのかが分からなくなります。",
+                evidence=[f"VLAN {', '.join(str(v) for v in idle[:10])}"],
             )
         )
     return out

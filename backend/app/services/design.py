@@ -20,10 +20,23 @@
 
 起こせない部分は空欄にせず、要記入と分かる印を残す。黙って省くと、
 「生成されたから完成している」と読まれてしまう。
+
+### 台帳から起こせる分は起こす
+
+図に描かれていなくても、台帳に書いてあることは確かめられる。管理IP が
+VLAN 台帳のどの区画に入るかは計算で決まるので、管理用の入口（SVI）は
+起こせる。ここを毎回手で書かせると、マスクの写し間違いが入る。
+
+### 安全側の既定を最初から入れる
+
+新規構築の Config が、そのまま点検（configcheck）で赤くなるのはおかしい。
+入り口を SSH に絞る、使わない web の口を閉じる、といった「どの現場でも
+そうする」ものは最初から入れておく。設計の判断が要らないものに限る。
 """
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -75,6 +88,11 @@ class DesignInput:
     # VLAN 番号 → 実機に投入できる名前。台帳が日本語のことが多いので別に持つ
     vlan_names: dict[int, str] = field(default_factory=dict)
 
+    #: 管理IP が入る VLAN と、その区画。台帳の subnet から計算で決まる
+    mgmt_vlan_id: int | None = None
+    mgmt_netmask: str | None = None
+    mgmt_prefixlen: int | None = None
+
     def vlan_name(self, vlan_id: int) -> str:
         return self.vlan_names.get(vlan_id, f"VLAN{vlan_id}")
 
@@ -113,7 +131,37 @@ def collect(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -
             observed[row.vlan_id] = row.name
 
     names = {vlan.vlan_id: _device_name(vlan, observed) for vlan in catalog}
-    return DesignInput(device=device, links=links, vlans=catalog, vlan_names=names)
+    plan = DesignInput(device=device, links=links, vlans=catalog, vlan_names=names)
+    _locate_management(plan, catalog)
+    return plan
+
+
+def _locate_management(plan: DesignInput, catalog: list[Vlan]) -> None:
+    """管理IP が、台帳のどの VLAN の区画に入るかを決める。
+
+    ここは計算で決まるので、人に書かせるとマスクの写し間違いが入る。
+    どの区画にも入らないときは何も決めない。当てずっぽうで近い VLAN を
+    選ぶと、通らない Config が「起こせた」形で出てしまう。
+    """
+    if not plan.device.mgmt_ip:
+        return
+    try:
+        address = ipaddress.ip_address(plan.device.mgmt_ip.strip())
+    except ValueError:
+        return
+
+    for vlan in catalog:
+        if not vlan.subnet:
+            continue
+        try:
+            network = ipaddress.ip_network(vlan.subnet.strip(), strict=False)
+        except ValueError:
+            continue
+        if address in network:
+            plan.mgmt_vlan_id = vlan.vlan_id
+            plan.mgmt_prefixlen = network.prefixlen
+            plan.mgmt_netmask = str(network.netmask)
+            return
 
 
 def _device_name(vlan: Vlan, observed: dict[int, str]) -> str:
@@ -154,6 +202,8 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
         return _nec_ix(plan)
     if vendor is Vendor.JUNIPER:
         return _junos(plan)
+    if vendor is Vendor.FORTINET:
+        return _fortios(plan)
     return _outline(plan, vendor)
 
 
@@ -198,6 +248,16 @@ def _cisco(plan: DesignInput) -> str:
     lines = _header(plan, Vendor.CISCO_IOS, "!")
     lines.append(f"hostname {plan.device.hostname}")
     lines.append("!")
+    lines.extend(
+        [
+            "! どの現場でもこうする、という既定。設計の判断は要らない",
+            "service password-encryption",
+            "no ip http server",
+            "no ip http secure-server",
+            "no ip source-route",
+            "!",
+        ]
+    )
 
     for vlan in plan.vlans:
         lines.append(f"vlan {vlan.vlan_id}")
@@ -209,21 +269,58 @@ def _cisco(plan: DesignInput) -> str:
         lines.append(f"interface {link.local_interface}")
         lines.append(f" description {link.description}")
         if link.is_infrastructure and allowed:
+            # IOS は方式の指定が要る機種がある。NX-OS では不要だが、
+            # 入っていて困る行ではないので、下敷きとしては出しておく
+            lines.append(" switchport trunk encapsulation dot1q")
             lines.append(" switchport mode trunk")
             lines.append(f" switchport trunk allowed vlan {allowed}")
-            lines.append(f"! ネイティブ VLAN: {TODO}")
+            lines.append(" switchport nonegotiate")
+            lines.append(f"! タグ無し VLAN（native）: {TODO}")
+            lines.append("!  1 のままにしない。使っていない番号を決めて、両端で同じにする")
         elif link.is_infrastructure:
             lines.append(f"! VLAN が台帳に無いため許可 VLAN を出せません: {TODO}")
+        else:
+            # 端末側。番号は図に描かれていないので出せないが、
+            # 端末を挿す口であることは図から分かる
+            lines.append(" switchport mode access")
+            lines.append(f"! アクセス VLAN: {TODO}")
+            lines.append(" spanning-tree portfast")
+            lines.append(" spanning-tree bpduguard enable")
         lines.append("!")
 
-    if plan.device.mgmt_ip:
-        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
-        lines.append(f"! 管理VLAN / マスク / 既定経路: {TODO}")
-        lines.append("!")
+    lines.extend(_cisco_management(plan))
 
+    lines.append("line vty 0 15")
+    lines.append(" transport input ssh")
+    lines.append(" exec-timeout 10 0")
+    lines.append("!")
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
     lines.append(f"! アクセスポートの割り当て: {TODO}")
     lines.append(f"! 経路制御・ACL・認証・冗長化: {TODO}")
     return "\n".join(lines) + "\n"
+
+
+def _cisco_management(plan: DesignInput) -> list[str]:
+    """管理用の入口。台帳に区画が書いてあれば、そこまでは起こせる。"""
+    if not plan.device.mgmt_ip:
+        return []
+
+    lines: list[str] = []
+    if plan.mgmt_vlan_id is not None and plan.mgmt_netmask:
+        lines.append(f"interface Vlan{plan.mgmt_vlan_id}")
+        lines.append(" description management")
+        lines.append(f" ip address {plan.device.mgmt_ip} {plan.mgmt_netmask}")
+        lines.append(" no shutdown")
+        lines.append("!")
+        lines.append(f"! 既定の経路（この区画の出口）: {TODO}")
+    else:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(
+            f"! 管理VLAN / マスク / 既定経路: {TODO}"
+            "（VLAN 台帳に、この住所が入る区画が登録されていません）"
+        )
+    lines.append("!")
+    return lines
 
 
 # ---------------------------------------------------------------------------
@@ -248,10 +345,30 @@ def _comware(plan: DesignInput) -> str:
         if link.is_infrastructure and permitted:
             lines.append(" port link-type trunk")
             lines.append(f" port trunk permit vlan {permitted}")
-            lines.append(f"# PVID: {TODO}")
+            lines.append(f"# タグ無し VLAN（PVID）: {TODO}")
+            lines.append("#  1 のままにしない。使っていない番号を決めて、両端で同じにする")
+        elif not link.is_infrastructure:
+            lines.append(" port link-type access")
+            lines.append(f"# アクセス VLAN: {TODO}")
+            lines.append(" stp edged-port")
         lines.append("#")
 
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_prefixlen:
+        lines.append(f"interface Vlan-interface{plan.mgmt_vlan_id}")
+        lines.append(" description management")
+        lines.append(f" ip address {plan.device.mgmt_ip} {plan.mgmt_prefixlen}")
+        lines.append("#")
+    elif plan.device.mgmt_ip:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"# 管理VLAN / マスク: {TODO}")
+        lines.append("#")
+
+    lines.append("# 入り口は ssh だけにする")
+    lines.append("line vty 0 63")
+    lines.append(" protocol inbound ssh")
+    lines.append("#")
     lines.append(f"# アクセスポートの割り当て: {TODO}")
+    lines.append(f"# ログの送り先 / 時刻の参照先: {TODO}")
     lines.append(f"# 経路制御・ACL・認証: {TODO}")
     return "\n".join(lines) + "\n"
 
@@ -307,8 +424,69 @@ def _junos(plan: DesignInput) -> str:
                 f"set interfaces {port} unit 0 family ethernet-switching vlan members [ {members} ]"
             )
 
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_prefixlen:
+        lines.append(
+            f"set interfaces irb unit {plan.mgmt_vlan_id} family inet address "
+            f"{plan.device.mgmt_ip}/{plan.mgmt_prefixlen}"
+        )
+    elif plan.device.mgmt_ip:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"# 管理VLAN / マスク: {TODO}")
+
+    lines.append("set system services ssh protocol-version v2")
+    lines.append("delete system services telnet")
+    lines.append(f"# タグ無し VLAN（native-vlan-id）: {TODO}")
     lines.append(f"# アクセスポートの割り当て: {TODO}")
     lines.append(f"# 経路制御・セキュリティポリシー: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# FortiGate（FortiOS）
+# ---------------------------------------------------------------------------
+
+
+def _fortios(plan: DesignInput) -> str:
+    """FortiGate は、通す通信を決めないと何も通らない。
+
+    それが設計の中身そのものなので、ここでは起こさない。起こすのは
+    ホスト名と、図から分かるポートの名前付けまでにする。
+    """
+    lines = _header(plan, Vendor.FORTINET, "#")
+    lines.append("config system global")
+    lines.append(f'    set hostname "{plan.device.hostname}"')
+    lines.append("    set admin-telnet disable")
+    lines.append("end")
+    lines.append("#")
+
+    if plan.links:
+        lines.append("config system interface")
+        for link in plan.links:
+            lines.append(f'    edit "{link.local_interface}"')
+            lines.append(f'        set description "{link.description}"')
+            lines.append("        set allowaccess ping")
+            lines.append("    next")
+        lines.append("end")
+        lines.append("#")
+
+    if plan.device.mgmt_ip and plan.mgmt_netmask:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip} {plan.mgmt_netmask}")
+        lines.append(f"# どのポートに付けるかは図から決まりません: {TODO}")
+    elif plan.device.mgmt_ip:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"# マスク / 付けるポート: {TODO}")
+    lines.append("#")
+
+    if plan.vlans:
+        lines.append("# VLAN を受けるときは、ポートごとに VLAN インターフェースを作る")
+        for vlan in plan.vlans:
+            lines.append(
+                f'#   例) edit "{plan.vlan_name(vlan.vlan_id)}" / set vlanid {vlan.vlan_id}'
+            )
+        lines.append("#")
+
+    lines.append(f"# 通す通信（ポリシー）・NAT・経路: {TODO}")
+    lines.append("#  ここを空のままにすると、線がつながっていても何も通りません")
     return "\n".join(lines) + "\n"
 
 

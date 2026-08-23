@@ -403,10 +403,28 @@ def get_graph(
         rank = _align_redundant_pairs(
             hierarchy_rank(graph), _adjacency(graph), edges=graph.edges, nodes=graph.nodes
         )
-        _compact(graph.nodes, graph.edges, rank=rank, orientation=orientation)
+        _arrange_initial(graph, rank, orientation=orientation)
         apply_planes(graph.nodes, rank)
         graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
+
+
+def _arrange_initial(graph: TopologyGraph, rank: dict[int, int], *, orientation: str) -> None:
+    """初期配置。拠点がたくさんある図だけ、拠点ごとのまとまりで置く。
+
+    1つの木として組むと、拠点が増えるほど横へ伸びる。実際に 120 台で
+    8段70列・幅16000px の帯になり、画面に収めると線も名前も読めなかった。
+    """
+    from app.services import topology_world
+
+    unplaced = {node.device_id for node in graph.nodes if not node.placed}
+    # まだ誰も並べていない図だけ。人が1台でも置いていたら、その意思の上に積む
+    # （_compact は置いたものを動かさない）。まとまりごと動かすこちらは、
+    # 置いた機器も一緒に運んでしまう
+    if len(unplaced) == len(graph.nodes) and topology_world.should_use(graph.nodes):
+        topology_world.arrange(graph.nodes, graph.edges, orientation=orientation)
+        return
+    _compact(graph.nodes, graph.edges, rank=rank, orientation=orientation)
 
 
 #: L3 図に出す機器の種別。スイッチ同士のトランクは L2 側の話。
@@ -581,7 +599,7 @@ def scope_graph(
         nodes=nodes,
     )
     apply_planes(nodes, used_rank)
-    return TopologyGraph(
+    scoped = TopologyGraph(
         layer=graph.layer,
         nodes=nodes,
         # 対向どうしを結ぶ線は出さない。絞り込んだ範囲の外の話で、
@@ -595,6 +613,13 @@ def scope_graph(
         groups=graph.groups,
     )
 
+    # 置き方をいくつか試し、実際に線を引いてみてから決める。置き方だけを
+    # 見ていたのでは、線が上位の段をまたいで走ることに気づけない
+    from app.services import topology_site
+
+    topology_site.polish(scoped)
+    return scoped
+
 
 #: 対向どうしの間隔。マス目1つ。
 #: 図の外の相手は名前だけの小さな箱なので、内側と同じだけ空ける必要がない
@@ -602,6 +627,15 @@ _OUTSIDE_GAP = _GRID
 
 #: 対向の箱の高さ（画面の OUTSIDE_HEIGHT と合わせる）。名前と拠点の2行ぶん
 _OUTSIDE_HEIGHT = 53.0
+
+
+def _snap_up(value: float, grid: float = _GRID) -> float:
+    """マス目の倍数へ切り上げる。
+
+    丸め（round）だと、必要な間隔より狭い側へ落ちることがある。間隔が
+    足りなければ箱は重なるので、足りない方へ丸めてはいけない。
+    """
+    return ceil(value / grid) * grid
 
 
 def _stack_outside(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView]) -> None:
@@ -625,7 +659,9 @@ def _stack_outside(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView])
         return
 
     center = (min(n.x for n in inside) + max(n.x for n in inside)) / 2
-    step = _OUTSIDE_HEIGHT + _OUTSIDE_GAP
+    # 箱の高さ＋すき間を、マス目の倍数へ切り上げる。切り上げずにマス目へ
+    # 丸めていたため、段の間隔が 60 と 80 に割れ、60 の側では箱が重なっていた
+    step = _snap_up(_OUTSIDE_HEIGHT + _OUTSIDE_GAP)
 
     for column in (
         [n for n in outside if n.x >= center],
@@ -641,13 +677,11 @@ def _stack_outside(nodes: list[TopologyNodeView], edges: list[TopologyEdgeView])
 
         top = min(rows)
         for index, key in enumerate(sorted(rows)):
+            # 等間隔に置き直す。詰めるだけにしていたときは、元が広い段だけが
+            # 残って間隔が不揃いになり、どれが同じ列なのかが読めなかった
             want = top + index * step
-            # 詰めるだけ。広げると、また散らばる
-            if want >= key:
-                continue
-            snapped = round(want / _GRID) * _GRID
             for node in rows[key]:
-                node.y = snapped
+                node.y = want
 
 
 def _boxes_touch(
@@ -1463,9 +1497,27 @@ def _separate_grown_boxes(
     *,
     horizontal: bool,
 ) -> None:
-    """広げた箱どうしが食い込まないよう、保存座標を離す。"""
+    """広げた箱どうしが食い込まないよう、保存座標を離す。
+
+    1回では収まらない。1組を離すと、その先の組が近くなるため。落ち着くまで
+    繰り返す（上限つき）。1回で止めていたときは、離し損ねた組がすき間 10px の
+    まま残っていた。
+    """
     if len(nodes) < 2:
         return
+    for _ in range(6):
+        before = [(node.x, node.y) for node in nodes]
+        _separate_once(nodes, edges, horizontal=horizontal)
+        if [(node.x, node.y) for node in nodes] == before:
+            return
+
+
+def _separate_once(
+    nodes: list[TopologyNodeView],
+    edges: list[TopologyEdgeView],
+    *,
+    horizontal: bool,
+) -> None:
     busiest_tb, busiest_lr = _busiest_sides(nodes, edges)
 
     def tb_of(node: TopologyNodeView) -> int:
@@ -1495,27 +1547,29 @@ def _unstick_visual_pairs(
     lr_of,
     horizontal: bool,
 ) -> None:
-    """列がずれていても、画面上の箱が重なる対だけ軸方向へ離す。"""
+    """列がずれていても、画面上の箱が近すぎる対だけ軸方向へ離す。
+
+    重なりだけを見ていたときは、すき間 10px の対が残った。枠が2本並ぶと
+    1つの箱に見えるので、離れているとは言えない。ここは配置のいちばん
+    最後に通るので、どの経路で置かれた図でもここで最低限のすき間になる。
+    """
     ordered = sorted(nodes, key=lambda node: (node.y, node.x, node.device_id))
     for _ in range(len(ordered)):
         moved = False
         for i, a in enumerate(ordered):
             for b in ordered[i + 1 :]:
-                if not (
-                    _visual_left(a.x, tb_of(a)) < _visual_right(b.x, tb_of(b)) - 1
-                    and _visual_left(b.x, tb_of(b)) < _visual_right(a.x, tb_of(a)) - 1
-                    and _visual_top(a.y, lr_of(a)) < _visual_bottom(b.y, lr_of(b)) - 1
-                    and _visual_top(b.y, lr_of(b)) < _visual_bottom(a.y, lr_of(a)) - 1
-                ):
+                gap_x = max(
+                    _visual_left(a.x, tb_of(a)) - _visual_right(b.x, tb_of(b)),
+                    _visual_left(b.x, tb_of(b)) - _visual_right(a.x, tb_of(a)),
+                )
+                gap_y = max(
+                    _visual_top(a.y, lr_of(a)) - _visual_bottom(b.y, lr_of(b)),
+                    _visual_top(b.y, lr_of(b)) - _visual_bottom(a.y, lr_of(a)),
+                )
+                if gap_x >= MIN_BOX_GAP or gap_y >= MIN_BOX_GAP:
                     continue
-                overlap_x = min(_visual_right(a.x, tb_of(a)), _visual_right(b.x, tb_of(b))) - max(
-                    _visual_left(a.x, tb_of(a)), _visual_left(b.x, tb_of(b))
-                )
-                overlap_y = min(_visual_bottom(a.y, lr_of(a)), _visual_bottom(b.y, lr_of(b))) - max(
-                    _visual_top(a.y, lr_of(a)), _visual_top(b.y, lr_of(b))
-                )
-                # 食い込みの薄い軸へ離す（少ない移動で済む方）
-                push_y = overlap_x >= overlap_y
+                # 足りない分が小さい軸へ離す（少ない移動で済む方）
+                push_y = (MIN_BOX_GAP - gap_y) <= (MIN_BOX_GAP - gap_x)
                 if horizontal:
                     push_y = not push_y
                 if push_y:
@@ -1780,6 +1834,9 @@ _SAME_ROW = 60.0
 _TIER = 100.0
 _COLUMN = 400.0
 
+#: 「横にいる」と見なす比。縦の差のこれ倍だけ横へ離れていれば横から出す
+_SIDEWAYS = 1.5
+
 
 def _box_width(links: int) -> float:
     """上下の辺の最大結線本数から、画面上の箱幅を出す（frontend の widthFor と同じ）。"""
@@ -1802,10 +1859,13 @@ def _side_toward_xy(fx: float, fy: float, tx: float, ty: float) -> str:
     dx, dy = tx - fx, ty - fy
     if abs(dy) < _SAME_ROW:
         return "right" if dx > 0 else "left"
+    # 横への離れ方が縦より十分に大きければ、横から出す。右の列にいる対向が
+    # これにあたる。固定の距離（400px）で切っていたときは、列が 380px の
+    # ところにあると下から出すことになり、配下への線を何本もまたいでいた。
     if abs(dx) >= _COLUMN:
         return "right" if dx > 0 else "left"
-    if abs(dy) >= _TIER:
-        return "bottom" if dy > 0 else "top"
+    if abs(dx) >= _SIDEWAYS * abs(dy):
+        return "right" if dx > 0 else "left"
     return "bottom" if dy > 0 else "top"
 
 
@@ -2380,6 +2440,10 @@ LAYOUT_GRID = _GRID
 _ALIGN_WITHIN = 36.0
 #: 整頓で動かしてよい上限（軸ごと）。これを超えると「作り直し」に見える
 _POLISH_MAX_MOVE = 80.0
+
+#: 箱どうしに最低限空けるすき間。これより近いと、枠が2本並んで1つの箱に見える。
+#: 図の良し悪しを見る側（topology_quality）も同じ値で判定する
+MIN_BOX_GAP = _GRID
 #: 横に並ぶ機器の最小のすき間。自動配置の間隔と同じにして、整頓しても間隔が変わらない
 _MIN_GAP_X = _X_SPACING
 #: 縦に並ぶ機器の最小のすき間。ポート名・線の名前・ポート名の3行が入る幅
@@ -2490,19 +2554,21 @@ def _unstick_along(
             if gap >= needed_gap:
                 continue
             needed = needed_gap - gap
-            # 見た目の箱が食い込んでいるときは、移動上限を超えてでも離す。
-            # そうしないと広げたハブの右端が隣の下に残り、ポート名が隠れる。
-            visually_overlapping = False
+            # 見た目の箱が近すぎるときは、移動上限を超えてでも離す。
+            # 上限で見送ると、すき間 10px のまま残る（枠が2本並んで、
+            # 1つの箱に見える）。すき間は妥協してよい値ではない。
+            too_close = False
             if links_of is not None:
                 if axis == "x":
-                    visually_overlapping = _visual_left(
-                        curr_node.x, links_of(curr_node)
-                    ) < _visual_right(prev_node.x, links_of(prev_node))
+                    visual_gap = _visual_left(curr_node.x, links_of(curr_node)) - _visual_right(
+                        prev_node.x, links_of(prev_node)
+                    )
                 else:
-                    visually_overlapping = _visual_top(
-                        curr_node.y, links_of(curr_node)
-                    ) < _visual_bottom(prev_node.y, links_of(prev_node))
-            if gap < LAYOUT_GRID or visually_overlapping:
+                    visual_gap = _visual_top(curr_node.y, links_of(curr_node)) - _visual_bottom(
+                        prev_node.y, links_of(prev_node)
+                    )
+                too_close = visual_gap < MIN_BOX_GAP
+            if gap < LAYOUT_GRID or too_close:
                 target = prev + needed_gap
                 setattr(curr_node, axis, _snap_at_least(target, prev + needed_gap))
                 forced.add(curr_node.device_id)
