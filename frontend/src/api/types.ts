@@ -1483,3 +1483,28 @@ export interface CalcReport {
   duplicates: DuplicateAddress[];
   notes: string[];
 }
+
+/** 通り道の1段。人 → AI → ロジック → AI → ロジック → AI → 人。 */
+export interface PipelineStage {
+  name: string;
+  /** ai / logic / human */
+  kind: string;
+  summary: string;
+  /** 飛ばした理由。動いた段では空 */
+  skipped: string;
+  model: string | null;
+}
+
+export interface PipelineRun {
+  request: string;
+  understood: string;
+  body: string;
+  decided: ConfigDraftDecided[];
+  gaps: ConfigDraftGap[];
+  risks: string[];
+  findings: string[];
+  ungrounded: string[];
+  explanation: string;
+  stages: PipelineStage[];
+  notes: string[];
+}

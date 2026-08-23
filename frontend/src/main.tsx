@@ -25,6 +25,7 @@ import DeviceFormPage from "./pages/DeviceFormPage";
 import DeviceListPage from "./pages/DeviceListPage";
 import ExposuresPage from "./pages/ExposuresPage";
 import HiddenPage from "./pages/HiddenPage";
+import PipelinePage from "./pages/PipelinePage";
 import ImportPage from "./pages/ImportPage";
 import InsightsPage from "./pages/InsightsPage";
 import MigrationPage from "./pages/MigrationPage";
@@ -69,6 +70,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="ask" element={<AskPage />} />
               <Route path="blueprint" element={<BlueprintPage />} />
               <Route path="calc" element={<CalcPage />} />
+              <Route path="pipeline" element={<PipelinePage />} />
               <Route path="hidden" element={<HiddenPage />} />
               <Route path="capabilities" element={<CapabilitiesPage />} />
               <Route path="config-check" element={<ConfigCheckPage />} />

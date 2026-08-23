@@ -23,6 +23,7 @@ from app.api.routes import (
     insights,
     jobs,
     maintenance,
+    pipeline,
     reference,
     remediation,
     replacement,
@@ -83,6 +84,7 @@ app.include_router(replacement.router, prefix=api)
 app.include_router(remediation.router, prefix=api)
 app.include_router(exposures.router, prefix=api)
 app.include_router(calc.router, prefix=api)
+app.include_router(pipeline.router, prefix=api)
 app.include_router(schema_routes.router, prefix=api)
 app.include_router(settings_routes.router, prefix=api)
 app.include_router(jobs.router, prefix=api)

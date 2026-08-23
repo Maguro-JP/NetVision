@@ -41,6 +41,7 @@ import type {
   NetworkInterface,
   AppMeta,
   CalcReport,
+  PipelineRun,
   DeviceRemediation,
   ExposureRow,
   ExposureSummary,
@@ -1098,6 +1099,13 @@ export const api = {
 
   /** 数えれば分かること。セグメントの空き・VLAN 番号・ポートの残りなど。 */
   calc: () => request<CalcReport>("/calc"),
+
+  /** やりたいことを1本通す。どの段が何をしたかも返る。 */
+  runPipeline: (deviceId: number, body: { request: string; base?: string }) =>
+    request<PipelineRun>(`/devices/${deviceId}/pipeline`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   meta: () => request<AppMeta>("/meta"),
   // プレビューの初回は表の作成とデモ投入が走る。8秒だと「起動できませんでした」になる

@@ -40,6 +40,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
       items: [
         { to: "/replacement", label: "更改支援" },
         { to: "/ask", label: "ことばで頼む" },
+        { to: "/pipeline", label: "頼んで、通り道を見る" },
         { to: "/config-check", label: "Config を見てもらう" },
         { to: "/syslog", label: "ログを読む" },
         { to: "/calc", label: "数えれば分かること" },

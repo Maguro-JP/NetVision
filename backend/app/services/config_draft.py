@@ -216,10 +216,18 @@ def _check(body: str, sources: list[Source], vendor: str) -> tuple[list[Line], l
     return lines, risks
 
 
-def draft(db: Session, device: Device, request: str, *, base: str | None = None) -> Draft:
+def draft(
+    db: Session,
+    device: Device,
+    request: str,
+    *,
+    base: str | None = None,
+    ready: prefill.Prefill | None = None,
+) -> Draft:
     """依頼の文と資料から、投入コマンドの下書きを作る。
 
     `base` を渡すとその config を前提に書く。省くと最新の取り込み済み config。
+    `ready` は先に済ませた下ごしらえ。渡さなければここで作る。
     """
     snapshot = config_plans.latest_snapshot(db, device.id)
     current = base if base is not None else (snapshot.content if snapshot else "")
@@ -237,7 +245,8 @@ def draft(db: Session, device: Device, request: str, *, base: str | None = None)
         )
 
     # 先に、台帳と流儀から決まるものを決める。ここで決まったぶんはモデルに渡さない
-    ready = prefill.build(db, device, request, vendor=vendor)
+    if ready is None:
+        ready = prefill.build(db, device, request, vendor=vendor)
     result.decided = ready.decided
     result.gaps = ready.gaps
     result.notes.extend(ready.notes)
