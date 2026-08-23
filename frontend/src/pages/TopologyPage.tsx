@@ -2474,7 +2474,10 @@ function TopologyEditor() {
                 shouldFit.current = false;
               }
             }}
-            minZoom={0.2}
+            // 全体を出すのに必要な倍率は、台数と広がりで決まる。0.2 で止めて
+            // いたため、広い図では「全体を表示」を押しても収まらず、
+            // 画面の隅に固まったまま余白だけが見えていた
+            minZoom={0.03}
             proOptions={{ hideAttribution: true }}
           >
             <Background

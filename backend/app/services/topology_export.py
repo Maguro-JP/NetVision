@@ -245,11 +245,13 @@ def render_svg(
         else:
             busiest_tb[device_id] = max(busiest_tb.get(device_id, 0), count)
 
-    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる
+    # 対向は2行だけの小さい箱。口の位置も描く箱に合わせる。
+    # 簡易表示でも同じ高さで描く。配置（_stack_outside）と品質判定は
+    # この高さで詰めているので、ここだけ大きく描くと箱が重なる
     heights = {
         n.device_id: _box_height(
             busiest_lr.get(n.device_id, 0),
-            OUTSIDE_H if (n.outside and not simple) else base_h,
+            OUTSIDE_H if n.outside else base_h,
         )
         for n in nodes
     }

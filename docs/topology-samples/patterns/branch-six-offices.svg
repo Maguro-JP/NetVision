@@ -1,38 +1,38 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="866" height="648" viewBox="0 0 866 648" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="866" height="663" viewBox="0 0 866 663" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">支社 配下6拠点</text>
-<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-23 15:21 JST 時点 / 9台 8本</text>
-<polyline points="225,298 225,188 241,188 241,160" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="225.1" y="280.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
-<text class="port-label" x="245.9" y="171.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<polyline points="401,298 401,188 405,188 405,160" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="400.9" y="280.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
-<text class="port-label" x="400.1" y="171.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
-<polyline points="418,311 580,311 580,234 608,234" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="432.4" y="311.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/1</text>
-<text class="port-label" x="601.7" y="244.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<polyline points="418,329 580,329 580,294 608,294" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="431.8" y="331.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/2</text>
-<text class="port-label" x="601.7" y="304.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<polyline points="418,347 580,347 580,374 608,374" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="430.9" y="351.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/3</text>
-<text class="port-label" x="601.7" y="384.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<polyline points="418,403 580,403 580,388 608,388" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="425.5" y="412.8" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/4</text>
-<text class="port-label" x="591.9" y="403.3" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<polyline points="418,433 580,433 580,448 608,448" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="422.1" y="444.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/5</text>
-<text class="port-label" x="595.2" y="452.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<polyline points="418,451 580,451 580,528 608,528" fill="none" stroke="#4a5364" stroke-width="1.6"/>
-<text class="port-label" x="408.1" y="480.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/6</text>
-<text class="port-label" x="595.2" y="532.8" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
-<g><rect x="208" y="298" width="210" height="166" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="313" y="386" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">ksi-br-rt-01</text></g>
-<g><rect x="48" y="82" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="153" y="121" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-01</text><text x="153" y="139" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>
-<g><rect x="388" y="82" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="493" y="121" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-02</text><text x="493" y="139" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>
-<g><rect x="608" y="162" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="201" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">shiga-rt-01</text><text x="713" y="219" font-size="10" fill="#6b6b6b" text-anchor="middle">shiga営業所</text></g>
-<g><rect x="608" y="222" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="261" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">kyoto-rt-01</text><text x="713" y="279" font-size="10" fill="#6b6b6b" text-anchor="middle">kyoto営業所</text></g>
-<g><rect x="608" y="302" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="341" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">osaka-rt-01</text><text x="713" y="359" font-size="10" fill="#6b6b6b" text-anchor="middle">osaka営業所</text></g>
-<g><rect x="608" y="382" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="421" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">hyogo-rt-01</text><text x="713" y="439" font-size="10" fill="#6b6b6b" text-anchor="middle">hyogo営業所</text></g>
-<g><rect x="608" y="442" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="481" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">nara-rt-01</text><text x="713" y="499" font-size="10" fill="#6b6b6b" text-anchor="middle">nara営業所</text></g>
-<g><rect x="608" y="522" width="210" height="78" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="561" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">wakayama-rt-01</text><text x="713" y="579" font-size="10" fill="#6b6b6b" text-anchor="middle">wakayama営業所</text></g>
+<text x="818" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-23 20:27 JST 時点 / 9台 8本</text>
+<polyline points="225,286 225,163 241,163 241,135" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="225.1" y="267.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="244.4" y="155.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="401,286 401,163 405,163 405,135" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="400.9" y="267.6" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="401.6" y="155.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<polyline points="418,299 580,299 580,211 608,211" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="432.4" y="299.4" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/1</text>
+<text class="port-label" x="600.5" y="220.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="418,317 580,317 580,291 608,291" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="431.8" y="319.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/2</text>
+<text class="port-label" x="600.5" y="300.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="418,335 580,335 580,368 608,368" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="430.9" y="339.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/3</text>
+<text class="port-label" x="600.2" y="378.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="418,402 580,402 580,406 608,406" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="424.2" y="412.8" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/4</text>
+<text class="port-label" x="595.9" y="411.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="418,420 580,420 580,486 608,486" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="422.1" y="431.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/5</text>
+<text class="port-label" x="595.9" y="491.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<polyline points="418,438 580,438 580,566 608,566" fill="none" stroke="#4a5364" stroke-width="1.6"/>
+<text class="port-label" x="408.1" y="468.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1/6</text>
+<text class="port-label" x="595.9" y="571.9" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">GE0/0</text>
+<g><rect x="208" y="286" width="210" height="166" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="313" y="374" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">ksi-br-rt-01</text></g>
+<g><rect x="48" y="82" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="153" y="108" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-01</text><text x="153" y="126" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>
+<g><rect x="388" y="82" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="493" y="108" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">west-core-rt-02</text><text x="493" y="126" font-size="10" fill="#6b6b6b" text-anchor="middle">西日本センター</text></g>
+<g><rect x="608" y="162" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="188" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">shiga-rt-01</text><text x="713" y="206" font-size="10" fill="#6b6b6b" text-anchor="middle">shiga営業所</text></g>
+<g><rect x="608" y="242" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="268" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">kyoto-rt-01</text><text x="713" y="286" font-size="10" fill="#6b6b6b" text-anchor="middle">kyoto営業所</text></g>
+<g><rect x="608" y="322" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="348" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">osaka-rt-01</text><text x="713" y="366" font-size="10" fill="#6b6b6b" text-anchor="middle">osaka営業所</text></g>
+<g><rect x="608" y="402" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="428" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">hyogo-rt-01</text><text x="713" y="446" font-size="10" fill="#6b6b6b" text-anchor="middle">hyogo営業所</text></g>
+<g><rect x="608" y="482" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="508" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">nara-rt-01</text><text x="713" y="526" font-size="10" fill="#6b6b6b" text-anchor="middle">nara営業所</text></g>
+<g><rect x="608" y="562" width="210" height="53" rx="7" fill="#ffffff" stroke="#4a5364" stroke-width="1.6"/><text x="713" y="588" font-size="14" font-weight="700" fill="#1a1a1a" text-anchor="middle">wakayama-rt-01</text><text x="713" y="606" font-size="10" fill="#6b6b6b" text-anchor="middle">wakayama営業所</text></g>
 </svg>
