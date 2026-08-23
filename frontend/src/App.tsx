@@ -44,6 +44,7 @@ const NAV_GROUPS: { label: string; items: { to: string; label: string }[] }[] =
         { to: "/config-check", label: "Config を見てもらう" },
         { to: "/syslog", label: "ログを読む" },
         { to: "/calc", label: "数えれば分かること" },
+        { to: "/os", label: "版と、いまの状態" },
         { to: "/blueprint", label: "構成を起こす" },
         { to: "/scenarios", label: "将来構成シナリオ" },
         { to: "/config-plans", label: "Config計画（差分生成）" },

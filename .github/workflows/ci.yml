@@ -1,11 +1,24 @@
 name: CI
 
+# 走らせる回数を絞る。private リポジトリの Actions は無料枠に限りがあり、
+# ジョブは1分未満でも1分として数えられる。同じコミットを2度見ない。
 on:
+  # 作業ブランチは PR 側で見るので、push で走らせるのは本線だけにする。
+  # 以前は push と pull_request の両方が走り、1回の push で2回ぶん使っていた
   push:
-    # cursor/* は PR の CI だけで見る。push と pull_request の二重実行を止める
-    branches-ignore:
-      - "cursor/**"
+    branches:
+      - main
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
+  # 下書きのあいだは走らせない。書いている途中は手元で確かめていて、
+  # ここで見てほしいのは「人に見せる形になった」ときだから。
+  # ready_for_review を足しているのは、既定の種類に入っていないため
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+    paths-ignore:
+      - "**/*.md"
+      - "docs/**"
 
 # 新しいコミットが来たら、古い実行は捨てる。
 # 直し済みの失敗が後から届いて「CI が落ちた」と出るのを防ぐ。
@@ -15,6 +28,7 @@ concurrency:
 
 jobs:
   backend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -24,12 +38,16 @@ jobs:
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
+          # 依存を毎回取りに行くと、そのぶん実行時間が伸びる
+          cache: pip
+          cache-dependency-path: backend/pyproject.toml
       - run: pip install -e ".[dev]"
       - run: ruff check .
       - run: ruff format --check .
       - run: pytest -q
 
   frontend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:

@@ -41,6 +41,8 @@ import type {
   NetworkInterface,
   AppMeta,
   CalcReport,
+  MibReport,
+  OsReport,
   PipelineRun,
   DeviceRemediation,
   ExposureRow,
@@ -712,6 +714,21 @@ export const api = {
     for (const file of files) form.append("files", file);
     return upload<LogReport>("/syslog/upload", form);
   },
+
+  /** 貼り付けた snmpwalk の出力を読む。台帳には何も書かない。 */
+  readMib: (text: string) =>
+    request<MibReport>("/mib", {
+      method: "POST",
+      body: JSON.stringify({ text }),
+    }),
+  readMibFiles: (files: File[]) => {
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    return upload<MibReport>("/mib/upload", form);
+  },
+
+  /** 機種ごとの OS の版の散らばり。 */
+  osReport: () => request<OsReport>("/os-report"),
 
   /** 線の両端で、設定がそろっているか。 */
   linkCheck: () => request<LinkReport>("/topology/link-check"),

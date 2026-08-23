@@ -2,12 +2,16 @@
 # ルールの本文は AGENTS.md。
 name: PR policy
 
+# 積み上げかどうかは、PR が立った時点と、下書きを外した時点で決まる。
+# push のたび・本文を直すたびに見直す必要はない（そのぶん無料枠を使う）
 on:
   pull_request:
-    types: [opened, edited, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, ready_for_review]
 
 jobs:
   one-at-a-time:
+    # 下書きは、まだ人に見せる形になっていない。並び方はそのときに見る
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
