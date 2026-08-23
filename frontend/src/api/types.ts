@@ -768,6 +768,20 @@ export interface ConfigDraftSource {
   commands: string[];
 }
 
+/** コードで先に決めた値と、その理由。 */
+export interface ConfigDraftDecided {
+  key: string;
+  value: string;
+  why: string;
+}
+
+/** コードでは決められず、モデルか人に回したところ。 */
+export interface ConfigDraftGap {
+  key: string;
+  question: string;
+  why: string;
+}
+
 export interface ConfigDraft {
   device_id: number;
   vendor: string;
@@ -778,6 +792,10 @@ export interface ConfigDraft {
   notes: string[];
   /** 下書きを起こしたモデル。資料から拾っただけなら null */
   model: string | null;
+  /** モデルに渡す前に確定させたこと */
+  decided: ConfigDraftDecided[];
+  /** 決められず、モデルか人に回したところ */
+  gaps: ConfigDraftGap[];
 }
 
 export interface LlmModel {

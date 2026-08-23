@@ -14,10 +14,12 @@ from app.schemas.config_plans import (
     ConfigPlanRead,
     ConfigPlanUpdate,
     ConfigReviewRequest,
+    DecidedRead,
     DiffPreviewRequest,
     DiffRead,
     DraftLineRead,
     DraftSourceRead,
+    GapRead,
     LlmStatusRead,
     PlanOutputRead,
 )
@@ -293,6 +295,14 @@ def draft_config(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> 
         risks=result.risks,
         notes=result.notes,
         model=result.model,
+        decided=[
+            DecidedRead(key=item.key, value=item.value, why=item.why)
+            for item in getattr(result, "decided", [])
+        ],
+        gaps=[
+            GapRead(key=item.key, question=item.question, why=item.why)
+            for item in getattr(result, "gaps", [])
+        ],
     )
 
 
@@ -317,6 +327,14 @@ def _draft_read(device: Device, result) -> ConfigDraftRead:
         risks=result.risks,
         notes=result.notes,
         model=result.model,
+        decided=[
+            DecidedRead(key=item.key, value=item.value, why=item.why)
+            for item in getattr(result, "decided", [])
+        ],
+        gaps=[
+            GapRead(key=item.key, question=item.question, why=item.why)
+            for item in getattr(result, "gaps", [])
+        ],
     )
 
 

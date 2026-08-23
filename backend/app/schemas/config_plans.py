@@ -113,6 +113,22 @@ class DraftSourceRead(BaseModel):
     commands: list[str]
 
 
+class DecidedRead(BaseModel):
+    """コードで先に決めた値と、その理由。"""
+
+    key: str
+    value: str
+    why: str
+
+
+class GapRead(BaseModel):
+    """コードでは決められず、モデルか人に回したところ。"""
+
+    key: str
+    question: str
+    why: str
+
+
 class ConfigDraftRead(BaseModel):
     device_id: int
     vendor: str
@@ -123,6 +139,10 @@ class ConfigDraftRead(BaseModel):
     notes: list[str]
     #: 下書きを起こしたモデル。資料から拾っただけのときは null
     model: str | None = None
+    #: モデルに渡す前に、コードで確定させたこと
+    decided: list[DecidedRead] = []
+    #: 決められず、モデルか人に回したところ
+    gaps: list[GapRead] = []
 
 
 class LlmModelRead(BaseModel):

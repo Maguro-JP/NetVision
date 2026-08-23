@@ -487,6 +487,32 @@ export default function ConfigPlansPage() {
                 </details>
                 {suggestion && (
                   <>
+                    {suggestion.decided.length > 0 && (
+                      <div className="card" style={{ marginTop: 6 }}>
+                        <div className="label">
+                          先に決めたこと（AI は使っていません）
+                        </div>
+                        <ul className="muted">
+                          {suggestion.decided.map((item) => (
+                            <li key={item.key}>
+                              {item.key}: {item.value} — {item.why}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {suggestion.gaps.length > 0 && (
+                      <div className="card" style={{ marginTop: 6 }}>
+                        <div className="label">決められなかったこと</div>
+                        <ul className="muted">
+                          {suggestion.gaps.map((gap) => (
+                            <li key={gap.key}>
+                              {gap.question} — {gap.why}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
                     {suggestion.notes.map((note) => (
                       <div
                         key={note}
