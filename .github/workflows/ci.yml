@@ -11,7 +11,11 @@ on:
     paths-ignore:
       - "**/*.md"
       - "docs/**"
+  # 下書きのあいだは走らせない。書いている途中は手元で確かめていて、
+  # ここで見てほしいのは「人に見せる形になった」ときだから。
+  # ready_for_review を足しているのは、既定の種類に入っていないため
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -24,6 +28,7 @@ concurrency:
 
 jobs:
   backend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -42,6 +47,7 @@ jobs:
       - run: pytest -q
 
   frontend:
+    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     defaults:
       run:

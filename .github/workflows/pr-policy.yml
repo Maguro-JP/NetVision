@@ -10,6 +10,8 @@ on:
 
 jobs:
   one-at-a-time:
+    # 下書きは、まだ人に見せる形になっていない。並び方はそのときに見る
+    if: github.event.pull_request.draft == false
     runs-on: ubuntu-latest
     permissions:
       pull-requests: read
