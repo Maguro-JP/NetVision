@@ -403,10 +403,28 @@ def get_graph(
         rank = _align_redundant_pairs(
             hierarchy_rank(graph), _adjacency(graph), edges=graph.edges, nodes=graph.nodes
         )
-        _compact(graph.nodes, graph.edges, rank=rank, orientation=orientation)
+        _arrange_initial(graph, rank, orientation=orientation)
         apply_planes(graph.nodes, rank)
         graph.unplaced_count = sum(1 for n in graph.nodes if not n.placed)
     return graph
+
+
+def _arrange_initial(graph: TopologyGraph, rank: dict[int, int], *, orientation: str) -> None:
+    """初期配置。拠点がたくさんある図だけ、拠点ごとのまとまりで置く。
+
+    1つの木として組むと、拠点が増えるほど横へ伸びる。実際に 120 台で
+    8段70列・幅16000px の帯になり、画面に収めると線も名前も読めなかった。
+    """
+    from app.services import topology_world
+
+    unplaced = {node.device_id for node in graph.nodes if not node.placed}
+    # まだ誰も並べていない図だけ。人が1台でも置いていたら、その意思の上に積む
+    # （_compact は置いたものを動かさない）。まとまりごと動かすこちらは、
+    # 置いた機器も一緒に運んでしまう
+    if len(unplaced) == len(graph.nodes) and topology_world.should_use(graph.nodes):
+        topology_world.arrange(graph.nodes, graph.edges, orientation=orientation)
+        return
+    _compact(graph.nodes, graph.edges, rank=rank, orientation=orientation)
 
 
 #: L3 図に出す機器の種別。スイッチ同士のトランクは L2 側の話。
