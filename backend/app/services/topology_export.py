@@ -22,7 +22,7 @@ from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
 
-from app.services import localtime, portlabel, svglayout
+from app.services import localtime, portlabel, svglayout, topology_view
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import (
@@ -148,6 +148,7 @@ def render_svg(
     port_style: str = "short",
     along_line: bool = False,
     show_peers: bool = True,
+    view: topology_view.ViewGeometry | None = None,
 ) -> str:
     """トポロジーを SVG にする。位置は渡されたグラフのまま使う。
 
@@ -267,6 +268,12 @@ def render_svg(
         return box_at(node, h, w)
 
     sized = {n.device_id: display_box(n) for n in nodes}
+    # 画面が描いた箱があれば、そのまま使う。ここで作り直すと、同じ台帳でも
+    # 画面と書き出しで箱の大きさが変わり、線の付き方まで変わってしまう
+    if view is not None:
+        for device_id, box in view.boxes.items():
+            if device_id in sized:
+                sized[device_id] = (box.x, box.y, box.width, box.height)
 
     min_x = min([sized[n.device_id][0] for n in nodes] + [p.x for p in peers])
     min_y = min([sized[n.device_id][1] for n in nodes] + [p.y for p in peers])
@@ -470,6 +477,9 @@ def render_svg(
             src_side=edge.source_side,
             dst_side=edge.target_side,
         )
+        drawn = view.wires.get(edge.id) if view is not None else None
+        if drawn is not None:
+            src_side, dst_side = drawn.source_side, drawn.target_side
         sides[edge.id] = (src_side, dst_side)
         src_along = dst_box[1] if src_side in ("left", "right") else dst_box[0]
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
@@ -581,6 +591,12 @@ def render_svg(
             for device_id, rect in boxes.items()
             if device_id not in (edge.source, edge.target)
         ] + [rect.grow(2.0) for rect in peer_boxes]
+        drawn = view.wires.get(edge.id) if view is not None else None
+        if drawn is not None:
+            # 画面が引いた線。原点を図の左上へそろえるだけで、形は変えない
+            pending.append(([(x + dx, y + dy) for x, y in drawn.points], edge))
+            drawn_with.append({})
+            continue
         points = _wire_path(
             src_box,
             dst_box,
@@ -621,6 +637,8 @@ def render_svg(
         if _route_cross_count(points, others) == 0:
             continue
         how = drawn_with[index]
+        if not how:
+            continue  # 画面が引いた線は引き直さない。画面と違う図になる
         again = _wire_path(*how["args"], src_t=how["src_t"], dst_t=how["dst_t"], avoid=others)
         if _route_cross_count(again, others) < _route_cross_count(points, others):
             pending[index] = (again, pending[index][1])
@@ -2343,6 +2361,7 @@ def export_svg(
     along_line: bool = False,
     show_peers: bool = True,
     orientation: str = "vertical",
+    view: topology_view.ViewGeometry | None = None,
 ) -> str:
     return render_svg(
         load_diagram(db, layer, site_id=site_id, orientation=orientation),
@@ -2354,4 +2373,5 @@ def export_svg(
         port_style=port_style,
         along_line=along_line,
         show_peers=show_peers,
+        view=view,
     )

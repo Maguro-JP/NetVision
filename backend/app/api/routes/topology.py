@@ -27,7 +27,7 @@ from app.schemas.topology import (
     VrfRead,
 )
 from app.services import configs as config_service
-from app.services import spaceview, topology_export
+from app.services import spaceview, topology_export, topology_view
 from app.services import topology as service
 from app.services import vlans as vlan_service
 
@@ -261,6 +261,71 @@ def list_vrfs(db: DbSession) -> list[VrfRead]:
     return service.vrf_summary(db)
 
 
+class ViewBoxIn(BaseModel):
+    """画面が描いた箱1つ。左上と、実際の大きさ。"""
+
+    device_id: int
+    x: float
+    y: float
+    width: float
+    height: float
+
+
+class ViewWireIn(BaseModel):
+    """画面が引いた線1本。折れ点と、どの辺から出ているか。"""
+
+    edge_id: int
+    points: list[tuple[float, float]]
+    source_side: str = "right"
+    target_side: str = "left"
+
+
+class ViewIn(BaseModel):
+    boxes: list[ViewBoxIn] = []
+    wires: list[ViewWireIn] = []
+
+
+class ViewToken(BaseModel):
+    token: str
+
+
+@router.post("/views", response_model=ViewToken)
+def keep_view(body: ViewIn) -> ViewToken:
+    """いま画面に出ている図の形を預かる。
+
+    人は画面で配置と線を確かめてから「出力する」を押す。そこで別のものが
+    出てくるなら、確かめた意味が無い。画面が引いた線をそのまま渡してもらい、
+    書き出しはそれを描くだけにする。
+
+    預かるのは形だけで、中身（機器名・型番・状態）は台帳から取り直す。
+    画面から送られてきた文字をそのまま図に出すと、細工した文字が資料に
+    載ることになる。
+    """
+    view = topology_view.ViewGeometry(
+        boxes={
+            box.device_id: topology_view.ViewBox(
+                device_id=box.device_id,
+                x=box.x,
+                y=box.y,
+                width=box.width,
+                height=box.height,
+            )
+            for box in body.boxes
+        },
+        wires={
+            wire.edge_id: topology_view.ViewWire(
+                edge_id=wire.edge_id,
+                points=[(x, y) for x, y in wire.points],
+                source_side=wire.source_side,
+                target_side=wire.target_side,
+            )
+            for wire in body.wires
+            if len(wire.points) >= 2
+        },
+    )
+    return ViewToken(token=topology_view.keep(view))
+
+
 @router.get("/export.svg", response_class=Response)
 def export_topology(
     db: DbSession,
@@ -286,6 +351,11 @@ def export_topology(
         default="vertical",
         description="自動配置の向き。vertical = 上下 / horizontal = 左右",
     ),
+    view: str | None = Query(
+        default=None,
+        description="画面が描いた図の札（/topology/views で預けたもの）。"
+        "渡すと、その線と箱をそのまま描く",
+    ),
 ) -> Response:
     """構成図を SVG で書き出す。
 
@@ -305,6 +375,7 @@ def export_topology(
     svg = topology_export.export_svg(
         db,
         layer,
+        view=topology_view.take(view),
         title=title,
         vlan=vlan,
         vrf=vrf,

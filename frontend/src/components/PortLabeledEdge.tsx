@@ -815,6 +815,21 @@ const FACE_OF: Record<Position, "top" | "bottom" | "left" | "right"> = {
 };
 
 /**
+ * 画面が実際に引いた線。書き出しはここから取る。
+ *
+ * 書き出しが自分でもう一度線を引くと、同じ規則で書いてあっても候補の
+ * 選び方が少し違うだけで別の図になる。人は画面で確かめてから「出力する」を
+ * 押すのだから、そこで違う図が出てはいけない。
+ *
+ * 画面から消えた線は残っても構わない。読む側は、いま出ている結線の分だけを
+ * 引くようにしてある。
+ */
+export const drawnWires = new Map<
+  string,
+  { points: Pt[]; sourceFace: Face; targetFace: Face }
+>();
+
+/**
  * 結線1本。ポート名をそれぞれの機器側に置く。
  *
  * 1本の線に2つのポート名を並べると「左が上位」のような規則を覚える必要が出る。
@@ -850,6 +865,12 @@ export default function PortLabeledEdge({
   const path = routed.path;
   const labelX = routed.labelX;
   const labelY = routed.labelY;
+  // 引いた線を控える。書き出しはこれをそのまま描く
+  drawnWires.set(id, {
+    points: parsePathPoints(path),
+    sourceFace: FACE_OF[sourcePosition],
+    targetFace: FACE_OF[targetPosition],
+  });
   const angle = (Math.atan2(targetY - sourceY, targetX - sourceX) * 180) / Math.PI;
   // 左右の辺どうしを結ぶ線では、両端のポート名が箱の間の通路を分け合う。
   // 半分を超えると必ず出会うので、そこで切って吹き出しで読ませる

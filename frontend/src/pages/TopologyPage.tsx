@@ -49,6 +49,7 @@ import WindowLink, {
   openInWindow,
 } from "../components/WindowLink";
 import PortLabeledEdge, {
+  drawnWires,
   type PortEdgeData,
   sideBetween,
   type WireBox,
@@ -1943,6 +1944,59 @@ function TopologyEditor() {
     [],
   );
 
+  /**
+   * いま画面に描いてある図の形を、書き出しへ預けておく。
+   *
+   * 書き出しが自分でもう一度線を引くと、同じ規則で書いてあっても候補の
+   * 選び方が少し違うだけで別の図になる。人は画面で配置と線を確かめてから
+   * 出力を押すので、そこで違う図が出ては困る。
+   *
+   * 押したときに預けると、返事を待つ間に窓が開けず（ポップアップの制限）、
+   * 出力そのものが止まる。描き変わってから少し置いて、先に預けておく。
+   */
+  const [viewToken, setViewToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (nodes.length === 0) {
+      setViewToken(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const boxes = nodes
+        .filter((node) => node.type === "device")
+        .map((node) => {
+          const data = node.data as DeviceNodeData;
+          return {
+            device_id: Number(node.id),
+            x: node.position.x,
+            y: node.position.y,
+            width: data.width ?? DEFAULT_WIDTH,
+            height: data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT),
+          };
+        });
+      const wires = edges.flatMap((edge) => {
+        const drawn = drawnWires.get(edge.id);
+        const edgeId = Number(edge.id);
+        if (!drawn || !Number.isFinite(edgeId)) return [];
+        return [
+          {
+            edge_id: edgeId,
+            points: drawn.points.map(
+              (point) => [point.x, point.y] as [number, number],
+            ),
+            source_side: drawn.sourceFace,
+            target_side: drawn.targetFace,
+          },
+        ];
+      });
+      api
+        .keepTopologyView({ boxes, wires })
+        .then((result) => setViewToken(result.token))
+        // 預けられなくても、書き出しは今までどおり出る（線は書き出し側が引く）
+        .catch(() => setViewToken(null));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [nodes, edges, simple]);
+
   // 出力の画面へ、いまの絞り込みと見せ方をそのまま渡す。
   // 画面と出したものが 食い違わないようにする
   const exportQuery = (() => {
@@ -1957,6 +2011,8 @@ function TopologyEditor() {
     if (orientation) next.set("orientation", orientation);
     if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
     if (selectedVrf) next.set("vrf", selectedVrf);
+    // 画面が引いた線。渡せないときは、書き出し側が自分で引く
+    if (viewToken) next.set("view", viewToken);
     return `?${next.toString()}`;
   })();
 

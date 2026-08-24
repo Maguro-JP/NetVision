@@ -658,6 +658,33 @@ export const api = {
       { method: "POST" },
     ),
 
+  /**
+   * いま画面に出ている図の形を預ける。
+   *
+   * 書き出しが自分でもう一度線を引くと、画面で確かめたものと違う図が出る。
+   * 引いた線をそのまま渡して、書き出しはそれを描くだけにする。
+   * 返ってきた札を書き出しの URL に付けると、その形で出てくる。
+   */
+  keepTopologyView: (body: {
+    boxes: {
+      device_id: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[];
+    wires: {
+      edge_id: number;
+      points: [number, number][];
+      source_side: string;
+      target_side: string;
+    }[];
+  }) =>
+    request<{ token: string }>(`/topology/views`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // 構成図を SVG で書き出す（設計書や報告書に貼るため）
   topologyExportUrl: (
     layer: string,
@@ -673,6 +700,8 @@ export const api = {
       port_style?: string;
       /** ポート名を線に沿わせて回転する */
       along_line?: string;
+      /** 画面が描いた図の札。渡すと、その線と箱をそのまま描く */
+      view?: string;
     } = {},
   ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
   /** 結線表。図が要らない場面（作業指示・検収）は表の方が使いやすい */

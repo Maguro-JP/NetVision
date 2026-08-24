@@ -93,6 +93,8 @@ export default function ExportPage() {
   const orientation = params.get("orientation") ?? undefined;
   const vlan = params.get("vlan") ? Number(params.get("vlan")) : undefined;
   const vrf = params.get("vrf") ?? undefined;
+  // 図の画面が引いた線。これを渡すと、画面で見ていたものがそのまま出る
+  const view = params.get("view") ?? undefined;
 
   const svgUrl = api.topologyExportUrl(layer, {
     vlan,
@@ -102,6 +104,7 @@ export default function ExportPage() {
     port_style: portStyle,
     along_line: alongLine ? "true" : undefined,
     orientation,
+    view,
   });
   // 機器一覧の絞り込み。機器一覧の画面から開いたときは、その絞り込みで出す
   const deviceFilters: DeviceFilters = {};
