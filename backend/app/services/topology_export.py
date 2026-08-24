@@ -149,6 +149,7 @@ def render_svg(
     along_line: bool = False,
     show_peers: bool = True,
     view: topology_view.ViewGeometry | None = None,
+    collect: dict | None = None,
 ) -> str:
     """トポロジーを SVG にする。位置は渡されたグラフのまま使う。
 
@@ -642,6 +643,28 @@ def render_svg(
         again = _wire_path(*how["args"], src_t=how["src_t"], dst_t=how["dst_t"], avoid=others)
         if _route_cross_count(again, others) < _route_cross_count(points, others):
             pending[index] = (again, pending[index][1])
+
+    # 引き終えた形を、頼まれていれば渡す。画面はこれを描く。
+    # 図を描く手順の途中から取り出すので、線の引き方が2つに分かれない
+    if collect is not None:
+        collect["boxes"] = {
+            node.device_id: (
+                sized[node.device_id][0],
+                sized[node.device_id][1],
+                sized[node.device_id][2],
+                sized[node.device_id][3],
+            )
+            for node in nodes
+        }
+        collect["wires"] = {
+            edge.id: {
+                # 図の余白ぶんを引いて、台帳と同じ座標に戻す
+                "points": [(x - dx, y - dy) for x, y in points],
+                "source_side": sides.get(edge.id, ("right", "left"))[0],
+                "target_side": sides.get(edge.id, ("right", "left"))[1],
+            }
+            for points, edge in pending
+        }
 
     # 同じ辺回りは箱の下を通る。キャンバスを箱だけだと線が凡例や外枠へ食い込む。
     wire_ys = [y for points, _ in pending for _, y in points]
@@ -1365,12 +1388,17 @@ def _route_pierce_count(
     route: list[tuple[float, float]], boxes: list[tuple[float, float, float, float]]
 ) -> int:
     """端点の箱も含め、線が箱の中を通る回数。obstacles から端点を外すと見逃す。"""
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for box in boxes
-        if _segment_pierces_box(box, a, b)
-    )
+    count = 0
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for box in boxes:
+            # 外接矩形が離れていれば、貫きの計算をするまでもない
+            if high_x < box[0] or low_x > box[2] or high_y < box[1] or low_y > box[3]:
+                continue
+            if _segment_pierces_box(box, a, b):
+                count += 1
+    return count
 
 
 #: 線が箱のそばを通るときに空けたいすき間。これより近いと、箱の縁を這って
@@ -1392,7 +1420,13 @@ def _hugs_box_count(
     for index, (a, b) in enumerate(segments):
         if index == 0 or index == len(segments) - 1:
             continue
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
         for x1, y1, x2, y2 in boxes:
+            if high_x < x1 - _BOX_CLEARANCE or low_x > x2 + _BOX_CLEARANCE:
+                continue
+            if high_y < y1 - _BOX_CLEARANCE or low_y > y2 + _BOX_CLEARANCE:
+                continue
             near = (
                 x1 - _BOX_CLEARANCE,
                 y1 - _BOX_CLEARANCE,
@@ -1437,13 +1471,20 @@ def _route_cross_count(
     """
     if not drawn:
         return 0
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for other in drawn
-        for c, d in zip(other, other[1:], strict=False)
-        if _crosses_at_right_angle(a, b, c, d)
-    )
+    count = 0
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for other in drawn:
+            for c, d in zip(other, other[1:], strict=False):
+                # 離れている組は、交わりようが無い
+                if high_x < min(c[0], d[0]) or low_x > max(c[0], d[0]):
+                    continue
+                if high_y < min(c[1], d[1]) or low_y > max(c[1], d[1]):
+                    continue
+                if _crosses_at_right_angle(a, b, c, d):
+                    count += 1
+    return count
 
 
 def _ensure_outward(
@@ -1749,13 +1790,7 @@ def _route(
         clear = [route for route in options if _residual(route, obstacles) == 0]
         if clear:
             return min(clear, key=_length)
-        blockers = [
-            rect
-            for rect in obstacles
-            for route in options
-            for a, b in zip(route, route[1:], strict=False)
-            if svglayout.segment_hits(rect, a, b)
-        ]
+        blockers = [rect for route in options for _a, _b, rect in _hits(route, obstacles)]
         if not blockers:
             return options[0]
 
@@ -1805,14 +1840,28 @@ def _route(
     return out if len(out) > 1 else _ell(p1, p2, True)
 
 
+def _hits(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]):
+    """線分と、当たる見込みのある箱の組だけを返す。
+
+    区間と箱の総当たりは、図が大きくなると効いてくる（120台の図で1本の線を
+    引くのに数百万回）。外接矩形が離れている組は、当たり判定を呼ぶまでもない。
+    ここで落としておくと、書き出しが5秒から0.4秒になる。
+    """
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for rect in obstacles:
+            if high_x < rect.x1 or low_x > rect.x2:
+                continue
+            if high_y < rect.y1 or low_y > rect.y2:
+                continue
+            if svglayout.segment_hits(rect, a, b):
+                yield a, b, rect
+
+
 def _residual(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]) -> int:
     """引き直しても、まだ箱を通ってしまっている区間の数。"""
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for rect in obstacles
-        if svglayout.segment_hits(rect, a, b)
-    )
+    return sum(1 for _ in _hits(route, obstacles))
 
 
 def _length(route: list[tuple[float, float]]) -> float:

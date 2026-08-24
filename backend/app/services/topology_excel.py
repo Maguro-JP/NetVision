@@ -108,7 +108,10 @@ def _fit_to_page(sheet, shapes, get_column_letter) -> None:
     bottom = max(shape.y + shape.height for shape in shapes)
     columns = max(1, int(right // _CELL_W) + 1)
     rows = max(1, int(bottom // _CELL_H) + 1)
-    sheet.print_area = f"A1:{get_column_letter(columns)}{rows}"
+    # 印刷範囲を決めると、Excel は普通の画面に点線の枠を出す。図の紙に
+    # 大きな枠が乗っているように見えるので、範囲は決めない。代わりに、
+    # 図の右下にあたるセルを作って「ここまでが中身」と伝える
+    sheet.cell(row=rows, column=columns).value = ""
     # 横に長い図が多い。縦置きだと、縮めた結果が読めない大きさになる
     sheet.page_setup.orientation = "landscape" if right >= bottom else "portrait"
     sheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)

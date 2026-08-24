@@ -332,6 +332,50 @@ export function comparePortNames(a: string, b: string): number {
 }
 
 /**
+ * サーバーが引いた線から、引き出し口を決める。
+ *
+ * 線を引くのはサーバー側の1か所だけにしてある。画面の引き出し口が線の端と
+ * 違う場所にあると、線の端が箱から浮いて見え、ポート名も線から離れる。
+ * だから口も、引かれた線の端から決める。
+ */
+export function handlesFromRoutes(
+  graph: TopologyGraph,
+  boxOf: (deviceId: number) => { x: number; y: number; w: number; h: number } | undefined,
+): {
+  anchors: Map<number, { source: string; target: string }>;
+  faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
+} | null {
+  const anchors = new Map<number, { source: string; target: string }>();
+  const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
+  if (graph.edges.length === 0) return null;
+
+  for (const edge of graph.edges) {
+    const points = edge.points;
+    if (!points || points.length < 2) return null; // 1本でも欠けたら、いつもの決め方に戻す
+    const ends: [number, [number, number], "top" | "bottom" | "left" | "right" | null][] = [
+      [edge.source, points[0], edge.source_side],
+      [edge.target, points[points.length - 1], edge.target_side],
+    ];
+    const ids: string[] = [];
+    for (const [deviceId, point, side] of ends) {
+      const box = boxOf(deviceId);
+      if (!box || !side) return null;
+      const along =
+        side === "top" || side === "bottom"
+          ? (point[0] - box.x) / Math.max(box.w, 1)
+          : (point[1] - box.y) / Math.max(box.h, 1);
+      const list = faceHandles.get(deviceId) ?? [];
+      const id = anchorId(side, list.length);
+      list.push({ id, side, t: Math.min(1, Math.max(0, along)) });
+      faceHandles.set(deviceId, list);
+      ids.push(id);
+    }
+    anchors.set(edge.id, { source: ids[0], target: ids[1] });
+  }
+  return { anchors, faceHandles };
+}
+
+/**
  * 各結線の引き出し口を決める。
  *
  * 人が指定していれば従い、していなければ位置関係から選ぶ。
@@ -811,13 +855,41 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } =
-    assignAnchors(graph, { simple });
+  const own = assignAnchors(graph, { simple });
+  const { busiestTB, heights, lanes, laneRank, flipped } = own;
+  // 箱の大きさは、線を引いたところ（サーバー）で決まった値を使う
+  const sizeOf = (node: TopologyNode) => {
+    const width = node.width ?? widthFor(busiestTB.get(node.device_id) ?? 0) ?? DEFAULT_WIDTH;
+    const height =
+      node.height ??
+      heights.get(node.device_id) ??
+      (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+    return { width, height };
+  };
+  const drawnBox = new Map(
+    graph.nodes.map((node) => {
+      const { width, height } = sizeOf(node);
+      return [
+        node.device_id,
+        {
+          x: node.x - shiftFor(node.width ?? width),
+          y: node.y - shiftYFor(height),
+          w: width,
+          h: height,
+        },
+      ] as const;
+    }),
+  );
+  // 引き出し口は、引かれた線の端に合わせる。線とずれた口から出すと、
+  // 端が箱から浮いて見えるうえ、ポート名も線から離れる
+  const routed = handlesFromRoutes(graph, (id) => drawnBox.get(id));
+  const anchors = routed?.anchors ?? own.anchors;
+  const faceHandles = routed?.faceHandles ?? own.faceHandles;
 
   const devices = graph.nodes.map((node) => {
-    const width = widthFor(busiestTB.get(node.device_id) ?? 0);
-    const height =
-      heights.get(node.device_id) ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+    // 既定の大きさのときは、箱側に幅を指定しない（css の既定に任せる）
+    const width = node.width ?? widthFor(busiestTB.get(node.device_id) ?? 0);
+    const height = sizeOf(node).height;
     const shift = shiftFor(width);
     const shiftY = shiftYFor(height);
     return {
@@ -959,6 +1031,10 @@ function toFlow(
       targetFlip: flipped.has(`${edge.id}:${edge.target}`),
       sourceBox: boxOf.get(edge.source),
       targetBox: boxOf.get(edge.target),
+      // サーバーが引いた線。画面はこれを描く（引き方は1か所に置いてある）
+      points: edge.points?.length ? edge.points : undefined,
+      sourceSide: edge.source_side ?? undefined,
+      targetSide: edge.target_side ?? undefined,
       obstacles: [...boxOf.entries()]
         .filter(([id]) => id !== edge.source && id !== edge.target)
         .map(([, box]) => box),
@@ -1170,12 +1246,15 @@ function TopologyEditor() {
       selectedSite,
       appliedSearch,
       scope,
+      // 箱の大きさが変わると線の引き方も変わるので、取り直す
+      simple,
     ],
     queryFn: () =>
       api.getTopology(layer, false, orientation, {
         site_id: selectedSite === "" ? undefined : selectedSite,
         q: appliedSearch.trim() || undefined,
         scope,
+        simple: simple ? "true" : undefined,
       }),
   });
   const { data: tunnelInfo } = useQuery({

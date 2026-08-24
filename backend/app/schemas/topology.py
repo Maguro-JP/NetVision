@@ -187,6 +187,10 @@ class TopologyNodeRead(BaseModel):
     label: str | None = None
     #: 人が決めた管理ID
     code: str | None = None
+    #: 図に描く箱の大きさ。線の引き方と同じところで決めるので、画面と
+    #: 書き出しで箱がずれない
+    width: float | None = None
+    height: float | None = None
 
 
 class TopologyGroupRead(BaseModel):
@@ -216,6 +220,8 @@ class TopologyEdgeRead(BaseModel):
     vrf: str | None = None
     source_side: str | None = None
     target_side: str | None = None
+    #: 図に引く折れ線。線の引き方は書き出し側の1か所で決めて、画面はこれを描く
+    points: list[tuple[float, float]] = []
 
 
 class TopologyGraphRead(BaseModel):

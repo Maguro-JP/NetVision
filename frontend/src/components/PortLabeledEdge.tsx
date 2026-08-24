@@ -3,6 +3,9 @@ import { BaseEdge, EdgeLabelRenderer, Position, type EdgeProps } from "@xyflow/r
 import { MEDIA_COLOR, formatPort, mediaOf, type PortStyle } from "../lib/portlabel";
 
 /** 段が違うと見なす縦の差。これ未満なら横並びとして扱う。 */
+type Face = "top" | "bottom" | "left" | "right";
+type Pt = { x: number; y: number };
+
 const SAME_ROW = 60;
 
 /** 右の列（拠点の対向など）と見なす横の差。 */
@@ -54,6 +57,15 @@ export interface PortEdgeData extends Record<string, unknown> {
   obstacles?: WireBox[];
   sourceBox?: WireBox;
   targetBox?: WireBox;
+  /**
+   * サーバーが引いた折れ線。画面はこれを描く。
+   *
+   * 線の引き方を画面と書き出しの両方に置くと、同じ規則で書いてあっても
+   * 候補の選び方が少し違うだけで別の図になる。引くのは1か所だけにする。
+   */
+  points?: [number, number][];
+  sourceSide?: "top" | "bottom" | "left" | "right";
+  targetSide?: "top" | "bottom" | "left" | "right";
 }
 
 /** ノード枠から、その先どのくらい離してラベルを置くか。 */
@@ -106,158 +118,6 @@ export function portLabelPlacement(
           : "0%, -100%";
   return { x: px, y: py, anchor };
 }
-
-/**
- * 縦横だけの通り道。構成図の定石どおり、箱の間で束ねてから相手の高さで抜く。
- * 曲がった SmoothStep は、束の順が崩れると交差して見える。
- */
-export function orthogonalBusPath(input: {
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourceFace: "top" | "bottom" | "left" | "right";
-  targetFace: "top" | "bottom" | "left" | "right";
-  rank: number;
-  count: number;
-  gap?: number;
-  /** 同じ辺回りの横バスを、通路上の箱の外へ押し出す */
-  obstacles?: WireBox[];
-}): { path: string; labelX: number; labelY: number } | null {
-  const gap = input.gap ?? 16;
-  const inset = 28;
-  const rank = Math.max(0, input.rank);
-  const steps = Math.max(0, input.count - 1);
-  const sx = input.sourceX;
-  const sy = input.sourceY;
-  const tx = input.targetX;
-  const ty = input.targetY;
-  const clearBusY = (busY: number, side: "above" | "below") => {
-    const boxes = input.obstacles ?? [];
-    if (boxes.length === 0) return busY;
-    const loX = Math.min(sx, tx);
-    const hiX = Math.max(sx, tx);
-    const pad = 24;
-    let out = busY;
-    for (const box of boxes) {
-      if (box.x2 < loX - 1 || box.x1 > hiX + 1) continue;
-      if (side === "below") out = Math.max(out, box.y2 + pad);
-      else out = Math.min(out, box.y1 - pad);
-    }
-    return out;
-  };
-  // 接続点が相手の高さに寄っている前提。高さが揃えば横一直線。
-  // ハブ側で一度重ねると折れが増えるだけなので、出口から扇に開く。
-  if (input.sourceFace === "right" && input.targetFace === "left" && tx - sx > 40) {
-    if (Math.abs(sy - ty) < 3) {
-      return {
-        path: `M ${sx},${sy} L ${tx},${ty}`,
-        labelX: (sx + tx) / 2,
-        labelY: sy,
-      };
-    }
-    const usable = Math.max(0, tx - sx - inset * 2);
-    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busX = tx - inset - rank * pitch;
-    return {
-      path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
-      labelX: busX,
-      labelY: (sy + ty) / 2,
-    };
-  }
-  if (input.sourceFace === "left" && input.targetFace === "right" && sx - tx > 40) {
-    if (Math.abs(sy - ty) < 3) {
-      return {
-        path: `M ${sx},${sy} L ${tx},${ty}`,
-        labelX: (sx + tx) / 2,
-        labelY: sy,
-      };
-    }
-    const usable = Math.max(0, sx - tx - inset * 2);
-    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busX = tx + inset + rank * pitch;
-    return {
-      path: `M ${sx},${sy} L ${busX},${sy} L ${busX},${ty} L ${tx},${ty}`,
-      labelX: busX,
-      labelY: (sy + ty) / 2,
-    };
-  }
-  if (input.sourceFace === "bottom" && input.targetFace === "top" && ty - sy > 40) {
-    if (Math.abs(sx - tx) < 3) {
-      return {
-        path: `M ${sx},${sy} L ${tx},${ty}`,
-        labelX: sx,
-        labelY: (sy + ty) / 2,
-      };
-    }
-    const usable = Math.max(0, ty - sy - inset * 2);
-    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busY = ty - inset - rank * pitch;
-    return {
-      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
-      labelX: (sx + tx) / 2,
-      labelY: busY,
-    };
-  }
-  if (input.sourceFace === "top" && input.targetFace === "bottom" && sy - ty > 40) {
-    if (Math.abs(sx - tx) < 3) {
-      return {
-        path: `M ${sx},${sy} L ${tx},${ty}`,
-        labelX: sx,
-        labelY: (sy + ty) / 2,
-      };
-    }
-    const usable = Math.max(0, sy - ty - inset * 2);
-    const pitch = steps > 0 ? Math.min(gap, usable / steps) : 0;
-    const busY = ty + inset + rank * pitch;
-    return {
-      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
-      labelX: (sx + tx) / 2,
-      labelY: busY,
-    };
-  }
-  // 同じ段で左右が塞がるとき、上下どちらかの辺から回す（2折れ）
-  if (input.sourceFace === "bottom" && input.targetFace === "bottom") {
-    const busY = clearBusY(Math.max(sy, ty) + inset + rank * (steps > 0 ? gap : 0), "below");
-    return {
-      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
-      labelX: (sx + tx) / 2,
-      labelY: busY,
-    };
-  }
-  if (input.sourceFace === "top" && input.targetFace === "top") {
-    const busY = clearBusY(Math.min(sy, ty) - inset - rank * (steps > 0 ? gap : 0), "above");
-    return {
-      path: `M ${sx},${sy} L ${sx},${busY} L ${tx},${busY} L ${tx},${ty}`,
-      labelX: (sx + tx) / 2,
-      labelY: busY,
-    };
-  }
-  return null;
-}
-
-/** 上下が近いときは直交バスにしない、と同じで縦も一直線を許す。 */
-function nearStraightVertical(
-  sx: number,
-  sy: number,
-  tx: number,
-  ty: number,
-  sourceFace: Face,
-  targetFace: Face,
-): { path: string; labelX: number; labelY: number } | null {
-  if (Math.abs(sx - tx) >= 3) return null;
-  if (sourceFace === "bottom" && targetFace === "top" && ty - sy > 40) {
-    return { path: `M ${sx},${sy} L ${tx},${ty}`, labelX: sx, labelY: (sy + ty) / 2 };
-  }
-  if (sourceFace === "top" && targetFace === "bottom" && sy - ty > 40) {
-    return { path: `M ${sx},${sy} L ${tx},${ty}`, labelX: sx, labelY: (sy + ty) / 2 };
-  }
-  return null;
-}
-
-type Face = "top" | "bottom" | "left" | "right";
-type Pt = { x: number; y: number };
-
 function pointsToPath(points: Pt[]): { path: string; labelX: number; labelY: number } {
   const cleaned: Pt[] = [points[0]];
   for (const point of points.slice(1)) {
@@ -313,197 +173,21 @@ export function segmentPiercesBox(box: WireBox, a: Pt, b: Pt): boolean {
   }
   return t1 - t0 > 1e-4 && t0 < 1 - 1e-9 && t1 > 1e-9;
 }
-
-/** 箱の縁すれすれを通る区間の数。書き出し側の _hugs_box_count と同じ考え方。 */
-export function hugsBoxCount(points: Pt[], boxes: WireBox[], clearance = 20): number {
-  let count = 0;
-  for (let i = 1; i + 2 < points.length; i += 1) {
-    const a = points[i];
-    const b = points[i + 1];
-    for (const box of boxes) {
-      const near: WireBox = {
-        x1: box.x1 - clearance,
-        y1: box.y1 - clearance,
-        x2: box.x2 + clearance,
-        y2: box.y2 + clearance,
-      };
-      if (segmentPiercesBox(near, a, b) && !segmentPiercesBox(box, a, b)) {
-        count += 1;
-        break;
-      }
-    }
-  }
-  return count;
-}
-
-/** 迂回するときに箱から離す距離。書き出し側の _ROUTE_CLEAR と同じ考え方。 */
-const ROUTE_CLEAR = 24;
-
-function ell(p1: Pt, p2: Pt, horizontalFirst: boolean): Pt[] {
-  const mid = horizontalFirst ? { x: p2.x, y: p1.y } : { x: p1.x, y: p2.y };
-  if (Math.abs(mid.x - p1.x) < 0.5 && Math.abs(mid.y - p1.y) < 0.5) return [p1, p2];
-  if (Math.abs(mid.x - p2.x) < 0.5 && Math.abs(mid.y - p2.y) < 0.5) return [p1, p2];
-  return [p1, mid, p2];
-}
-
-function segmentsHit(points: Pt[], boxes: WireBox[]): number {
-  let count = 0;
-  for (let i = 0; i + 1 < points.length; i += 1) {
-    for (const box of boxes) {
-      if (segmentPiercesBox(box, points[i], points[i + 1])) {
-        count += 1;
-        break;
-      }
-    }
-  }
-  return count;
-}
-
 /**
- * 関係の無い機器の箱を避けて通る折れ線。斜めは出さない。
+ * 箱を動かしている最中の、仮の線。
  *
- * 直線で結ぶと、間にある機器の上を通ってしまう。図の上では「通過」と
- * 「接続」を見分けられないので、その機器にも繋がっていると読まれる。
- * 書き出し側（topology_export の _route）と同じ考え方で、邪魔をしている箱を
- * ひとまとめにして、その4辺の外へ逃がしてから引き直す。
+ * 本物の線はサーバーが引く。動かしているあいだは口の位置が変わり続けるので、
+ * その形は使えない。縦横に1回だけ曲げた線を出しておいて、手を離したら
+ * 引き直してもらう。ここで凝った経路を作ると、線の引き方が2つに増える。
  */
-export function avoidRoute(p1: Pt, p2: Pt, boxes: WireBox[], depth = 0): Pt[] {
-  const options = [ell(p1, p2, true), ell(p1, p2, false)];
-  const clear = options.filter((route) => segmentsHit(route, boxes) === 0);
-  if (clear.length > 0) {
-    return clear.sort((a, b) => pathLength(a) - pathLength(b))[0];
-  }
-  if (depth >= 2) {
-    return options.sort(
-      (a, b) => segmentsHit(a, boxes) - segmentsHit(b, boxes) || pathLength(a) - pathLength(b),
-    )[0];
-  }
-
-  const blockers = boxes.filter((box) =>
-    options.some((route) =>
-      route.some((_, i) => i + 1 < route.length && segmentPiercesBox(box, route[i], route[i + 1])),
-    ),
-  );
-  if (blockers.length === 0) return options[0];
-
-  const hit: WireBox = {
-    x1: Math.min(...blockers.map((b) => b.x1)),
-    y1: Math.min(...blockers.map((b) => b.y1)),
-    x2: Math.max(...blockers.map((b) => b.x2)),
-    y2: Math.max(...blockers.map((b) => b.y2)),
-  };
-  const midX = (hit.x1 + hit.x2) / 2;
-  const midY = (hit.y1 + hit.y2) / 2;
-  const corners: Pt[] = [
-    { x: midX, y: hit.y1 - ROUTE_CLEAR },
-    { x: midX, y: hit.y2 + ROUTE_CLEAR },
-    { x: hit.x1 - ROUTE_CLEAR, y: midY },
-    { x: hit.x2 + ROUTE_CLEAR, y: midY },
-  ];
-  let best: Pt[] | null = null;
-  let bestCost: [number, number] | null = null;
-  for (const point of corners) {
-    const head = avoidRoute(p1, point, boxes, depth + 1);
-    const tail = avoidRoute(point, p2, boxes, depth + 1);
-    const route = [...head.slice(0, -1), ...tail];
-    const cost: [number, number] = [segmentsHit(route, boxes), pathLength(route)];
-    if (!bestCost || cost[0] < bestCost[0] || (cost[0] === bestCost[0] && cost[1] < bestCost[1])) {
-      best = route;
-      bestCost = cost;
-    }
-    if (cost[0] === 0 && depth > 0) break;
-  }
-  return best ?? options[0];
-}
-
-export function routePierceCount(points: Pt[], boxes: WireBox[]): number {
-  let hits = 0;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    for (const box of boxes) {
-      if (segmentPiercesBox(box, points[i], points[i + 1])) hits += 1;
-    }
-  }
-  return hits;
-}
-
-function exitsOutward(points: Pt[], face: Face): boolean {
-  if (points.length < 2) return false;
-  const a = points[0];
-  const b = points[1];
-  if (face === "left") return b.x < a.x - 0.5;
-  if (face === "right") return b.x > a.x + 0.5;
-  if (face === "top") return b.y < a.y - 0.5;
-  if (face === "bottom") return b.y > a.y + 0.5;
-  return true;
-}
-
-function arrivesFromOutside(points: Pt[], face: Face): boolean {
-  if (points.length < 2) return false;
-  const tip = points[points.length - 1];
-  const prev = points[points.length - 2];
-  if (face === "left") return prev.x < tip.x - 0.5;
-  if (face === "right") return prev.x > tip.x + 0.5;
-  if (face === "top") return prev.y < tip.y - 0.5;
-  if (face === "bottom") return prev.y > tip.y + 0.5;
-  return true;
-}
-
-function ensureOutward(points: Pt[], face: Face, gap = 16): Pt[] {
-  if (points.length < 2 || exitsOutward(points, face)) return points;
-  const a = points[0];
-  const b = points[1];
-  const mid =
-    face === "left"
-      ? { x: a.x - gap, y: a.y }
-      : face === "right"
-        ? { x: a.x + gap, y: a.y }
-        : face === "top"
-          ? { x: a.x, y: a.y - gap }
-          : { x: a.x, y: a.y + gap };
-  if (face === "left" || face === "right") {
-    const corner = { x: mid.x, y: b.y };
-    if (Math.abs(b.x - a.x) <= 0.5) {
-      return [a, mid, corner, ...points.slice(2)];
-    }
-    return [a, mid, corner, ...points.slice(1)];
-  }
-  const corner = { x: b.x, y: mid.y };
-  if (Math.abs(b.y - a.y) <= 0.5) {
-    return [a, mid, corner, ...points.slice(2)];
-  }
-  return [a, mid, corner, ...points.slice(1)];
-}
-
-function pathLength(points: Pt[]): number {
-  let len = 0;
-  for (let i = 0; i < points.length - 1; i += 1) {
-    len += Math.abs(points[i + 1].x - points[i].x) + Math.abs(points[i + 1].y - points[i].y);
-  }
-  return len;
-}
-
-function collapseCollinear(points: Pt[]): Pt[] {
-  if (points.length < 3) return points;
-  const out: Pt[] = [points[0]];
-  for (let i = 1; i < points.length - 1; i += 1) {
-    const a = out[out.length - 1];
-    const b = points[i];
-    const c = points[i + 1];
-    if (Math.abs(b.x - a.x) <= 0.5 && Math.abs(b.y - a.y) <= 0.5) continue;
-    const colinear =
-      (Math.abs(a.x - b.x) <= 0.5 && Math.abs(b.x - c.x) <= 0.5) ||
-      (Math.abs(a.y - b.y) <= 0.5 && Math.abs(b.y - c.y) <= 0.5);
-    if (colinear) continue;
-    out.push(b);
-  }
-  const last = points[points.length - 1];
-  if (
-    Math.abs(last.x - out[out.length - 1].x) > 0.5 ||
-    Math.abs(last.y - out[out.length - 1].y) > 0.5
-  ) {
-    out.push(last);
-  }
-  return out.length > 1 ? out : points;
+export function previewRoute(
+  from: Pt,
+  to: Pt,
+  face: Face,
+): { path: string; labelX: number; labelY: number } {
+  const horizontalFirst = face === "left" || face === "right";
+  const corner = horizontalFirst ? { x: to.x, y: from.y } : { x: from.x, y: to.y };
+  return pointsToPath([from, corner, to]);
 }
 
 function parsePathPoints(path: string): Pt[] {
@@ -516,52 +200,6 @@ function parsePathPoints(path: string): Pt[] {
       return { x, y };
     });
 }
-
-/** 同じ口のまま、上下のすき間へ迂回する。口を上下に付け替えると画面のハンドルと食い違う。 */
-function detourKeepFaces(
-  sx: number,
-  sy: number,
-  tx: number,
-  ty: number,
-  sourceFace: Face,
-  targetFace: Face,
-  boxes: WireBox[],
-  side: "above" | "below",
-): Pt[] | null {
-  if (
-    !(
-      (sourceFace === "left" || sourceFace === "right") &&
-      (targetFace === "left" || targetFace === "right")
-    )
-  ) {
-    return null;
-  }
-  const pad = 24;
-  const out = 16;
-  const ox = sx + (sourceFace === "right" ? out : sourceFace === "left" ? -out : 0);
-  const ix = tx + (targetFace === "right" ? out : targetFace === "left" ? -out : 0);
-  // 通り道の横幅に重なり、直進帯を塞ぐ箱だけ避ける
-  const loX = Math.min(ox, ix);
-  const hiX = Math.max(ox, ix);
-  const bandLo = Math.min(sy, ty) - pad;
-  const bandHi = Math.max(sy, ty) + pad;
-  let channel = side === "below" ? Math.max(sy, ty) + pad : Math.min(sy, ty) - pad;
-  for (const box of boxes) {
-    if (box.x2 < loX - 1 || box.x1 > hiX + 1) continue;
-    if (box.y2 < bandLo || box.y1 > bandHi) continue;
-    if (side === "below") channel = Math.max(channel, box.y2 + pad);
-    else channel = Math.min(channel, box.y1 - pad);
-  }
-  return [
-    { x: sx, y: sy },
-    { x: ox, y: sy },
-    { x: ox, y: channel },
-    { x: ix, y: channel },
-    { x: ix, y: ty },
-    { x: tx, y: ty },
-  ];
-}
-
 export function facesForEdge(input: {
   sourceBox: WireBox;
   targetBox: WireBox;
@@ -576,235 +214,11 @@ export function facesForEdge(input: {
   const srcMid = mid(input.sourceBox);
   const dstMid = mid(input.targetBox);
   const toward = (from: Pt, to: Pt): Face => sideBetween(to.x - from.x, to.y - from.y);
-  let sourceFace = input.sourceSide ?? toward(srcMid, dstMid);
-  let targetFace = input.targetSide ?? toward(dstMid, srcMid);
-  if (
-    (sourceFace === "left" || sourceFace === "right") &&
-    (targetFace === "left" || targetFace === "right")
-  ) {
-    const boxes = [input.sourceBox, input.targetBox, ...input.obstacles];
-    const clear = (sf: Face, tf: Face) => {
-      const start =
-        sf === "right"
-          ? { x: input.sourceBox.x2, y: srcMid.y }
-          : sf === "left"
-            ? { x: input.sourceBox.x1, y: srcMid.y }
-            : sf === "bottom"
-              ? { x: srcMid.x, y: input.sourceBox.y2 }
-              : { x: srcMid.x, y: input.sourceBox.y1 };
-      const end =
-        tf === "right"
-          ? { x: input.targetBox.x2, y: dstMid.y }
-          : tf === "left"
-            ? { x: input.targetBox.x1, y: dstMid.y }
-            : tf === "bottom"
-              ? { x: dstMid.x, y: input.targetBox.y2 }
-              : { x: dstMid.x, y: input.targetBox.y1 };
-      const bus = orthogonalBusPath({
-        sourceX: start.x,
-        sourceY: start.y,
-        targetX: end.x,
-        targetY: end.y,
-        sourceFace: sf,
-        targetFace: tf,
-        rank: 0,
-        count: 1,
-        obstacles: boxes,
-      });
-      if (!bus) return false;
-      const points = bus.path
-        .split(/[ML]\s*/)
-        .map((part) => part.trim())
-        .filter(Boolean)
-        .map((part) => {
-          const [x, y] = part.split(",").map(Number);
-          return { x, y };
-        });
-      return routePierceCount(points, boxes) === 0;
-    };
-    if (!clear(sourceFace, targetFace)) {
-      const pairs: Array<[Face, Face]> = [
-        ["bottom", "top"],
-        ["top", "bottom"],
-        ["bottom", "bottom"],
-        ["top", "top"],
-      ];
-      for (const [sf, tf] of pairs) {
-        if (clear(sf, tf)) {
-          return { sourceFace: sf, targetFace: tf };
-        }
-      }
-    }
-  }
+  const sourceFace = input.sourceSide ?? toward(srcMid, dstMid);
+  const targetFace = input.targetSide ?? toward(dstMid, srcMid);
+  // ここは、サーバーから線が届かなかったときの控えでしかない。凝った
+  // 選び方をすると、線の引き方が画面にもある状態に戻ってしまう
   return { sourceFace, targetFace };
-}
-
-/**
- * 画面の結線。バス → マンハッタン → 上下迂回を試し、箱を貫かないものを採る。
- */
-export function routeWire(input: {
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourceFace: Face;
-  targetFace: Face;
-  rank: number;
-  count: number;
-  gap?: number;
-  obstacles?: WireBox[];
-  sourceBox?: WireBox;
-  targetBox?: WireBox;
-}): { path: string; labelX: number; labelY: number } {
-  const pierceBoxes: WireBox[] = [
-    ...(input.sourceBox ? [input.sourceBox] : []),
-    ...(input.targetBox ? [input.targetBox] : []),
-    ...(input.obstacles ?? []),
-  ];
-
-  const candidates: Pt[][] = [];
-  const straight = nearStraightVertical(
-    input.sourceX,
-    input.sourceY,
-    input.targetX,
-    input.targetY,
-    input.sourceFace,
-    input.targetFace,
-  );
-  if (straight) candidates.push(parsePathPoints(straight.path));
-
-  const bus = orthogonalBusPath({ ...input, obstacles: pierceBoxes });
-  if (bus) candidates.push(parsePathPoints(bus.path));
-
-  const out = 16;
-  const ox =
-    input.sourceX +
-    (input.sourceFace === "right" ? out : input.sourceFace === "left" ? -out : 0);
-  const oy =
-    input.sourceY +
-    (input.sourceFace === "bottom" ? out : input.sourceFace === "top" ? -out : 0);
-  const ix =
-    input.targetX +
-    (input.targetFace === "right" ? out : input.targetFace === "left" ? -out : 0);
-  const iy =
-    input.targetY +
-    (input.targetFace === "bottom" ? out : input.targetFace === "top" ? -out : 0);
-  // 口の外へ一歩出てから、横→縦・縦→横の両方でつなぐ。片方だけだと、
-  // 相手の箱の中を通る経路しか残らないことがある（実際に画面で起きていた）
-  for (const horizontalFirst of [true, false]) {
-    const midX = horizontalFirst ? ox : ix;
-    const midY = horizontalFirst ? iy : oy;
-    candidates.push([
-      { x: input.sourceX, y: input.sourceY },
-      { x: ox, y: oy },
-      { x: midX, y: midY },
-      { x: ix, y: iy },
-      { x: input.targetX, y: input.targetY },
-    ]);
-  }
-
-  // 口の外へ出てから、箱を避けて相手の口の正面まで回る。L字だけでは、
-  // 間に別の拠点の箱が並んでいるときに通れる道が残らない
-  if (pierceBoxes.length > 0) {
-    const around = avoidRoute({ x: ox, y: oy }, { x: ix, y: iy }, pierceBoxes);
-    candidates.push([
-      { x: input.sourceX, y: input.sourceY },
-      ...around,
-      { x: input.targetX, y: input.targetY },
-    ]);
-  }
-
-  if (pierceBoxes.length > 0) {
-    for (const side of ["below", "above"] as const) {
-      const detour = detourKeepFaces(
-        input.sourceX,
-        input.sourceY,
-        input.targetX,
-        input.targetY,
-        input.sourceFace,
-        input.targetFace,
-        pierceBoxes,
-        side,
-      );
-      if (detour) candidates.push(detour);
-    }
-  }
-
-  const scored = candidates
-    .map((raw) => collapseCollinear(ensureOutward(raw, input.sourceFace)))
-    .map((points) => ({
-      points,
-      pierce: routePierceCount(points, pierceBoxes),
-      hugs: hugsBoxCount(points, pierceBoxes),
-      outward: exitsOutward(points, input.sourceFace) ? 0 : 1,
-      arrive: arrivesFromOutside(points, input.targetFace) ? 0 : 1,
-      bends: Math.max(0, points.length - 2),
-      length: pathLength(points),
-    }));
-  scored.sort(
-    (a, b) =>
-      a.pierce - b.pierce ||
-      a.hugs - b.hugs ||
-      a.outward - b.outward ||
-      a.arrive - b.arrive ||
-      a.bends - b.bends ||
-      a.length - b.length,
-  );
-  const best = scored[0]?.points;
-  if (!best || best.length < 2) {
-    return manhattanRouteFallback(input);
-  }
-  return pointsToPath(best);
-}
-
-function manhattanRouteFallback(input: {
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourceFace: Face;
-  targetFace: Face;
-  rank: number;
-  count: number;
-  gap?: number;
-}): { path: string; labelX: number; labelY: number } {
-  const bus = orthogonalBusPath(input);
-  if (bus) return bus;
-  const out = 16;
-  const sx =
-    input.sourceX + (input.sourceFace === "right" ? out : input.sourceFace === "left" ? -out : 0);
-  const sy =
-    input.sourceY + (input.sourceFace === "bottom" ? out : input.sourceFace === "top" ? -out : 0);
-  const tx =
-    input.targetX + (input.targetFace === "right" ? out : input.targetFace === "left" ? -out : 0);
-  const ty =
-    input.targetY + (input.targetFace === "bottom" ? out : input.targetFace === "top" ? -out : 0);
-  const horizontalFirst = input.sourceFace === "left" || input.sourceFace === "right";
-  const midX = horizontalFirst ? sx : tx;
-  const midY = horizontalFirst ? ty : sy;
-  return {
-    path: `M ${input.sourceX},${input.sourceY} L ${sx},${sy} L ${midX},${midY} L ${tx},${ty} L ${input.targetX},${input.targetY}`,
-    labelX: (sx + tx) / 2,
-    labelY: (sy + ty) / 2,
-  };
-}
-
-/** どの向きの引き出しでも縦横だけ。バスが使えないときも曲線にしない。 */
-export function manhattanRoute(input: {
-  sourceX: number;
-  sourceY: number;
-  targetX: number;
-  targetY: number;
-  sourceFace: "top" | "bottom" | "left" | "right";
-  targetFace: "top" | "bottom" | "left" | "right";
-  rank: number;
-  count: number;
-  gap?: number;
-  obstacles?: WireBox[];
-  sourceBox?: WireBox;
-  targetBox?: WireBox;
-}): { path: string; labelX: number; labelY: number } {
-  return routeWire(input);
 }
 
 const FACE_OF: Record<Position, "top" | "bottom" | "left" | "right"> = {
@@ -849,19 +263,23 @@ export default function PortLabeledEdge({
   data,
 }: EdgeProps) {
   const info = (data ?? {}) as Partial<PortEdgeData>;
-  const routed = routeWire({
-    sourceX,
-    sourceY,
-    targetX,
-    targetY,
-    sourceFace: FACE_OF[sourcePosition],
-    targetFace: FACE_OF[targetPosition],
-    rank: info.laneRank ?? 0,
-    count: info.laneCount ?? 1,
-    obstacles: info.obstacles,
-    sourceBox: info.sourceBox,
-    targetBox: info.targetBox,
-  });
+  // サーバーが引いた線。線の引き方は1か所に置いてあり、画面はそれを描く。
+  // 箱を動かしている最中は口の位置が変わるので、そのあいだだけ仮の線にする
+  const given = info.points;
+  const fits =
+    given !== undefined &&
+    given.length >= 2 &&
+    Math.abs(given[0][0] - sourceX) < 12 &&
+    Math.abs(given[0][1] - sourceY) < 12 &&
+    Math.abs(given[given.length - 1][0] - targetX) < 12 &&
+    Math.abs(given[given.length - 1][1] - targetY) < 12;
+  const routed = fits
+    ? pointsToPath(given!.map(([x, y]) => ({ x, y })))
+    : previewRoute(
+        { x: sourceX, y: sourceY },
+        { x: targetX, y: targetY },
+        FACE_OF[sourcePosition],
+      );
   const path = routed.path;
   const labelX = routed.labelX;
   const labelY = routed.labelY;

@@ -1,4 +1,5 @@
 import type {
+  LinkSide,
   AdditionPlan,
   LogReport,
   LinkReport,
@@ -532,7 +533,13 @@ export const api = {
     includeRetired = false,
     orientation = "vertical",
     // 拠点が多い環境では全体図は使わない。絞った分＋対向だけを取る
-    filter: { site_id?: number; q?: string; scope?: string } = {},
+    filter: {
+      site_id?: number;
+      q?: string;
+      scope?: string;
+      /** 機器名と結線だけの図。箱が小さくなるので、線の引き方も変わる */
+      simple?: string;
+    } = {},
   ) =>
     request<TopologyGraph>(
       `/topology${query({
@@ -542,6 +549,30 @@ export const api = {
         ...filter,
       })}`,
     ),
+  /**
+   * いま画面にある配置で、線を引き直してもらう。
+   *
+   * 線を引く決まりはサーバー側の1か所に置いてある。画面が自分で引くと、
+   * 同じ台帳から違う図が2つ出るため。動かしている最中の位置でも同じ形が
+   * 要るので、動かし終わったところで頼む。
+   */
+  topologyRoutes: (body: {
+    layer: string;
+    site_id?: number;
+    q?: string;
+    scope?: string;
+    simple?: boolean;
+    positions: { device_id: number; x: number; y: number }[];
+  }) =>
+    request<{
+      boxes: { device_id: number; width: number; height: number }[];
+      wires: {
+        edge_id: number;
+        points: [number, number][];
+        source_side: LinkSide;
+        target_side: LinkSide;
+      }[];
+    }>("/topology/routes", { method: "POST", body: JSON.stringify(body) }),
   getTopologyStats: (layer: string) =>
     request<TopologyStats>(`/topology/stats${query({ layer })}`),
   /** 論理構成の材料。相手が特定できなかったトンネルも件数で返す。 */

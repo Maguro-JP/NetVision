@@ -15,6 +15,7 @@ from app.schemas.topology import (
     LinkCreate,
     LinkRead,
     LinkUpdate,
+    NodePosition,
     RebuildResult,
     SavePositions,
     TopologyGraphRead,
@@ -27,7 +28,7 @@ from app.schemas.topology import (
     VrfRead,
 )
 from app.services import configs as config_service
-from app.services import spaceview, topology_export, topology_view
+from app.services import spaceview, topology_export, topology_routes, topology_view
 from app.services import topology as service
 from app.services import vlans as vlan_service
 
@@ -50,6 +51,10 @@ def get_topology(
     scope: str = Query(
         default=service.SCOPE_PEERS,
         description="絞ったときにどこまで出すか。peers = 対向まで / site = 絞った分だけ",
+    ),
+    simple: bool = Query(
+        default=False,
+        description="機器名と結線だけの図。箱が小さくなるので、線の引き方も変わる",
     ),
 ) -> TopologyGraphRead:
     """図に描くためのノードと結線を返す。位置は保存済みのものを優先する。
@@ -82,6 +87,20 @@ def get_topology(
         scope=scope,
         only=only if auto_scoped else None,
     )
+    # 線と箱は、書き出しと同じところで決める。画面はそれを描くだけにして、
+    # 同じ台帳から違う図が2つ出ないようにする
+    drawn = topology_routes.compute(graph, simple=simple)
+    for node in graph.nodes:
+        box = drawn["boxes"].get(node.device_id)
+        if box:
+            node.width, node.height = box[2], box[3]
+    for edge in graph.edges:
+        wire = drawn["wires"].get(edge.id)
+        if wire:
+            edge.points = wire["points"]
+            edge.source_side = wire["source_side"]
+            edge.target_side = wire["target_side"]
+
     if auto_scoped:
         graph.auto_scoped = True
         graph.note = (
@@ -259,6 +278,67 @@ def adopt_observed_vlans(db: DbSession, overwrite: bool = False) -> dict[str, in
 def list_vrfs(db: DbSession) -> list[VrfRead]:
     """機器の中に切られた仮想ルーターを、名前ごとにまとめて返す。"""
     return service.vrf_summary(db)
+
+
+class RoutesIn(BaseModel):
+    """いま画面にある配置。動かしている途中の位置で線を引き直すのに使う。"""
+
+    layer: str = service.DEFAULT_LAYER
+    site_id: int | None = None
+    q: str | None = None
+    scope: str = service.SCOPE_PEERS
+    simple: bool = False
+    positions: list[NodePosition] = []
+
+
+class WireOut(BaseModel):
+    edge_id: int
+    points: list[tuple[float, float]]
+    source_side: str
+    target_side: str
+
+
+class BoxOut(BaseModel):
+    device_id: int
+    width: float
+    height: float
+
+
+class RoutesOut(BaseModel):
+    boxes: list[BoxOut]
+    wires: list[WireOut]
+
+
+@router.post("/routes", response_model=RoutesOut)
+def compute_routes(body: RoutesIn, db: DbSession) -> RoutesOut:
+    """動かした位置で、線を引き直す。
+
+    線を引く決まりは書き出しの側だけに置いてある。画面が自分で引くと、
+    同じ台帳から違う図が2つ出るため。動かしている最中の位置でも同じ形が
+    要るので、ここで引いて返す。
+    """
+    graph = service.load_diagram(db, body.layer, site_id=body.site_id, q=body.q, scope=body.scope)
+    moved = {item.device_id: (item.x, item.y) for item in body.positions}
+    for node in graph.nodes:
+        spot = moved.get(node.device_id)
+        if spot:
+            node.x, node.y = spot
+    drawn = topology_routes.compute(graph, simple=body.simple)
+    return RoutesOut(
+        boxes=[
+            BoxOut(device_id=device_id, width=box[2], height=box[3])
+            for device_id, box in drawn["boxes"].items()
+        ],
+        wires=[
+            WireOut(
+                edge_id=edge_id,
+                points=[(x, y) for x, y in wire["points"]],
+                source_side=wire["source_side"],
+                target_side=wire["target_side"],
+            )
+            for edge_id, wire in drawn["wires"].items()
+        ],
+    )
 
 
 class ViewBoxIn(BaseModel):

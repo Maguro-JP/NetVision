@@ -19,11 +19,12 @@
 
 import { describe, expect, it } from "vitest";
 
-import { orthogonalBusPath, manhattanRoute, portLabelPlacement, routeWire, routePierceCount } from "../components/PortLabeledEdge";
+import { portLabelPlacement, previewRoute } from "../components/PortLabeledEdge";
 import { Position } from "@xyflow/react";
 import type { TopologyEdge, TopologyGraph, TopologyNode } from "../api/types";
 import {
   assignAnchors,
+  handlesFromRoutes,
   readyToFit,
   comparePortNames,
   keepLocalPositions,
@@ -213,145 +214,68 @@ describe("引き出し口と通り道", () => {
   });
 });
 
-describe("直交の通り道", () => {
-  it("右から左へは出口から扇に開き、縦横だけ通す", () => {
-    const a = orthogonalBusPath({
-      sourceX: 0,
-      sourceY: 0,
-      targetX: 400,
-      targetY: 80,
-      sourceFace: "right",
-      targetFace: "left",
-      rank: 0,
-      count: 3,
-    });
-    const b = orthogonalBusPath({
-      sourceX: 0,
-      sourceY: 40,
-      targetX: 400,
-      targetY: 200,
-      sourceFace: "right",
-      targetFace: "left",
-      rank: 1,
-      count: 3,
-    });
-    expect(a).not.toBeNull();
-    expect(b).not.toBeNull();
-    expect(a!.path.includes("C ")).toBe(false);
-    // M sx,sy L bus,sy L bus,ty L tx,ty
-    expect(a!.path.startsWith("M 0,0 L ")).toBe(true);
-    expect(a!.path.endsWith(" L 400,80")).toBe(true);
-    expect(b!.path.endsWith(" L 400,200")).toBe(true);
-    const busA = Number(a!.path.split(" ")[3].split(",")[0]);
-    const busB = Number(b!.path.split(" ")[3].split(",")[0]);
-    expect(busA).toBeGreaterThan(busB);
-  });
+describe("線は、サーバーが引いたものを描く", () => {
+  it("届いた折れ線の端に、引き出し口を合わせる", () => {
+    // 口が線の端とずれていると、線の端が箱から浮き、ポート名も線から離れる
+    const graph = {
+      layer: "physical",
+      nodes: [],
+      edges: [
+        {
+          id: 1,
+          source: 10,
+          target: 20,
+          source_side: "right",
+          target_side: "left",
+          points: [
+            [210, 40],
+            [300, 40],
+            [300, 130],
+            [400, 130],
+          ],
+        },
+      ],
+      groups: [],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    const boxes = new Map([
+      [10, { x: 0, y: 0, w: 210, h: 80 }],
+      [20, { x: 400, y: 100, w: 210, h: 80 }],
+    ]);
 
-  it("上下が近いときは直交バスにしない", () => {
-    expect(
-      orthogonalBusPath({
-        sourceX: 0,
-        sourceY: 0,
-        targetX: 20,
-        targetY: 10,
-        sourceFace: "right",
-        targetFace: "left",
-        rank: 0,
-        count: 1,
-      }),
-    ).toBeNull();
-  });
-
-  it("バスが使えない向きでも縦横だけ通す", () => {
-    const routed = manhattanRoute({
-      sourceX: 0,
-      sourceY: 0,
-      targetX: 20,
-      targetY: 10,
-      sourceFace: "right",
-      targetFace: "left",
-      rank: 0,
-      count: 1,
-    });
-    expect(routed.path.includes("C ")).toBe(false);
-    expect(routed.path.startsWith("M ")).toBe(true);
-    for (const part of routed.path.split(" ").slice(1)) {
-      if (!part.includes(",")) continue;
-      const [x, y] = part.split(",").map(Number);
-      expect(Number.isFinite(x) && Number.isFinite(y)).toBe(true);
-    }
-  });
-
-  it("途中の箱を貫く左右の線は下へ迂回する", () => {
-    const obstacle = { x1: 200, y1: 0, y2: 80, x2: 400 };
-    const routed = routeWire({
-      sourceX: 500,
-      sourceY: 40,
-      targetX: 100,
-      targetY: 40,
-      sourceFace: "left",
-      targetFace: "right",
-      rank: 0,
-      count: 1,
-      obstacles: [obstacle],
-      sourceBox: { x1: 500, y1: 0, x2: 690, y2: 80 },
-      targetBox: { x1: -90, y1: 0, x2: 100, y2: 80 },
-    });
-    expect(routed.path.includes("C ")).toBe(false);
-    const points = routed.path
-      .split(/[ML]\s*/)
-      .filter(Boolean)
-      .map((part) => {
-        const [x, y] = part.split(",").map(Number);
-        return { x, y };
-      });
-    expect(routePierceCount(points, [obstacle])).toBe(0);
-    // まっすぐ y=40 だと障害を貫くので、迂回で高さが変わる
-    expect(points.some((p) => p.y > 80 || p.y < 0)).toBe(true);
-  });
-
-  it("同じ辺回りの横バスは通路上の箱の下を通る", () => {
-    const hub = { x1: 200, y1: 200, x2: 390, y2: 332 };
-    const near = { x1: 600, y1: 200, x2: 790, y2: 332 };
-    const far = { x1: 920, y1: 200, x2: 1110, y2: 332 };
-    const down = { x1: 600, y1: 450, x2: 790, y2: 582 };
-    const routed = orthogonalBusPath({
-      sourceX: 1015,
-      sourceY: 332,
-      targetX: 295,
-      targetY: 332,
-      sourceFace: "bottom",
-      targetFace: "bottom",
-      rank: 0,
-      count: 1,
-      obstacles: [hub, near, far, down],
-    });
+    const routed = handlesFromRoutes(graph, (id: number) => boxes.get(id));
     expect(routed).not.toBeNull();
-    const points = routed!.path
-      .split(/[ML]\s*/)
-      .filter(Boolean)
-      .map((part) => {
-        const [x, y] = part.split(",").map(Number);
-        return { x, y };
-      });
-    expect(Math.max(0, points.length - 2)).toBeLessThanOrEqual(2);
-    // 配下箱の下まで押し出す（口のすぐ下では配下への縦線と交差する）
-    expect(points.some((p) => p.y >= down.y2 + 24)).toBe(true);
+    const source = routed!.faceHandles.get(10)![0];
+    expect(source.side).toBe("right");
+    // 端が箱の上から 40px（高さ80）なので、辺の半分の位置
+    expect(source.t).toBeCloseTo(0.5, 2);
+    const target = routed!.faceHandles.get(20)![0];
+    expect(target.side).toBe("left");
+    expect(target.t).toBeCloseTo(0.375, 2);
   });
 
-  it("上下が揃っていれば縦一直線", () => {
-    const routed = orthogonalBusPath({
-      sourceX: 100,
-      sourceY: 0,
-      targetX: 100,
-      targetY: 120,
-      sourceFace: "bottom",
-      targetFace: "top",
-      rank: 0,
-      count: 1,
-    });
-    expect(routed).not.toBeNull();
-    expect(routed!.path).toBe("M 100,0 L 100,120");
+  it("線が届いていないときは、いつもの決め方に戻す", () => {
+    const graph = {
+      layer: "physical",
+      nodes: [],
+      edges: [{ id: 1, source: 10, target: 20, points: [] }],
+      groups: [],
+      unplaced_count: 0,
+    } as unknown as TopologyGraph;
+    expect(handlesFromRoutes(graph, () => ({ x: 0, y: 0, w: 210, h: 80 }))).toBeNull();
+  });
+});
+
+describe("動かしている最中の仮の線", () => {
+  it("縦横だけで、1回だけ曲げる", () => {
+    // 本物の線はサーバーが引く。ここで凝ると、引き方が2つに増える
+    const routed = previewRoute({ x: 0, y: 0 }, { x: 200, y: 100 }, "right");
+    expect(routed.path).toBe("M 0,0 L 200,0 L 200,100");
+  });
+
+  it("下から出るときは、先に縦へ振る", () => {
+    const routed = previewRoute({ x: 0, y: 0 }, { x: 200, y: 100 }, "bottom");
+    expect(routed.path).toBe("M 0,0 L 0,100 L 200,100");
   });
 });
 

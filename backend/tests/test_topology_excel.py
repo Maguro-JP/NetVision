@@ -124,9 +124,13 @@ def test_it_is_set_to_print_on_one_sheet(db_session):
     """紙で配るために出す。既定のままだと A4 の幅で線が切られる。"""
     build(db_session)
     sheet = load_workbook(io.BytesIO(topology_excel.to_xlsx(db_session)))["構成図"]
-    assert sheet.print_area, "印刷範囲が決まっていない"
     assert sheet.page_setup.fitToWidth == 1
     assert sheet.sheet_properties.pageSetUpPr.fitToPage is True
+    # 印刷範囲は決めない。決めると Excel が普通の画面に点線の枠を出し、
+    # 図の上に大きな枠が乗っているように見える。代わりに、図の右下にあたる
+    # セルを作って「ここまでが中身」と伝える
+    assert not sheet.print_area
+    assert sheet.max_row > 1 and sheet.max_column > 1
 
 
 def test_tables_are_in_the_same_file(db_session):

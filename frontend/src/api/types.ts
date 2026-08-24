@@ -272,6 +272,9 @@ export interface TopologyNode {
   label: string | null;
   /** 人が決めた管理ID */
   code: string | null;
+  /** 図に描く箱の大きさ。線と同じところで決まるので、画面と書き出しでずれない */
+  width?: number | null;
+  height?: number | null;
   /** キャリア網の段。backbone / metro / access */
   plane?: "backbone" | "metro" | "access";
 }
@@ -351,6 +354,8 @@ export interface TopologyEdge {
   /** 人が指定した引き出し位置。null なら位置関係から自動で決める */
   source_side: LinkSide | null;
   target_side: LinkSide | null;
+  /** 図に引く折れ線。線の引き方は1か所（書き出し側）で決めて、画面はこれを描く */
+  points: [number, number][];
 }
 
 export type LinkSide = "top" | "bottom" | "left" | "right";
