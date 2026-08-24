@@ -1212,6 +1212,13 @@ export interface L3Report {
     name: string;
     detail: string;
     applied_to: string[];
+    /** ACL の中身。書いてある順。reads が false の行は、上の行に隠れて読まれない */
+    rows: {
+      text: string;
+      action: string;
+      reads: boolean;
+      hidden_by: string | null;
+    }[];
   }[];
   /** その機器で使っている機能。中身の解釈まではしていない */
   features: {

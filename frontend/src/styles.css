@@ -1469,3 +1469,15 @@ a.button.export-save:focus-visible {
 .import-change {
   color: var(--sev-warning);
 }
+
+/* ACL の中身。読まれない行は、目で追えるように印を付ける */
+.acl-rows {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.acl-rows li.unread code {
+  text-decoration: line-through;
+  opacity: 0.7;
+}

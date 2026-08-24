@@ -333,7 +333,27 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
                 <tr key={`${control.kind}-${control.name}-${index}`}>
                   <td>{control.kind}</td>
                   <td>{control.name}</td>
-                  <td>{control.detail}</td>
+                  <td>
+                    {control.detail}
+                    {control.rows.length > 0 && (
+                      <details>
+                        <summary className="muted">中身を見る</summary>
+                        <ol className="acl-rows">
+                          {control.rows.map((row, position) => (
+                            <li key={position} className={row.reads ? undefined : "unread"}>
+                              <code>{row.text}</code>
+                              {!row.reads && (
+                                <span className="muted">
+                                  {" "}
+                                  ← 手前の {row.hidden_by} で決まるので読まれません
+                                </span>
+                              )}
+                            </li>
+                          ))}
+                        </ol>
+                      </details>
+                    )}
+                  </td>
                   <td>{control.applied_to.join(" / ") || "当たっていません"}</td>
                 </tr>
               ))}

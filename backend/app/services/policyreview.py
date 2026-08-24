@@ -16,9 +16,11 @@ Config を書く道具である以上、書いたものが効いているかど�
 from __future__ import annotations
 
 import ipaddress
+import re
 
+from app.services import aclcheck
 from app.services.configparse import ParsedConfig
-from app.services.configparse.base import ParsedAcl, ParsedBgp, ParsedBgpNeighbor
+from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
 
 #: 今の目で見て、そのまま残しておけない方式。数字は鍵の短さ・衝突の作りやすさ
@@ -39,8 +41,12 @@ _WEAK_CRYPTO = {
 _WEAK_GROUPS = {"1", "2", "5"}
 
 
-def review(parsed: ParsedConfig) -> list[Finding]:
-    """1台分の Config を見て、気になったところを並べる。"""
+def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
+    """1台分の Config を見て、気になったところを並べる。
+
+    `text` は元の Config。ポートや経路として読み取っていない書き方
+    （line vty など）を見るのに使う。渡されなければ、その分は見ない。
+    """
     findings: list[Finding] = []
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
@@ -49,6 +55,8 @@ def review(parsed: ParsedConfig) -> list[Finding]:
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
+    if text is not None:
+        findings.extend(_management_access(text, parsed))
     return findings
 
 
@@ -278,49 +286,174 @@ def _acls(parsed: ParsedConfig) -> list[Finding]:
                 )
             )
         findings.extend(_shadowed(acl, rules))
+        findings.extend(_lets_everything_through(acl, rules))
+        findings.extend(_drops_without_a_trace(acl, rules))
     return findings
 
 
-def _shadowed(acl: ParsedAcl, rules: list) -> list[Finding]:  # noqa: ANN001
+#: 1つの ACL から出す影の指摘の上限。多いときは中身を作り直すほうが早く、
+#: 20 件並べても読まれない
+_SHADOW_LIMIT = 3
+
+
+def _shadowed(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:
     """上の行に隠れて、読まれない行を挙げる。
 
-    ACL は上から順に見て、最初に当たった行で決まる。無条件の行の下や、
-    同じ条件の行の下は読まれない。書いた人はたいてい気づいていない。
+    字面ではなく、条件の集合として比べる。`permit ip any any` と
+    `deny tcp 10.0.0.0 0.0.0.255 any eq 23` は、字面はまったく違うが、
+    上が下を丸ごと覆っている。書いた人はたいてい気づいていない。
     """
     findings: list[Finding] = []
-    seen: dict[tuple, str] = {}
     for index, entry in enumerate(rules):
-        key = (
-            entry.protocol,
-            entry.source,
-            entry.source_port,
-            entry.destination,
-            entry.destination_port,
-        )
-        if key in seen:
+        upper = next((item for item in rules[:index] if aclcheck.covers(item, entry)), None)
+        if upper is None:
+            continue
+        if upper.action == entry.action:
             findings.append(
                 _note(
                     LOW,
-                    f"ACL {acl.name} に、同じ条件の行が2つあります",
-                    f"上の行で決まるので、下の行は読まれません。上: {seen[key]}",
-                    [seen[key], entry.raw],
+                    f"ACL {acl.name} に、上の行と同じ意味の行があります",
+                    f"上の行で決まるので、この行は読まれません。上: {upper.raw}",
+                    [upper.raw, entry.raw],
                 )
             )
-            continue
-        seen[key] = entry.raw
-        if entry.is_any_any and entry.protocol in {None, "ip", "any"} and index + 1 < len(rules):
-            rest = rules[index + 1 :]
+        else:
+            doing = "通して" if upper.action == "permit" else "落として"
             findings.append(
                 _note(
                     MEDIUM,
-                    f"ACL {acl.name} は、途中で全部決めています",
-                    f"{entry.raw} は送信元も宛先も限定していません。"
-                    f"この後ろの {len(rest)} 行は読まれません。",
-                    [entry.raw, *[item.raw for item in rest]],
+                    f"ACL {acl.name} の {entry.raw} は読まれません",
+                    f"手前の {upper.raw} が、この行に当たる通信を先に{doing}います。"
+                    "書いたつもりの制限が効いていません。行の順番を入れ替えてください。",
+                    [upper.raw, entry.raw],
+                )
+            )
+        if len(findings) >= _SHADOW_LIMIT:
+            findings.append(
+                _note(
+                    MEDIUM,
+                    f"ACL {acl.name} には、読まれない行がほかにもあります",
+                    "順番の直しでは追いつきません。何を通したいのかを決め直して、"
+                    "書き直すほうが早いところです。",
+                    [entry.raw],
                 )
             )
             break
     return findings
+
+
+def _lets_everything_through(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:
+    """実質、何も止めていない ACL。
+
+    影の行としては出ない（後ろに行が無ければ隠れるものが無い）ので、別に見る。
+    当てていない ACL には言わない。何も止めていなくても、効いていなければ害は無い。
+    """
+    if not acl.applied_to:
+        return []
+    wide = next(
+        (entry for entry in rules if entry.action == "permit" and aclcheck.is_wide_open(entry)),
+        None,
+    )
+    if wide is None:
+        return []
+    return [
+        _note(
+            MEDIUM,
+            f"ACL {acl.name} は、実質すべて通しています",
+            f"{wide.raw} は送信元も宛先もポートも限定していません。"
+            f"{', '.join(acl.applied_to)} に当ててはいますが、止まる通信はありません。",
+            [wide.raw],
+        )
+    ]
+
+
+def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:
+    """落としているのに、記録が残らない ACL。
+
+    ACL の末尾には、書かなくても「残り全部を落とす」が入っている。これは
+    ログに残らないので、「繋がらない」と言われたときに、この ACL で
+    落ちたのかどうかを確かめられない。
+    """
+    if not acl.applied_to or acl.kind == "policy":
+        # ポリシー表（FortiOS）の末尾の落としは、機器が別に記録する
+        return []
+    denies = [entry for entry in rules if entry.action == "deny"]
+    if any(entry.log for entry in denies):
+        return []
+    last = rules[-1]
+    if denies and aclcheck.is_wide_open(last) and last.action == "deny":
+        return [
+            _note(
+                LOW,
+                f"ACL {acl.name} は、落とした通信を記録していません",
+                "末尾の落とす行に log がありません。「繋がらない」と言われたときに、"
+                "ここで落ちたのかどうかを確かめられません。",
+                [last.raw],
+            )
+        ]
+    if not denies:
+        return [
+            _note(
+                LOW,
+                f"ACL {acl.name} には、明示的に落とす行がありません",
+                "ACL の末尾には、書かなくても「残り全部を落とす」が入っています。"
+                "書いていないと、それがログに残らず、落ちたことに気づけません。",
+                [rules[-1].raw],
+            )
+        ]
+    return []
+
+
+# ---------------------------------------------------------------------------
+# 管理の口
+# ---------------------------------------------------------------------------
+
+_VTY = re.compile(r"^line vty\s+(\S+(?:\s+\S+)?)\s*$", re.IGNORECASE)
+
+
+def _management_access(text: str, parsed: ParsedConfig) -> list[Finding]:
+    """機器に入る口に当てた ACL が、ちゃんと存在するか。
+
+    ACL を書いていても、当て先の中身が無ければ絞れていない。
+    access-class を書いていないこと自体は、ここでは言わない。入る口を
+    どこまで絞るかは現場の決めごとで、間違いとは言い切れないため。
+    """
+    findings: list[Finding] = []
+    acl_names = {acl.name for acl in parsed.acls}
+    for head, body in _blocks(text, _VTY):
+        for line in body:
+            match = re.match(r"^(?:ip\s+)?access-class\s+(\S+)", line, re.IGNORECASE)
+            if match and match.group(1) not in acl_names:
+                findings.append(
+                    _note(
+                        HIGH,
+                        f"管理の口に当てた {match.group(1)} が、この Config にありません",
+                        "当て先の中身が無いので、絞れているのかどうかが分かりません。"
+                        "名前の打ち間違いか、定義の入れ忘れです。",
+                        [f"line vty {head.group(1)}", line],
+                    )
+                )
+    return findings
+
+
+def _blocks(text: str, head: re.Pattern[str]) -> list[tuple[re.Match[str], list[str]]]:
+    """見出しと、そこにぶら下がる字下げ行。"""
+    out: list[tuple[re.Match[str], list[str]]] = []
+    current: list[str] | None = None
+    for line in text.splitlines():
+        match = head.match(line)
+        if match:
+            current = []
+            out.append((match, current))
+            continue
+        if current is None:
+            continue
+        if line.strip() == "" or line.startswith((" ", "\t")):
+            if line.strip():
+                current.append(line.strip())
+            continue
+        current = None
+    return out
 
 
 # ---------------------------------------------------------------------------

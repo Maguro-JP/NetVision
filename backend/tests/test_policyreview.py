@@ -84,7 +84,7 @@ ip access-list extended OUT
  10 permit ip any any
  20 deny tcp any any eq 23
 """
-    item = _one(_review(text), "途中で全部決めています")
+    item = _one(_review(text), "読まれません")
     assert item.level == MEDIUM
     assert "20 deny tcp any any eq 23" in item.evidence
 
@@ -114,7 +114,7 @@ ip access-list extended DUP
  10 permit tcp any host 10.0.0.1 eq 443
  20 permit tcp any host 10.0.0.1 eq 443
 """
-    assert _one(_review(text), "同じ条件の行").level == LOW
+    assert _one(_review(text), "同じ意味の行").level == LOW
 
 
 def test_a_route_map_that_denies_everything_is_called_out():
@@ -309,3 +309,102 @@ def test_every_finding_says_why_and_what_it_looked_at():
     for item in findings:
         assert item.why and item.evidence
         assert item.level in (HIGH, MEDIUM, LOW)
+
+
+# ---------------------------------------------------------------------------
+# ACL の行と行の重なり
+# ---------------------------------------------------------------------------
+
+
+def test_a_wide_rule_hides_a_narrow_one_even_when_they_look_different():
+    """字面では見つからない。上が下を集合として覆っているかで見る。"""
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 permit tcp 10.0.0.0 0.0.0.255 any range 20 100
+ 20 deny tcp host 10.0.0.5 any eq www
+ 30 deny ip any any log
+"""
+    item = _one(_review(text), "20 deny tcp host 10.0.0.5 any eq www")
+    assert item.level == MEDIUM
+    assert "10 permit tcp 10.0.0.0 0.0.0.255 any range 20 100" in item.evidence[0]
+
+
+def test_a_narrow_rule_above_a_wide_one_is_left_alone():
+    """順番が正しいものまで指摘すると、直す必要の無いものを直させてしまう。"""
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 deny tcp host 10.0.0.5 any eq www
+ 20 permit tcp 10.0.0.0 0.0.0.255 any range 20 100
+ 30 deny ip any any log
+"""
+    assert "読まれません" not in _titles(_review(text))
+
+
+def test_a_rule_we_cannot_read_is_not_called_shadowed():
+    """object-group の中身はこの Config から分からない。分からないものは言わない。"""
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 permit ip object-group INSIDE any
+ 20 deny tcp host 10.0.0.5 any eq www
+ 30 deny ip any any log
+"""
+    assert "読まれません" not in _titles(_review(text))
+
+
+def test_an_acl_that_stops_nothing_is_called_out():
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 permit tcp any host 10.0.0.1 eq 443
+ 20 permit ip any any
+"""
+    item = _one(_review(text), "実質すべて通しています")
+    assert item.level == MEDIUM
+
+
+def test_dropping_without_a_record_is_called_out():
+    """「繋がらない」と言われたときに、ここで落ちたのかを確かめられない。"""
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 permit tcp any host 10.0.0.1 eq 443
+ 20 deny ip any any
+"""
+    assert _one(_review(text), "記録していません").level == LOW
+
+
+def test_logging_the_drop_settles_it():
+    text = """
+interface GigabitEthernet0/0
+ ip access-group OUT in
+ip access-list extended OUT
+ 10 permit tcp any host 10.0.0.1 eq 443
+ 20 deny ip any any log
+"""
+    assert "記録していません" not in _titles(_review(text))
+
+
+def test_an_acl_on_the_management_port_pointing_at_nothing_is_called_out():
+    text = """
+ip access-list standard MGMT
+ permit 10.0.0.0 0.0.0.255
+line vty 0 15
+ transport input ssh
+ access-class NOSUCH in
+"""
+    findings = policyreview.review(configparse.parse(text), text)
+    assert _one(findings, "NOSUCH").level == HIGH
+
+
+def test_not_limiting_the_management_port_is_not_called_a_mistake():
+    """入る口をどこまで絞るかは現場の決めごと。間違いとは言い切れない。"""
+    text = "line vty 0 15\n transport input ssh\n"
+    assert policyreview.review(configparse.parse(text), text) == []

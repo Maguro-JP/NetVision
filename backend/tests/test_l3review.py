@@ -352,3 +352,20 @@ def test_a_bgp_peer_shows_what_is_applied_to_it(db_session):
 def test_the_api_carries_the_controls(client, core):
     body = client.get(f"{API}/devices/{core.id}/l3").json()
     assert "controls" in body
+
+
+def test_the_report_shows_the_acl_line_by_line_with_the_unread_ones_marked(db_session):
+    """なぜ通らないのかは、順番のまま見えないと追えない。"""
+    device = _device(db_session, "rt-11")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-11\n!\ninterface GigabitEthernet0/0\n ip access-group OUT in\n!\n"
+        "ip access-list extended OUT\n permit ip any any\n deny tcp any any eq 23\n",
+        "c" * 64,
+    )
+    report = l3review.review(db_session, device)
+
+    acl = next(entry for entry in report.controls if entry["kind"] == "通信の制限")
+    assert [row["reads"] for row in acl["rows"]] == [True, False]
+    assert acl["rows"][1]["hidden_by"] == "permit ip any any"

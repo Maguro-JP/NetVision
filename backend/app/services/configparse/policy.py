@@ -526,3 +526,259 @@ def _ike_line(policy: ParsedIkePolicy, line: str) -> None:
     lifetime = re.match(r"^lifetime\s+(\d+)", line, re.IGNORECASE)
     if lifetime:
         policy.lifetime = int(lifetime.group(1))
+
+
+# ---------------------------------------------------------------------------
+# ベンダーごとの、通信の制限
+# ---------------------------------------------------------------------------
+#
+# 書き方はまるで違うが、意味は同じところへ落ちる。「上から順に見て、最初に
+# 当たった行で決まる」も同じ。だから同じ器（ParsedAcl）に入れておけば、
+# 影の行を見つける仕組みは1つで足りる。
+
+_QX_ACL = re.compile(
+    r"^acl\s+(?:number\s+)?(?:(?:advanced|basic|mac|ipv6)\s+)?(?:name\s+)?(\S+)", re.IGNORECASE
+)
+_QX_RULE = re.compile(r"^rule\s+(?:(\d+)\s+)?(permit|deny)\s*(.*)$", re.IGNORECASE)
+
+
+def parse_comware(text: str, parsed: ParsedConfig) -> None:
+    """NEC QX（H3C Comware 系）の acl / rule を読む。"""
+    acls: dict[str, ParsedAcl] = {}
+    for head, body in _blocks(text, _QX_ACL):
+        name = head.group(1)
+        acl = acls.setdefault(name, ParsedAcl(name=name, kind="extended"))
+        for line in body:
+            rule = _QX_RULE.match(line)
+            if rule:
+                acl.entries.append(_comware_entry(rule, line))
+
+    for head, body in _blocks(text, _INTERFACE):
+        interface = expand(head.group(1))
+        for line in body:
+            match = re.match(r"^packet-filter\s+(\S+)\s+(inbound|outbound)", line, re.IGNORECASE)
+            if match and match.group(1) in acls:
+                direction = "入り" if match.group(2).lower() == "inbound" else "出"
+                acls[match.group(1)].applied_to.append(f"interface {interface} {direction}")
+
+    parsed.acls.extend(acls.values())
+
+
+def _comware_entry(rule: re.Match[str], raw: str) -> ParsedAclEntry:
+    """`rule 5 permit tcp source 10.0.0.0 0.0.0.255 destination-port eq 80` を読む。
+
+    Comware は何をどこに書くかを言葉で示すので、位置ではなく言葉で拾う。
+    """
+    rest = rule.group(3).split()
+    entry = ParsedAclEntry(seq=rule.group(1), action=rule.group(2).lower(), raw=raw)
+    if rest and not rest[0].lower().startswith(("source", "destination", "logging")):
+        entry.protocol = rest[0].lower()
+        rest = rest[1:]
+    entry.log = any(token.lower() == "logging" for token in rest)
+
+    index = 0
+    while index < len(rest):
+        keyword = rest[index].lower()
+        if keyword in {"source", "destination"}:
+            value, index = _address(rest, index + 1)
+            setattr(entry, keyword, value)
+            continue
+        if keyword in {"source-port", "destination-port"}:
+            value, index = _port(rest, index + 1)
+            setattr(entry, keyword.replace("-", "_"), value)
+            continue
+        index += 1
+    # 何も書かなければ、どこからどこへでも当たる
+    entry.source = entry.source or "any"
+    entry.destination = entry.destination or "any"
+    return entry
+
+
+_IX_ACL = re.compile(
+    r"^ip access-list\s+(?P<name>\S+)\s+(?P<action>permit|deny)\s+(?P<rest>.+)$", re.IGNORECASE
+)
+_IX_FILTER = re.compile(r"^ip filter\s+(\S+)\s+\d+\s+(in|out)\b", re.IGNORECASE)
+
+
+def parse_ix(text: str, parsed: ParsedConfig) -> None:
+    """NEC IX の ip access-list を読む。1行で1つの規則を書く形。"""
+    acls: dict[str, ParsedAcl] = {}
+    for raw in text.splitlines():
+        match = _IX_ACL.match(raw.strip())
+        if not match:
+            continue
+        acl = acls.setdefault(match.group("name"), ParsedAcl(name=match.group("name")))
+        acl.entries.append(_ix_entry(match, raw.strip()))
+
+    for head, body in _blocks(text, _INTERFACE):
+        interface = expand(head.group(1))
+        for line in body:
+            match = _IX_FILTER.match(line)
+            if match and match.group(1) in acls:
+                direction = "入り" if match.group(2).lower() == "in" else "出"
+                acls[match.group(1)].applied_to.append(f"interface {interface} {direction}")
+
+    parsed.acls.extend(acls.values())
+
+
+def _ix_entry(match: re.Match[str], raw: str) -> ParsedAclEntry:
+    """`permit ip src 10.0.0.0/24 dest any` を読む。"""
+    entry = ParsedAclEntry(action=match.group("action").lower(), raw=raw)
+    rest = match.group("rest").split()
+    if rest:
+        entry.protocol = rest[0].lower()
+        rest = rest[1:]
+    index = 0
+    while index < len(rest):
+        keyword = rest[index].lower()
+        if keyword in {"src", "source"} and index + 1 < len(rest):
+            entry.source = rest[index + 1]
+            index += 2
+            continue
+        if keyword in {"dest", "destination"} and index + 1 < len(rest):
+            entry.destination = rest[index + 1]
+            index += 2
+            continue
+        if keyword in {"sport", "dport"} and index + 1 < len(rest):
+            field = "source_port" if keyword == "sport" else "destination_port"
+            setattr(entry, field, f"eq {rest[index + 1]}")
+            index += 2
+            continue
+        index += 1
+    entry.source = entry.source or "any"
+    entry.destination = entry.destination or "any"
+    return entry
+
+
+_JUNOS_TERM = re.compile(
+    r"^set firewall(?:\s+family\s+\S+)?\s+filter\s+(?P<name>\S+)\s+term\s+(?P<term>\S+)\s+"
+    r"(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+_JUNOS_APPLY = re.compile(
+    r"^set interfaces\s+(?P<interface>\S+)(?:\s+unit\s+(?P<unit>\S+))?"
+    r".*?\bfilter\s+(?P<direction>input|output)\s+(?P<name>\S+)",
+    re.IGNORECASE,
+)
+
+
+def parse_junos(text: str, parsed: ParsedConfig) -> None:
+    """Junos の firewall filter を読む。term ごとに1つの規則にまとめる。"""
+    acls: dict[str, ParsedAcl] = {}
+    terms: dict[tuple[str, str], ParsedAclEntry] = {}
+
+    for raw in text.splitlines():
+        match = _JUNOS_TERM.match(raw.strip())
+        if not match:
+            continue
+        name, term = match.group("name"), match.group("term")
+        acl = acls.setdefault(name, ParsedAcl(name=name, kind="filter"))
+        entry = terms.get((name, term))
+        if entry is None:
+            entry = ParsedAclEntry(seq=term, action="permit", raw=f"term {term}")
+            terms[(name, term)] = entry
+            acl.entries.append(entry)
+        _junos_term(entry, match.group("rest"))
+
+    for raw in text.splitlines():
+        match = _JUNOS_APPLY.match(raw.strip())
+        if match and match.group("name") in acls:
+            direction = "入り" if match.group("direction").lower() == "input" else "出"
+            unit = f".{match.group('unit')}" if match.group("unit") else ""
+            acls[match.group("name")].applied_to.append(
+                f"interface {match.group('interface')}{unit} {direction}"
+            )
+
+    parsed.acls.extend(acls.values())
+
+
+def _junos_term(entry: ParsedAclEntry, rest: str) -> None:
+    """1つの term に、from（条件）と then（結果）が何行かに分かれて書かれる。"""
+    tokens = rest.split()
+    if not tokens:
+        return
+    if tokens[0].lower() == "then":
+        result = tokens[1].lower() if len(tokens) > 1 else ""
+        if result in {"discard", "reject"}:
+            entry.action = "deny"
+        elif result == "accept":
+            entry.action = "permit"
+        if any(token.lower().startswith(("log", "syslog")) for token in tokens):
+            entry.log = True
+        entry.raw = f"{entry.raw} then {result}".strip()
+        return
+    if tokens[0].lower() != "from" or len(tokens) < 3:
+        return
+    keyword, value = tokens[1].lower(), tokens[2]
+    fields = {
+        "source-address": "source",
+        "destination-address": "destination",
+        "protocol": "protocol",
+    }
+    if keyword in fields:
+        setattr(entry, fields[keyword], value.lower() if keyword == "protocol" else value)
+    elif keyword in {"source-port", "destination-port"}:
+        setattr(entry, keyword.replace("-", "_"), f"eq {value}")
+    entry.raw = f"{entry.raw} from {keyword} {value}"
+
+
+_FORTI_POLICY = re.compile(r"^config firewall policy\s*$", re.IGNORECASE)
+_FORTI_EDIT = re.compile(r"^edit\s+(\S+)", re.IGNORECASE)
+
+
+def parse_fortios(text: str, parsed: ParsedConfig) -> None:
+    """FortiOS の firewall policy を読む。
+
+    ACL とは形が違うが、上から順に見て最初に当たった行で決まるところは同じ。
+    同じ器に入れておけば、影の行を見つける仕組みをそのまま使える。
+    アドレスもサービスも名前で書かれるので、中身が分かるのは `all` だけ。
+    """
+    acl = ParsedAcl(name="firewall policy", kind="policy", applied_to=["ポリシー表"])
+    current: ParsedAclEntry | None = None
+    inside = False
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        if _FORTI_POLICY.match(line):
+            inside = True
+            continue
+        if not inside:
+            continue
+        if line == "end":
+            break
+        edit = _FORTI_EDIT.match(line)
+        if edit:
+            current = ParsedAclEntry(
+                seq=edit.group(1), action="deny", raw=f"policy {edit.group(1)}"
+            )
+            acl.entries.append(current)
+            continue
+        if current is None:
+            continue
+        setting = re.match(r"^set\s+(\S+)\s+(.+)$", line, re.IGNORECASE)
+        if setting:
+            _fortios_setting(current, setting.group(1).lower(), setting.group(2))
+
+    if acl.entries:
+        parsed.acls.append(acl)
+
+
+def _fortios_setting(entry: ParsedAclEntry, name: str, value: str) -> None:
+    cleaned = value.replace('"', "").strip()
+    first = cleaned.split()[0] if cleaned.split() else cleaned
+    if name == "action":
+        entry.action = "permit" if first.lower() == "accept" else "deny"
+    elif name == "status" and first.lower() == "disable":
+        # 止めたままの行。効いていないので、並びの検算からは外す
+        entry.action = "disabled"
+    elif name == "srcaddr":
+        entry.source = "any" if first.lower() == "all" else first
+    elif name == "dstaddr":
+        entry.destination = "any" if first.lower() == "all" else first
+    elif name == "service":
+        entry.destination_port = None if first.upper() == "ALL" else f"サービス {first}"
+    elif name == "name":
+        entry.remark = first
+    elif name == "logtraffic" and first.lower() != "disable":
+        entry.log = True
+    entry.raw = f"{entry.raw} {name} {first}".strip()

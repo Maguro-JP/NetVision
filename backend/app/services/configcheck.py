@@ -173,7 +173,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(l3review._same_destination_twice(parsed))
     found.extend(l3review._segments_nobody_advertises(parsed, local))
     found.extend(l3review._unused_policies(parsed))
-    found.extend(policyreview.review(parsed))
+    found.extend(policyreview.review(parsed, text))
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
