@@ -274,3 +274,81 @@ def test_the_other_protocols_show_up_in_the_report(db_session):
     report = l3review.review(db_session, device)
     assert report.protocols[0]["name"] == "eigrp"
     assert report.protocols[0]["networks"] == ["10.10.0.0/16"]
+
+
+CONTROLS = """hostname rt-09
+!
+interface GigabitEthernet0/0
+ ip address 203.0.113.2 255.255.255.252
+ ip nat outside
+ ip access-group OUTSIDE-IN in
+ crypto map VPNMAP
+!
+interface GigabitEthernet0/1
+ ip address 10.10.0.1 255.255.255.0
+ ip nat inside
+ service-policy output SHAPE
+!
+ip access-list extended OUTSIDE-IN
+ 10 permit tcp any host 203.0.113.10 eq 443
+ 20 deny ip any any
+!
+ip nat inside source list OUTSIDE-IN interface GigabitEthernet0/0 overload
+!
+ip dhcp excluded-address 10.10.0.1 10.10.0.10
+ip dhcp pool OFFICE
+ network 10.10.0.0 255.255.255.0
+ default-router 10.10.0.1
+ dns-server 10.10.0.53
+!
+class-map match-any VOICE
+ match dscp ef
+policy-map SHAPE
+ class VOICE
+  priority percent 20
+!
+crypto ipsec transform-set TS esp-aes 256 esp-sha256-hmac
+crypto map VPNMAP 10 ipsec-isakmp
+ set peer 198.51.100.1
+ set transform-set TS
+ set pfs group14
+ match address OUTSIDE-IN
+!
+router bgp 65001
+ neighbor 203.0.113.1 remote-as 65100
+ neighbor 203.0.113.1 prefix-list CUST out
+ neighbor 203.0.113.1 maximum-prefix 500
+!
+ip prefix-list CUST seq 5 permit 10.10.0.0/16 le 24
+"""
+
+
+def test_the_report_says_where_each_control_is_applied(db_session):
+    """書いてあるだけのものと、効いているものを、同じ表で見分けられること。"""
+    device = _device(db_session, "rt-09")
+    _snapshot(db_session, device, CONTROLS, "9" * 64)
+    report = l3review.review(db_session, device)
+
+    kinds = {entry["kind"] for entry in report.controls}
+    assert kinds == {"通信の制限", "アドレス変換", "アドレス配布", "優先制御", "拠点間の暗号化"}
+    acl = next(e for e in report.controls if e["kind"] == "通信の制限")
+    assert "interface GigabitEthernet0/0 入り" in acl["applied_to"]
+    vpn = next(e for e in report.controls if e["kind"] == "拠点間の暗号化")
+    assert vpn["applied_to"] == ["interface GigabitEthernet0/0"]
+
+
+def test_a_bgp_peer_shows_what_is_applied_to_it(db_session):
+    """BGP は相手ごとに設定が違う。1台だけ抜けているのを見えるようにする。"""
+    device = _device(db_session, "rt-10")
+    _snapshot(db_session, device, CONTROLS, "a" * 63 + "b")
+    report = l3review.review(db_session, device)
+
+    neighbor = report.bgp["neighbors"][0]
+    assert neighbor["external"] is True
+    assert neighbor["prefix_list_out"] == "CUST"
+    assert neighbor["maximum_prefix"] == 500
+
+
+def test_the_api_carries_the_controls(client, core):
+    body = client.get(f"{API}/devices/{core.id}/l3").json()
+    assert "controls" in body

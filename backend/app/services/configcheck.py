@@ -19,7 +19,7 @@ from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from app.services import configparse, l3review
+from app.services import configparse, l3review, policyreview
 from app.services import conventions as conventions_module
 from app.services.configparse import ParsedConfig, Vendor
 from app.services.l3review import HIGH, LOW, MEDIUM, Finding
@@ -173,6 +173,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(l3review._same_destination_twice(parsed))
     found.extend(l3review._segments_nobody_advertises(parsed, local))
     found.extend(l3review._unused_policies(parsed))
+    found.extend(policyreview.review(parsed))
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))

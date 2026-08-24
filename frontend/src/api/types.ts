@@ -1163,10 +1163,23 @@ export interface L3Report {
     local_as: string | null;
     router_id: string | null;
     networks: string[];
+    redistributes: string[];
+    aggregates: string[];
     neighbors: {
       address: string;
       remote_as: string | null;
       description: string | null;
+      /** 外の AS が相手か。掛けるべき安全策が変わる */
+      external: boolean;
+      route_map_in: string | null;
+      route_map_out: string | null;
+      prefix_list_in: string | null;
+      prefix_list_out: string | null;
+      update_source: string | null;
+      next_hop_self: boolean;
+      maximum_prefix: number | null;
+      password: boolean;
+      shutdown: boolean;
     }[];
   } | null;
   redundancy: {
@@ -1191,6 +1204,14 @@ export interface L3Report {
     name: string;
     detail: string;
     used_by: string[];
+    entries: { seq: string | null; action: string; matches: string[]; sets: string[] }[];
+  }[];
+  /** ACL / NAT / DHCP / QoS / IPsec。当て先が空なら、書いてあるだけで効いていない */
+  controls: {
+    kind: string;
+    name: string;
+    detail: string;
+    applied_to: string[];
   }[];
   /** その機器で使っている機能。中身の解釈まではしていない */
   features: {

@@ -27,6 +27,17 @@ export function sortFindings(findings: L3Finding[]): L3Finding[] {
   return [...findings].sort((a, b) => weight[a.level] - weight[b.level]);
 }
 
+/**
+ * 相手ごとに掛けている道具。
+ *
+ * route-map と prefix-list は別物なので、まとめずに並べる。両方とも無い
+ * ときに「絞っていません」と読めることが、この列のいちばんの用である。
+ */
+export function tools(routeMap: string | null, prefixList: string | null): string {
+  const applied = [routeMap, prefixList].filter(Boolean);
+  return applied.length > 0 ? applied.join(" / ") : "絞っていません";
+}
+
 export default function L3Panel({ deviceId }: { deviceId: number }) {
   const { data, isLoading } = useQuery({
     queryKey: ["deviceL3", deviceId],
@@ -57,6 +68,7 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
     data.redundancy.length === 0 &&
     data.protocols.length === 0 &&
     data.policies.length === 0 &&
+    data.controls.length === 0 &&
     data.features.length === 0;
 
   return (
@@ -216,14 +228,24 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
               <tr>
                 <th>相手</th>
                 <th>相手の AS</th>
+                <th>受ける経路に掛けている物</th>
+                <th>出す経路に掛けている物</th>
+                <th>受ける上限</th>
                 <th>説明</th>
               </tr>
             </thead>
             <tbody>
               {data.bgp.neighbors.map((neighbor) => (
                 <tr key={neighbor.address}>
-                  <td>{neighbor.address}</td>
+                  <td>
+                    {neighbor.address}
+                    {neighbor.external ? " (外)" : ""}
+                    {neighbor.shutdown ? " / 止めています" : ""}
+                  </td>
                   <td>{neighbor.remote_as ?? "—"}</td>
+                  <td>{tools(neighbor.route_map_in, neighbor.prefix_list_in)}</td>
+                  <td>{tools(neighbor.route_map_out, neighbor.prefix_list_out)}</td>
+                  <td>{neighbor.maximum_prefix ?? "無し"}</td>
                   <td>{neighbor.description ?? "—"}</td>
                 </tr>
               ))}
@@ -283,6 +305,36 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
                   <td>{policy.name}</td>
                   <td>{policy.detail}</td>
                   <td>{policy.used_by.join(" / ") || "見当たりません"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {data.controls.length > 0 && (
+        <>
+          <h3>制限・変換・配布・優先・暗号化</h3>
+          <p className="muted" style={{ marginTop: -8 }}>
+            書いてあるだけでは何も起きません。当て先が空のものは、当て忘れか、
+            使わなくなったものが残っているかのどちらかです。
+          </p>
+          <table>
+            <thead>
+              <tr>
+                <th>種類</th>
+                <th>名前</th>
+                <th>中身</th>
+                <th>どこに当たっているか</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.controls.map((control, index) => (
+                <tr key={`${control.kind}-${control.name}-${index}`}>
+                  <td>{control.kind}</td>
+                  <td>{control.name}</td>
+                  <td>{control.detail}</td>
+                  <td>{control.applied_to.join(" / ") || "当たっていません"}</td>
                 </tr>
               ))}
             </tbody>

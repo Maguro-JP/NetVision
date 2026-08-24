@@ -533,6 +533,8 @@ class L3Read(BaseModel):
     redundancy: list[dict]
     protocols: list[dict]
     policies: list[dict]
+    #: ACL / NAT / DHCP / QoS / IPsec を、当てている場所まで並べたもの
+    controls: list[dict]
     features: list[dict]
     findings: list[FindingRead]
 
@@ -560,6 +562,7 @@ def read_l3(device_id: int, db: DbSession) -> L3Read:
         redundancy=report.redundancy,
         protocols=report.protocols,
         policies=report.policies,
+        controls=report.controls,
         features=report.features,
         findings=[
             FindingRead(level=f.level, title=f.title, why=f.why, evidence=f.evidence)
