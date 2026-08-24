@@ -92,7 +92,7 @@ export default function VlansPage() {
 
   return (
     <>
-      <h1>VLAN 台帳</h1>
+      <h1>VLAN</h1>
       <p className="subtitle">
         番号だけでは何のセグメントか分かりません。名称と用途はここで管理します。
         <strong>ここに書いた内容は Config を取り込み直しても上書きされません。</strong>

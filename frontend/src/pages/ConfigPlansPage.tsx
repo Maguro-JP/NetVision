@@ -179,7 +179,7 @@ export default function ConfigPlansPage() {
 
   return (
     <>
-      <h1>Config 計画（現行 / 将来 / 差分）</h1>
+      <h1>Config の変更計画</h1>
       <p className="subtitle">
         1つの機器について「今こうなっている」と「こうしたい」を持ち、そこから3つを出します。
         <br />

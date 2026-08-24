@@ -76,7 +76,7 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
       <h2>経路と機能</h2>
       <p className="muted" style={{ marginTop: -8 }}>
         言葉が分からないときは
-        <Link to="/glossary"> 言葉の説明</Link>
+        <Link to="/glossary"> 用語集</Link>
         を見てください。「切り替わらない」のように、困っていることからも探せます。
       </p>
 

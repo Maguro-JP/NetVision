@@ -57,7 +57,7 @@ export default function OsMibPage() {
 
   return (
     <>
-      <h1>版と、いまの状態</h1>
+      <h1>版数と状態</h1>
       <p className="subtitle">
         同じ機種で OS の版が揃っているかを数えます。あわせて、snmpwalk
         の出力を放り込むと、いまの状態（落ちているポート、台帳との食い違い）を出します。

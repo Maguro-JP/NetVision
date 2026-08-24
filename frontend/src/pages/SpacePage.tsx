@@ -10,10 +10,12 @@ import { BOUNDS, locate } from "../lib/japan";
 /* ネットワークを立体で眺めるページ。
  *
  * 平面の構成図は「どこがどこに繋がっているか」を読むためのもので、それは
- * トポロジー図が担当する。こちらは全体の形をつかむための遊び。
+ * 構成図が担当する。こちらは全体の形をつかむための遊び。
  * 本番向けの作業画面ではないので、メニューには出さない（/space 直打ち）。
  *
- * 流れている光はランダムに出しているだけで、実際の通信量ではない。
+ * 光は拠点と拠点のあいだをランダムに飛ばしているだけで、実際の通信量ではない。
+ * 機器1台ずつから出していたときは、数が多すぎてどこへ向かう光なのか読めず、
+ * ただちらついているだけの絵になっていた。
  * 監視の画面と取り違えられないよう、画面にもそう書いてある。
  *
  * 外部ライブラリも外部の地図サービスも使わない（閉域で動かす前提）。
@@ -593,7 +595,13 @@ export default function SpacePage() {
         }
       : detail;
 
+    // 光は拠点から拠点へ飛ばす。機器1台ずつから出すと、数が多すぎて
+    // 線がどこへ向かっているのか読めず、ただちらつくだけの絵になる。
+    // 拠点が1つしかない台帳では、飛ばすものが無いので機器の線を使う
+    const flow = summary.edges.length ? summary : detail;
     let packets: Packet[] = [];
+    // 着いたところで広がる輪。玉の行き先が拠点だと分かるようにする
+    let bursts: { x: number; y: number; at: number }[] = [];
     let showing = summary;
     const started = performance.now();
 
@@ -615,7 +623,8 @@ export default function SpacePage() {
       const wanted = zoom.current < CLUSTER_ZOOM ? summary : detail;
       if (wanted !== showing) {
         showing = wanted;
-        packets = [];
+        // 玉の行き先は拠点のまま変わらないので、消すのは輪だけでよい
+        bursts = [];
       }
       const { points: shown, byId, edges, counts } = showing;
       // 地図は回さない。形が読めなくなる
@@ -638,7 +647,10 @@ export default function SpacePage() {
         return { sx: cx + x1 * scale * magnify, sy: cy + y2 * scale * magnify, scale };
       };
 
-      for (const point of shown) {
+      // 描く点と、光の出入り口になる拠点の両方を投影する。寄って機器を
+      // 出しているときも、拠点の位置が要る（そこから光が出るため）
+      const projected = showing === flow ? shown : [...shown, ...flow.points];
+      for (const point of projected) {
         // 止まっていると絵に見えるので、少しだけ揺らす
         const sway = settings.drift;
         const driftX = Math.sin(seconds * 0.5 + point.phase) * sway;
@@ -719,9 +731,26 @@ export default function SpacePage() {
         context.stroke();
       }
 
-      // 光の玉。行き先はランダムで、行きと帰りの両方がある
-      if (edges.length && packets.length < MAX_PACKETS && Math.random() < settings.flow) {
-        const edge = edges[Math.floor(Math.random() * edges.length)];
+      // 寄って機器を出しているときは、拠点をつなぐ線が描かれていない。
+      // 見えない道を光だけが飛ぶと、どこへ向かっているのか分からないので、
+      // 薄く道を引いておく
+      if (showing !== flow) {
+        context.strokeStyle = `rgba(124, 196, 255, ${0.1 * settings.link})`;
+        for (const edge of flow.edges) {
+          const a = flow.byId.get(edge.source)!;
+          const b = flow.byId.get(edge.target)!;
+          const mid = control(a, b);
+          curves.set(-edge.id, mid);
+          context.beginPath();
+          context.moveTo(a.screenX, a.screenY);
+          context.quadraticCurveTo(mid.x, mid.y, b.screenX, b.screenY);
+          context.stroke();
+        }
+      }
+
+      // 光の玉。拠点と拠点のあいだを、行き帰りとも同じだけ飛ばす
+      if (flow.edges.length && packets.length < MAX_PACKETS && Math.random() < settings.flow) {
+        const edge = flow.edges[Math.floor(Math.random() * flow.edges.length)];
         const forward = Math.random() < 0.5;
         packets.push({
           from: forward ? edge.source : edge.target,
@@ -733,8 +762,8 @@ export default function SpacePage() {
 
       for (let i = packets.length - 1; i >= 0; i -= 1) {
         const packet = packets[i];
-        const from = byId.get(packet.from);
-        const to = byId.get(packet.to);
+        const from = flow.byId.get(packet.from);
+        const to = flow.byId.get(packet.to);
         if (!from || !to) {
           packets.splice(i, 1);
           continue;
@@ -743,6 +772,7 @@ export default function SpacePage() {
         if (packet.progress >= 1) {
           // 着いた先を少し光らせる。届いたことが分かる
           to.litAt = now;
+          bursts.push({ x: to.screenX, y: to.screenY, at: now });
           packets.splice(i, 1);
           continue;
         }
@@ -769,6 +799,20 @@ export default function SpacePage() {
         context.arc(head.x, head.y, 2.2 * scale, 0, Math.PI * 2);
         context.fill();
         context.shadowBlur = 0;
+      }
+
+      // 着いたところで広がる輪。1秒ほどで消す
+      for (let i = bursts.length - 1; i >= 0; i -= 1) {
+        const age = (now - bursts[i].at) / 900;
+        if (age >= 1) {
+          bursts.splice(i, 1);
+          continue;
+        }
+        context.strokeStyle = `rgba(180, 225, 255, ${(1 - age) * 0.5})`;
+        context.lineWidth = 1.2;
+        context.beginPath();
+        context.arc(bursts[i].x, bursts[i].y, 4 + age * 22, 0, Math.PI * 2);
+        context.stroke();
       }
 
       const sorted = [...shown].sort((a, b) => a.scale - b.scale);
@@ -837,9 +881,9 @@ export default function SpacePage() {
     <section>
       <h1>立体で眺める</h1>
       <p className="muted">
-        全体の形をつかむための遊びのページです。流れている光はランダムに出しているだけで、
+        全体の形をつかむための遊びのページです。光は拠点と拠点のあいだをランダムに飛ばしているだけで、
         実際の通信量ではありません。どこがどこに繋がっているかを読むのは
-        <RouterLink to="/topology"> トポロジー図 </RouterLink>
+        <RouterLink to="/topology"> 構成図 </RouterLink>
         の方が向いています。ドラッグで回す、Shift か右ボタンのドラッグで位置をずらす、
         ホイールで寄る／引く、です。引いているうちは拠点ごとの玉にまとまり、寄るとその中の
         機器が出ます。
@@ -917,7 +961,7 @@ export default function SpacePage() {
           />
           <Slider
             label="光の量"
-            hint="線を流れる光の出やすさ。0 で出しません"
+            hint="拠点のあいだを飛ぶ光の出やすさ。0 で出しません"
             min={0}
             max={1}
             step={0.05}

@@ -158,7 +158,7 @@ export default function RemediationPage() {
 
   return (
     <>
-      <h1>脆弱性への対処</h1>
+      <h1>対処手順</h1>
       <p className="subtitle">
         機器を選ぶと、該当する CVE と<strong>その機器で何をすればいいか</strong>が並びます。
         <br />

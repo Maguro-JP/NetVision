@@ -61,7 +61,7 @@ export default function CalcPage() {
 
   return (
     <>
-      <h1>数えれば分かること</h1>
+      <h1>試算</h1>
       <p className="subtitle">
         台帳と、Config
         から読み取った内容だけを数えています。推測は入っていないので、

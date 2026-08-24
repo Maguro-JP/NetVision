@@ -114,7 +114,7 @@ export default function MigrationPage() {
       {data.phase === "needs_confirm" && backup && (
         <>
           <p>
-            表は更新済みです。機器の台数やトポロジー図を見て、問題ないことを確かめてください。
+            表は更新済みです。機器の台数や構成図を見て、問題ないことを確かめてください。
             控えは確認するまで残します。確認したあともファイルは消しません。
           </p>
           <BackupCard backup={backup} />
@@ -129,7 +129,7 @@ export default function MigrationPage() {
               <Link to="/devices">機器一覧</Link>で台数を見る
             </li>
             <li>
-              <Link to="/topology">トポロジー図</Link>で拠点を選んで図が出るか見る
+              <Link to="/topology">構成図</Link>で拠点を選んで図が出るか見る
             </li>
             <li>
               <Link to="/configs">Configの取り込み</Link>で履歴が残っているか見る

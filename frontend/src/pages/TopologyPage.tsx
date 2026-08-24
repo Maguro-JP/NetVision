@@ -2001,7 +2001,7 @@ function TopologyEditor() {
 
   return (
     <>
-      <h1>トポロジー図</h1>
+      <h1>構成図</h1>
       <p className="subtitle">
         Config の LLDP / CDP から結線を推定して描きます。
         {editable ? (

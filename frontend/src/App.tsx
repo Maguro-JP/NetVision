@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 
 import { api } from "./api/client";
+import Logo from "./components/Logo";
+import { CollapseIcon, GearIcon, MenuIcon, PinIcon } from "./components/icons";
 import { WINDOW_FLAG } from "./components/WindowLink";
 import { SECTIONS, isCurrent, sectionFor } from "./nav";
 
@@ -84,19 +86,48 @@ export default function App() {
         {/* 設定はロゴの隣に置く。下に置くと、台帳のような長い画面では
             一番下まで送らないと届かない */}
         <div className="brand">
-          <span className="brand-name">
-            Net<span>Vision</span>
-          </span>
-          <NavLink
-            to="/settings"
-            className={({ isActive }) =>
-              `brand-settings ${isActive ? "active" : ""}`
-            }
-            title="画面の設定"
-            aria-label="設定"
-          >
-            <span aria-hidden="true">⚙</span>
-          </NavLink>
+          <Link to="/dashboard" className="brand-home" aria-label="NetVision">
+            <Logo />
+          </Link>
+          <div className="brand-tools">
+            {/* 画鋲は狭い画面だけ。広い画面ではメニューが元から居座るので、
+                押しても何も変わらないボタンになる */}
+            <button
+              className={`icon-button pin-button ${pinned ? "active" : ""}`}
+              onClick={() => setPinned((value) => !value)}
+              aria-pressed={pinned}
+              aria-label="メニューを出したままにする"
+              title={
+                pinned
+                  ? "メニューを出したままにしています"
+                  : "画面が狭くてもメニューを出したままにする"
+              }
+            >
+              <PinIcon />
+            </button>
+            <NavLink
+              to="/settings"
+              className={({ isActive }) =>
+                `icon-button ${isActive ? "active" : ""}`
+              }
+              title="設定"
+              aria-label="設定"
+            >
+              <GearIcon />
+            </NavLink>
+            <button
+              className="icon-button"
+              onClick={() => {
+                // 常時表示のまま隠すと、次に開くときに迷う。隠すなら常時表示も解く
+                if (pinned) setPinned(false);
+                setOpen(false);
+              }}
+              aria-label="メニューを隠す"
+              title="メニューを隠す"
+            >
+              <CollapseIcon />
+            </button>
+          </div>
         </div>
         <nav className="nav">
           {SECTIONS.map((item) => (
@@ -120,38 +151,26 @@ export default function App() {
       )}
 
       <main className="main">
-        {/* 開閉ボタンと常時表示の切り替えは、メニューの外に置く。
-            メニューの中に入れると、閉じたときに触れなくなって戻せない */}
-        <div className="sidebar-controls">
-          <button
-            className="sidebar-toggle"
-            onClick={() => {
-              // 常時表示のまま隠すと、次に開くときに迷う。隠すなら常時表示も解く
-              if (pinned) setPinned(false);
-              setOpen((value) => !value);
-            }}
-            aria-expanded={open}
-            title={open ? "メニューを隠す" : "メニューを出す"}
-          >
-            ☰<span className="sidebar-toggle-text"> メニュー</span>
-          </button>
-          {/* メニューを隠しているときは、ここに名前を出す。どの道具を見ているのかが
-              分からなくなるのを防ぐ */}
-          <span className="topbar-brand">
-            Net<span>Vision</span>
-          </span>
-          <label
-            className="sidebar-pin"
-            title="画面が狭くてもメニューを出したままにします"
-          >
-            <input
-              type="checkbox"
-              checked={pinned}
-              onChange={(event) => setPinned(event.target.checked)}
-            />{" "}
-            常時表示
-          </label>
-        </div>
+        {/* メニューを隠しているときだけ、出すためのボタンと名前を置く。
+            出ているときは、畳むボタンはメニューの中にある。
+            空の帯を常に置くと、図に使える高さがその分減る */}
+        {!open && (
+          <div className="sidebar-controls">
+            <button
+              className="icon-button"
+              onClick={() => setOpen(true)}
+              aria-expanded={false}
+              aria-label="メニューを出す"
+              title="メニューを出す"
+            >
+              <MenuIcon />
+            </button>
+            {/* どの道具を見ているのかが分からなくなるのを防ぐ */}
+            <Link to="/dashboard" className="topbar-brand" aria-label="NetVision">
+              <Logo size={20} />
+            </Link>
+          </div>
+        )}
 
         {meta?.schema_phase === "needs_confirm" && (
           <div className="demo-banner">

@@ -171,7 +171,7 @@ export default function ConfigsPage() {
       <p className="subtitle">
         running-config や show
         出力を読み込んで、機器情報・インターフェース・VLAN・隣接情報を抽出します。
-        隣接情報（LLDP / CDP）からは <Link to="/topology">トポロジー図</Link>{" "}
+        隣接情報（LLDP / CDP）からは <Link to="/topology">構成図</Link>{" "}
         の結線を自動で組み立てます。
       </p>
 
@@ -286,7 +286,7 @@ export default function ConfigsPage() {
           ))}
           <div className="actions">
             <Link to="/topology">
-              <button className="primary">トポロジー図で確認する →</button>
+              <button className="primary">構成図で確認する →</button>
             </Link>
           </div>
         </>

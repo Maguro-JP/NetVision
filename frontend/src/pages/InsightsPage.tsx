@@ -35,7 +35,7 @@ export default function InsightsPage() {
 
   return (
     <>
-      <h1>最適化の指摘</h1>
+      <h1>改善の指摘</h1>
       <p className="subtitle">
         登録済みの台帳から、払わなくてよい保守費と、抱えているリスクを洗い出します。
         削減できる年額の見込みも出すので、契約見直しや更改の根拠に使えます。

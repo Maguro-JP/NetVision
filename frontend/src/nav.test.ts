@@ -35,7 +35,7 @@ describe("いまどこにいるか", () => {
 
   it("奥のページでも、上のタブは消えない", () => {
     expect(sectionFor("/devices/12")?.label).toBe("台帳");
-    expect(sectionFor("/scenarios/3")?.label).toBe("更改・計画");
+    expect(sectionFor("/scenarios/3")?.label).toBe("更改");
     expect(isCurrent("/devices/12/edit", "/devices")).toBe(true);
   });
 

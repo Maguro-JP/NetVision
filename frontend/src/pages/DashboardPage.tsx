@@ -24,7 +24,7 @@ export default function DashboardPage() {
   if (data.total_devices === 0) {
     return (
       <>
-        <h1>ダッシュボード</h1>
+        <h1>概況</h1>
         <p className="subtitle">
           まだ機器がありません。どれか1つから始められます。
         </p>
@@ -49,7 +49,7 @@ export default function DashboardPage() {
 
   return (
     <>
-      <h1>ダッシュボード</h1>
+      <h1>概況</h1>
       <p className="subtitle">
         保守期限とサポート終了（EoL）の状況を一覧します。
       </p>

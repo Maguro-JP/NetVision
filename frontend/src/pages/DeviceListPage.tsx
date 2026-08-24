@@ -232,7 +232,7 @@ export default function DeviceListPage() {
 
   return (
     <>
-      <h1>機器一覧</h1>
+      <h1>機器</h1>
       <p className="subtitle">型番・バージョン・導入時期・保守期限をまとめて管理します。</p>
 
       <div className="toolbar">

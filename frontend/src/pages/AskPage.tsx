@@ -44,7 +44,7 @@ export default function AskPage() {
 
   return (
     <>
-      <h1>ことばで頼む</h1>
+      <h1>ことばで依頼</h1>
       <p className="subtitle">
         やりたいことを、そのまま書いてください。台帳にある機器の名前が入っていれば、
         そこから設計を起こします。読み取った内容も出すので、違っていれば直せます。
@@ -203,7 +203,7 @@ export default function AskPage() {
               </ul>
               <p className="muted">
                 ここで作るのは下書きです。実機には投入しません。言葉が分からないときは
-                <Link to="/glossary"> 言葉の説明</Link>を見てください。
+                <Link to="/glossary"> 用語集</Link>を見てください。
               </p>
             </>
           )}
