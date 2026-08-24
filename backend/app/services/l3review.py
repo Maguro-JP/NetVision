@@ -22,29 +22,11 @@ from sqlalchemy.orm import Session
 
 from app.models import Device
 from app.models.topology import Link
-from app.services import capabilities, configparse
+from app.services import aclcheck, capabilities, configparse, policyreview
 from app.services.addition import read_upstream
 from app.services.configparse import ParsedConfig
 from app.services.configparse.routing import to_prefix
-
-#: 気になる度合い。台帳の重要度と同じ言葉にはしない（別の軸なので混ぜない）
-HIGH = "high"
-MEDIUM = "medium"
-LOW = "low"
-
-
-@dataclass
-class Finding:
-    """気になったこと1件。
-
-    `why` は「なぜ気になるのか」、`evidence` は「どこを見てそう言ったか」。
-    どちらも無いものは指摘として出さない。
-    """
-
-    level: str
-    title: str
-    why: str
-    evidence: list[str] = field(default_factory=list)
+from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding  # noqa: F401  再輸出
 
 
 @dataclass
@@ -58,6 +40,8 @@ class L3Report:
     protocols: list[dict] = field(default_factory=list)
     #: 経路の選び方・配り方を決める道具（route-map / prefix-list）
     policies: list[dict] = field(default_factory=list)
+    #: ACL / NAT / DHCP / QoS / IPsec を、当てている場所まで並べたもの
+    controls: list[dict] = field(default_factory=list)
     redundancy: list[dict] = field(default_factory=list)
     #: その機器で使っている機能（ACL / NAT / DHCP など）
     features: list[dict] = field(default_factory=list)
@@ -65,7 +49,7 @@ class L3Report:
 
 
 def review(db: Session, device: Device) -> L3Report:
-    parsed, _raw = read_upstream(db, device)
+    parsed, raw = read_upstream(db, device)
     report = L3Report(hostname=device.hostname)
     if parsed is None:
         return report
@@ -91,9 +75,19 @@ def review(db: Session, device: Device) -> L3Report:
             "name": policy.name,
             "detail": policy.detail,
             "used_by": policy.used_by,
+            "entries": [
+                {
+                    "seq": entry.seq,
+                    "action": entry.action,
+                    "matches": entry.matches,
+                    "sets": entry.sets,
+                }
+                for entry in policy.entries
+            ],
         }
         for policy in parsed.policies
     ]
+    report.controls = _controls(parsed)
     report.redundancy = [_redundancy_read(entry) for entry in parsed.redundancy]
     report.features = [
         {
@@ -107,7 +101,7 @@ def review(db: Session, device: Device) -> L3Report:
         for feature in parsed.features
     ]
 
-    report.findings = _findings(db, device, parsed)
+    report.findings = _findings(db, device, parsed, raw)
     return report
 
 
@@ -142,11 +136,128 @@ def _bgp_read(parsed: ParsedConfig) -> dict | None:
         "local_as": parsed.bgp.local_as,
         "router_id": parsed.bgp.router_id,
         "networks": parsed.bgp.networks,
+        "redistributes": parsed.bgp.redistributes,
+        "aggregates": parsed.bgp.aggregates,
         "neighbors": [
-            {"address": n.address, "remote_as": n.remote_as, "description": n.description}
+            {
+                "address": n.address,
+                "remote_as": n.remote_as,
+                "description": n.description,
+                "external": n.is_ebgp(parsed.bgp.local_as),
+                # 出入りに掛けている道具。in と out は別物なので分けて出す
+                "route_map_in": n.route_map_in,
+                "route_map_out": n.route_map_out,
+                "prefix_list_in": n.prefix_list_in,
+                "prefix_list_out": n.prefix_list_out,
+                "update_source": n.update_source,
+                "next_hop_self": n.next_hop_self,
+                "maximum_prefix": n.maximum_prefix,
+                "password": n.password,
+                "shutdown": n.shutdown,
+            }
             for n in parsed.bgp.neighbors
         ],
     }
+
+
+def _controls(parsed: ParsedConfig) -> list[dict]:
+    """通信の制限・変換・配布・優先制御・暗号化を、同じ形で並べる。
+
+    見る側が知りたいのはどれも同じ3つ、「何が」「どういう中身で」「どこに
+    当たっているか」である。種類ごとに違う表を出すより、1つに揃えたほうが
+    抜けに気づきやすい。当て先が空の行が、そのまま「効いていないもの」になる。
+    """
+    out: list[dict] = []
+
+    def add(
+        kind: str, name: str, detail: str, applied: list[str], rows: list[dict] | None = None
+    ) -> None:
+        out.append(
+            {
+                "kind": kind,
+                "name": name,
+                "detail": detail,
+                "applied_to": applied,
+                "rows": rows or [],
+            }
+        )
+
+    for acl in parsed.acls:
+        rules = [entry for entry in acl.entries if entry.action in {"permit", "deny"}]
+        permits = sum(1 for entry in rules if entry.action == "permit")
+        add(
+            "通信の制限",
+            acl.name,
+            f"{len(rules)} 行（通す {permits} / 落とす {len(rules) - permits}）",
+            [*acl.applied_to, *acl.referenced_by],
+            _acl_rows(rules),
+        )
+
+    if parsed.nat is not None:
+        for rule in parsed.nat.rules:
+            kind = {"dynamic": "動的", "static": "固定", "static-port": "固定（ポート指定）"}
+            detail = (
+                f"{kind.get(rule.kind, rule.kind)} {rule.matched or ''} → {rule.translated or ''}"
+            )
+            if rule.overload:
+                detail += "（ポートで束ねる）"
+            where = parsed.nat.inside_interfaces + parsed.nat.outside_interfaces
+            add("アドレス変換", rule.matched or rule.kind, detail.strip(), where)
+
+    if parsed.dhcp is not None:
+        for pool in parsed.dhcp.pools:
+            gateway = ", ".join(pool.default_routers) or "既定ゲートウェイなし"
+            add("アドレス配布", pool.name, f"{pool.network or '範囲不明'} / {gateway}", [])
+        for interface, server in parsed.dhcp.relays:
+            add(
+                "アドレス配布",
+                f"リレー {server}",
+                "他所のサーバーへ回す",
+                [f"interface {interface}"],
+            )
+
+    if parsed.qos is not None:
+        for policy in parsed.qos.policies:
+            where = [
+                f"interface {interface} {'出' if direction == 'output' else '入り'}"
+                for interface, direction, name in parsed.qos.applied
+                if name == policy.name
+            ]
+            classes = ", ".join(entry.class_name for entry in policy.classes)
+            add("優先制御", policy.name, classes or "区分なし", where)
+
+    if parsed.crypto is not None:
+        for entry in parsed.crypto.maps:
+            where = [
+                f"interface {interface}"
+                for interface, name in parsed.crypto.applied
+                if name == entry.name
+            ]
+            peers = ", ".join(entry.peers) or "相手なし"
+            method = ", ".join(entry.transform_sets) or entry.profile or "方式なし"
+            add("拠点間の暗号化", f"{entry.name} {entry.seq}", f"{peers} / {method}", where)
+
+    return out
+
+
+def _acl_rows(rules: list) -> list[dict]:  # noqa: ANN001
+    """ACL の中身を、書いてある順に並べる。
+
+    読まれない行には印を付ける。ACL は上から順に見て最初に当たった行で
+    決まるので、順番のまま見えないと、なぜ通らないのかを追えない。
+    """
+    rows = []
+    for index, entry in enumerate(rules):
+        upper = next((item for item in rules[:index] if aclcheck.covers(item, entry)), None)
+        rows.append(
+            {
+                "text": entry.raw or f"{entry.action} {entry.source or ''}".strip(),
+                "action": entry.action,
+                "reads": upper is None,
+                "hidden_by": upper.raw if upper is not None else None,
+            }
+        )
+    return rows
 
 
 def _redundancy_read(entry) -> dict:  # noqa: ANN001
@@ -164,7 +275,9 @@ def _redundancy_read(entry) -> dict:  # noqa: ANN001
 # ---------------------------------------------------------------------------
 
 
-def _findings(db: Session, device: Device, parsed: ParsedConfig) -> list[Finding]:
+def _findings(
+    db: Session, device: Device, parsed: ParsedConfig, text: str | None = None
+) -> list[Finding]:
     findings: list[Finding] = []
     local = _local_networks(parsed)
 
@@ -175,6 +288,7 @@ def _findings(db: Session, device: Device, parsed: ParsedConfig) -> list[Finding
     findings.extend(_segments_nobody_advertises(parsed, local))
     findings.extend(_redundancy_only_on_one_side(db, device, parsed))
     findings.extend(_unused_policies(parsed))
+    findings.extend(policyreview.review(parsed, text))
     return findings
 
 

@@ -1163,10 +1163,23 @@ export interface L3Report {
     local_as: string | null;
     router_id: string | null;
     networks: string[];
+    redistributes: string[];
+    aggregates: string[];
     neighbors: {
       address: string;
       remote_as: string | null;
       description: string | null;
+      /** 外の AS が相手か。掛けるべき安全策が変わる */
+      external: boolean;
+      route_map_in: string | null;
+      route_map_out: string | null;
+      prefix_list_in: string | null;
+      prefix_list_out: string | null;
+      update_source: string | null;
+      next_hop_self: boolean;
+      maximum_prefix: number | null;
+      password: boolean;
+      shutdown: boolean;
     }[];
   } | null;
   redundancy: {
@@ -1191,6 +1204,21 @@ export interface L3Report {
     name: string;
     detail: string;
     used_by: string[];
+    entries: { seq: string | null; action: string; matches: string[]; sets: string[] }[];
+  }[];
+  /** ACL / NAT / DHCP / QoS / IPsec。当て先が空なら、書いてあるだけで効いていない */
+  controls: {
+    kind: string;
+    name: string;
+    detail: string;
+    applied_to: string[];
+    /** ACL の中身。書いてある順。reads が false の行は、上の行に隠れて読まれない */
+    rows: {
+      text: string;
+      action: string;
+      reads: boolean;
+      hidden_by: string | null;
+    }[];
   }[];
   /** その機器で使っている機能。中身の解釈まではしていない */
   features: {
@@ -1429,6 +1457,23 @@ export interface LogReport {
   known_hosts: string[];
   unknown_hosts: string[];
   notes: string[];
+  /** 数えた先の判断。障害・設定・攻撃を、根拠と次の一手つきで出す */
+  findings: LogFinding[];
+}
+
+/** ログから読み取った、気になること1件。 */
+export interface LogFinding {
+  level: "high" | "medium" | "low";
+  /** 障害 / 設定 / 攻撃 */
+  kind: string;
+  title: string;
+  why: string;
+  what_now: string;
+  count: number;
+  hosts: string[];
+  first_at: string | null;
+  last_at: string | null;
+  evidence: string[];
 }
 
 /** 数えれば分かること。推測は入っていない。 */

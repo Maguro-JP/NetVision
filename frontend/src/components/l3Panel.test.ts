@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { L3Finding } from "../api/types";
-import { LEVEL_LABEL, sortFindings } from "./L3Panel";
+import { LEVEL_LABEL, sortFindings, tools } from "./L3Panel";
 
 function finding(level: L3Finding["level"], title: string): L3Finding {
   return { level, title, why: "理由", evidence: ["根拠"] };
@@ -39,5 +39,17 @@ describe("度合いの呼び名", () => {
     expect(LEVEL_LABEL.high).toBe("急ぎ");
     expect(LEVEL_LABEL.medium).toBe("確認");
     expect(LEVEL_LABEL.low).toBe("参考");
+  });
+});
+
+describe("相手ごとに掛けている道具", () => {
+  it("route-map と prefix-list をまとめない", () => {
+    expect(tools("SET-LP", "CUST")).toBe("SET-LP / CUST");
+    expect(tools(null, "CUST")).toBe("CUST");
+  });
+
+  it("何も掛けていないことが、そう読める", () => {
+    // 空欄にすると「読めていない」と区別できない
+    expect(tools(null, null)).toBe("絞っていません");
   });
 });

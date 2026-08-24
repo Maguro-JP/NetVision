@@ -150,6 +150,13 @@ class ParsedConfig:
     redundancy: list[ParsedRedundancy] = field(default_factory=list)
     #: その機器で使っている機能（ACL / NAT / DHCP / STP など）
     features: list[ParsedFeature] = field(default_factory=list)
+    #: 通信の制限（中身と、当てている場所まで）
+    acls: list[ParsedAcl] = field(default_factory=list)
+    #: アドレス変換。読めなければ None（無いのか読めていないのかは区別しない）
+    nat: ParsedNat | None = None
+    dhcp: ParsedDhcp | None = None
+    qos: ParsedQos | None = None
+    crypto: ParsedCrypto | None = None
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""
@@ -261,9 +268,44 @@ class ParsedOspf:
 
 @dataclass
 class ParsedBgpNeighbor:
+    """BGP の相手1台分。
+
+    相手ごとに、出入りの経路へ何を掛けているかまで持つ。BGP は相手単位で
+    設定が違うのが普通で、「1台だけ route-map が抜けている」が事故になる。
+    合言葉（password）は入っているかどうかだけを持ち、値は持たない。
+    """
+
     address: str
     remote_as: str | None = None
     description: str | None = None
+    #: 受ける側・出す側に掛けている道具。in と out は別物なので分けて持つ
+    route_map_in: str | None = None
+    route_map_out: str | None = None
+    prefix_list_in: str | None = None
+    prefix_list_out: str | None = None
+    filter_list_in: str | None = None
+    filter_list_out: str | None = None
+    #: どのアドレスから喋るか。ループバックを指すのが定石
+    update_source: str | None = None
+    next_hop_self: bool = False
+    #: 直結していない相手と張るときの許容ホップ数
+    ebgp_multihop: int | None = None
+    #: 受け取る経路数の上限。無いと、相手の事故がこちらのメモリを食い潰す
+    maximum_prefix: int | None = None
+    #: 合言葉を掛けているか（値は持たない）
+    password: bool = False
+    shutdown: bool = False
+    peer_group: str | None = None
+    #: 相手を有効にしたアドレスファミリ（ipv4 unicast / vpnv4 など）
+    address_families: list[str] = field(default_factory=list)
+    #: activate を書いていないのに address-family の中にだけ出てくる相手もいる
+    activated: bool = False
+
+    def is_ebgp(self, local_as: str | None) -> bool:
+        """外の AS が相手かどうか。掛けるべき安全策が変わる。"""
+        if not self.remote_as or not local_as:
+            return False
+        return self.remote_as.strip() != local_as.strip()
 
 
 @dataclass
@@ -272,6 +314,17 @@ class ParsedBgp:
     router_id: str | None = None
     neighbors: list[ParsedBgpNeighbor] = field(default_factory=list)
     networks: list[str] = field(default_factory=list)
+    #: 他のプロトコルから取り込んでいるもの
+    redistributes: list[str] = field(default_factory=list)
+    #: 経路をまとめて出す指定（aggregate-address）
+    aggregates: list[str] = field(default_factory=list)
+    #: 落ちた相手を待つ時間（keepalive, holdtime）
+    timers: str | None = None
+    #: 同じ宛先へ複数の経路を使う設定
+    maximum_paths: int | None = None
+    log_neighbor_changes: bool = False
+    #: 書いていないと、同じ経路長でも AS の並びを見ずに先着順で決まる
+    always_compare_med: bool = False
 
 
 @dataclass
@@ -291,17 +344,215 @@ class ParsedRoutingProtocol:
 
 
 @dataclass
+class ParsedPolicyEntry:
+    """route-map / prefix-list の1行分。
+
+    順番（seq）と permit / deny が要る。route-map も prefix-list も上から
+    順に見て、最初に当たったところで止まる。並びが違えば結果が変わるので、
+    中身だけ持っても意味が無い。
+    """
+
+    seq: str | None = None
+    action: str = "permit"  # permit / deny
+    #: 何に当てるか（match ip address prefix-list FOO など）
+    matches: list[str] = field(default_factory=list)
+    #: 当たったら何をするか（set local-preference 200 など）
+    sets: list[str] = field(default_factory=list)
+    raw: str = ""
+
+
+@dataclass
 class ParsedPolicy:
     """経路の選び方・配り方を決める道具（route-map / prefix-list / ACL 参照）。
 
     「広告しているはずなのに相手に届かない」の原因はたいていここにある。
-    中身の評価まではしないが、名前と、どこで使われているかは持っておく。
+    名前と、どこで使われているかに加えて、中身の並びも持つ。
+    並びを持たないと、「掛かってはいるが、その手前で落ちている」が見えない。
     """
 
     kind: str  # route-map / prefix-list / policy-based-routing
     name: str
     detail: str = ""
     used_by: list[str] = field(default_factory=list)
+    entries: list[ParsedPolicyEntry] = field(default_factory=list)
+
+    @property
+    def has_permit(self) -> bool:
+        """通す行があるか。deny だけの道具を掛けると、全部落ちる。"""
+        return any(entry.action == "permit" for entry in self.entries)
+
+
+@dataclass
+class ParsedAclEntry:
+    """ACL の1行。
+
+    ACL は上から順に見て、最初に当たった行で決まる。だから「何行あるか」より
+    「どの順で何を許しているか」のほうが大事になる。
+    """
+
+    seq: str | None = None
+    action: str = "permit"  # permit / deny
+    protocol: str | None = None
+    source: str | None = None  # "any" / "10.0.0.0/24" / "host 10.0.0.1"
+    source_port: str | None = None
+    destination: str | None = None
+    destination_port: str | None = None
+    log: bool = False
+    remark: str | None = None
+    raw: str = ""
+
+    @property
+    def is_any_any(self) -> bool:
+        """送信元も宛先も限定していない行。ここより下は読まれない。"""
+        return (self.source or "any") == "any" and (self.destination or "any") == "any"
+
+
+@dataclass
+class ParsedAcl:
+    """通信の制限1つ分。
+
+    書いてあるだけでは何も起きない。どこに、どちら向きで当てているかまで
+    見て、はじめて「効いている」と言える。
+    """
+
+    name: str
+    kind: str = "extended"  # standard / extended / mac / named
+    entries: list[ParsedAclEntry] = field(default_factory=list)
+    #: 当てている場所（"interface GigabitEthernet0/0 in" の形）
+    applied_to: list[str] = field(default_factory=list)
+    #: 経路の道具や NAT から参照されている場合の参照元
+    referenced_by: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedNatPool:
+    name: str
+    start: str | None = None
+    end: str | None = None
+    netmask: str | None = None
+
+
+@dataclass
+class ParsedNatRule:
+    """アドレス変換1行分。
+
+    NAPT（overload）かどうかで、外から入れるかどうかが変わる。ここを
+    取り違えると「出られるのに入れない」の説明ができない。
+    """
+
+    kind: str  # static / dynamic / static-port
+    direction: str = "inside"  # inside / outside
+    #: 変換する側（ACL 名、route-map 名、または元のアドレス）
+    matched: str | None = None
+    #: 変換した先（pool 名、interface、または変換後のアドレス）
+    translated: str | None = None
+    #: 1つのアドレスにポートで束ねる（NAPT）
+    overload: bool = False
+    protocol: str | None = None  # static-port のとき tcp / udp
+    raw: str = ""
+
+
+@dataclass
+class ParsedNat:
+    pools: list[ParsedNatPool] = field(default_factory=list)
+    rules: list[ParsedNatRule] = field(default_factory=list)
+    #: どのポートが内側・外側か。片方しか無いと変換は動かない
+    inside_interfaces: list[str] = field(default_factory=list)
+    outside_interfaces: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedDhcpPool:
+    name: str
+    network: str | None = None
+    default_routers: list[str] = field(default_factory=list)
+    dns_servers: list[str] = field(default_factory=list)
+    domain: str | None = None
+    lease: str | None = None
+
+
+@dataclass
+class ParsedDhcp:
+    pools: list[ParsedDhcpPool] = field(default_factory=list)
+    #: 配らないアドレス（開始, 終了）
+    excluded: list[tuple[str, str]] = field(default_factory=list)
+    #: 他所のサーバーへ回す指定（ポート名, 転送先）
+    relays: list[tuple[str, str]] = field(default_factory=list)
+
+
+@dataclass
+class ParsedQosClass:
+    name: str
+    match_type: str = "match-all"  # match-all / match-any
+    matches: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedQosAction:
+    class_name: str
+    actions: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedQosPolicy:
+    name: str
+    classes: list[ParsedQosAction] = field(default_factory=list)
+
+
+@dataclass
+class ParsedQos:
+    classes: list[ParsedQosClass] = field(default_factory=list)
+    policies: list[ParsedQosPolicy] = field(default_factory=list)
+    #: 当てている場所（"interface GigabitEthernet0/0 output" の形）
+    applied: list[tuple[str, str, str]] = field(default_factory=list)
+
+
+@dataclass
+class ParsedIkePolicy:
+    """鍵を交換するときの決めごと（ISAKMP / IKEv2 の proposal）。
+
+    両側で揃っていないと、そもそもトンネルが上がらない。古い方式のまま
+    残っていることも多いので、強さが分かる形で持つ。
+    """
+
+    number: str | None = None
+    version: int = 1
+    encryption: str | None = None
+    hash: str | None = None
+    group: str | None = None
+    authentication: str | None = None
+    lifetime: int | None = None
+
+
+@dataclass
+class ParsedTransformSet:
+    name: str
+    transforms: list[str] = field(default_factory=list)
+    mode: str | None = None  # tunnel / transport
+
+
+@dataclass
+class ParsedCryptoMapEntry:
+    name: str
+    seq: str | None = None
+    kind: str = "ipsec-isakmp"
+    peers: list[str] = field(default_factory=list)
+    transform_sets: list[str] = field(default_factory=list)
+    #: 何を暗号化するか（ACL 名）。ここが両側で裏返しになっていないと通らない
+    match_address: str | None = None
+    pfs: str | None = None
+    profile: str | None = None
+
+
+@dataclass
+class ParsedCrypto:
+    ike_policies: list[ParsedIkePolicy] = field(default_factory=list)
+    transform_sets: list[ParsedTransformSet] = field(default_factory=list)
+    maps: list[ParsedCryptoMapEntry] = field(default_factory=list)
+    #: crypto map を当てているポート
+    applied: list[tuple[str, str]] = field(default_factory=list)
+    #: 合言葉を入れてある相手（値は持たない）
+    keyed_peers: list[str] = field(default_factory=list)
 
 
 @dataclass

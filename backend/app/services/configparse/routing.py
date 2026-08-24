@@ -23,6 +23,7 @@ from app.services.configparse.base import (
     ParsedOspf,
     ParsedOspfArea,
     ParsedPolicy,
+    ParsedPolicyEntry,
     ParsedRedundancy,
     ParsedRoute,
     ParsedRoutingProtocol,
@@ -193,14 +194,24 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
     for head, body in _blocks(text, _IOS_ROUTER_BGP):
         bgp = parsed.bgp or ParsedBgp()
         bgp.local_as = bgp.local_as or head.group(1)
+        family: str | None = None
         for line in body:
+            found = re.match(r"^address-family\s+(.+)$", line, re.IGNORECASE)
+            if found:
+                family = found.group(1).strip().lower()
+                continue
+            if re.match(r"^exit-address-family\b", line, re.IGNORECASE):
+                family = None
+                continue
             router_id = re.match(r"^bgp router-id\s+(\S+)", line, re.IGNORECASE)
             if router_id:
                 bgp.router_id = router_id.group(1)
                 continue
+            if _bgp_option(bgp, line):
+                continue
             neighbor = re.match(r"^neighbor\s+(\S+)\s+(.+)$", line, re.IGNORECASE)
             if neighbor:
-                _add_neighbor(bgp, neighbor.group(1), neighbor.group(2))
+                _add_neighbor(bgp, neighbor.group(1), neighbor.group(2), family)
                 continue
             network = re.match(r"^network\s+(\S+)(?:\s+mask\s+(\S+))?", line, re.IGNORECASE)
             if network:
@@ -210,17 +221,88 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
         parsed.bgp = bgp
 
 
-def _add_neighbor(bgp: ParsedBgp, address: str, rest: str) -> None:
+def _bgp_option(bgp: ParsedBgp, line: str) -> bool:
+    """相手ごとではない、BGP 全体の決めごと。"""
+    redistribute = re.match(r"^redistribute\s+(\S+)", line, re.IGNORECASE)
+    if redistribute:
+        if redistribute.group(1) not in bgp.redistributes:
+            bgp.redistributes.append(redistribute.group(1))
+        return True
+    aggregate = re.match(r"^aggregate-address\s+(\S+)(?:\s+(\d+\.\d+\.\d+\.\d+))?", line, re.I)
+    if aggregate:
+        prefix = to_prefix(aggregate.group(1), aggregate.group(2))
+        if prefix and prefix not in bgp.aggregates:
+            bgp.aggregates.append(prefix)
+        return True
+    timers = re.match(r"^timers bgp\s+(.+)$", line, re.IGNORECASE)
+    if timers:
+        bgp.timers = timers.group(1).strip()
+        return True
+    paths = re.match(r"^maximum-paths\s+(\d+)", line, re.IGNORECASE)
+    if paths:
+        bgp.maximum_paths = int(paths.group(1))
+        return True
+    if re.match(r"^bgp log-neighbor-changes\b", line, re.IGNORECASE):
+        bgp.log_neighbor_changes = True
+        return True
+    if re.match(r"^bgp always-compare-med\b", line, re.IGNORECASE):
+        bgp.always_compare_med = True
+        return True
+    return False
+
+
+#: 相手1台に対して書ける指定。BGP は相手ごとに設定が違うのが普通なので、
+#: 「1台だけ抜けている」を見つけられるよう、相手単位で持つ
+_NEIGHBOR_FLAGS = (
+    (r"^remote-as\s+(\S+)", "remote_as"),
+    (r"^description\s+(.+)$", "description"),
+    (r"^update-source\s+(\S+)", "update_source"),
+    (r"^peer-group\s+(\S+)", "peer_group"),
+)
+
+
+def _add_neighbor(bgp: ParsedBgp, address: str, rest: str, family: str | None = None) -> None:
     found = next((n for n in bgp.neighbors if n.address == address), None)
     if found is None:
         found = ParsedBgpNeighbor(address=address)
         bgp.neighbors.append(found)
-    remote = re.match(r"^remote-as\s+(\S+)", rest, re.IGNORECASE)
-    if remote:
-        found.remote_as = remote.group(1)
-    description = re.match(r"^description\s+(.+)$", rest, re.IGNORECASE)
-    if description:
-        found.description = description.group(1).strip()
+    if family and family not in found.address_families:
+        found.address_families.append(family)
+
+    for pattern, name in _NEIGHBOR_FLAGS:
+        match = re.match(pattern, rest, re.IGNORECASE)
+        if match:
+            setattr(found, name, match.group(1).strip())
+            return
+
+    # 掛けている道具は、in と out で別物。まとめると片側の抜けが見えなくなる
+    tool = re.match(
+        r"^(route-map|prefix-list|filter-list)\s+(\S+)\s+(in|out)\b", rest, re.IGNORECASE
+    )
+    if tool:
+        kind = tool.group(1).lower().replace("-", "_")
+        setattr(found, f"{kind}_{tool.group(3).lower()}", tool.group(2))
+        return
+
+    if re.match(r"^password\b", rest, re.IGNORECASE):
+        found.password = True
+        return
+    if re.match(r"^next-hop-self\b", rest, re.IGNORECASE):
+        found.next_hop_self = True
+        return
+    if re.match(r"^shutdown\s*$", rest, re.IGNORECASE):
+        found.shutdown = True
+        return
+    if re.match(r"^activate\s*$", rest, re.IGNORECASE):
+        found.activated = True
+        return
+    multihop = re.match(r"^ebgp-multihop(?:\s+(\d+))?", rest, re.IGNORECASE)
+    if multihop:
+        found.ebgp_multihop = int(multihop.group(1)) if multihop.group(1) else 255
+        return
+    maximum = re.match(r"^maximum-prefix\s+(\d+)", rest, re.IGNORECASE)
+    if maximum:
+        found.maximum_prefix = int(maximum.group(1))
 
 
 def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
@@ -547,33 +629,71 @@ def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRouti
 # ---------------------------------------------------------------------------
 
 _ROUTE_MAP = re.compile(r"^route-map\s+(\S+)(?:\s+(permit|deny))?(?:\s+(\d+))?", re.IGNORECASE)
-_PREFIX_LIST = re.compile(r"^ip prefix-list\s+(\S+)\s", re.IGNORECASE)
 _QX_ROUTE_POLICY = re.compile(r"^route-policy\s+(\S+)\s+(permit|deny)\s+node\s+(\d+)", re.I)
 _POLICY_APPLY = re.compile(r"^\s*ip policy route-map\s+(\S+)", re.IGNORECASE)
+_PREFIX_LIST_ENTRY = re.compile(
+    r"^ip(?:v6)? prefix-list\s+(?P<name>\S+)(?:\s+seq\s+(?P<seq>\d+))?"
+    r"\s+(?P<action>permit|deny)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
 
 
 def parse_policies(text: str, parsed: ParsedConfig) -> None:
-    """route-map / prefix-list と、その使われ方を拾う。
+    """route-map / prefix-list を、中身の並びまで拾う。
 
     「広告しているはずなのに相手に届かない」の原因はたいていここにある。
-    中身の評価まではしないが、名前と、どこで使われているかは持っておく。
+    どちらも上から順に見て、最初に当たったところで止まる。並びを持たないと、
+    「掛かってはいるが、その手前で落ちている」が見えない。
     """
-    counts: dict[tuple[str, str], int] = {}
-    for line in text.splitlines():
-        stripped = line.strip()
-        for pattern, kind in (
-            (_ROUTE_MAP, "route-map"),
-            (_PREFIX_LIST, "prefix-list"),
-            (_QX_ROUTE_POLICY, "route-map"),
-        ):
-            match = pattern.match(stripped)
-            if match:
-                key = (kind, match.group(1))
-                counts[key] = counts.get(key, 0) + 1
-                break
+    policies: dict[tuple[str, str], ParsedPolicy] = {}
 
-    for (kind, name), count in counts.items():
-        parsed.policies.append(ParsedPolicy(kind=kind, name=name, detail=f"{count} 行"))
+    def get(kind: str, name: str) -> ParsedPolicy:
+        key = (kind, name)
+        found = policies.get(key)
+        if found is None:
+            found = ParsedPolicy(kind=kind, name=name)
+            policies[key] = found
+        return found
+
+    current: ParsedPolicyEntry | None = None
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line:
+            continue
+
+        prefix = _PREFIX_LIST_ENTRY.match(line)
+        if prefix:
+            entry = ParsedPolicyEntry(
+                seq=prefix.group("seq"),
+                action=prefix.group("action").lower(),
+                matches=[prefix.group("rest").strip()],
+                raw=line,
+            )
+            get("prefix-list", prefix.group("name")).entries.append(entry)
+            current = None
+            continue
+
+        head = _ROUTE_MAP.match(line) or _QX_ROUTE_POLICY.match(line)
+        if head and not raw.startswith((" ", "\t")):
+            groups = head.groups()
+            action = (groups[1] or "permit").lower()
+            current = ParsedPolicyEntry(seq=groups[2], action=action, raw=line)
+            get("route-map", groups[0]).entries.append(current)
+            continue
+
+        if current is None:
+            continue
+        if not raw.startswith((" ", "\t")):
+            current = None
+            continue
+        if re.match(r"^(?:match|if-match)\s+", line, re.IGNORECASE):
+            current.matches.append(line)
+        elif re.match(r"^(?:set|apply)\s+", line, re.IGNORECASE):
+            current.sets.append(line)
+
+    for policy in policies.values():
+        policy.detail = f"{len(policy.entries)} 行"
+        parsed.policies.append(policy)
 
     _mark_usage(text, parsed)
 

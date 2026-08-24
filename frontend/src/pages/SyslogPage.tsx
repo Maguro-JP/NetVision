@@ -2,8 +2,9 @@ import { useMutation } from "@tanstack/react-query";
 import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 
+import { LEVEL_LABEL } from "../components/L3Panel";
 import { api } from "../api/client";
-import type { LogReport } from "../api/types";
+import type { LogFinding, LogReport } from "../api/types";
 
 /**
  * 機器のログを読んで、何が起きたかを出す。
@@ -20,6 +21,19 @@ export function coverageOf(report: LogReport): string {
   if (report.lines === 0) return "";
   if (report.unreadable === 0) return `${report.lines} 行すべてを読みました`;
   return `${report.lines} 行のうち ${report.parsed} 行を読みました（${report.unreadable} 行は読めていません）`;
+}
+
+/** 気づいたことが、いつからいつまでの話なのか。件数だけでは判断できない。 */
+export function spanOf(finding: LogFinding): string {
+  if (!finding.first_at) return "";
+  const time = (value: string) =>
+    new Date(value).toLocaleTimeString("ja-JP", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  const from = time(finding.first_at);
+  const to = finding.last_at ? time(finding.last_at) : from;
+  return from === to ? from : `${from}〜${to}`;
 }
 
 /** 期間を1行で。いつからいつまでの話なのかが分からないと、判断できない。 */
@@ -153,9 +167,51 @@ export default function SyslogPage() {
             </p>
           ))}
 
+          {report.findings.length > 0 && (
+            <>
+              <h3>気になること</h3>
+              <p className="muted">
+                数えた行から読み取れたものです。断定ではありません。根拠の行と、
+                次に見るところを添えてあります。
+              </p>
+              {report.findings.map((finding, index) => (
+                <div
+                  className="card"
+                  key={`${finding.title}-${index}`}
+                  style={{ marginBottom: 12 }}
+                >
+                  <div className="toolbar" style={{ gap: 8, marginBottom: 4 }}>
+                    <span className={`badge level-${finding.level}`}>
+                      {LEVEL_LABEL[finding.level]}
+                    </span>
+                    <strong>{finding.title}</strong>
+                    <span className="muted">
+                      {finding.kind} / {finding.count} 件
+                      {finding.hosts.length > 0 &&
+                        ` / ${finding.hosts.slice(0, 4).join(" ")}`}
+                      {finding.first_at && ` / ${spanOf(finding)}`}
+                    </span>
+                  </div>
+                  <p style={{ margin: "4px 0" }}>{finding.why}</p>
+                  <p style={{ margin: "4px 0" }}>
+                    <strong>次に</strong>: {finding.what_now}
+                  </p>
+                  {finding.evidence.length > 0 && (
+                    <details>
+                      <summary className="muted">根拠にした行</summary>
+                      <pre className="log-sample">
+                        {finding.evidence.join("\n")}
+                      </pre>
+                    </details>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
+
           {report.patterns.length > 0 && (
             <>
-              <h3>何が起きたか</h3>
+              <h3>何が起きたか（数えた結果）</h3>
               <table>
                 <thead>
                   <tr>

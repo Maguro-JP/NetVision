@@ -292,6 +292,32 @@ td.wrap {
   color: #fff;
 }
 
+/* 指摘の重さ。台帳の重要度（期限の話）とは別の軸なので、同じ色は使わない */
+.badge.level-high {
+  background: var(--sev-expired);
+  color: #fff;
+}
+.badge.level-medium {
+  background: var(--sev-warning);
+}
+.badge.level-low {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+}
+
+/* 根拠にした生ログ。折り返さずに、そのままの形で読めるようにする */
+.log-sample {
+  margin: 6px 0 0;
+  padding: 8px 10px;
+  background: var(--panel-2);
+  border-radius: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  overflow-x: auto;
+  white-space: pre;
+}
+
 /* 拠点の状態。稼働中は数が多いので目立たせず、休みと閉鎖だけ色を付ける */
 .badge.site-active {
   /* 大半はこれなので、色で埋め尽くさない。休みと閉鎖だけが目に入るようにする */
@@ -1442,4 +1468,16 @@ a.button.export-save:focus-visible {
 /* 取り込みの下見で、変わるところだけを目立たせる。変わらない行は静かなまま */
 .import-change {
   color: var(--sev-warning);
+}
+
+/* ACL の中身。読まれない行は、目で追えるように印を付ける */
+.acl-rows {
+  margin: 6px 0 0;
+  padding-left: 20px;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.acl-rows li.unread code {
+  text-decoration: line-through;
+  opacity: 0.7;
 }
