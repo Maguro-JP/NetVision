@@ -36,6 +36,21 @@ class PatternRead(BaseModel):
     sample: str
 
 
+class LogFindingRead(BaseModel):
+    """数えた先の判断。件数だけでは現場は動けない。"""
+
+    level: str
+    kind: str
+    title: str
+    why: str
+    what_now: str
+    count: int
+    hosts: list[str]
+    first_at: datetime | None
+    last_at: datetime | None
+    evidence: list[str]
+
+
 class HostCountRead(BaseModel):
     host: str
     count: int
@@ -54,6 +69,7 @@ class LogReportRead(BaseModel):
     known_hosts: list[str]
     unknown_hosts: list[str]
     notes: list[str]
+    findings: list[LogFindingRead]
 
 
 class LogBody(BaseModel):
@@ -88,6 +104,21 @@ def _read(report: service.LogReport) -> LogReportRead:
         known_hosts=report.known_hosts,
         unknown_hosts=report.unknown_hosts,
         notes=report.notes,
+        findings=[
+            LogFindingRead(
+                level=finding.level,
+                kind=finding.kind,
+                title=finding.title,
+                why=finding.why,
+                what_now=finding.what_now,
+                count=finding.count,
+                hosts=finding.hosts,
+                first_at=finding.first_at,
+                last_at=finding.last_at,
+                evidence=finding.evidence,
+            )
+            for finding in report.findings
+        ],
     )
 
 

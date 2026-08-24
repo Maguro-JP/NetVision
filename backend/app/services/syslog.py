@@ -95,6 +95,8 @@ class LogReport:
     known_hosts: list[str] = field(default_factory=list)
     unknown_hosts: list[str] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
+    #: 数えた先の判断（障害・設定・攻撃）。件数だけでは現場は動けない
+    findings: list = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -278,6 +280,16 @@ def review(db: Session | None, text: str) -> LogReport:
     ]
 
     report.patterns = _patterns(events)
+    # 数えるところまでで止めない。設定を出す道具である以上、その設定が
+    # 原因で起きている事象を「件数」としてしか出せないのでは足りない
+    from app.services import logreview
+
+    report.findings = logreview.review(events)
+    if not report.findings:
+        report.notes.append(
+            "気になる並びは見つかりませんでした。ここで見ているのはログに出ている範囲だけで、"
+            "記録されていない事象は分かりません。"
+        )
     if db is not None:
         report.known_hosts, report.unknown_hosts = _match_devices(db, list(hosts))
         if report.unknown_hosts:
@@ -285,6 +297,11 @@ def review(db: Session | None, text: str) -> LogReport:
                 f"台帳に見当たらない名前が {len(report.unknown_hosts)} 件あります。"
                 "別の呼び方で載っているか、台帳に無い機器のログです。"
             )
+    stamped = sum(1 for event in events if event.at is not None)
+    if events and stamped < len(events) / 2:
+        report.notes.append(
+            "時刻を読めない行が半分以上あります。順番と「直後に起きた」の判断は当てになりません。"
+        )
     if report.unreadable:
         report.notes.append(
             f"{report.unreadable} 行は読めませんでした。"

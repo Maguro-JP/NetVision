@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LogReport } from "../api/types";
-import { coverageOf, periodOf } from "./SyslogPage";
+import { coverageOf, periodOf, spanOf } from "./SyslogPage";
 
 function report(over: Partial<LogReport> = {}): LogReport {
   return {
@@ -23,6 +23,7 @@ function report(over: Partial<LogReport> = {}): LogReport {
     known_hosts: [],
     unknown_hosts: [],
     notes: [],
+    findings: [],
     ...over,
   };
 }
@@ -57,5 +58,36 @@ describe("期間", () => {
   it("幅があるときは、いつからいつまでかを出す", () => {
     const text = periodOf(report({ first_at: "2026-08-22T01:00:00", last_at: "2026-08-22T03:00:00" }));
     expect(text).toContain("〜");
+  });
+});
+
+describe("気になることの期間", () => {
+  const finding = (from: string | null, to: string | null) => ({
+    level: "high" as const,
+    kind: "障害",
+    title: "同じポートが何度も上下しています",
+    why: "",
+    what_now: "",
+    count: 6,
+    hosts: [],
+    first_at: from,
+    last_at: to,
+    evidence: [],
+  });
+
+  it("いつからいつまでかを出す", () => {
+    expect(spanOf(finding("2026-08-22T03:16:00", "2026-08-22T03:19:00"))).toBe(
+      "03:16〜03:19",
+    );
+  });
+
+  it("同じ時刻なら1つだけ出す", () => {
+    expect(spanOf(finding("2026-08-22T03:16:00", "2026-08-22T03:16:00"))).toBe(
+      "03:16",
+    );
+  });
+
+  it("時刻が読めていないときは何も出さない", () => {
+    expect(spanOf(finding(null, null))).toBe("");
   });
 });

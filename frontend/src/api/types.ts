@@ -1429,6 +1429,23 @@ export interface LogReport {
   known_hosts: string[];
   unknown_hosts: string[];
   notes: string[];
+  /** 数えた先の判断。障害・設定・攻撃を、根拠と次の一手つきで出す */
+  findings: LogFinding[];
+}
+
+/** ログから読み取った、気になること1件。 */
+export interface LogFinding {
+  level: "high" | "medium" | "low";
+  /** 障害 / 設定 / 攻撃 */
+  kind: string;
+  title: string;
+  why: string;
+  what_now: string;
+  count: number;
+  hosts: string[];
+  first_at: string | null;
+  last_at: string | null;
+  evidence: string[];
 }
 
 /** 数えれば分かること。推測は入っていない。 */
