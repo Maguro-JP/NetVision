@@ -644,6 +644,10 @@ def render_svg(
         if _route_cross_count(again, others) < _route_cross_count(points, others):
             pending[index] = (again, pending[index][1])
 
+    # ポート名の置き場所も、線と同じくここで決めて画面へ渡す。
+    # 中身はこの後の描画で埋まる（同じ辞書を渡しておく）
+    names: dict[int, dict[str, dict]] = {}
+
     # 引き終えた形を、頼まれていれば渡す。画面はこれを描く。
     # 図を描く手順の途中から取り出すので、線の引き方が2つに分かれない
     if collect is not None:
@@ -665,6 +669,7 @@ def render_svg(
             }
             for points, edge in pending
         }
+        collect["labels"] = names
 
     # 同じ辺回りは箱の下を通る。キャンバスを箱だけだと線が凡例や外枠へ食い込む。
     wire_ys = [y for points, _ in pending for _, y in points]
@@ -699,6 +704,12 @@ def render_svg(
                         )
                         break
 
+    # 線の上に文字を置くと、白い縁取りで線が切れて見える。ポート名を置く前に、
+    # 引いた線そのものを「埋まっている場所」として覚えさせる。ポート名の候補は
+    # 線から少し離した位置も持っているので、線をよけた場所に落ちる
+    for route, wire in pending:
+        _keep_wire(placement, route, (wire.id, "source"), (wire.id, "target"))
+
     gapped = _cut_gaps([item[0] for item in pending])
     stroke = "#4a5364" if simple else "#8a94a6"
     for index, (points, edge) in enumerate(pending):
@@ -720,6 +731,8 @@ def render_svg(
         tw, th = size_at[edge.target]
         sx, sy = source[0] + sw / 2, source[1] + sh / 2
         tx, ty = target[0] + tw / 2, target[1] + th / 2
+        source_note: dict = {}
+        target_note: dict = {}
         parts.append(
             _port_label(
                 sx,
@@ -733,6 +746,8 @@ def render_svg(
                 half_w=sw / 2,
                 half_h=sh / 2,
                 prefer=label_side.get(edge.id),
+                key=(edge.id, "source"),
+                note=source_note,
             )
         )
         parts.append(
@@ -748,8 +763,16 @@ def render_svg(
                 half_w=tw / 2,
                 half_h=th / 2,
                 prefer=label_side.get(edge.id),
+                key=(edge.id, "target"),
+                note=target_note,
             )
         )
+        if collect is not None:
+            names[edge.id] = {
+                which: {**note, "x": note["x"] - dx, "y": note["y"] - dy}
+                for which, note in (("source", source_note), ("target", target_note))
+                if note
+            }
         for name in (edge.source_interface, edge.target_interface):
             if name:
                 used_media.add(portlabel.media_of(name))
@@ -795,6 +818,7 @@ def render_svg(
             + "/>"
         )
         parts.append(_peer_box(px, py, peer, simple))
+        _keep_wire(placement, points, ("peer", peer_index), None)
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
         label_to = points[1] if len(points) > 1 else points[0]
         parts.append(
@@ -808,6 +832,7 @@ def render_svg(
                 placement,
                 half_w=aw / 2,
                 half_h=ah / 2,
+                key=("peer", peer_index),
             )
         )
         if peer.local_interface:
@@ -848,7 +873,11 @@ def render_svg(
                 f'<text x="{x + 30:.0f}" y="{y + 22:.0f}" font-size="12" font-weight="700" '
                 f'fill="#4a5364">{_esc(_clip(node.hostname, 20))}</text>'
                 f'<text x="{x + 12:.0f}" y="{y + 38:.0f}" font-size="10" fill="#7a828f">'
-                f"{_esc(_clip(where, 26))}</text></g>"
+                f"{_esc(_clip(where, 26))}</text>"
+                # 実線の箱に付く種別と同じ位置に、これが何の箱かを書く。
+                # 破線というだけでは、名前の入った空の枠に見えてしまう
+                f'<text x="{x + nw - 12:.0f}" y="{y + 15:.0f}" font-size="9" fill="#9aa4b2" '
+                f'text-anchor="end">この図の外</text></g>'
             )
             continue
 
@@ -2093,8 +2122,47 @@ _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
 _SIDE_OFFSET = 11.0
 _LABEL_FONT = 10.0
+# 線のまわり、文字を置きたくない幅（線の太さ 1.6px ぶんと少しの余白）
+_WIRE_HALO = 2.5
 # 同じ機器同士を結ぶ線を、何 px ずつ離して描くか
 _PARALLEL_GAP = 11.0
+
+
+def _keep_wire(
+    placement: svglayout.Placement,
+    points: list[tuple[float, float]],
+    source_key: object | None,
+    target_key: object | None,
+) -> None:
+    """引いた線を、文字を置けない場所として覚えさせる。
+
+    両端の1区間だけは、その端のポート名の持ち物にしておく。ポート名は自分の
+    出口に寄り添って初めて「どちらの機器のどの口か」が分かるので、そこまで
+    避けさせると線から離れて意味が薄くなる。折れた先や他の線の上には置かない。
+    """
+    rects = _wire_rects(points)
+    for index, rect in enumerate(rects):
+        owners: set[object] = set()
+        if index == 0 and source_key is not None:
+            owners.add(source_key)
+        if index == len(rects) - 1 and target_key is not None:
+            owners.add(target_key)
+        placement.add(rect, frozenset(owners) if owners else None)
+
+
+def _wire_rects(points: list[tuple[float, float]]) -> list[svglayout.Rect]:
+    """折れ線を、区間ごとの細い矩形にする（文字の当たり判定用）。"""
+    rects = []
+    for (x1, y1), (x2, y2) in zip(points, points[1:], strict=False):
+        rects.append(
+            svglayout.Rect(
+                min(x1, x2) - _WIRE_HALO,
+                min(y1, y2) - _WIRE_HALO,
+                max(x1, x2) + _WIRE_HALO,
+                max(y1, y2) + _WIRE_HALO,
+            )
+        )
+    return rects
 
 
 def _port_label(
@@ -2110,6 +2178,8 @@ def _port_label(
     half_w: float | None = None,
     half_h: float | None = None,
     prefer: str | None = None,
+    key: object | None = None,
+    note: dict | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -2206,7 +2276,7 @@ def _port_label(
                 svglayout.text_rect(px, py - 3, text, _LABEL_FONT, text_anchor, text_angle)
                 for px, py in spots
             ]
-            index, fits = placement.choose(rects)
+            index, fits = placement.choose(rects, key)
             if fits:
                 return (text, index, rects[index]), first
             if first is None:
@@ -2223,7 +2293,7 @@ def _port_label(
             chosen, angle, anchor = flat, 0.0, flat_anchor
         elif flat_fallback is not None and fallback is not None:
             # どちらも置けないなら、はみ出しの少ない方を採る
-            if placement.penalty(flat_fallback[2]) < placement.penalty(fallback[2]):
+            if placement.penalty(flat_fallback[2], key) < placement.penalty(fallback[2], key):
                 fallback, angle, anchor = flat_fallback, 0.0, flat_anchor
 
     text, index, rect = chosen or fallback  # type: ignore[misc]
@@ -2235,12 +2305,30 @@ def _port_label(
             moved_x = px + ux * step * 6.0
             moved_y = py + uy * step * 6.0
             candidate = svglayout.text_rect(moved_x, moved_y - 3, text, _LABEL_FONT, anchor, angle)
-            if not placement.collides(candidate):
+            if not placement.collides(candidate, key):
                 px, py, rect = moved_x, moved_y, candidate
                 break
     # 出力時に座標を丸める分だけ余裕を持たせる。ぎりぎりで置くと、
-    # 丸めた結果わずかに重なることがある
-    placement.add(rect.grow(1.0))
+    # 丸めた結果わずかに重なることがある。横は名前どうしが並んだときに
+    # 一続きに見えない程度まで空ける
+    placement.add(
+        svglayout.Rect(rect.x1 - 5.0, rect.y1 - 1.0, rect.x2 + 5.0, rect.y2 + 1.0)
+    )
+
+    if note is not None:
+        # 画面にも同じ場所へ出させるための控え。線と同じく、置き場所を決めるのは
+        # ここ1か所にして、画面はその結果を描くだけにする
+        note.update(
+            {
+                "x": px,
+                "y": py - 3,
+                "text": text,
+                "full": name,
+                "anchor": anchor,
+                "angle": angle,
+                "color": color,
+            }
+        )
 
     transform = f' transform="rotate({angle:.1f} {px:.1f} {py:.1f})"' if angle else ""
     title = f"<title>{_esc(name)}</title>" if text != name else ""

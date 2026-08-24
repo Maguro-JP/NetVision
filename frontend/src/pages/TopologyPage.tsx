@@ -1035,6 +1035,9 @@ function toFlow(
       points: edge.points?.length ? edge.points : undefined,
       sourceSide: edge.source_side ?? undefined,
       targetSide: edge.target_side ?? undefined,
+      // ポート名の置き場所も、線と同じところで決めてある
+      sourceLabel: edge.source_label ?? undefined,
+      targetLabel: edge.target_label ?? undefined,
       obstacles: [...boxOf.entries()]
         .filter(([id]) => id !== edge.source && id !== edge.target)
         .map(([, box]) => box),

@@ -126,29 +126,43 @@ def segment_hits(rect: Rect, p1: tuple[float, float], p2: tuple[float, float]) -
 
 
 class Placement:
-    """置いたものを覚えておいて、次の当たり判定に使う。"""
+    """置いたものを覚えておいて、次の当たり判定に使う。
+
+    覚えるときに「誰のためのものか」を付けられる。ポート名は、自分が指している
+    線の出口とは重なって当たり前なので、そこだけは避ける相手から外したい。
+    その持ち主の印を持つ場所は、同じ印で問い合わせたときだけ空いているとみなす。
+    """
 
     def __init__(self, blocked: list[Rect] | None = None) -> None:
-        self._taken: list[Rect] = list(blocked or [])
+        self._taken: list[tuple[frozenset[object] | None, Rect]] = [
+            (None, rect) for rect in (blocked or [])
+        ]
 
-    def add(self, rect: Rect) -> None:
-        self._taken.append(rect)
+    def add(self, rect: Rect, owners: frozenset[object] | None = None) -> None:
+        self._taken.append((owners, rect))
 
-    def collides(self, rect: Rect) -> bool:
-        return any(rect.overlaps(taken) for taken in self._taken)
+    def _others(self, key: object | None) -> list[Rect]:
+        return [
+            rect
+            for owners, rect in self._taken
+            if owners is None or key is None or key not in owners
+        ]
 
-    def penalty(self, rect: Rect) -> float:
-        return sum(rect.overlap_area(taken) for taken in self._taken)
+    def collides(self, rect: Rect, key: object | None = None) -> bool:
+        return any(rect.overlaps(taken) for taken in self._others(key))
 
-    def choose(self, candidates: list[Rect]) -> tuple[int, bool]:
+    def penalty(self, rect: Rect, key: object | None = None) -> float:
+        return sum(rect.overlap_area(taken) for taken in self._others(key))
+
+    def choose(self, candidates: list[Rect], key: object | None = None) -> tuple[int, bool]:
         """候補を良い順に見て、最初に空いているものを返す。
 
         戻り値は (選んだ番号, 重ならずに置けたか)。
         どれも空いていなければ、重なりが最小のものを選ぶ。図が出せなくなる方が困る。
         """
         for index, rect in enumerate(candidates):
-            if not self.collides(rect):
+            if not self.collides(rect, key):
                 return index, True
 
-        best = min(range(len(candidates)), key=lambda i: self.penalty(candidates[i]))
+        best = min(range(len(candidates)), key=lambda i: self.penalty(candidates[i], key))
         return best, False

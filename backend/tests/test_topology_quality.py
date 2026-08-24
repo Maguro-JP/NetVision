@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from app.services import svglayout
 from app.services.topology import get_graph, load_diagram, scope_graph
 from app.services.topology_export import export_svg, render_svg
 from app.services.topology_quality import (
@@ -10,6 +11,7 @@ from app.services.topology_quality import (
     is_acceptable,
     score_diagram,
 )
+from tests import svgread
 from tests.test_topology_scope import build_center
 
 SAMPLES = Path(__file__).resolve().parents[2] / "docs" / "topology-samples"
@@ -45,6 +47,35 @@ def test_kansai_branch_diagram_is_readable(db_session):
         assert hostname in exported
     screen = load_diagram(db_session, "physical", site_id=ids["branch"])
     assert {n.hostname for n in screen.nodes} == {n.hostname for n in graph.nodes}
+
+
+def test_port_names_are_not_written_on_the_wires(db_session):
+    """ポート名が線の上に乗っていないこと。
+
+    文字は白で縁取ってあるので、線の上に置くとその線が切れて見える。
+    自分が出ている口の1区間だけは重なってよい（そこに寄り添って初めて
+    どの機器のどの口か分かる）ので、またぐ区間が2つ以上あるものを不合格とする。
+    """
+    import re
+
+    ids = build_center(db_session)
+    graph = scope_graph(get_graph(db_session), site_id=ids["branch"])
+    svg = render_svg(graph, title="関西支社 物理構成")
+
+    segments = []
+    for match in re.finditer(r'<polyline points="([^"]+)"', svg):
+        pts = [(float(p.split(",")[0]), float(p.split(",")[1])) for p in match.group(1).split(" ")]
+        for (x1, y1), (x2, y2) in zip(pts, pts[1:], strict=False):
+            segments.append(
+                svglayout.Rect(min(x1, x2), min(y1, y2), max(x1, x2), max(y1, y2)).grow(1.5)
+            )
+
+    on_wires = [
+        rect
+        for rect in svgread.rects(svg, "port-label")
+        if sum(1 for seg in segments if rect.overlaps(seg)) > 1
+    ]
+    assert not on_wires, f"線の上に乗っているポート名 {len(on_wires)} 個"
 
 
 def _has_diagonal(svg: str) -> bool:

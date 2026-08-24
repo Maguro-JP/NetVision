@@ -158,6 +158,9 @@ class TopologyEdgeView:
     target_side: str | None = None
     #: 図に引く折れ線。画面はこれをそのまま描く
     points: list[tuple[float, float]] = field(default_factory=list)
+    #: 両端のポート名を、どこにどう置くか。置き場所も書き出しの側で決める
+    source_label: dict | None = None
+    target_label: dict | None = None
 
 
 @dataclass

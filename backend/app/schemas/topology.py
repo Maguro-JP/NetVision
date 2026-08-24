@@ -203,6 +203,18 @@ class TopologyGroupRead(BaseModel):
     parent_id: int | None = None
 
 
+class PortLabelRead(BaseModel):
+    """ポート名1つの置き場所。座標は図の座標（機器の x, y と同じ）。"""
+
+    x: float
+    y: float
+    text: str
+    full: str
+    anchor: str
+    angle: float
+    color: str
+
+
 class TopologyEdgeRead(BaseModel):
     id: int
     source: int
@@ -222,6 +234,10 @@ class TopologyEdgeRead(BaseModel):
     target_side: str | None = None
     #: 図に引く折れ線。線の引き方は書き出し側の1か所で決めて、画面はこれを描く
     points: list[tuple[float, float]] = []
+    #: 両端のポート名の置き場所（x, y, text, full, anchor, angle, color）。
+    #: 文字の置き場所も書き出し側で決めるので、画面と書き出しでずれない
+    source_label: PortLabelRead | None = None
+    target_label: PortLabelRead | None = None
 
 
 class TopologyGraphRead(BaseModel):

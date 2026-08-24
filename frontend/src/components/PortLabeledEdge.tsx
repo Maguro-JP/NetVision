@@ -66,6 +66,23 @@ export interface PortEdgeData extends Record<string, unknown> {
   points?: [number, number][];
   sourceSide?: "top" | "bottom" | "left" | "right";
   targetSide?: "top" | "bottom" | "left" | "right";
+  /**
+   * サーバーが決めたポート名の置き場所。線と同じく、決めるのは1か所にする。
+   * 動かしている最中は線が仮なので、そのときだけ画面側の置き方に戻す。
+   */
+  sourceLabel?: PlacedLabel;
+  targetLabel?: PlacedLabel;
+}
+
+/** サーバーが決めたポート名1つ。座標は図の座標。 */
+export interface PlacedLabel {
+  x: number;
+  y: number;
+  text: string;
+  full: string;
+  anchor: string;
+  angle: number;
+  color: string;
 }
 
 /** ノード枠から、その先どのくらい離してラベルを置くか。 */
@@ -321,6 +338,9 @@ export default function PortLabeledEdge({
               {info.manualLabel}
             </div>
           )}
+          {fits && info.sourceLabel ? (
+            <PlacedPortLabel placed={info.sourceLabel} opacity={style?.opacity} />
+          ) : (
           <PortLabel
             name={info.sourceInterface ?? ""}
             flip={info.sourceFlip ?? false}
@@ -335,6 +355,10 @@ export default function PortLabeledEdge({
             opacity={style?.opacity}
             color={typeof style?.stroke === "string" ? style.stroke : undefined}
           />
+          )}
+          {fits && info.targetLabel ? (
+            <PlacedPortLabel placed={info.targetLabel} opacity={style?.opacity} />
+          ) : (
           <PortLabel
             name={info.targetInterface ?? ""}
             flip={info.targetFlip ?? false}
@@ -351,6 +375,7 @@ export default function PortLabeledEdge({
             opacity={style?.opacity}
             color={typeof style?.stroke === "string" ? style.stroke : undefined}
           />
+          )}
           {info.warning && (
             <div
               className="topo-edge-label warning"
@@ -385,6 +410,44 @@ function shortEnough(name: string, style: PortStyle, maxWidth?: number): string 
   // 10px の文字は1文字あたり約6px。左右の余白 4px ずつを差し引いて測る
   if (text.length * 6 <= maxWidth - 8) return text;
   return formatPort(name, "number");
+}
+
+/** SVG の baseline から、文字の入った箱の上端までのおよその距離（px）。 */
+const BASELINE_TO_TOP = 10.6;
+
+/**
+ * サーバーが決めた場所へポート名を置く。
+ *
+ * 置き場所を画面と書き出しの両方で決めると、同じ規則で書いてあっても
+ * 結果が食い違う。線と同じで、決めるのは1か所にして画面はそれを描く。
+ */
+function PlacedPortLabel({
+  placed,
+  opacity,
+}: {
+  placed: PlacedLabel;
+  opacity?: number | string;
+}) {
+  if (!placed.text) return null;
+  // SVG の text-anchor を、箱の寄せ方に読み替える。左右の余白（padding）も戻す
+  const shift =
+    placed.anchor === "middle" ? "-50%" : placed.anchor === "end" ? "-100%" : "0%";
+  const x = placed.anchor === "middle" ? placed.x : placed.anchor === "end" ? placed.x + 4 : placed.x - 4;
+  return (
+    <div
+      className="topo-edge-label port"
+      style={{
+        transform:
+          `translate(${shift}, 0) translate(${x}px, ${placed.y - BASELINE_TO_TOP}px)` +
+          (placed.angle ? ` rotate(${placed.angle}deg)` : ""),
+        color: placed.color,
+        ...(opacity ? { opacity } : {}),
+      }}
+      title={placed.full}
+    >
+      {placed.text}
+    </div>
+  );
 }
 
 function PortLabel({

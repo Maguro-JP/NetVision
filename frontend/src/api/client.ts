@@ -1,4 +1,5 @@
 import type {
+  PlacedPortName,
   LinkSide,
   AdditionPlan,
   LogReport,
@@ -571,6 +572,8 @@ export const api = {
         points: [number, number][];
         source_side: LinkSide;
         target_side: LinkSide;
+        source_label: PlacedPortName | null;
+        target_label: PlacedPortName | null;
       }[];
     }>("/topology/routes", { method: "POST", body: JSON.stringify(body) }),
   getTopologyStats: (layer: string) =>

@@ -1,36 +1,36 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1286" height="538" viewBox="0 0 1286 538" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">センター 物理構成</text>
-<text x="1238" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-25 03:04 JST 時点 / レイヤ: physical / 6台 8本</text>
+<text x="1238" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-25 08:30 JST 時点 / レイヤ: physical / 6台 8本</text>
 <polyline points="241,82 241,54 1045,54 1045,136" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="240.1" y="64.2" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
+<text class="port-label" x="264.0" y="86.9" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/0</title>ge0/0/0</text>
 <text class="port-label" x="1038.4" y="119.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
 <polyline points="258,149 620,149 620,174 648,174" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="270.3" y="154.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/1/0</title>ge0/1/0</text>
-<text class="port-label" x="638.0" y="182.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/1/0</title>ge0/1/0</text>
+<text class="port-label" x="638.0" y="193.5" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/1/0</title>ge0/1/0</text>
 <polyline points="1028,220 1004,220 1004,259" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <polyline points="1004,269 1004,274 887,274" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <polyline points="877,274 282,274 282,216 258,216" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="1015.9" y="225.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
-<text class="port-label" x="263.2" y="227.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="1002.2" y="290.0" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
+<text class="port-label" x="238.9" y="288.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
 <polyline points="1028,264 886,264 886,106 858,106" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="1020.5" y="274.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
-<text class="port-label" x="872.4" y="106.8" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
+<text class="port-label" x="1038.7" y="360.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="890.4" y="134.4" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/1</title>ge0/0/1</text>
 <polyline points="1028,300 887,300" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <polyline points="877,300 282,300 282,234 258,234" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="1015.9" y="305.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
-<text class="port-label" x="261.3" y="245.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<text class="port-label" x="228.6" y="303.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
 <polyline points="1028,344 882,344 882,305" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <polyline points="882,295 882,174 858,174" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="1020.5" y="354.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
-<text class="port-label" x="868.0" y="182.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
+<text class="port-label" x="1038.7" y="440.2" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="868.0" y="94.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/2</title>ge0/0/2</text>
 <polyline points="1028,380 282,380 282,252 258,252" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <text class="port-label" x="1015.9" y="385.4" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/0</text>
-<text class="port-label" x="246.4" y="281.7" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
+<text class="port-label" x="220.2" y="317.0" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
 <polyline points="1028,424 882,424 882,385" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
 <polyline points="882,375 882,243 858,243" fill="none" stroke="#8a94a6" stroke-width="1.6" stroke-dasharray="6 4"/>
-<text class="port-label" x="1020.5" y="434.1" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
-<text class="port-label" x="848.4" y="273.1" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
+<text class="port-label" x="1025.1" y="455.6" font-size="10" fill="#2f6fb5" text-anchor="end" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/0/2</text>
+<text class="port-label" x="836.3" y="291.5" font-size="10" fill="#2f6fb5" text-anchor="start" paint-order="stroke" stroke="#ffffff" stroke-width="3"><title>ge-0/0/3</title>ge0/0/3</text>
 <g><rect x="48" y="82" width="210" height="185" rx="7" fill="#f7f9fc" stroke="#7a7a7a" stroke-width="2"/><rect x="48" y="82" width="5" height="185" rx="2" fill="#7a7a7a"/>
 <text x="246" y="100" font-size="9" font-weight="700" fill="#8a929e" text-anchor="end">ルーター</text>
 <text x="60" y="120" font-size="12" fill="#4a5364">◇</text>
@@ -47,10 +47,10 @@
 <text x="662" y="162" font-size="9"><tspan fill="#2f6fb5">ge</tspan></text>
 <text x="846" y="246" font-size="10" font-weight="600" fill="#7a7a7a" text-anchor="end">稼働中 ・情報未登録</text>
 </g>
-<g><rect x="1028" y="136" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="158" font-size="12" fill="#4a5364">◇</text><text x="1058" y="158" font-size="12" font-weight="700" fill="#4a5364">edge-rt-01</text><text x="1040" y="174" font-size="10" fill="#7a828f">本社データセンター</text></g>
-<g><rect x="1028" y="216" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="238" font-size="12" fill="#4a5364">◇</text><text x="1058" y="238" font-size="12" font-weight="700" fill="#4a5364">hkd-br-rt-01</text><text x="1040" y="254" font-size="10" fill="#7a828f">hkd支社</text></g>
-<g><rect x="1028" y="296" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="318" font-size="12" fill="#4a5364">◇</text><text x="1058" y="318" font-size="12" font-weight="700" fill="#4a5364">thk-br-rt-01</text><text x="1040" y="334" font-size="10" fill="#7a828f">thk支社</text></g>
-<g><rect x="1028" y="376" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="398" font-size="12" fill="#4a5364">◇</text><text x="1058" y="398" font-size="12" font-weight="700" fill="#4a5364">knt-br-rt-01</text><text x="1040" y="414" font-size="10" fill="#7a828f">knt支社</text></g>
+<g><rect x="1028" y="136" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="158" font-size="12" fill="#4a5364">◇</text><text x="1058" y="158" font-size="12" font-weight="700" fill="#4a5364">edge-rt-01</text><text x="1040" y="174" font-size="10" fill="#7a828f">本社データセンター</text><text x="1226" y="150" font-size="9" fill="#9aa4b2" text-anchor="end">この図の外</text></g>
+<g><rect x="1028" y="216" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="238" font-size="12" fill="#4a5364">◇</text><text x="1058" y="238" font-size="12" font-weight="700" fill="#4a5364">hkd-br-rt-01</text><text x="1040" y="254" font-size="10" fill="#7a828f">hkd支社</text><text x="1226" y="230" font-size="9" fill="#9aa4b2" text-anchor="end">この図の外</text></g>
+<g><rect x="1028" y="296" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="318" font-size="12" fill="#4a5364">◇</text><text x="1058" y="318" font-size="12" font-weight="700" fill="#4a5364">thk-br-rt-01</text><text x="1040" y="334" font-size="10" fill="#7a828f">thk支社</text><text x="1226" y="310" font-size="9" fill="#9aa4b2" text-anchor="end">この図の外</text></g>
+<g><rect x="1028" y="376" width="210" height="53" rx="7" fill="none" stroke="#9aa4b2" stroke-width="1.4" stroke-dasharray="5 3"/><text x="1040" y="398" font-size="12" fill="#4a5364">◇</text><text x="1058" y="398" font-size="12" font-weight="700" fill="#4a5364">knt-br-rt-01</text><text x="1040" y="414" font-size="10" fill="#7a828f">knt支社</text><text x="1226" y="390" font-size="9" fill="#9aa4b2" text-anchor="end">この図の外</text></g>
 <line x1="48" y1="474" x2="1238" y2="474" stroke="#dfe3ea" stroke-width="1"/>
 <text x="48" y="490" font-size="10" fill="#6b6b6b">保守・EoL の状態</text>
 <rect x="144" y="482" width="10" height="10" rx="2" fill="#c0392b"/>

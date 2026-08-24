@@ -175,6 +175,15 @@ export default function DeviceNode({
         </Fragment>
       ))}
 
+      {/* 対向の箱は、破線というだけでは名前の入った空の枠に見える。
+          実線の箱の種別と同じ位置に、これが何の箱かを書く（書き出しと同じ） */}
+      {data.outside && (
+        <div className="topo-node-top">
+          <span className="topo-code" />
+          <span className="topo-type outside-tag">この図の外</span>
+        </div>
+      )}
+
       {/* 上段。左に管理ID、右に種別。名前の行を1行まるごと使えるようにする */}
       {!data.outside && (data.code || data.typeLabel) && (
         <div className="topo-node-top">

@@ -745,6 +745,12 @@ button:disabled {
 .topo-type {
   font-weight: 700;
 }
+/* 対向の箱の「この図の外」。種別と同じ位置に出すが、主役ではないので細く薄く */
+.topo-type.outside-tag {
+  font-weight: 400;
+  font-size: 9px;
+  color: #9aa4b2;
+}
 
 .topo-node-head {
   display: flex;

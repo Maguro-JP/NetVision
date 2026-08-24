@@ -16,6 +16,7 @@ from app.schemas.topology import (
     LinkRead,
     LinkUpdate,
     NodePosition,
+    PortLabelRead,
     RebuildResult,
     SavePositions,
     TopologyGraphRead,
@@ -100,6 +101,9 @@ def get_topology(
             edge.points = wire["points"]
             edge.source_side = wire["source_side"]
             edge.target_side = wire["target_side"]
+        placed = drawn["labels"].get(edge.id) or {}
+        edge.source_label = placed.get("source")
+        edge.target_label = placed.get("target")
 
     if auto_scoped:
         graph.auto_scoped = True
@@ -296,6 +300,9 @@ class WireOut(BaseModel):
     points: list[tuple[float, float]]
     source_side: str
     target_side: str
+    #: 両端のポート名の置き場所。線と同じところで決めて画面へ渡す
+    source_label: PortLabelRead | None = None
+    target_label: PortLabelRead | None = None
 
 
 class BoxOut(BaseModel):
@@ -335,6 +342,8 @@ def compute_routes(body: RoutesIn, db: DbSession) -> RoutesOut:
                 points=[(x, y) for x, y in wire["points"]],
                 source_side=wire["source_side"],
                 target_side=wire["target_side"],
+                source_label=(drawn["labels"].get(edge_id) or {}).get("source"),
+                target_label=(drawn["labels"].get(edge_id) or {}).get("target"),
             )
             for edge_id, wire in drawn["wires"].items()
         ],

@@ -356,6 +356,20 @@ export interface TopologyEdge {
   target_side: LinkSide | null;
   /** 図に引く折れ線。線の引き方は1か所（書き出し側）で決めて、画面はこれを描く */
   points: [number, number][];
+  /** 両端のポート名の置き場所。文字の置き方も同じ1か所で決める */
+  source_label: PlacedPortName | null;
+  target_label: PlacedPortName | null;
+}
+
+/** サーバーが決めたポート名1つの置き場所（図の座標）。 */
+export interface PlacedPortName {
+  x: number;
+  y: number;
+  text: string;
+  full: string;
+  anchor: string;
+  angle: number;
+  color: string;
 }
 
 export type LinkSide = "top" | "bottom" | "left" | "right";
