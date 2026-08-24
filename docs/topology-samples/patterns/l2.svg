@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="306" height="488" viewBox="0 0 306 488" font-family="'Yu Gothic', 'Hiragino Kaku Gothic ProN', Meiryo, 'Noto Sans JP', sans-serif">
 <rect width="100%" height="100%" fill="#ffffff"/>
 <text x="48" y="30" font-size="18" font-weight="700" fill="#1a1a1a">L2 構成</text>
-<text x="258" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-24 06:32 JST 時点 / 2台 1本</text>
+<text x="258" y="30" font-size="11" fill="#6b6b6b" text-anchor="end">2026-08-25 03:04 JST 時点 / 2台 1本</text>
 <polyline points="153,160 153,362" fill="none" stroke="#4a5364" stroke-width="1.6"/>
 <text class="port-label" x="142.0" y="171.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi1/0/1</text>
 <text class="port-label" x="164.0" y="345.0" font-size="10" fill="#2f6fb5" text-anchor="middle" paint-order="stroke" stroke="#ffffff" stroke-width="3">Gi0/1</text>

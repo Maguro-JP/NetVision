@@ -214,8 +214,12 @@ def render_svg(
     base_h = NODE_H if simple else _DETAIL_HEIGHT
 
     def box_at(node, height: float, width: float) -> tuple[float, float, float, float]:
-        shift_x = (width - NODE_W) / 2
-        shift_y = (height - NODE_H) / 2
+        # 広げた分だけ中心を保つように上と左へずらす。縮んだ箱（対向の
+        # 簡易表示）はずらさない。画面は基準より小さい箱を上に寄せたまま
+        # 描くので、ここで中心をそろえると、同じ台帳から出した2つの図で
+        # 箱が 12px 上下にずれる（実際にずれていた）
+        shift_x = max(0.0, (width - NODE_W) / 2)
+        shift_y = max(0.0, (height - NODE_H) / 2)
         return (node.x - shift_x, node.y - shift_y, width, height)
 
     provisional = {n.device_id: box_at(n, base_h, NODE_W) for n in nodes}
