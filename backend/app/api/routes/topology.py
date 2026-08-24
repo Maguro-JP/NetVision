@@ -432,17 +432,23 @@ def export_workbook(
     layer: str = Query(default=service.DEFAULT_LAYER),
     site_id: int | None = Query(default=None, description="この拠点に絞って出す"),
     scope: str = Query(default=service.SCOPE_PEERS),
+    view: str | None = Query(
+        default=None,
+        description="画面が描いた図の札（/topology/views で預けたもの）",
+    ),
 ) -> Response:
     """構成図・結線表・ポート一覧を1つの Excel にまとめて出す。
 
-    構成図はセルの罫線で描いてあるので、手元で直せる。行を足す・機器を
-    1台書き足す・注記を入れる、が現場でそのままできる。
+    構成図は SVG と同じ図を、Excel の図形として置く。掴んで動かせるし、色も
+    変えられる。線1本まで画面と同じものが入る。
 
     拠点が多い環境では全体を1枚に描いても読めないので、拠点で絞って出す前提。
     """
     from app.services import topology_excel
 
-    data = topology_excel.to_xlsx(db, layer, site_id=site_id, scope=scope)
+    data = topology_excel.to_xlsx(
+        db, layer, site_id=site_id, scope=scope, view=topology_view.take(view)
+    )
     name = f"topology-{layer}{f'-site{site_id}' if site_id else ''}.xlsx"
     return Response(
         content=data,

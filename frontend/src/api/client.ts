@@ -715,7 +715,8 @@ export const api = {
   // 図・結線表・ポート一覧を1つにまとめた Excel。配るのはこれ1つで済む
   workbookUrl: (
     layer: string,
-    options: { site_id?: number; scope?: string } = {},
+    /** view は、図の画面が引いた線の札。渡すと画面と同じ図が入る */
+    options: { site_id?: number; scope?: string; view?: string } = {},
   ) => `${BASE}/topology/workbook.xlsx${query({ layer, ...options })}`,
   designConfig: (deviceId: number) =>
     request<{
