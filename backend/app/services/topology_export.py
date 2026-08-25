@@ -98,6 +98,9 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
+#: 上下へ逃がすとき、線の端からどこまで離れてよいか。これを超えると
+#: 迂回ではなく大回りで、図の端を横断する線が枠のように見えてしまう
+_DETOUR_LIMIT = 320.0
 # 枠の内側に取る余白と、名前の行の高さ。画面（topologyGroups.ts の
 # GROUP_PAD / GROUP_HEAD）と同じ値にする。違うと同じ配置なのに枠だけずれ、
 # 画面で確かめた見た目のまま配れない
@@ -1237,10 +1240,14 @@ def _orthogonal_bus(
     if source_face == "bottom" and target_face == "bottom":
         bus_y = max(sy, ty) + inset + rank * (gap if steps else 0.0)
         bus_y = _clear_bus_y(bus_y, sx, tx, "below", obstacles)
+        if bus_y - max(sy, ty) > _DETOUR_LIMIT:
+            return None  # 図の端まで回る通り道。線ではなく枠に見える
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "top":
         bus_y = min(sy, ty) - inset - rank * (gap if steps else 0.0)
         bus_y = _clear_bus_y(bus_y, sx, tx, "above", obstacles)
+        if min(sy, ty) - bus_y > _DETOUR_LIMIT:
+            return None
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -1651,6 +1658,12 @@ def _detour_keep_faces(
             channel = max(channel, y2 + pad)
         else:
             channel = min(channel, y1 - pad)
+    # 端から遠く離れた通り道は、迂回ではなく大回りになる。図の端まで上がって
+    # 横断し、そこだけ見ると図を囲む枠のように見える。そうなるくらいなら
+    # 交差した方がまし（交差は目で追えるが、大回りは図の形を壊す）
+    reach = channel - max(sy, ty) if side == "below" else min(sy, ty) - channel
+    if reach > _DETOUR_LIMIT:
+        return None
     return [
         (sx, sy),
         (ox, sy),
@@ -1730,9 +1743,15 @@ def _wire_path(
                 _detour_keep_faces(start, end, src_side, dst_side, pierce_boxes, side),
             )
 
+    # 端から端への最短（縦横で引いたときの長さ）。遠回りの度合いはこれで測る
+    direct = max(abs(end[0] - start[0]) + abs(end[1] - start[1]), 1.0)
+
     def score(item: tuple[str, str, list[tuple[float, float]]]) -> tuple:
         face_s, face_t, route = item
         bends = max(0, len(route) - 2)
+        # 最短の何倍まわったか。倍以上まわる経路は、交差を避けるためであっても
+        # 採らない。図の端まで大回りした線は、線ではなく枠のように見えてしまう
+        detour = _length(route) / direct
         return (
             _route_pierce_count(route, pierce_boxes),
             _hugs_box_count(route, pierce_boxes),
@@ -1740,6 +1759,7 @@ def _wire_path(
             0 if _arrives_from_outside(route, face_t) else 1,
             # 折れは Visio の定石どおり2つまで。ここを崩してまで交差は避けない
             0 if bends <= MAX_BENDS else 1,
+            0 if detour <= 1.6 else 1 if detour <= 2.5 else 2,
             # そのうえで、先に引いた線と交わらない経路を採る。
             # 交差した線は、どちらがどこへ行っているのか目で追えなくなる
             _route_cross_count(route, drawn),
@@ -2311,9 +2331,7 @@ def _port_label(
     # 出力時に座標を丸める分だけ余裕を持たせる。ぎりぎりで置くと、
     # 丸めた結果わずかに重なることがある。横は名前どうしが並んだときに
     # 一続きに見えない程度まで空ける
-    placement.add(
-        svglayout.Rect(rect.x1 - 5.0, rect.y1 - 1.0, rect.x2 + 5.0, rect.y2 + 1.0)
-    )
+    placement.add(svglayout.Rect(rect.x1 - 5.0, rect.y1 - 1.0, rect.x2 + 5.0, rect.y2 + 1.0))
 
     if note is not None:
         # 画面にも同じ場所へ出させるための控え。線と同じく、置き場所を決めるのは
