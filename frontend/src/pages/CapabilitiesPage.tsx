@@ -40,7 +40,7 @@ export default function CapabilitiesPage() {
 
   return (
     <>
-      <h1>対応している機能</h1>
+      <h1>対応機能</h1>
       <p className="subtitle">
         ネットワークの機能ごとに、どこまで扱えるかを並べています。できないことも
         同じ表に書いてあります。機種ごとの差は、対応した時点で別に足します。

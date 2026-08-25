@@ -43,7 +43,7 @@ export default function ScenariosPage() {
 
   return (
     <>
-      <h1>将来構成シナリオ</h1>
+      <h1>構成シナリオ</h1>
       <p className="subtitle">
         「この機器を入れ替えたらどうなるか」を、実際の台帳に触れずに試算します。
         台数・年間保守費・サポート切れ台数を現状と並べて比較できます。

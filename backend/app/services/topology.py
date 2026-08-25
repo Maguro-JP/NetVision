@@ -130,6 +130,9 @@ class TopologyNodeView:
     label: str | None = None
     # 人が決めた管理ID
     code: str | None = None
+    #: 図に描く箱の大きさ。線と同じところで決めて、画面へ渡す
+    width: float | None = None
+    height: float | None = None
 
 
 @dataclass
@@ -153,6 +156,11 @@ class TopologyEdgeView:
     # 人が指定した引き出し位置。空なら図の側で位置関係から決める
     source_side: str | None = None
     target_side: str | None = None
+    #: 図に引く折れ線。画面はこれをそのまま描く
+    points: list[tuple[float, float]] = field(default_factory=list)
+    #: 両端のポート名を、どこにどう置くか。置き場所も書き出しの側で決める
+    source_label: dict | None = None
+    target_label: dict | None = None
 
 
 @dataclass

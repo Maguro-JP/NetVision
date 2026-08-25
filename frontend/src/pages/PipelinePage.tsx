@@ -45,7 +45,7 @@ export default function PipelinePage() {
 
   return (
     <>
-      <h1>頼んで、通り道を見る</h1>
+      <h1>処理の流れ</h1>
       <p className="subtitle">
         やりたいことを書くと、AI とロジックが交互に受け持って下書きを作ります。
         値を決めるのはロジックだけで、AI
@@ -95,7 +95,7 @@ export default function PipelinePage() {
       {result && (
         <>
           <section>
-            <h2>通り道</h2>
+            <h2>処理の経路</h2>
             <ol>
               {result.stages.map((stage, index) => (
                 <li key={`${stage.name}-${index}`}>
@@ -107,7 +107,7 @@ export default function PipelinePage() {
 
           {result.explanation && (
             <section>
-              <h2>何をしたか</h2>
+              <h2>各段のはたらき</h2>
               <p style={{ whiteSpace: "pre-wrap" }}>{result.explanation}</p>
             </section>
           )}

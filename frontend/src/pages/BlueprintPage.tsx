@@ -13,7 +13,7 @@ import type { Blueprint } from "../api/types";
  * 決まっていないのは「間に何を挟むか」で、そこは条件から機械的に決まる。
  *
  * 案は図で見ないと判断できないので、そのままテスト拠点として台帳に置いて、
- * いつものトポロジー図で見られるようにしてある。本物と混ざらないよう
+ * いつもの構成図で見られるようにしてある。本物と混ざらないよう
  * 拠点名に印が付き、まとめて消せる。
  */
 
@@ -94,7 +94,7 @@ export default function BlueprintPage() {
 
   return (
     <>
-      <h1>構成を起こす</h1>
+      <h1>構成の下書き</h1>
       <p className="subtitle">
         つなぎたい2つと条件を選ぶと、間に挟む機器・結線・セグメント・Config
         を起こします。なぜその機器を置いたのかも一緒に出します。
@@ -172,7 +172,7 @@ export default function BlueprintPage() {
       {placed && (
         <div className="card" style={{ marginTop: 12 }}>
           「{placed}」として台帳に置きました。
-          <Link to="/topology"> トポロジー図で見る →</Link>
+          <Link to="/topology"> 構成図で見る →</Link>
           <div className="muted" style={{ marginTop: 4 }}>
             本物の拠点と混ざらないよう、名前に印が付いています。下の一覧からまとめて消せます。
           </div>

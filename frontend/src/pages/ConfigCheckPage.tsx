@@ -19,7 +19,7 @@ import { LEVEL_LABEL, sortFindings } from "../components/L3Panel";
 
 /** どうやって答えたかの呼び名。答えの確からしさが変わるので、必ず出す。 */
 export const SOURCE_LABEL: Record<string, string> = {
-  glossary: "言葉の説明から",
+  glossary: "用語集から",
   model: "手元のモデルが",
   prompt: "答えられません",
 };
@@ -97,7 +97,7 @@ export default function ConfigCheckPage() {
 
   return (
     <>
-      <h1>Config を見てもらう</h1>
+      <h1>Config の点検</h1>
       <p className="subtitle">
         ファイルを放り込むか、貼り付けてください。読み取って、気になるところを出します。
         台帳には何も書きません。取り込みたいときは
@@ -151,7 +151,7 @@ export default function ConfigCheckPage() {
         <div className="error">{(drop.error as Error).message}</div>
       )}
 
-      <h2>貼り付けて見る</h2>
+      <h2>貼り付けて点検する</h2>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -165,7 +165,7 @@ export default function ConfigCheckPage() {
           disabled={!text.trim() || paste.isPending}
           onClick={() => paste.mutate()}
         >
-          {paste.isPending ? "読んでいます…" : "貼り付けたものを見る"}
+          {paste.isPending ? "点検しています…" : "点検する"}
         </button>
         {results.length > 0 && (
           <button onClick={() => setResults([])}>結果を消す</button>
@@ -212,7 +212,7 @@ export default function ConfigCheckPage() {
 
       {text.trim() && <ConfigEditor body={text} />}
 
-      <h2>聞いてみる</h2>
+      <h2>結果について聞く</h2>
       <p className="muted" style={{ marginTop: -6 }}>
         出した結果について聞き返せます。言葉の意味なら、その場で答えます。それ以外は
         手元のモデルが答えます。モデルが無いときは、会社で認められている AI
@@ -254,7 +254,7 @@ export default function ConfigCheckPage() {
       )}
 
       <p className="muted" style={{ marginTop: 24 }}>
-        言葉が分からないときは<Link to="/glossary"> 言葉の説明</Link>
+        言葉が分からないときは<Link to="/glossary"> 用語集</Link>
         を見てください。
       </p>
     </>

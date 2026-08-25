@@ -1,4 +1,6 @@
 import type {
+  PlacedPortName,
+  LinkSide,
   AdditionPlan,
   LogReport,
   LinkReport,
@@ -532,7 +534,13 @@ export const api = {
     includeRetired = false,
     orientation = "vertical",
     // 拠点が多い環境では全体図は使わない。絞った分＋対向だけを取る
-    filter: { site_id?: number; q?: string; scope?: string } = {},
+    filter: {
+      site_id?: number;
+      q?: string;
+      scope?: string;
+      /** 機器名と結線だけの図。箱が小さくなるので、線の引き方も変わる */
+      simple?: string;
+    } = {},
   ) =>
     request<TopologyGraph>(
       `/topology${query({
@@ -542,6 +550,32 @@ export const api = {
         ...filter,
       })}`,
     ),
+  /**
+   * いま画面にある配置で、線を引き直してもらう。
+   *
+   * 線を引く決まりはサーバー側の1か所に置いてある。画面が自分で引くと、
+   * 同じ台帳から違う図が2つ出るため。動かしている最中の位置でも同じ形が
+   * 要るので、動かし終わったところで頼む。
+   */
+  topologyRoutes: (body: {
+    layer: string;
+    site_id?: number;
+    q?: string;
+    scope?: string;
+    simple?: boolean;
+    positions: { device_id: number; x: number; y: number }[];
+  }) =>
+    request<{
+      boxes: { device_id: number; width: number; height: number }[];
+      wires: {
+        edge_id: number;
+        points: [number, number][];
+        source_side: LinkSide;
+        target_side: LinkSide;
+        source_label: PlacedPortName | null;
+        target_label: PlacedPortName | null;
+      }[];
+    }>("/topology/routes", { method: "POST", body: JSON.stringify(body) }),
   getTopologyStats: (layer: string) =>
     request<TopologyStats>(`/topology/stats${query({ layer })}`),
   /** 論理構成の材料。相手が特定できなかったトンネルも件数で返す。 */
@@ -658,6 +692,33 @@ export const api = {
       { method: "POST" },
     ),
 
+  /**
+   * いま画面に出ている図の形を預ける。
+   *
+   * 書き出しが自分でもう一度線を引くと、画面で確かめたものと違う図が出る。
+   * 引いた線をそのまま渡して、書き出しはそれを描くだけにする。
+   * 返ってきた札を書き出しの URL に付けると、その形で出てくる。
+   */
+  keepTopologyView: (body: {
+    boxes: {
+      device_id: number;
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    }[];
+    wires: {
+      edge_id: number;
+      points: [number, number][];
+      source_side: string;
+      target_side: string;
+    }[];
+  }) =>
+    request<{ token: string }>(`/topology/views`, {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
   // 構成図を SVG で書き出す（設計書や報告書に貼るため）
   topologyExportUrl: (
     layer: string,
@@ -673,6 +734,8 @@ export const api = {
       port_style?: string;
       /** ポート名を線に沿わせて回転する */
       along_line?: string;
+      /** 画面が描いた図の札。渡すと、その線と箱をそのまま描く */
+      view?: string;
     } = {},
   ) => `${BASE}/topology/export.svg${query({ layer, ...options })}`,
   /** 結線表。図が要らない場面（作業指示・検収）は表の方が使いやすい */
@@ -686,7 +749,8 @@ export const api = {
   // 図・結線表・ポート一覧を1つにまとめた Excel。配るのはこれ1つで済む
   workbookUrl: (
     layer: string,
-    options: { site_id?: number; scope?: string } = {},
+    /** view は、図の画面が引いた線の札。渡すと画面と同じ図が入る */
+    options: { site_id?: number; scope?: string; view?: string } = {},
   ) => `${BASE}/topology/workbook.xlsx${query({ layer, ...options })}`,
   designConfig: (deviceId: number) =>
     request<{

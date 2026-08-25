@@ -59,7 +59,7 @@ describe("1行の要約", () => {
 describe("どうやって答えたか", () => {
   it("答えの出どころを、必ず言葉で出す", async () => {
     const { SOURCE_LABEL } = await import("./ConfigCheckPage");
-    expect(SOURCE_LABEL.glossary).toBe("言葉の説明から");
+    expect(SOURCE_LABEL.glossary).toBe("用語集から");
     expect(SOURCE_LABEL.model).toBe("手元のモデルが");
     expect(SOURCE_LABEL.prompt).toBe("答えられません");
   });

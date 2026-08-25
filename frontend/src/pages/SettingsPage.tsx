@@ -66,9 +66,9 @@ export default function SettingsPage() {
       <div className="card settings-card">
         <h2>機器を開くとき</h2>
         <p className="muted">
-          機器一覧やトポロジー図から機器情報を開いたときの動きです。図や絞り込みを
+          機器一覧や構成図から機器情報を開いたときの動きです。図や絞り込みを
           残したまま見たいときは、別のウィンドウかタブを選んでください。
-          トポロジー図では、機器をダブルクリックしても同じように開きます。
+          構成図では、機器をダブルクリックしても同じように開きます。
         </p>
         <div className="settings-choices">
           {(Object.keys(OPEN_TARGET_LABEL) as OpenTarget[]).map((value) => (
@@ -284,7 +284,7 @@ export default function SettingsPage() {
             環境変数で決めます（README に一覧があります）。
           </li>
           <li>
-            トポロジー図の見せ方（シンプル表示・ポート名・並び）は、図の画面で選んだものが
+            構成図の見せ方（シンプル表示・ポート名・並び）は、図の画面で選んだものが
             そのまま次回に残ります。
           </li>
         </ul>

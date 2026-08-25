@@ -66,7 +66,7 @@ export default function SyslogPage() {
 
   return (
     <>
-      <h1>ログを読む</h1>
+      <h1>ログ解析</h1>
       <p className="subtitle">
         機器が出したログを放り込むか貼り付けてください。同じことが何度起きたか、どの機器で
         起きたか、いつからいつまでかを出します。台帳には何も書きません。
@@ -120,7 +120,7 @@ export default function SyslogPage() {
         <div className="error">{(drop.error as Error).message}</div>
       )}
 
-      <h2>貼り付けて読む</h2>
+      <h2>貼り付けて解析する</h2>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
@@ -145,7 +145,7 @@ export default function SyslogPage() {
 
       {report && (
         <>
-          <h2>読んだ結果</h2>
+          <h2>解析の結果</h2>
           <div className="cards">
             <div className="card">
               <div className="label">読めた行</div>
@@ -279,7 +279,7 @@ export default function SyslogPage() {
           )}
 
           <p className="muted">
-            言葉が分からないときは<Link to="/glossary"> 言葉の説明</Link>
+            言葉が分からないときは<Link to="/glossary"> 用語集</Link>
             を見てください。
           </p>
         </>

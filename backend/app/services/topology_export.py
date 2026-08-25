@@ -22,7 +22,7 @@ from xml.sax.saxutils import escape
 
 from sqlalchemy.orm import Session
 
-from app.services import localtime, portlabel, svglayout
+from app.services import localtime, portlabel, svglayout, topology_view
 from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import (
@@ -98,6 +98,9 @@ _ROW_BODY = 16.0
 _ROW_KINDS = 15.0
 # ポート名が縦に積まれても重ならない間隔（画面の LABEL_PITCH と同じ）
 _LABEL_PITCH = 18.0
+#: 上下へ逃がすとき、線の端からどこまで離れてよいか。これを超えると
+#: 迂回ではなく大回りで、図の端を横断する線が枠のように見えてしまう
+_DETOUR_LIMIT = 320.0
 # 枠の内側に取る余白と、名前の行の高さ。画面（topologyGroups.ts の
 # GROUP_PAD / GROUP_HEAD）と同じ値にする。違うと同じ配置なのに枠だけずれ、
 # 画面で確かめた見た目のまま配れない
@@ -148,6 +151,8 @@ def render_svg(
     port_style: str = "short",
     along_line: bool = False,
     show_peers: bool = True,
+    view: topology_view.ViewGeometry | None = None,
+    collect: dict | None = None,
 ) -> str:
     """トポロジーを SVG にする。位置は渡されたグラフのまま使う。
 
@@ -214,8 +219,12 @@ def render_svg(
     base_h = NODE_H if simple else _DETAIL_HEIGHT
 
     def box_at(node, height: float, width: float) -> tuple[float, float, float, float]:
-        shift_x = (width - NODE_W) / 2
-        shift_y = (height - NODE_H) / 2
+        # 広げた分だけ中心を保つように上と左へずらす。縮んだ箱（対向の
+        # 簡易表示）はずらさない。画面は基準より小さい箱を上に寄せたまま
+        # 描くので、ここで中心をそろえると、同じ台帳から出した2つの図で
+        # 箱が 12px 上下にずれる（実際にずれていた）
+        shift_x = max(0.0, (width - NODE_W) / 2)
+        shift_y = max(0.0, (height - NODE_H) / 2)
         return (node.x - shift_x, node.y - shift_y, width, height)
 
     provisional = {n.device_id: box_at(n, base_h, NODE_W) for n in nodes}
@@ -263,6 +272,12 @@ def render_svg(
         return box_at(node, h, w)
 
     sized = {n.device_id: display_box(n) for n in nodes}
+    # 画面が描いた箱があれば、そのまま使う。ここで作り直すと、同じ台帳でも
+    # 画面と書き出しで箱の大きさが変わり、線の付き方まで変わってしまう
+    if view is not None:
+        for device_id, box in view.boxes.items():
+            if device_id in sized:
+                sized[device_id] = (box.x, box.y, box.width, box.height)
 
     min_x = min([sized[n.device_id][0] for n in nodes] + [p.x for p in peers])
     min_y = min([sized[n.device_id][1] for n in nodes] + [p.y for p in peers])
@@ -466,6 +481,9 @@ def render_svg(
             src_side=edge.source_side,
             dst_side=edge.target_side,
         )
+        drawn = view.wires.get(edge.id) if view is not None else None
+        if drawn is not None:
+            src_side, dst_side = drawn.source_side, drawn.target_side
         sides[edge.id] = (src_side, dst_side)
         src_along = dst_box[1] if src_side in ("left", "right") else dst_box[0]
         dst_along = src_box[1] if dst_side in ("left", "right") else src_box[0]
@@ -577,6 +595,12 @@ def render_svg(
             for device_id, rect in boxes.items()
             if device_id not in (edge.source, edge.target)
         ] + [rect.grow(2.0) for rect in peer_boxes]
+        drawn = view.wires.get(edge.id) if view is not None else None
+        if drawn is not None:
+            # 画面が引いた線。原点を図の左上へそろえるだけで、形は変えない
+            pending.append(([(x + dx, y + dy) for x, y in drawn.points], edge))
+            drawn_with.append({})
+            continue
         points = _wire_path(
             src_box,
             dst_box,
@@ -617,9 +641,38 @@ def render_svg(
         if _route_cross_count(points, others) == 0:
             continue
         how = drawn_with[index]
+        if not how:
+            continue  # 画面が引いた線は引き直さない。画面と違う図になる
         again = _wire_path(*how["args"], src_t=how["src_t"], dst_t=how["dst_t"], avoid=others)
         if _route_cross_count(again, others) < _route_cross_count(points, others):
             pending[index] = (again, pending[index][1])
+
+    # ポート名の置き場所も、線と同じくここで決めて画面へ渡す。
+    # 中身はこの後の描画で埋まる（同じ辞書を渡しておく）
+    names: dict[int, dict[str, dict]] = {}
+
+    # 引き終えた形を、頼まれていれば渡す。画面はこれを描く。
+    # 図を描く手順の途中から取り出すので、線の引き方が2つに分かれない
+    if collect is not None:
+        collect["boxes"] = {
+            node.device_id: (
+                sized[node.device_id][0],
+                sized[node.device_id][1],
+                sized[node.device_id][2],
+                sized[node.device_id][3],
+            )
+            for node in nodes
+        }
+        collect["wires"] = {
+            edge.id: {
+                # 図の余白ぶんを引いて、台帳と同じ座標に戻す
+                "points": [(x - dx, y - dy) for x, y in points],
+                "source_side": sides.get(edge.id, ("right", "left"))[0],
+                "target_side": sides.get(edge.id, ("right", "left"))[1],
+            }
+            for points, edge in pending
+        }
+        collect["labels"] = names
 
     # 同じ辺回りは箱の下を通る。キャンバスを箱だけだと線が凡例や外枠へ食い込む。
     wire_ys = [y for points, _ in pending for _, y in points]
@@ -654,6 +707,12 @@ def render_svg(
                         )
                         break
 
+    # 線の上に文字を置くと、白い縁取りで線が切れて見える。ポート名を置く前に、
+    # 引いた線そのものを「埋まっている場所」として覚えさせる。ポート名の候補は
+    # 線から少し離した位置も持っているので、線をよけた場所に落ちる
+    for route, wire in pending:
+        _keep_wire(placement, route, (wire.id, "source"), (wire.id, "target"))
+
     gapped = _cut_gaps([item[0] for item in pending])
     stroke = "#4a5364" if simple else "#8a94a6"
     for index, (points, edge) in enumerate(pending):
@@ -675,6 +734,8 @@ def render_svg(
         tw, th = size_at[edge.target]
         sx, sy = source[0] + sw / 2, source[1] + sh / 2
         tx, ty = target[0] + tw / 2, target[1] + th / 2
+        source_note: dict = {}
+        target_note: dict = {}
         parts.append(
             _port_label(
                 sx,
@@ -688,6 +749,8 @@ def render_svg(
                 half_w=sw / 2,
                 half_h=sh / 2,
                 prefer=label_side.get(edge.id),
+                key=(edge.id, "source"),
+                note=source_note,
             )
         )
         parts.append(
@@ -703,8 +766,16 @@ def render_svg(
                 half_w=tw / 2,
                 half_h=th / 2,
                 prefer=label_side.get(edge.id),
+                key=(edge.id, "target"),
+                note=target_note,
             )
         )
+        if collect is not None:
+            names[edge.id] = {
+                which: {**note, "x": note["x"] - dx, "y": note["y"] - dy}
+                for which, note in (("source", source_note), ("target", target_note))
+                if note
+            }
         for name in (edge.source_interface, edge.target_interface):
             if name:
                 used_media.add(portlabel.media_of(name))
@@ -750,6 +821,7 @@ def render_svg(
             + "/>"
         )
         parts.append(_peer_box(px, py, peer, simple))
+        _keep_wire(placement, points, ("peer", peer_index), None)
         # 図の中に残っている側のポート名は、通常どおり機器の隣に出す
         label_to = points[1] if len(points) > 1 else points[0]
         parts.append(
@@ -763,6 +835,7 @@ def render_svg(
                 placement,
                 half_w=aw / 2,
                 half_h=ah / 2,
+                key=("peer", peer_index),
             )
         )
         if peer.local_interface:
@@ -803,7 +876,11 @@ def render_svg(
                 f'<text x="{x + 30:.0f}" y="{y + 22:.0f}" font-size="12" font-weight="700" '
                 f'fill="#4a5364">{_esc(_clip(node.hostname, 20))}</text>'
                 f'<text x="{x + 12:.0f}" y="{y + 38:.0f}" font-size="10" fill="#7a828f">'
-                f"{_esc(_clip(where, 26))}</text></g>"
+                f"{_esc(_clip(where, 26))}</text>"
+                # 実線の箱に付く種別と同じ位置に、これが何の箱かを書く。
+                # 破線というだけでは、名前の入った空の枠に見えてしまう
+                f'<text x="{x + nw - 12:.0f}" y="{y + 15:.0f}" font-size="9" fill="#9aa4b2" '
+                f'text-anchor="end">この図の外</text></g>'
             )
             continue
 
@@ -1163,10 +1240,14 @@ def _orthogonal_bus(
     if source_face == "bottom" and target_face == "bottom":
         bus_y = max(sy, ty) + inset + rank * (gap if steps else 0.0)
         bus_y = _clear_bus_y(bus_y, sx, tx, "below", obstacles)
+        if bus_y - max(sy, ty) > _DETOUR_LIMIT:
+            return None  # 図の端まで回る通り道。線ではなく枠に見える
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     if source_face == "top" and target_face == "top":
         bus_y = min(sy, ty) - inset - rank * (gap if steps else 0.0)
         bus_y = _clear_bus_y(bus_y, sx, tx, "above", obstacles)
+        if min(sy, ty) - bus_y > _DETOUR_LIMIT:
+            return None
         return [(sx, sy), (sx, bus_y), (tx, bus_y), (tx, ty)]
     return None
 
@@ -1343,12 +1424,17 @@ def _route_pierce_count(
     route: list[tuple[float, float]], boxes: list[tuple[float, float, float, float]]
 ) -> int:
     """端点の箱も含め、線が箱の中を通る回数。obstacles から端点を外すと見逃す。"""
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for box in boxes
-        if _segment_pierces_box(box, a, b)
-    )
+    count = 0
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for box in boxes:
+            # 外接矩形が離れていれば、貫きの計算をするまでもない
+            if high_x < box[0] or low_x > box[2] or high_y < box[1] or low_y > box[3]:
+                continue
+            if _segment_pierces_box(box, a, b):
+                count += 1
+    return count
 
 
 #: 線が箱のそばを通るときに空けたいすき間。これより近いと、箱の縁を這って
@@ -1370,7 +1456,13 @@ def _hugs_box_count(
     for index, (a, b) in enumerate(segments):
         if index == 0 or index == len(segments) - 1:
             continue
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
         for x1, y1, x2, y2 in boxes:
+            if high_x < x1 - _BOX_CLEARANCE or low_x > x2 + _BOX_CLEARANCE:
+                continue
+            if high_y < y1 - _BOX_CLEARANCE or low_y > y2 + _BOX_CLEARANCE:
+                continue
             near = (
                 x1 - _BOX_CLEARANCE,
                 y1 - _BOX_CLEARANCE,
@@ -1415,13 +1507,20 @@ def _route_cross_count(
     """
     if not drawn:
         return 0
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for other in drawn
-        for c, d in zip(other, other[1:], strict=False)
-        if _crosses_at_right_angle(a, b, c, d)
-    )
+    count = 0
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for other in drawn:
+            for c, d in zip(other, other[1:], strict=False):
+                # 離れている組は、交わりようが無い
+                if high_x < min(c[0], d[0]) or low_x > max(c[0], d[0]):
+                    continue
+                if high_y < min(c[1], d[1]) or low_y > max(c[1], d[1]):
+                    continue
+                if _crosses_at_right_angle(a, b, c, d):
+                    count += 1
+    return count
 
 
 def _ensure_outward(
@@ -1559,6 +1658,12 @@ def _detour_keep_faces(
             channel = max(channel, y2 + pad)
         else:
             channel = min(channel, y1 - pad)
+    # 端から遠く離れた通り道は、迂回ではなく大回りになる。図の端まで上がって
+    # 横断し、そこだけ見ると図を囲む枠のように見える。そうなるくらいなら
+    # 交差した方がまし（交差は目で追えるが、大回りは図の形を壊す）
+    reach = channel - max(sy, ty) if side == "below" else min(sy, ty) - channel
+    if reach > _DETOUR_LIMIT:
+        return None
     return [
         (sx, sy),
         (ox, sy),
@@ -1638,9 +1743,15 @@ def _wire_path(
                 _detour_keep_faces(start, end, src_side, dst_side, pierce_boxes, side),
             )
 
+    # 端から端への最短（縦横で引いたときの長さ）。遠回りの度合いはこれで測る
+    direct = max(abs(end[0] - start[0]) + abs(end[1] - start[1]), 1.0)
+
     def score(item: tuple[str, str, list[tuple[float, float]]]) -> tuple:
         face_s, face_t, route = item
         bends = max(0, len(route) - 2)
+        # 最短の何倍まわったか。倍以上まわる経路は、交差を避けるためであっても
+        # 採らない。図の端まで大回りした線は、線ではなく枠のように見えてしまう
+        detour = _length(route) / direct
         return (
             _route_pierce_count(route, pierce_boxes),
             _hugs_box_count(route, pierce_boxes),
@@ -1648,6 +1759,7 @@ def _wire_path(
             0 if _arrives_from_outside(route, face_t) else 1,
             # 折れは Visio の定石どおり2つまで。ここを崩してまで交差は避けない
             0 if bends <= MAX_BENDS else 1,
+            0 if detour <= 1.6 else 1 if detour <= 2.5 else 2,
             # そのうえで、先に引いた線と交わらない経路を採る。
             # 交差した線は、どちらがどこへ行っているのか目で追えなくなる
             _route_cross_count(route, drawn),
@@ -1727,13 +1839,7 @@ def _route(
         clear = [route for route in options if _residual(route, obstacles) == 0]
         if clear:
             return min(clear, key=_length)
-        blockers = [
-            rect
-            for rect in obstacles
-            for route in options
-            for a, b in zip(route, route[1:], strict=False)
-            if svglayout.segment_hits(rect, a, b)
-        ]
+        blockers = [rect for route in options for _a, _b, rect in _hits(route, obstacles)]
         if not blockers:
             return options[0]
 
@@ -1783,14 +1889,28 @@ def _route(
     return out if len(out) > 1 else _ell(p1, p2, True)
 
 
+def _hits(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]):
+    """線分と、当たる見込みのある箱の組だけを返す。
+
+    区間と箱の総当たりは、図が大きくなると効いてくる（120台の図で1本の線を
+    引くのに数百万回）。外接矩形が離れている組は、当たり判定を呼ぶまでもない。
+    ここで落としておくと、書き出しが5秒から0.4秒になる。
+    """
+    for a, b in zip(route, route[1:], strict=False):
+        low_x, high_x = (a[0], b[0]) if a[0] <= b[0] else (b[0], a[0])
+        low_y, high_y = (a[1], b[1]) if a[1] <= b[1] else (b[1], a[1])
+        for rect in obstacles:
+            if high_x < rect.x1 or low_x > rect.x2:
+                continue
+            if high_y < rect.y1 or low_y > rect.y2:
+                continue
+            if svglayout.segment_hits(rect, a, b):
+                yield a, b, rect
+
+
 def _residual(route: list[tuple[float, float]], obstacles: list[svglayout.Rect]) -> int:
     """引き直しても、まだ箱を通ってしまっている区間の数。"""
-    return sum(
-        1
-        for a, b in zip(route, route[1:], strict=False)
-        for rect in obstacles
-        if svglayout.segment_hits(rect, a, b)
-    )
+    return sum(1 for _ in _hits(route, obstacles))
 
 
 def _length(route: list[tuple[float, float]]) -> float:
@@ -2022,8 +2142,47 @@ _LABEL_GAP = 10.0
 # 線と垂直な向きへのずらし幅。線に文字が重なると両方読めなくなる
 _SIDE_OFFSET = 11.0
 _LABEL_FONT = 10.0
+# 線のまわり、文字を置きたくない幅（線の太さ 1.6px ぶんと少しの余白）
+_WIRE_HALO = 2.5
 # 同じ機器同士を結ぶ線を、何 px ずつ離して描くか
 _PARALLEL_GAP = 11.0
+
+
+def _keep_wire(
+    placement: svglayout.Placement,
+    points: list[tuple[float, float]],
+    source_key: object | None,
+    target_key: object | None,
+) -> None:
+    """引いた線を、文字を置けない場所として覚えさせる。
+
+    両端の1区間だけは、その端のポート名の持ち物にしておく。ポート名は自分の
+    出口に寄り添って初めて「どちらの機器のどの口か」が分かるので、そこまで
+    避けさせると線から離れて意味が薄くなる。折れた先や他の線の上には置かない。
+    """
+    rects = _wire_rects(points)
+    for index, rect in enumerate(rects):
+        owners: set[object] = set()
+        if index == 0 and source_key is not None:
+            owners.add(source_key)
+        if index == len(rects) - 1 and target_key is not None:
+            owners.add(target_key)
+        placement.add(rect, frozenset(owners) if owners else None)
+
+
+def _wire_rects(points: list[tuple[float, float]]) -> list[svglayout.Rect]:
+    """折れ線を、区間ごとの細い矩形にする（文字の当たり判定用）。"""
+    rects = []
+    for (x1, y1), (x2, y2) in zip(points, points[1:], strict=False):
+        rects.append(
+            svglayout.Rect(
+                min(x1, x2) - _WIRE_HALO,
+                min(y1, y2) - _WIRE_HALO,
+                max(x1, x2) + _WIRE_HALO,
+                max(y1, y2) + _WIRE_HALO,
+            )
+        )
+    return rects
 
 
 def _port_label(
@@ -2039,6 +2198,8 @@ def _port_label(
     half_w: float | None = None,
     half_h: float | None = None,
     prefer: str | None = None,
+    key: object | None = None,
+    note: dict | None = None,
 ) -> str:
     """(x1,y1) 側の機器のポート名を、その機器のすぐ外に置く。
 
@@ -2135,7 +2296,7 @@ def _port_label(
                 svglayout.text_rect(px, py - 3, text, _LABEL_FONT, text_anchor, text_angle)
                 for px, py in spots
             ]
-            index, fits = placement.choose(rects)
+            index, fits = placement.choose(rects, key)
             if fits:
                 return (text, index, rects[index]), first
             if first is None:
@@ -2152,7 +2313,7 @@ def _port_label(
             chosen, angle, anchor = flat, 0.0, flat_anchor
         elif flat_fallback is not None and fallback is not None:
             # どちらも置けないなら、はみ出しの少ない方を採る
-            if placement.penalty(flat_fallback[2]) < placement.penalty(fallback[2]):
+            if placement.penalty(flat_fallback[2], key) < placement.penalty(fallback[2], key):
                 fallback, angle, anchor = flat_fallback, 0.0, flat_anchor
 
     text, index, rect = chosen or fallback  # type: ignore[misc]
@@ -2164,12 +2325,28 @@ def _port_label(
             moved_x = px + ux * step * 6.0
             moved_y = py + uy * step * 6.0
             candidate = svglayout.text_rect(moved_x, moved_y - 3, text, _LABEL_FONT, anchor, angle)
-            if not placement.collides(candidate):
+            if not placement.collides(candidate, key):
                 px, py, rect = moved_x, moved_y, candidate
                 break
     # 出力時に座標を丸める分だけ余裕を持たせる。ぎりぎりで置くと、
-    # 丸めた結果わずかに重なることがある
-    placement.add(rect.grow(1.0))
+    # 丸めた結果わずかに重なることがある。横は名前どうしが並んだときに
+    # 一続きに見えない程度まで空ける
+    placement.add(svglayout.Rect(rect.x1 - 5.0, rect.y1 - 1.0, rect.x2 + 5.0, rect.y2 + 1.0))
+
+    if note is not None:
+        # 画面にも同じ場所へ出させるための控え。線と同じく、置き場所を決めるのは
+        # ここ1か所にして、画面はその結果を描くだけにする
+        note.update(
+            {
+                "x": px,
+                "y": py - 3,
+                "text": text,
+                "full": name,
+                "anchor": anchor,
+                "angle": angle,
+                "color": color,
+            }
+        )
 
     transform = f' transform="rotate({angle:.1f} {px:.1f} {py:.1f})"' if angle else ""
     title = f"<title>{_esc(name)}</title>" if text != name else ""
@@ -2339,6 +2516,7 @@ def export_svg(
     along_line: bool = False,
     show_peers: bool = True,
     orientation: str = "vertical",
+    view: topology_view.ViewGeometry | None = None,
 ) -> str:
     return render_svg(
         load_diagram(db, layer, site_id=site_id, orientation=orientation),
@@ -2350,4 +2528,5 @@ def export_svg(
         port_style=port_style,
         along_line=along_line,
         show_peers=show_peers,
+        view=view,
     )

@@ -49,6 +49,7 @@ import WindowLink, {
   openInWindow,
 } from "../components/WindowLink";
 import PortLabeledEdge, {
+  drawnWires,
   type PortEdgeData,
   sideBetween,
   type WireBox,
@@ -328,6 +329,50 @@ export function comparePortNames(a: string, b: string): number {
     if (x !== y) return x < y ? -1 : 1;
   }
   return 0;
+}
+
+/**
+ * サーバーが引いた線から、引き出し口を決める。
+ *
+ * 線を引くのはサーバー側の1か所だけにしてある。画面の引き出し口が線の端と
+ * 違う場所にあると、線の端が箱から浮いて見え、ポート名も線から離れる。
+ * だから口も、引かれた線の端から決める。
+ */
+export function handlesFromRoutes(
+  graph: TopologyGraph,
+  boxOf: (deviceId: number) => { x: number; y: number; w: number; h: number } | undefined,
+): {
+  anchors: Map<number, { source: string; target: string }>;
+  faceHandles: Map<number, { id: string; side: Side; t: number }[]>;
+} | null {
+  const anchors = new Map<number, { source: string; target: string }>();
+  const faceHandles = new Map<number, { id: string; side: Side; t: number }[]>();
+  if (graph.edges.length === 0) return null;
+
+  for (const edge of graph.edges) {
+    const points = edge.points;
+    if (!points || points.length < 2) return null; // 1本でも欠けたら、いつもの決め方に戻す
+    const ends: [number, [number, number], "top" | "bottom" | "left" | "right" | null][] = [
+      [edge.source, points[0], edge.source_side],
+      [edge.target, points[points.length - 1], edge.target_side],
+    ];
+    const ids: string[] = [];
+    for (const [deviceId, point, side] of ends) {
+      const box = boxOf(deviceId);
+      if (!box || !side) return null;
+      const along =
+        side === "top" || side === "bottom"
+          ? (point[0] - box.x) / Math.max(box.w, 1)
+          : (point[1] - box.y) / Math.max(box.h, 1);
+      const list = faceHandles.get(deviceId) ?? [];
+      const id = anchorId(side, list.length);
+      list.push({ id, side, t: Math.min(1, Math.max(0, along)) });
+      faceHandles.set(deviceId, list);
+      ids.push(id);
+    }
+    anchors.set(edge.id, { source: ids[0], target: ids[1] });
+  }
+  return { anchors, faceHandles };
 }
 
 /**
@@ -810,13 +855,41 @@ function toFlow(
   nodes: Node<DeviceNodeData | GroupFrameData>[];
   edges: Edge[];
 } {
-  const { anchors, busiestTB, heights, faceHandles, lanes, laneRank, flipped } =
-    assignAnchors(graph, { simple });
+  const own = assignAnchors(graph, { simple });
+  const { busiestTB, heights, lanes, laneRank, flipped } = own;
+  // 箱の大きさは、線を引いたところ（サーバー）で決まった値を使う
+  const sizeOf = (node: TopologyNode) => {
+    const width = node.width ?? widthFor(busiestTB.get(node.device_id) ?? 0) ?? DEFAULT_WIDTH;
+    const height =
+      node.height ??
+      heights.get(node.device_id) ??
+      (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+    return { width, height };
+  };
+  const drawnBox = new Map(
+    graph.nodes.map((node) => {
+      const { width, height } = sizeOf(node);
+      return [
+        node.device_id,
+        {
+          x: node.x - shiftFor(node.width ?? width),
+          y: node.y - shiftYFor(height),
+          w: width,
+          h: height,
+        },
+      ] as const;
+    }),
+  );
+  // 引き出し口は、引かれた線の端に合わせる。線とずれた口から出すと、
+  // 端が箱から浮いて見えるうえ、ポート名も線から離れる
+  const routed = handlesFromRoutes(graph, (id) => drawnBox.get(id));
+  const anchors = routed?.anchors ?? own.anchors;
+  const faceHandles = routed?.faceHandles ?? own.faceHandles;
 
   const devices = graph.nodes.map((node) => {
-    const width = widthFor(busiestTB.get(node.device_id) ?? 0);
-    const height =
-      heights.get(node.device_id) ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT);
+    // 既定の大きさのときは、箱側に幅を指定しない（css の既定に任せる）
+    const width = node.width ?? widthFor(busiestTB.get(node.device_id) ?? 0);
+    const height = sizeOf(node).height;
     const shift = shiftFor(width);
     const shiftY = shiftYFor(height);
     return {
@@ -958,6 +1031,13 @@ function toFlow(
       targetFlip: flipped.has(`${edge.id}:${edge.target}`),
       sourceBox: boxOf.get(edge.source),
       targetBox: boxOf.get(edge.target),
+      // サーバーが引いた線。画面はこれを描く（引き方は1か所に置いてある）
+      points: edge.points?.length ? edge.points : undefined,
+      sourceSide: edge.source_side ?? undefined,
+      targetSide: edge.target_side ?? undefined,
+      // ポート名の置き場所も、線と同じところで決めてある
+      sourceLabel: edge.source_label ?? undefined,
+      targetLabel: edge.target_label ?? undefined,
       obstacles: [...boxOf.entries()]
         .filter(([id]) => id !== edge.source && id !== edge.target)
         .map(([, box]) => box),
@@ -1169,12 +1249,15 @@ function TopologyEditor() {
       selectedSite,
       appliedSearch,
       scope,
+      // 箱の大きさが変わると線の引き方も変わるので、取り直す
+      simple,
     ],
     queryFn: () =>
       api.getTopology(layer, false, orientation, {
         site_id: selectedSite === "" ? undefined : selectedSite,
         q: appliedSearch.trim() || undefined,
         scope,
+        simple: simple ? "true" : undefined,
       }),
   });
   const { data: tunnelInfo } = useQuery({
@@ -1943,6 +2026,59 @@ function TopologyEditor() {
     [],
   );
 
+  /**
+   * いま画面に描いてある図の形を、書き出しへ預けておく。
+   *
+   * 書き出しが自分でもう一度線を引くと、同じ規則で書いてあっても候補の
+   * 選び方が少し違うだけで別の図になる。人は画面で配置と線を確かめてから
+   * 出力を押すので、そこで違う図が出ては困る。
+   *
+   * 押したときに預けると、返事を待つ間に窓が開けず（ポップアップの制限）、
+   * 出力そのものが止まる。描き変わってから少し置いて、先に預けておく。
+   */
+  const [viewToken, setViewToken] = useState<string | null>(null);
+  useEffect(() => {
+    if (nodes.length === 0) {
+      setViewToken(null);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      const boxes = nodes
+        .filter((node) => node.type === "device")
+        .map((node) => {
+          const data = node.data as DeviceNodeData;
+          return {
+            device_id: Number(node.id),
+            x: node.position.x,
+            y: node.position.y,
+            width: data.width ?? DEFAULT_WIDTH,
+            height: data.height ?? (simple ? DEFAULT_HEIGHT : DETAIL_HEIGHT),
+          };
+        });
+      const wires = edges.flatMap((edge) => {
+        const drawn = drawnWires.get(edge.id);
+        const edgeId = Number(edge.id);
+        if (!drawn || !Number.isFinite(edgeId)) return [];
+        return [
+          {
+            edge_id: edgeId,
+            points: drawn.points.map(
+              (point) => [point.x, point.y] as [number, number],
+            ),
+            source_side: drawn.sourceFace,
+            target_side: drawn.targetFace,
+          },
+        ];
+      });
+      api
+        .keepTopologyView({ boxes, wires })
+        .then((result) => setViewToken(result.token))
+        // 預けられなくても、書き出しは今までどおり出る（線は書き出し側が引く）
+        .catch(() => setViewToken(null));
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [nodes, edges, simple]);
+
   // 出力の画面へ、いまの絞り込みと見せ方をそのまま渡す。
   // 画面と出したものが 食い違わないようにする
   const exportQuery = (() => {
@@ -1957,6 +2093,8 @@ function TopologyEditor() {
     if (orientation) next.set("orientation", orientation);
     if (selectedVlans.length === 1) next.set("vlan", String(selectedVlans[0]));
     if (selectedVrf) next.set("vrf", selectedVrf);
+    // 画面が引いた線。渡せないときは、書き出し側が自分で引く
+    if (viewToken) next.set("view", viewToken);
     return `?${next.toString()}`;
   })();
 
@@ -2001,7 +2139,7 @@ function TopologyEditor() {
 
   return (
     <>
-      <h1>トポロジー図</h1>
+      <h1>構成図</h1>
       <p className="subtitle">
         Config の LLDP / CDP から結線を推定して描きます。
         {editable ? (

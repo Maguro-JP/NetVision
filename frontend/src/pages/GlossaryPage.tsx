@@ -50,7 +50,7 @@ export default function GlossaryPage() {
 
   return (
     <>
-      <h1>言葉の説明</h1>
+      <h1>用語集</h1>
       <p className="subtitle">
         このツールに出てくる言葉を、たとえ話で説明します。正確さより、まず何の話なのかが
         分かることを取っています。困っていること（「通じない」「切り替わらない」）からも探せます。

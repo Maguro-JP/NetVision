@@ -1,19 +1,24 @@
-"""構成図を Excel のセルに描けること。
+"""Excel の図が、画面や SVG と同じものであること。
 
-SVG は貼るだけなら良いが、手元で直せない。現場では機器を1台書き足す・
-注記を入れるといった直しがその場で要るので、罫線で描いた図も出す。
+以前はセルの罫線で別の図（上位を左、下位を右に並べ直したもの）を描いていた。
+同じ台帳から2つの違う図が出ると、どちらを信じればいいのか分からなくなる。
+いまは SVG と同じ図を、Excel の図形として置く。
 
-見るのは「図に見えるか」——箱があり、線が引かれ、上位が左にあるか。
+ここで見るのは、図形として入っているか（掴んで動かせるか）、線と箱が
+SVG と同じ場所にあるか、そして1枚に収まるようにしてあるか。
 """
 
 import io
+import re
+import zipfile
 
 from openpyxl import load_workbook
 
 from app.models.device import Device, DeviceType
 from app.models.site import Site
 from app.models.topology import Link
-from app.services import topology_excel
+from app.services import topology_excel, topology_export, topology_view
+from app.services.topology import load_diagram
 from tests.conftest import API
 
 
@@ -49,70 +54,103 @@ def build(db) -> int:
     return site.id
 
 
-def sheet_of(db, **kwargs):
-    return load_workbook(io.BytesIO(topology_excel.to_xlsx(db, **kwargs)))
+def _drawing(book: bytes) -> str:
+    with zipfile.ZipFile(io.BytesIO(book)) as archive:
+        names = [name for name in archive.namelist() if name.startswith("xl/drawings/")]
+        assert names, f"図形の紙が入っていない: {archive.namelist()}"
+        return archive.read(names[0]).decode("utf-8")
 
 
-def test_devices_become_boxes_with_borders(db_session):
+def test_the_figure_is_made_of_shapes_not_cell_borders(db_session):
+    """図形なら、Excel の上で掴んで動かせる。罫線では動かせない。"""
     build(db_session)
-    sheet = sheet_of(db_session)["構成図"]
+    book = topology_excel.to_xlsx(db_session)
+    drawing = _drawing(book)
+    assert drawing.count("<xdr:sp ") >= 3, "図形が少なすぎる"
+    assert "osaka-rt-01" in drawing
+    assert "osaka-sw-01" in drawing
+    # 結線は折れ線（custGeom）で入る
+    assert "custGeom" in drawing
 
-    boxes = {
-        str(cell.value).split("\n")[0]
-        for row in sheet.iter_rows()
-        for cell in row
-        if cell.value and "\n" in str(cell.value)
-    }
-    assert {"osaka-rt-01", "osaka-sw-01"} <= boxes
 
-    # 箱は罫線で囲まれていること（値だけでは図にならない）
-    named = [
-        cell
-        for row in sheet.iter_rows()
-        for cell in row
-        if cell.value and str(cell.value).startswith("osaka-rt-01")
+def test_the_port_names_are_in_the_figure(db_session):
+    """線のそばのポート名まで含めて、SVG と同じものが入ること。"""
+    build(db_session)
+    drawing = _drawing(topology_excel.to_xlsx(db_session))
+    assert "GE0/1" in drawing or "GigaEthernet0/1" in drawing
+
+
+def test_the_boxes_are_where_the_svg_puts_them(db_session):
+    """同じ台帳から出した2つの図で、箱の場所が違ってはいけない。"""
+    build(db_session)
+    graph = load_diagram(db_session, "physical")
+    svg = topology_export.render_svg(graph, title="構成図")
+    boxes = [
+        (float(x), float(y))
+        for x, y, w in re.findall(r'<rect x="([\d.\-]+)" y="([\d.\-]+)" width="([\d.]+)"', svg)
+        if float(w) > 100
     ]
-    assert named and named[0].border.top.style
+    drawing = _drawing(topology_excel.to_xlsx(db_session))
+    spots = {
+        (round(int(x) / 9525), round(int(y) / 9525))
+        for x, y in re.findall(r'<xdr:pos x="(\d+)" y="(\d+)"/>', drawing)
+    }
+    for x, y in boxes:
+        assert (round(x), round(y)) in spots, f"SVG の箱 {x},{y} が Excel に無い"
 
 
-def test_upper_device_is_placed_to_the_left(db_session):
-    """上位を左、下位を右。ここが逆だと図として読めない。"""
+def test_the_screen_can_hand_its_own_figure_to_excel(db_session):
+    """画面が引いた線は、Excel の図にもそのまま入ること。"""
     build(db_session)
-    sheet = sheet_of(db_session)["構成図"]
-
-    where = {}
-    for row in sheet.iter_rows():
-        for cell in row:
-            if cell.value and "\n" in str(cell.value):
-                where[str(cell.value).split("\n")[0]] = cell.column
-    assert where["osaka-rt-01"] < where["osaka-sw-01"]
-
-
-def test_a_line_is_drawn_between_them(db_session):
-    """箱と箱の間に罫線が引かれていること。"""
-    build(db_session)
-    sheet = sheet_of(db_session)["構成図"]
-
-    drawn = sum(
-        1
-        for row in sheet.iter_rows()
-        for cell in row
-        if not cell.value and (cell.border.top.style or cell.border.left.style)
+    graph = load_diagram(db_session, "physical")
+    edge = graph.edges[0]
+    view = topology_view.ViewGeometry(
+        wires={
+            edge.id: topology_view.ViewWire(
+                edge_id=edge.id,
+                points=[(0.0, 0.0), (700.0, 0.0), (700.0, 500.0)],
+                source_side="right",
+                target_side="top",
+            )
+        }
     )
-    assert drawn > 0, "結線の罫線が1本も引かれていない"
+    drawing = _drawing(topology_excel.to_xlsx(db_session, view=view))
+    # 折れ線の幅は、預けた形の幅（700px）と同じになる
+    widths = {int(w) for w in re.findall(r'<a:path w="(\d+)"', drawing)}
+    assert round(700 * 9525) in widths, f"預けた形の線が無い: {sorted(widths)}"
+
+
+def test_it_is_set_to_print_on_one_sheet(db_session):
+    """紙で配るために出す。既定のままだと A4 の幅で線が切られる。"""
+    build(db_session)
+    sheet = load_workbook(io.BytesIO(topology_excel.to_xlsx(db_session)))["構成図"]
+    assert sheet.page_setup.fitToWidth == 1
+    assert sheet.sheet_properties.pageSetUpPr.fitToPage is True
+    # 印刷範囲は決めない。決めると Excel が普通の画面に点線の枠を出し、
+    # 図の上に大きな枠が乗っているように見える。代わりに、図の右下にあたる
+    # セルを作って「ここまでが中身」と伝える
+    assert not sheet.print_area
+    assert sheet.max_row > 1 and sheet.max_column > 1
 
 
 def test_tables_are_in_the_same_file(db_session):
     """図と表を別ファイルにしない。配るのは1つで済ませたい。"""
     build(db_session)
-    assert sheet_of(db_session).sheetnames == ["構成図", "結線表", "ポート一覧"]
+    book = load_workbook(io.BytesIO(topology_excel.to_xlsx(db_session)))
+    assert book.sheetnames == ["構成図", "結線表", "ポート一覧"]
+
+
+def test_the_file_still_opens_as_a_workbook(db_session):
+    """図形を後から足しているので、ファイルとして壊れていないことを見る。"""
+    build(db_session)
+    book = load_workbook(io.BytesIO(topology_excel.to_xlsx(db_session)))
+    assert book["結線表"]["A1"].value
 
 
 def test_site_filter_keeps_the_uplink(db_session):
     site_id = build(db_session)
-    sheet = sheet_of(db_session, site_id=site_id)["構成図"]
-    values = [str(c.value) for row in sheet.iter_rows() for c in row if c.value]
-    assert any("osaka-rt-01" in v for v in values)
+    drawing = _drawing(topology_excel.to_xlsx(db_session, site_id=site_id))
+    assert "osaka-rt-01" in drawing
 
 
 def test_endpoint(client):
@@ -128,7 +166,7 @@ def test_the_upper_device_is_decided_by_the_whole_network_not_by_link_count(db_s
     センターより支社が上に来てしまう。
     """
     from app.services import topology
-    from app.services.topology_excel import hierarchy_rank
+    from app.services.topology import hierarchy_rank
 
     site = Site(name="関西支社", address="大阪府")
     db_session.add(site)
@@ -162,89 +200,3 @@ def test_the_upper_device_is_decided_by_the_whole_network_not_by_link_count(db_s
     # 本数は branch(5) > core(2) だが、上位は core 側
     assert rank[core.id] < rank[branch.id]
     assert rank[branch.id] < rank[stations[0].id]
-
-
-def test_both_ends_of_a_link_show_their_port_on_separate_rows(db_session):
-    """1本の線に、上位側と下位側のポート名が両方出ること。
-
-    同じ行に書くと罫線と重なって読めなくなるので、上下の行に分ける。
-    上位機器に配下が何台あっても、線ごとにその機器のポートが出る。
-    """
-    site = Site(name="関西支社", address="大阪府")
-    db_session.add(site)
-    db_session.flush()
-
-    parent = Device(
-        hostname="br-rt-01",
-        vendor="Cisco",
-        model="ISR4451-X",
-        device_type=DeviceType.ROUTER,
-        site_id=site.id,
-    )
-    db_session.add(parent)
-    db_session.flush()
-    for index in range(3):
-        child = Device(
-            hostname=f"sw-{index:02d}",
-            vendor="Cisco",
-            model="C9300-48P",
-            device_type=DeviceType.SWITCH,
-            site_id=site.id,
-        )
-        db_session.add(child)
-        db_session.flush()
-        db_session.add(
-            Link(
-                a_device_id=parent.id,
-                a_interface=f"GigabitEthernet0/1/{index}",
-                b_device_id=child.id,
-                b_interface="GigabitEthernet1/0/1",
-            )
-        )
-    db_session.commit()
-
-    sheet = sheet_of(db_session)["構成図"]
-    cells = {
-        (cell.row, cell.column): str(cell.value)
-        for row in sheet.iter_rows()
-        for cell in row
-        if cell.value
-    }
-
-    # 上位側のポートは、配下の数だけ出る（1本しか出ないのは取りこぼし）
-    downlinks = [v for v in cells.values() if v.startswith("GigabitEthernet0/1/")]
-    assert sorted(downlinks) == [
-        "GigabitEthernet0/1/0",
-        "GigabitEthernet0/1/1",
-        "GigabitEthernet0/1/2",
-    ]
-
-    # 上位側は線の左上、下位側は線の右下。行も列も分かれている
-    for (row, column), value in cells.items():
-        if not value.startswith("GigabitEthernet0/1/"):
-            continue
-        below = [
-            (r, c)
-            for (r, c), v in cells.items()
-            if str(v).startswith("GigabitEthernet1/0/") and r > row
-        ]
-        assert below, "下位側のポートが出ていない"
-        assert any(c > column for _, c in below), "下位側が右に来ていない"
-
-
-def test_the_sheet_leaves_a_margin_at_the_top_left(db_session):
-    """見出しは B2 から。1台目の箱の左にも余白を空ける。"""
-    build(db_session)
-    sheet = sheet_of(db_session)["構成図"]
-
-    assert sheet["A1"].value is None
-    assert str(sheet["B2"].value).startswith("構成図")
-
-    boxes = [
-        cell.column
-        for row in sheet.iter_rows()
-        for cell in row
-        if cell.value and "\n" in str(cell.value)
-    ]
-    # 左は1列だけ空ける。空けすぎると図が右へ寄って横に長くなる
-    assert min(boxes) == 2

@@ -94,7 +94,7 @@ export default function ReplacementPage() {
 
   return (
     <>
-      <h1>更改支援</h1>
+      <h1>更改の見通し</h1>
       <p className="subtitle">
         保守期限と EoL の<strong>早い方</strong>を実質の期限として、年度別に並べます。
         年度は4月始まりです。
@@ -213,7 +213,7 @@ export default function ReplacementPage() {
           </div>
           <div className="actions">
             <Link className="button" to="/topology">
-              トポロジー図で見る
+              構成図で見る
             </Link>
             <button onClick={() => setImpactFor(null)}>閉じる</button>
           </div>

@@ -63,7 +63,7 @@ const KIND_FILE: Record<Kind, string> = {
 const KIND_NOTE: Record<Kind, string> = {
   svg: "設計書や報告書に貼るベクタ形式。Word / PowerPoint にそのまま挿入でき、拡大しても潰れません。",
   workbook:
-    "構成図・結線表・ポート一覧を1つにまとめた Excel。図はセルの罫線で描いてあるので、手元で直せます。配るのはこれ1つで済みます。",
+    "構成図・結線表・ポート一覧を1つにまとめた Excel。図は画面と同じものが図形で入るので、掴んで動かせます。配るのはこれ1つで済みます。",
   links:
     "結線を1行ずつ並べた表。作業指示・工事依頼・検収の突合など、図ではなく並べ替えと絞り込みが要る場面向けです。",
   ports:
@@ -93,6 +93,8 @@ export default function ExportPage() {
   const orientation = params.get("orientation") ?? undefined;
   const vlan = params.get("vlan") ? Number(params.get("vlan")) : undefined;
   const vrf = params.get("vrf") ?? undefined;
+  // 図の画面が引いた線。これを渡すと、画面で見ていたものがそのまま出る
+  const view = params.get("view") ?? undefined;
 
   const svgUrl = api.topologyExportUrl(layer, {
     vlan,
@@ -102,6 +104,7 @@ export default function ExportPage() {
     port_style: portStyle,
     along_line: alongLine ? "true" : undefined,
     orientation,
+    view,
   });
   // 機器一覧の絞り込み。機器一覧の画面から開いたときは、その絞り込みで出す
   const deviceFilters: DeviceFilters = {};
@@ -123,7 +126,7 @@ export default function ExportPage() {
 
   const url: Record<Kind, string> = {
     svg: svgUrl,
-    workbook: api.workbookUrl(layer, { site_id: siteId, scope }),
+    workbook: api.workbookUrl(layer, { site_id: siteId, scope, view }),
     links: api.linkTableUrl(layer, "xlsx", { site_id: siteId }),
     ports: api.portMapUrl({ site_id: siteId }),
     devices: deviceUrl,
@@ -318,7 +321,7 @@ function WorkbookPreview({
         <tbody>
           <tr>
             <td>構成図</td>
-            <td>セルの罫線で描いた図。機器 {devices ?? "—"} 台</td>
+            <td>画面と同じ図（図形）。機器 {devices ?? "—"} 台</td>
           </tr>
           <tr>
             <td>結線</td>

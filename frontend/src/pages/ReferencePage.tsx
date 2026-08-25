@@ -73,7 +73,7 @@ export default function ReferencePage() {
 
   return (
     <>
-      <h1>製品情報（EoL・脆弱性）</h1>
+      <h1>製品情報</h1>
       <p className="subtitle">
         型番ごとの EoL 情報と脆弱性情報をここで管理します（機器の仕様書やコマンド
         リファレンスは <Link to="/documents">メーカー資料</Link> です）。EoL は機器ごとではなく

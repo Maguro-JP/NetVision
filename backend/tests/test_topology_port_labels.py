@@ -123,14 +123,30 @@ def test_diagonal():
     assert_labels_sit_by_their_own_device(render_svg(graph_of(300, 0, 0, 300)))
 
 
-def test_both_labels_stay_off_the_line_and_apart():
-    """機器の間隔が狭くても2つのラベルが重ならないこと。
+def wire_ys(svg: str) -> list[float]:
+    """引いた線の通る高さ（水平な線だけを見る）。"""
+    ys: list[float] = []
+    for points in re.findall(r'<polyline points="([^"]+)"', svg):
+        pairs = [tuple(float(v) for v in pt.split(",")) for pt in points.split()]
+        for (_, y1), (_, y2) in zip(pairs, pairs[1:], strict=False):
+            if abs(y1 - y2) < 0.5:
+                ys.append(y1)
+    return ys
 
-    両端のラベルは線の反対側に出す。近づいても衝突しない。
+
+def test_both_labels_stay_off_the_line_and_apart():
+    """機器の間隔が狭くても、2つのラベルが線にも互いにも重ならないこと。
+
+    文字は白で縁取ってあるので、線の上に置くとその分だけ線が切れて見える。
+    ポート名は線から離した位置に出す。
     """
     svg = render_svg(graph_of(0, 0, 210, 0))  # ほとんど隙間が無い配置
     found = labels(svg)
-    assert found["Gi1/0/1"][1] != found["Te1/1/1"][1]
+    a, b = found["Gi1/0/1"], found["Te1/1/1"]
+    for y in wire_ys(svg):
+        assert abs(a[1] - y) > 4
+        assert abs(b[1] - y) > 4
+    assert abs(a[0] - b[0]) > 30 or abs(a[1] - b[1]) > 10
 
 
 def test_port_style_number_drops_the_prefix():

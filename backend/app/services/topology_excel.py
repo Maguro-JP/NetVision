@@ -1,190 +1,32 @@
-"""構成図を Excel のセルに描く。
+"""構成図と表を1つの Excel にまとめる。
 
-現場の構成図は Excel で回っていることが多い。SVG は貼るだけなら良いが、
-手元で直せない。セルに枠線で描いてあれば、行を増やす・機器を1台足す・
-コメントを入れるといった直しがその場でできる。
+図は、画面や SVG と同じものを Excel の図形として置く。以前はセルの罫線で
+別の図（上位を左、下位を右に並べ直したもの）を描いていたが、それだと同じ
+台帳から2つの違う図が出ることになる。どちらを信じればいいのか分からない図は
+現場では使われない。
 
-やり方は方眼紙と同じで、細かいセルを敷き、
+図形にしておけば、Excel の上で掴んで動かせるし、色も変えられる。罫線と違って
+行を足しても図は崩れない。図の中身は `topology_export` が書いた SVG を
+`xlsxdraw` が図形へ置き換えたもので、線1本まで同じものが入る。
 
-* 機器 = セルを結合して罫線で囲んだ箱
-* 結線 = セルの辺に罫線を引いた折れ線
-
-にする。並べ方は次の規則に従う。図は自動で作るので、規則を決めておかないと
-出すたびに並びが変わって信用されない。
-
-* 上位を左、下位を右に置く
-* 配下は、上位機器のポート番号の若い順に上から並べる（番号は数として比べる）
-* ポート名は線と同じ行に置くと罫線に重なって消えるので、
-  上位側は線の左上に左揃え、下位側は線の右下に右揃えで書く
-
-全体を1枚に描こうとしない。 拠点が数千あるところで全体図は使えないので、
-拠点で絞って出すことを前提にしている。
+表（結線表・ポート一覧）は、図では読めないことのために付ける。並べ替えと
+絞り込みが要る場面（作業指示・工事依頼・検収の突合）で使う。
 """
 
 from __future__ import annotations
 
 import io
-from dataclasses import dataclass, field
 
 from sqlalchemy.orm import Session
 
-from app.models.device import DeviceType
-from app.services import localtime, topology_ports, topology_table
-from app.services.topology import (
-    DEFAULT_LAYER,
-    TIER_ORDER,
-    get_graph,
-    hierarchy_rank,
-    port_key,
-    scope_graph,
+from app.services import (
+    topology_export,
+    topology_ports,
+    topology_table,
+    topology_view,
+    xlsxdraw,
 )
-
-# 方眼の細かさ。箱の大きさと、線を通す余白をこれで決める
-BOX_W = 8  # 箱の幅（列）
-BOX_H = 3  # 箱の高さ（行）
-GAP_W = 14  # 段と段の間（列）。ここに縦線とポート名が入る
-GAP_H = 1  # 箱と箱の間（行）
-
-# 図として見せるので、左と上に少しだけ余白を取る。左は A 列の1列分で足りる。
-# 空けすぎると図が右へ寄って、そのぶん横に長くなる
-COL_START = 2  # 箱を置き始める列（B）
-ROW_START = 5  # 箱を置き始める行（見出しの下）
-
-
-@dataclass
-class _Placed:
-    device_id: int
-    hostname: str
-    model: str
-    site_name: str
-    depth: int
-    row: int  # 箱の上端（1 始まり）
-    uplinks: list[str] = field(default_factory=list)
-    downlinks: list[str] = field(default_factory=list)
-    parent: int | None = None
-
-    @property
-    def col(self) -> int:
-        return COL_START + self.depth * (BOX_W + GAP_W)
-
-    @property
-    def middle(self) -> int:
-        return self.row + BOX_H // 2
-
-
-def _layout(
-    graph,
-    ports: dict[int, topology_ports.DevicePorts],
-    rank: dict[int, int] | None = None,
-) -> list[_Placed]:
-    """上位を左にした木に並べる。
-
-    根は網全体で見て一番上位の機器（`hierarchy_rank` が小さいもの）。
-    そこから幅優先でたどって親子を決める。拠点だけを出したときも、
-    その拠点の上位（対向）が左端に来る。
-    """
-    nodes = {n.device_id: n for n in graph.nodes}
-    tier = {
-        n.device_id: TIER_ORDER.get(DeviceType(n.device_type), 7)
-        for n in graph.nodes
-        if n.device_type in {t.value for t in DeviceType}
-    }
-    for node in graph.nodes:
-        tier.setdefault(node.device_id, 7)
-
-    # 隣接関係を作り、上位から幅優先でたどって木にする。
-    # 段（種別）だけで親を決めると、拠点ルーター→支社ルーターのような
-    # 同じ種別が縦に並ぶ構成が全部ばらばらの根になってしまう
-    neighbours: dict[int, list[int]] = {}
-    port_between: dict[tuple[int, int], str] = {}
-    for edge in graph.edges:
-        if edge.source in nodes and edge.target in nodes:
-            neighbours.setdefault(edge.source, []).append(edge.target)
-            neighbours.setdefault(edge.target, []).append(edge.source)
-            port_between[(edge.source, edge.target)] = edge.source_interface
-            port_between[(edge.target, edge.source)] = edge.target_interface
-
-    def order_of(parent_id: int, child_id: int) -> tuple:
-        # 上位側のポート番号の若い順。画面のトポロジー図と同じ規則にする
-        return (port_key(port_between.get((parent_id, child_id), "")), nodes[child_id].hostname)
-
-    order = sorted(
-        (n.device_id for n in graph.nodes),
-        key=lambda device_id: (
-            # 網全体で見た「上位からの遠さ」。本数で決めると、配下の多い
-            # 支社ルーターがセンターより上に来てしまう
-            (rank or {}).get(device_id, 0),
-            tier[device_id],
-            nodes[device_id].hostname,
-        ),
-    )
-
-    parent: dict[int, int] = {}
-    children: dict[int, list[int]] = {}
-    seen: set[int] = set()
-    roots: list[int] = []
-    for start in order:
-        if start in seen:
-            continue
-        roots.append(start)
-        seen.add(start)
-        queue = [start]
-        while queue:
-            current = queue.pop(0)
-            for neighbour in sorted(
-                neighbours.get(current, []), key=lambda i: order_of(current, i)
-            ):
-                if neighbour in seen:
-                    continue
-                seen.add(neighbour)
-                parent[neighbour] = current
-                children.setdefault(current, []).append(neighbour)
-                queue.append(neighbour)
-
-    placed: list[_Placed] = []
-    row = ROW_START
-
-    def walk(device_id: int, depth: int, at_row: int) -> int:
-        """自分を `at_row` に置き、子を右へ並べる。使った一番下の行を返す。
-
-        最初の子は親と同じ行に置く。1台ずつ下げると、上位から下位へ
-        一直線に繋がっているだけの構成が階段状になって、紙が横にも縦にも伸びる。
-        """
-        nonlocal row
-        node = nodes[device_id]
-        entry = topology_ports.DevicePorts(
-            device_id=device_id,
-            hostname=node.hostname,
-            site_name=node.site_name or "",
-            model=node.model,
-            tier=tier[device_id],
-            total_ports=None,
-        )
-        detail = ports.get(device_id, entry)
-        placed.append(
-            _Placed(
-                device_id=device_id,
-                hostname=node.hostname,
-                model=node.model,
-                site_name=node.site_name or "",
-                depth=depth,
-                row=at_row,
-                uplinks=[p.interface for p in detail.uplinks],
-                downlinks=[p.interface for p in detail.downlinks],
-                parent=parent.get(device_id),
-            )
-        )
-        bottom = at_row
-        for index, child in enumerate(
-            sorted(children.get(device_id, []), key=lambda i: order_of(device_id, i))
-        ):
-            child_row = at_row if index == 0 else bottom + BOX_H + GAP_H
-            bottom = max(bottom, walk(child, depth + 1, child_row))
-        return bottom
-
-    for root in roots:
-        row = walk(root, 0, row) + BOX_H + GAP_H
-    return placed
+from app.services.topology import DEFAULT_LAYER, load_diagram
 
 
 def to_xlsx(
@@ -193,130 +35,36 @@ def to_xlsx(
     *,
     site_id: int | None = None,
     scope: str = "peers",
+    view: topology_view.ViewGeometry | None = None,
 ) -> bytes:
     """構成図・結線表・ポート一覧・ポート割付を1つのファイルにまとめる。
 
     ボタンを分けるより、1つ開けば全部入っている方が配りやすい。
     """
     from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
 
-    whole = get_graph(db, layer, site_id=site_id)
-    # 上下関係は網全体で見る。拠点だけを切り出した中で決めると、
-    # その拠点でたまたま枝の多い機器が一番上に来てしまう
-    rank = hierarchy_rank(whole)
-
-    graph = scope_graph(whole, site_id=site_id, scope=scope)
-    ports = {p.device_id: p for p in topology_ports.collect(db)}
-    placed = _layout(graph, ports, rank)
+    graph = load_diagram(db, layer, site_id=site_id, scope=scope)
+    # 図は SVG と同じものを使う。ここでもう一度並べ直すと、同じ台帳から
+    # 違う図が2つ出ることになる
+    scope_name = ""
+    if site_id is not None:
+        scope_name = next((n.site_name for n in graph.nodes if not n.outside and n.site_name), "")
+    svg = topology_export.render_svg(
+        graph,
+        title=f"構成図{f' - {scope_name}' if scope_name else ''}",
+        site_id=site_id,
+        view=view,
+    )
+    shapes = xlsxdraw.shapes_from_svg(svg)
 
     workbook = Workbook()
     sheet = workbook.active
     sheet.title = "構成図"
-
-    thin = Side(style="thin", color="808080")
-    line = Side(style="medium", color="333333")
-    box_fill = PatternFill("solid", start_color="EEF3FA", end_color="EEF3FA")
-    outside_fill = PatternFill("solid", start_color="F2F2F2", end_color="F2F2F2")
-    center = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-    generated = localtime.format(localtime.now(), with_zone=True)
-    # どこの図なのかが分からないと、印刷した紙が他の拠点のものと混ざる
-    scope_name = ""
-    if site_id is not None:
-        scope_name = next((n.site_name for n in graph.nodes if not n.outside and n.site_name), "")
-    title = sheet.cell(row=2, column=2, value=f"構成図{f' - {scope_name}' if scope_name else ''}")
-    title.font = Font(bold=True, size=14)
-    sheet.cell(
-        row=3,
-        column=2,
-        value=f"{generated} 時点 / {len(graph.nodes)}台 {len(graph.edges)}本"
-        + (" / 上位を左、下位を右に並べています" if placed else ""),
-    ).font = Font(size=9, color="666666")
-
-    outside = {n.device_id for n in graph.nodes if n.outside}
-    by_id = {p.device_id: p for p in placed}
-    # どのポート同士で繋がっているか。機器の並び順ではなく、線ごとに引く
-    port_of: dict[tuple[int, int], tuple[str, str]] = {}
-    for edge in graph.edges:
-        port_of.setdefault(
-            (edge.source, edge.target), (edge.source_interface, edge.target_interface)
-        )
-        port_of.setdefault(
-            (edge.target, edge.source), (edge.target_interface, edge.source_interface)
-        )
-
-    def draw_box(entry: _Placed) -> None:
-        col, row = entry.col, entry.row
-        sheet.merge_cells(
-            start_row=row, start_column=col, end_row=row + BOX_H - 1, end_column=col + BOX_W - 1
-        )
-        cell = sheet.cell(row=row, column=col)
-        cell.value = f"{entry.hostname}\n{entry.model}\n{entry.site_name}"
-        cell.alignment = center
-        cell.fill = outside_fill if entry.device_id in outside else box_fill
-        cell.font = Font(size=9, italic=entry.device_id in outside)
-        for r in range(row, row + BOX_H):
-            for c in range(col, col + BOX_W):
-                sheet.cell(row=r, column=c).border = Border(
-                    left=line if c == col else thin,
-                    right=line if c == col + BOX_W - 1 else thin,
-                    top=line if r == row else thin,
-                    bottom=line if r == row + BOX_H - 1 else thin,
-                )
-
-    def draw_link(child: _Placed, parent_entry: _Placed) -> None:
-        """親の右端から子の左端へ、縦横だけの折れ線を引く。
-
-        ポート名は線と同じ行に書くと罫線に重なって読めなくなるので、
-        上位側は線の上の行、下位側は線の下の行に分けて書く。
-        """
-        # 縦線は親のすぐ右に置く。横に長く走る区間を子の行に持ってくると、
-        # そこへ両側のポート名を並べて書けて、余白が無駄にならない
-        bus = parent_entry.col + BOX_W + 2
-        # 親側の横線
-        for c in range(parent_entry.col + BOX_W, bus + 1):
-            _line_top(sheet, parent_entry.middle, c, line)
-        # 縦線（親の高さから子の高さまで）
-        low, high = sorted((parent_entry.middle, child.middle))
-        for r in range(low, high + 1):
-            _line_left(sheet, r, bus, line)
-        # 子側の横線
-        for c in range(bus, child.col):
-            _line_top(sheet, child.middle, c, line)
-
-        # ポート名は、その機器の側に書く。線ごとに引くので、
-        # 配下が何台あっても親側のポートがそれぞれ出る
-        pair = port_of.get((parent_entry.device_id, child.device_id))
-        if not pair:
-            return
-        down, up = pair
-        if down:
-            # 上位機器の下りポートは、その線の左上。線ごとに書くので、
-            # 配下が何台あっても親側のポートがそれぞれ出る
-            cell = sheet.cell(row=child.middle - 1, column=bus + 1, value=down)
-            cell.font = Font(size=8, color="444444")
-            cell.alignment = Alignment(horizontal="left")
-        if up:
-            # 下位機器の上りポートは、線の右下。右揃えで箱の手前に寄せる
-            cell = sheet.cell(row=child.middle + 1, column=child.col - 1, value=up)
-            cell.font = Font(size=8, color="444444")
-            cell.alignment = Alignment(horizontal="right")
-
-    for entry in placed:
-        draw_box(entry)
-    for entry in placed:
-        if entry.parent is not None and entry.parent in by_id:
-            draw_link(entry, by_id[entry.parent])
-
-    # 方眼にする。列を細く、行を低くしないと図に見えない
-    depth_max = max((e.depth for e in placed), default=0)
-    for column in range(1, (depth_max + 1) * (BOX_W + GAP_W) + GAP_W + 1):
-        sheet.column_dimensions[get_column_letter(column)].width = 3.2
-    for row in range(ROW_START, (placed[-1].row + BOX_H + 2) if placed else 40):
-        sheet.row_dimensions[row].height = 14
+    # 図形は紙の上に浮くので、升目は消しておく。見出しも時点も図の中にある
     sheet.sheet_view.showGridLines = False
+    _fit_to_page(sheet, shapes, get_column_letter)
 
     # --- 表のシート。同じファイルに入れておけば、配るのは1つで済む ---
     _append_table(
@@ -336,25 +84,39 @@ def to_xlsx(
 
     buffer = io.BytesIO()
     workbook.save(buffer)
-    return buffer.getvalue()
+    # openpyxl は自由な図形を書けないので、出来上がったファイルへ足す
+    return xlsxdraw.attach(buffer.getvalue(), shapes)
 
 
-def _line_top(sheet, row: int, column: int, line) -> None:
-    from openpyxl.styles import Border
-
-    current = sheet.cell(row=row, column=column).border
-    sheet.cell(row=row, column=column).border = Border(
-        left=current.left, right=current.right, top=line, bottom=current.bottom
-    )
+#: 既定のセルの大きさ（px）。図がはみ出さない印刷範囲を決めるのに使う
+_CELL_W = 64.0
+_CELL_H = 20.0
 
 
-def _line_left(sheet, row: int, column: int, line) -> None:
-    from openpyxl.styles import Border
+def _fit_to_page(sheet, shapes, get_column_letter) -> None:
+    """図が1枚に収まるようにする。
 
-    current = sheet.cell(row=row, column=column).border
-    sheet.cell(row=row, column=column).border = Border(
-        left=line, right=current.right, top=current.top, bottom=current.bottom
-    )
+    構成図は「画面で確かめて、印刷して配る」ために出す。既定のままだと
+    A4 の幅で切られて、線が次の紙へ渡ってしまう。図の入る範囲を印刷範囲に
+    決めて、1枚に縮める。
+    """
+    from openpyxl.worksheet.properties import PageSetupProperties
+
+    if not shapes:
+        return
+    right = max(shape.x + shape.width for shape in shapes)
+    bottom = max(shape.y + shape.height for shape in shapes)
+    columns = max(1, int(right // _CELL_W) + 1)
+    rows = max(1, int(bottom // _CELL_H) + 1)
+    # 印刷範囲を決めると、Excel は普通の画面に点線の枠を出す。図の紙に
+    # 大きな枠が乗っているように見えるので、範囲は決めない。代わりに、
+    # 図の右下にあたるセルを作って「ここまでが中身」と伝える
+    sheet.cell(row=rows, column=columns).value = ""
+    # 横に長い図が多い。縦置きだと、縮めた結果が読めない大きさになる
+    sheet.page_setup.orientation = "landscape" if right >= bottom else "portrait"
+    sheet.sheet_properties.pageSetUpPr = PageSetupProperties(fitToPage=True)
+    sheet.page_setup.fitToWidth = 1
+    sheet.page_setup.fitToHeight = 1
 
 
 def _append_table(sheet, headers, rows, Font, get_column_letter) -> None:
