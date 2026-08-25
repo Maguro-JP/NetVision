@@ -242,9 +242,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="上位",
         name="無線（コントローラ / AP）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="機器としては台帳に載せられます。SSID や電波の設計は見ていません。",
+        note="SSID の守り方・落とし先の VLAN・合言葉の置き方まで読み、"
+        "誰でも入れる SSID、WEP / WPA1 / TKIP、素のまま書かれた合言葉、"
+        "問い合わせ先の無い 802.1X、来客が業務と同じ VLAN を指摘します。"
+        "読めるのは Cisco IOS-XE / AireOS・Aruba Instant・FortiGate の書き方です。"
+        "電波の設計（置き場所・出力・チャネル）は見ていません。",
     ),
     Capability(
         area="管理",
@@ -258,11 +262,12 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="運用",
         name="ログの解析",
-        read=NONE,
-        review=NONE,
+        read=PARTIAL,
+        review=PARTIAL,
         generate=NONE,
-        note="NetVision は Config と台帳を扱う道具で、流れているログは受けていません。"
-        "やるなら Syslog を受ける口から作ることになります。",
+        note="人が貼ったログを読み、機器・重さ・並びで数えたうえで、"
+        "障害・設定の食い違い・攻撃の兆しを根拠つきで挙げます。"
+        "機器から自動で集めることはしません（外へ通信しない道具のため）。",
     ),
     Capability(
         area="運用",

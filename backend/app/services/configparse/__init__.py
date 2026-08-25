@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from app.services.configparse import cisco, features, fortinet, juniper, nec
+from app.services.configparse import cisco, features, fortinet, juniper, nec, wireless
 from app.services.configparse.base import (
     FEATURE_LABELS,
     NeighborProtocol,
@@ -21,6 +21,9 @@ from app.services.configparse.base import (
     ParsedRedundancy,
     ParsedRoute,
     ParsedVrf,
+    ParsedWireless,
+    ParsedWirelessAp,
+    ParsedWlan,
     Vendor,
 )
 from app.services.configparse.ifname import expand, normalize, normalize_hostname
@@ -77,6 +80,9 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     _collect_referenced_vrfs(parsed)
     # 機能の拾い出しはベンダーに依らない。どの経路で来ても最後に通す
     parsed.features = features.parse(text)
+    # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
+    # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
+    parsed.wireless = wireless.parse(text)
     return parsed
 
 
@@ -106,6 +112,9 @@ __all__ = [
     "ParsedRedundancy",
     "ParsedRoute",
     "ParsedVrf",
+    "ParsedWireless",
+    "ParsedWirelessAp",
+    "ParsedWlan",
     "VENDOR_LABELS",
     "VENDOR_NAMES",
     "Vendor",

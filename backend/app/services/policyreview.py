@@ -1,4 +1,4 @@
-"""読み取った ACL / NAT / DHCP / QoS / IPsec / BGP の中身を見て、粗を挙げる。
+"""読み取った ACL / NAT / DHCP / QoS / IPsec / BGP / 無線の中身を見て、粗を挙げる。
 
 Config を書く道具である以上、書いたものが効いているかどうかまで言えないと
 使えない。ここで見るのは、動かしてみなくても言えることに限る。
@@ -18,7 +18,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
-from app.services import aclcheck
+from app.services import aclcheck, wirelessreview
 from app.services.configparse import ParsedConfig
 from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -55,6 +55,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
+    findings.extend(wirelessreview.review(parsed))
     if text is not None:
         findings.extend(_management_access(text, parsed))
     return findings

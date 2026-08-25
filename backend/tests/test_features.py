@@ -154,7 +154,7 @@ def test_a_line_is_counted_once():
 def test_the_matrix_says_what_cannot_be_done_too():
     """できることだけ並べると、できないことが伝わらない。"""
     names = {item.name: item for item in capabilities.CAPABILITIES}
-    assert names["ログの解析"].read == capabilities.NONE
+    assert names["実機への投入・監視"].read == capabilities.NONE
     assert names["実機への投入・監視"].generate == capabilities.NONE
     assert names["静的経路"].generate == capabilities.FULL
     for item in capabilities.CAPABILITIES:
