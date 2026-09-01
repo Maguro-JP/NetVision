@@ -16,6 +16,12 @@ vlan database
  vlan 20 name SERVERS
  vlan 100 name GUEST
 !
+access-list 3001 permit tcp 10.0.10.0/24 any eq 443
+access-list 3001 deny ip any any log
+access-list hardware GUEST-IN
+ 10 permit udp any any eq 53
+ 20 deny ip any any log
+!
 interface port1.0.1
  description to-core-01
  switchport
@@ -36,6 +42,8 @@ interface port1.0.24
  switchport
  switchport mode access
  switchport access vlan 100
+ access-group 3001
+ access-group GUEST-IN
  shutdown
 !
 interface vlan10

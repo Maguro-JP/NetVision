@@ -13,8 +13,8 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import cisco
-from app.services.configparse.base import ParsedConfig, ParsedRoute, Vendor
+from app.services.configparse import cisco, policy
+from app.services.configparse.base import ParsedAcl, ParsedConfig, ParsedRoute, Vendor
 from app.services.configparse.routing import to_prefix
 
 _VERSION = re.compile(r"AlliedWare Plus.*?(?:version|Version)\s+([\d.\-A-Za-z]+)", re.IGNORECASE)
@@ -24,6 +24,8 @@ _SERIAL = re.compile(r"^!?\s*Serial number\s*:\s*(\S+)", re.IGNORECASE | re.MULT
 _VLAN_LINE = re.compile(r"^vlan\s+(\d+)\s+name\s+(\S+)", re.IGNORECASE)
 _IP_ADDRESS = re.compile(r"^ip address\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
 _INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE)
+_ACCESS_GROUP = re.compile(r"^access-group\s+(\S+)\s*$", re.IGNORECASE)
 _ROUTE = re.compile(
     r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?(?P<dest>\d+\.\d+\.\d+\.\d+/\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
@@ -65,6 +67,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_vlan_database(text, parsed)
     _parse_addresses(text, parsed)
     _parse_routes(text, parsed)
+    _parse_hardware_acls(text, parsed)
     return parsed
 
 
@@ -125,3 +128,47 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
             continue
         seen.add((route.destination, route.next_hop))
         parsed.routes.append(route)
+
+
+def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
+    """ハードウェア ACL と、ポートへの当て方。
+
+    番号付き（3000 番台）は IOS の読み手がそのまま読める。名前付きは
+    `access-list hardware 名前` の下に並ぶので、ここで読む。当てるのは
+    `access-group 名前` で、向きは書かない（入ってくる側に効く）。
+    """
+    by_name = {acl.name: acl for acl in parsed.acls}
+    current: ParsedAcl | None = None
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line:
+            continue
+        stripped = line.strip()
+
+        if not line.startswith(" "):
+            head = _ACL_HARDWARE.match(stripped)
+            if head:
+                current = by_name.setdefault(
+                    head.group(1), ParsedAcl(name=head.group(1), kind="extended")
+                )
+                if current not in parsed.acls:
+                    parsed.acls.append(current)
+                interface = None
+                continue
+            port = _INTERFACE.match(stripped)
+            current = None
+            interface = port.group(1) if port else None
+            continue
+
+        if current is not None:
+            entry = policy.acl_entry(stripped)
+            if entry is not None:
+                current.entries.append(entry)
+            continue
+
+        if interface is not None:
+            applied = _ACCESS_GROUP.match(stripped)
+            if applied and applied.group(1) in by_name:
+                by_name[applied.group(1)].applied_to.append(f"interface {interface} 入り")

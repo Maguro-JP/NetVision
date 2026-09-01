@@ -59,3 +59,16 @@ def test_routes_are_read_with_their_length(parsed):
 def test_ospf_on_a_port_is_read(parsed):
     port = {i.name: i for i in parsed.interfaces}["Vlan10"]
     assert port.ospf_area == "0.0.0.0"
+
+
+def test_hardware_acls_are_read_and_their_port_is_known(parsed):
+    """番号付きは IOS の読み手で、名前付き（access-list hardware）はこちらで読む。
+
+    当てるのは `access-group 名前` で向きを書かない。入ってくる側に効く。
+    """
+    acls = {a.name: a for a in parsed.acls}
+    assert [e.action for e in acls["3001"].entries] == ["permit", "deny"]
+    assert acls["3001"].applied_to == ["interface port1.0.24 入り"]
+    assert [e.seq for e in acls["GUEST-IN"].entries] == ["10", "20"]
+    assert acls["GUEST-IN"].entries[0].destination_port == "eq 53"
+    assert acls["GUEST-IN"].applied_to == ["interface port1.0.24 入り"]

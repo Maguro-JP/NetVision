@@ -125,6 +125,11 @@ def _acls(text: str) -> list[ParsedAcl]:
     return list(found.values())
 
 
+def acl_entry(line: str) -> ParsedAclEntry | None:
+    """IOS 風の1行（`10 permit tcp any any eq 443`）を読む。他の読み手からも使う。"""
+    return _acl_entry(line, standard=False)
+
+
 def _acl_entry(line: str, *, standard: bool) -> ParsedAclEntry | None:
     """1行を、順番・許否・送信元・宛先に分ける。"""
     raw = line.strip()
