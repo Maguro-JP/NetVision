@@ -106,3 +106,45 @@ def test_a_clean_config_gets_no_findings_but_the_real_ones_still_come_out():
         "dhcp scope option 1 router=192.168.100.1", "dhcp scope option 1 router=10.9.9.9"
     )
     assert [t for t in titles(broken) if "既定ゲートウェイが、配る範囲の外です" in t]
+
+
+def test_the_tunnels_are_read():
+    """`tunnel select` の下と、その外の `ipsec ike ...` を番号でつなぐ。"""
+    tunnels = {t.name: t for t in parsed().tunnels}
+    assert tunnels["tunnel1"].kind == "ipsec"
+    assert tunnels["tunnel1"].source == "192.168.100.1"
+    assert tunnels["tunnel1"].destination == "203.0.113.2"
+    assert tunnels["tunnel1"].description == "to-honsha"
+
+
+def test_where_a_key_is_placed_is_remembered_without_the_key():
+    """合言葉そのものは持たない。置いてある相手だけを残す。"""
+    crypto = parsed().crypto
+    assert crypto is not None
+    assert crypto.keyed_peers == ["203.0.113.2"]
+    assert "himitsu" not in str(crypto)
+
+
+def test_the_strength_is_carried_over_in_the_same_shape_as_cisco():
+    crypto = parsed().crypto
+    sets = {t.name: t.transforms for t in crypto.transform_sets}
+    assert sets["sa policy 101"] == ["esp-aes-cbc", "esp-sha256-hmac"]
+    # 鍵の長さで書かれた群は、判断の側と同じ番号に直しておく
+    policy = {p.number: p for p in crypto.ike_policies}["1"]
+    assert policy.encryption == "aes-cbc"
+    assert policy.group == "14"
+
+
+def test_an_old_tunnel_is_pointed_out():
+    """古い方式のまま残っているトンネルは、Cisco と同じ目で指摘が出る。"""
+    text = (
+        load()
+        .replace(
+            "ipsec sa policy 101 1 esp aes-cbc sha256-hmac",
+            "ipsec sa policy 101 1 esp des-cbc md5-hmac",
+        )
+        .replace("ipsec ike group 1 modp2048", "ipsec ike group 1 modp768")
+    )
+    found = titles(text)
+    assert [t for t in found if "破られている方式" in t]
+    assert [t for t in found if "鍵の作り方が古い" in t]
