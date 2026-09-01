@@ -974,6 +974,34 @@ def check_stp(db: DbSession) -> StpReportRead:
     )
 
 
+class HaReportRead(BaseModel):
+    devices_seen: int
+    groups: dict[str, list[str]]
+    findings: list[StpFindingRead]
+    notes: list[str]
+
+
+@router.get("/ha-check", response_model=HaReportRead)
+def check_ha(db: DbSession) -> HaReportRead:
+    """2台で1台に見せる仕組み（HA / failover / VSX / MLAG）が組として成り立っているか。
+
+    片方にしか入っていない、両方とも primary。どれも1台の中では正しいので、
+    機器をまたがないと見つからない。
+    """
+    from app.services import hareview
+
+    report = hareview.review(db)
+    return HaReportRead(
+        devices_seen=report.devices_seen,
+        groups=report.groups,
+        findings=[
+            StpFindingRead(level=f.level, title=f.title, why=f.why, evidence=f.evidence)
+            for f in report.findings
+        ],
+        notes=report.notes,
+    )
+
+
 @router.get("/link-check", response_model=LinkReportRead)
 def check_links(db: DbSession) -> LinkReportRead:
     """引けている線を、両端の設定で突き合わせる。

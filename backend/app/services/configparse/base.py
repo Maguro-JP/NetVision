@@ -177,6 +177,8 @@ class ParsedConfig:
     crypto: ParsedCrypto | None = None
     #: 無線（SSID と AP）。読めなければ None
     wireless: ParsedWireless | None = None
+    #: 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）。読めなければ None
+    ha_pair: object | None = None
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""

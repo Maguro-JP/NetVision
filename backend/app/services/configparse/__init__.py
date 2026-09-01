@@ -14,6 +14,7 @@ from app.services.configparse import (
     cisco,
     features,
     fortinet,
+    hapair,
     juniper,
     nec,
     panos,
@@ -131,6 +132,7 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     parsed.wireless = wireless.parse(text)
+    parsed.ha_pair = hapair.parse(text)
     return parsed
 
 

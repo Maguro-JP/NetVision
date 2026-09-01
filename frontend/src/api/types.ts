@@ -1485,6 +1485,15 @@ export interface StpReport {
   notes: string[];
 }
 
+/** 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）が組として成り立っているか。 */
+export interface HaReport {
+  devices_seen: number;
+  /** 「種類 / 組の名前」 → 機器名 */
+  groups: Record<string, string[]>;
+  findings: StpFinding[];
+  notes: string[];
+}
+
 /** ログを読んでまとめたもの。1行ずつ眺めるためのものではない。 */
 export interface LogReport {
   lines: number;
