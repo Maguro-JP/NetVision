@@ -1523,6 +1523,7 @@ NETVISION_ENV_FILE=config/aomori.env python -m uvicorn app.main:app
 | PUT / DELETE | `/topology/vlans/catalog/{vlan_id}` | VLAN 台帳の更新・削除 |
 | POST | `/topology/vlans/catalog/adopt` | 実機の VLAN 名を台帳の下書きとして取り込む |
 | POST / PATCH / DELETE | `/topology/links` | 手動での結線の追加・更新・削除 |
+| GET | `/topology/stp-check` | ループを止める木の根がどこに立つか（機器をまたいで判定） |
 | GET / POST | `/reference/products` | 型番リファレンスの一覧・登録 |
 | PATCH / DELETE | `/reference/products/{id}` | 型番リファレンスの更新・削除 |
 | POST | `/reference/products/import` | 型番リファレンスの CSV / Excel 取り込み |

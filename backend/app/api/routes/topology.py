@@ -933,6 +933,47 @@ def check_vlans(db: DbSession) -> VlanReportRead:
     )
 
 
+class StpFindingRead(BaseModel):
+    level: str
+    title: str
+    why: str
+    evidence: list[str]
+
+
+class StpReportRead(BaseModel):
+    devices_seen: int
+    #: VLAN 番号 → 根になる機器。全体に効く書き方しか無いときは "all"
+    roots: dict[str, str]
+    findings: list[StpFindingRead]
+    notes: list[str]
+
+
+@router.get("/stp-check", response_model=StpReportRead)
+def check_stp(db: DbSession) -> StpReportRead:
+    """ループを止める木の根が、どこに立つかを機器をまたいで見る。
+
+    1台の Config だけでは言えない。優先度は相手と比べてはじめて意味を
+    持つので、根の位置は機器をまたがないと分からない。
+    """
+    from app.services import stpreview
+
+    report = stpreview.review(db)
+    return StpReportRead(
+        devices_seen=report.devices_seen,
+        roots={("all" if vlan is None else str(vlan)): host for vlan, host in report.roots.items()},
+        findings=[
+            StpFindingRead(
+                level=item.level,
+                title=item.title,
+                why=item.why,
+                evidence=item.evidence,
+            )
+            for item in report.findings
+        ],
+        notes=report.notes,
+    )
+
+
 @router.get("/link-check", response_model=LinkReportRead)
 def check_links(db: DbSession) -> LinkReportRead:
     """引けている線を、両端の設定で突き合わせる。

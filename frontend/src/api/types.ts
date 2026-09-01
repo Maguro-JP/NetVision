@@ -1469,6 +1469,22 @@ export interface VlanReport {
   notes: string[];
 }
 
+export interface StpFinding {
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 木の根（STP のルート）が、どこに立つか。1台では言えないので機器をまたいで見る。 */
+export interface StpReport {
+  devices_seen: number;
+  /** VLAN 番号 → 根になる機器。全体に効く書き方しか無いときは "all"。 */
+  roots: Record<string, string>;
+  findings: StpFinding[];
+  notes: string[];
+}
+
 /** ログを読んでまとめたもの。1行ずつ眺めるためのものではない。 */
 export interface LogReport {
   lines: number;
