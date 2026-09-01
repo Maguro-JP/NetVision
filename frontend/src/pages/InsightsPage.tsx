@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { InsightCategory } from "../api/types";
 import LinkCheckPanel from "../components/LinkCheckPanel";
+import VlanCheckPanel from "../components/VlanCheckPanel";
 import QueryError from "../components/QueryError";
 import SeverityBadge from "../components/SeverityBadge";
 import { formatCurrency } from "../lib/format";
@@ -137,6 +138,7 @@ export default function InsightsPage() {
         </>
       )}
       <LinkCheckPanel />
+      <VlanCheckPanel />
     </>
   );
 }

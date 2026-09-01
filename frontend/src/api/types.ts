@@ -1453,6 +1453,22 @@ export interface LinkReport {
   notes: string[];
 }
 
+export interface VlanFinding {
+  vlan_id: number;
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+/** VLAN の名前が、機器と台帳でそろっているか。 */
+export interface VlanReport {
+  vlans_seen: number;
+  devices_with_vlans: number;
+  findings: VlanFinding[];
+  notes: string[];
+}
+
 /** ログを読んでまとめたもの。1行ずつ眺めるためのものではない。 */
 export interface LogReport {
   lines: number;
