@@ -548,3 +548,24 @@ interface GigabitEthernet1/0/2
         for t in titles
         if "問い合わせ先" in t or "どの口にも" in t or "破ったとき" in t or "黙って落とす" in t
     ]
+
+
+def test_a_vlan_used_on_a_port_but_never_defined_is_the_heaviest(db_session):
+    """定義していない番号を当てたポートは、つながっているのに通らない。"""
+    text = "hostname sw\nvlan 10\n name USERS\ninterface Gi1/0/1\n switchport access vlan 20\n"
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "定義が無い VLAN" in f.title)
+    assert finding.level == HIGH
+    assert any("VLAN 20" in line for line in finding.evidence)
+
+
+def test_a_config_without_any_vlan_definition_is_not_accused(db_session):
+    """ルーターの抜粋など、定義を1つも読めていないときは言わない。"""
+    text = (
+        "hostname rt\n"
+        "interface Gi0/0.20\n"
+        " encapsulation dot1Q 20\n"
+        " ip address 10.0.20.1 255.255.255.0\n"
+    )
+    result = configcheck.check(db_session, text)
+    assert not [f for f in result.findings if "定義が無い VLAN" in f.title]

@@ -315,6 +315,30 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
             digits = "".join(c for c in i.name if c.isdigit())
             if digits:
                 used.add(int(digits))
+    # 逆向き。ポートで使っているのに、定義が無い VLAN。Cisco はこの状態の
+    # アクセスポートを inactive にして、線はつながっているのに通らなくなる。
+    # 定義を1つも読めていない Config（ルーターの抜粋など）では言わない
+    if parsed.vlans:
+        undefined: dict[int, list[str]] = {}
+        for i in parsed.interfaces:
+            for vlan in sorted(i.carried_vlans()):
+                if vlan not in parsed.vlans and vlan != 1:
+                    undefined.setdefault(vlan, []).append(i.name)
+        if undefined:
+            out.append(
+                Finding(
+                    level=HIGH,
+                    title="ポートで使っているのに、定義が無い VLAN があります",
+                    why="定義していない番号をアクセスポートに当てると、ポートは"
+                    "つながっているのに通りません。トランクの許可に入れていても、"
+                    "その番号の通信は落ちます。`vlan 番号` を定義してください。",
+                    evidence=[
+                        f"VLAN {vlan}: {', '.join(names[:3])}"
+                        for vlan, names in sorted(undefined.items())
+                    ][:5],
+                )
+            )
+
     idle = sorted(v for v in parsed.vlans if v not in used and v != 1)
     if idle:
         out.append(
