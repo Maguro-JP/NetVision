@@ -1,0 +1,39 @@
+# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)
+# MAC Address : 00:a0:de:11:22:33, 00:a0:de:11:22:34
+# Memory 256Mbytes, 2LAN
+# main:  RTX830 ver=00 serial=S4H012345 MAC-Address=00:a0:de:11:22:33
+console character ja.utf8
+login password *
+administrator password *
+ip route default gateway pp 1
+ip route 10.20.0.0/16 gateway 192.168.100.254
+ip lan1 address 192.168.100.1/24
+ip lan1 secure filter in 200030 200031
+pp select 1
+ pp always-on on
+ pppoe use lan2
+ pp auth accept pap chap
+ pp auth myname user@example.jp himitsu
+ ppp lcp mru on 1454
+ ppp ipcp ipaddress on
+ ip pp secure filter in 200003 200020
+ ip pp secure filter out 200013 200099 dynamic 200080
+ ip pp nat descriptor 1000
+ pp enable 1
+switch control use lan1 on terminal=on
+nat descriptor type 1000 masquerade
+nat descriptor address outer 1000 ipcp
+nat descriptor masquerade static 1000 1 192.168.100.10 tcp 80
+ip filter 200003 reject 10.0.0.0/8 * * * *
+ip filter 200013 pass * * * * *
+ip filter 200020 pass * * icmp * *
+ip filter 200030 pass 192.168.100.0/24 * * * *
+ip filter 200031 reject-log * * tcp * 23
+ip filter 200099 reject * * udp * 135
+ip filter 200500 pass * * tcp * 22
+dhcp service server
+dhcp scope 1 192.168.100.2-192.168.100.191/24
+dhcp scope option 1 router=192.168.100.1 dns=192.168.100.1,8.8.8.8
+dns host lan1
+dns server 8.8.8.8
+syslog host 192.168.100.10

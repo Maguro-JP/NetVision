@@ -48,6 +48,7 @@ running-config
 | Fortinet FortiOS | ✅ | `get system status` |
 | NEC IX シリーズ | ✅ | `show version`（`IX Series IX2215 ...` の行） |
 | NEC QX シリーズ | ✅ | `display version`（Comware ベース） |
+| ヤマハ RTX / NVR / FWX | ✅ | `show config` の1行目（`# RTX830 Rev.15.02.28 ...`） |
 
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 
