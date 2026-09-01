@@ -17,7 +17,7 @@ pp select 1
  ppp lcp mru on 1454
  ppp ipcp ipaddress on
  ip pp secure filter in 200003 200020
- ip pp secure filter out 200013 200099 dynamic 200080
+ ip pp secure filter out 200099 200013 dynamic 200080
  ip pp nat descriptor 1000
  pp enable 1
 switch control use lan1 on terminal=on

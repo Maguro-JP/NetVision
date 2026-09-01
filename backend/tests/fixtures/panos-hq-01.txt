@@ -1,0 +1,47 @@
+hostname: fw-pan-01
+model: PA-440
+sw-version: 11.1.4-h7
+serial: 001801234567
+set deviceconfig system hostname fw-pan-01
+set network interface ethernet ethernet1/1 layer3 ip 203.0.113.2/30
+set network interface ethernet ethernet1/1 comment WAN-kaisen
+set network interface ethernet ethernet1/2 layer3 ip 10.1.0.1/24
+set network interface ethernet ethernet1/3 layer3 ip 10.9.0.1/24
+set zone untrust network layer3 ethernet1/1
+set zone trust network layer3 ethernet1/2
+set zone dmz network layer3 ethernet1/3
+set network virtual-router default routing-table ip static-route default destination 0.0.0.0/0
+set network virtual-router default routing-table ip static-route default nexthop ip-address 203.0.113.1
+set network virtual-router default routing-table ip static-route default interface ethernet1/1
+set address WEB-SERVER ip-netmask 10.9.0.10/32
+set address-group SERVERS static [ WEB-SERVER ]
+set service TCP-443 protocol tcp port 443
+set rulebase security rules allow-web from untrust
+set rulebase security rules allow-web to dmz
+set rulebase security rules allow-web source any
+set rulebase security rules allow-web destination WEB-SERVER
+set rulebase security rules allow-web service TCP-443
+set rulebase security rules allow-web application ssl
+set rulebase security rules allow-web action allow
+set rulebase security rules allow-web log-end yes
+set rulebase security rules trust-out from trust
+set rulebase security rules trust-out to untrust
+set rulebase security rules trust-out source any
+set rulebase security rules trust-out destination any
+set rulebase security rules trust-out service any
+set rulebase security rules trust-out application any
+set rulebase security rules trust-out action allow
+set rulebase security rules deny-all from any
+set rulebase security rules deny-all to any
+set rulebase security rules deny-all source any
+set rulebase security rules deny-all destination any
+set rulebase security rules deny-all action deny
+set rulebase security rules deny-all log-end yes
+set rulebase nat rules out-napt from trust
+set rulebase nat rules out-napt to untrust
+set rulebase nat rules out-napt source any
+set rulebase nat rules out-napt source-translation dynamic-ip-and-port interface-address interface ethernet1/1
+set rulebase nat rules web-in from untrust
+set rulebase nat rules web-in to untrust
+set rulebase nat rules web-in destination 203.0.113.10
+set rulebase nat rules web-in destination-translation translated-address 10.9.0.10

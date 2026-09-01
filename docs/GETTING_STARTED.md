@@ -99,7 +99,8 @@ running-config
 ```
 
 対応ベンダーは Cisco（IOS / IOS-XE / NX-OS）、Juniper Junos、Fortinet FortiOS、
-NEC（IX シリーズ / QX シリーズ）、ヤマハ（RTX / NVR / FWX）、Cisco ASA / FTD です（自動判別）。
+NEC（IX シリーズ / QX シリーズ）、ヤマハ（RTX / NVR / FWX）、Cisco ASA / FTD、
+Palo Alto PAN-OS（`set` 形式）です（自動判別）。
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 
 ## 2. まとめて取り込む

@@ -58,9 +58,12 @@ def covers(upper: ParsedAclEntry, lower: ParsedAclEntry) -> bool:
     """
     if not _protocol_covers(upper.protocol, lower.protocol):
         return False
-    if not _address_covers(upper.source, lower.source):
+    # 名前で書かれていても、中身が分かっていればそちらで比べる
+    if not _address_covers(upper.source_value or upper.source, lower.source_value or lower.source):
         return False
-    if not _address_covers(upper.destination, lower.destination):
+    if not _address_covers(
+        upper.destination_value or upper.destination, lower.destination_value or lower.destination
+    ):
         return False
     if not _port_covers(upper.source_port, lower.source_port):
         return False
@@ -124,9 +127,38 @@ def _wildcard_to_prefix(mask: str) -> int | None:
     return bin(netmask).count("1")
 
 
+def split_zone(text: str | None) -> tuple[str | None, str | None]:
+    """`trust:10.0.0.0/24` を（ゾーン, アドレス）に分ける。
+
+    ゾーンで許否が決まる機種（PAN-OS など）は、アドレスが同じでも
+    ゾーンが違えば別の条件になる。ここを混ぜると、別のゾーン宛ての行どうしを
+    「上が下を覆っている」と読み違える。
+    """
+    if text is None or ":" not in text:
+        return None, text
+    zone, _, address = text.partition(":")
+    # IPv6 のコロンと取り違えない。ゾーン名に数字だけは使わない前提で見る
+    if not zone or any(char in zone for char in ".:/") or zone.isdigit():
+        return None, text
+    return zone, address or "any"
+
+
+def _zone_covers(upper: str | None, lower: str | None) -> bool:
+    """上の行のゾーンが、下の行のゾーンを含んでいるか。"""
+    if upper is None or upper == "any":
+        return True
+    if lower is None:
+        return False
+    return upper == lower
+
+
 def _address_covers(upper: str | None, lower: str | None) -> bool:
-    top = network_of(upper)
-    bottom = network_of(lower)
+    upper_zone, upper_address = split_zone(upper)
+    lower_zone, lower_address = split_zone(lower)
+    if not _zone_covers(upper_zone, lower_zone):
+        return False
+    top = network_of(upper_address)
+    bottom = network_of(lower_address)
     if top is None or bottom is None:
         return False
     if top.version != bottom.version:
@@ -167,6 +199,10 @@ def _port_number(token: str) -> int | None:
 def _port_covers(upper: str | None, lower: str | None) -> bool:
     top = port_range(upper)
     bottom = port_range(lower)
+    if top == _ALL_PORTS:
+        # 上がポートを限定していないなら、下が何であっても先に拾う。
+        # 下の書き方が読めないことは、ここでは理由にならない
+        return True
     if top is None or bottom is None:
         return False
     return top[0] <= bottom[0] and bottom[1] <= top[1]
