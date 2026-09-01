@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from app.services.configparse import (
+    allied,
     arista,
     aruba,
     asa,
@@ -50,6 +51,7 @@ _DETECTORS = (
     asa.detect,
     arista.detect,
     aruba.detect,
+    allied.detect,
     nec.detect,
     cisco.detect,
 )
@@ -66,6 +68,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.PALO_ALTO: "Palo Alto PAN-OS",
     Vendor.ARISTA: "Arista EOS",
     Vendor.ARUBA_CX: "Aruba CX（AOS-CX）",
+    Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -81,6 +84,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.PALO_ALTO: "Palo Alto",
     Vendor.ARISTA: "Arista",
     Vendor.ARUBA_CX: "Aruba",
+    Vendor.ALLIED: "アライドテレシス",
 }
 
 
@@ -113,6 +117,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = arista.parse(text)
     elif vendor is Vendor.ARUBA_CX:
         parsed = aruba.parse(text)
+    elif vendor is Vendor.ALLIED:
+        parsed = allied.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

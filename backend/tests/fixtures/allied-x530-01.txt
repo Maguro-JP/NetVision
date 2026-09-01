@@ -1,0 +1,58 @@
+!
+! Allied Telesis AlliedWare Plus (tm) version 5.5.2-2.1
+! Build name : x530-5.5.2-2.1.rel
+! Base Model : AT-x530-28GTXm
+! Serial number : A11223344
+!
+hostname at-x530-01
+!
+service password-encryption
+!
+no service telnet
+service ssh
+!
+vlan database
+ vlan 10 name USERS
+ vlan 20 name SERVERS
+ vlan 100 name GUEST
+!
+interface port1.0.1
+ description to-core-01
+ switchport
+ switchport mode trunk
+ switchport trunk allowed vlan add 10,20
+ switchport trunk native vlan 1
+ static-channel-group 1
+!
+interface port1.0.10
+ description server-01
+ switchport
+ switchport mode access
+ switchport access vlan 20
+ spanning-tree portfast
+!
+interface port1.0.24
+ description guest-ap
+ switchport
+ switchport mode access
+ switchport access vlan 100
+ shutdown
+!
+interface vlan10
+ ip address 10.0.10.1/24
+ ip ospf 1 area 0.0.0.0
+!
+interface vlan20
+ ip address 10.0.20.1/24
+!
+ip route 0.0.0.0/0 10.0.10.254
+ip route 10.9.0.0/16 10.0.20.254 200
+!
+router ospf 1
+ ospf router-id 10.0.10.1
+ network 10.0.10.0/24 area 0.0.0.0
+!
+line vty 0 4
+ exec-timeout 10 0
+!
+end

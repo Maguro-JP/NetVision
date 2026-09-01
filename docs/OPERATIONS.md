@@ -52,6 +52,7 @@ running-config
 | Cisco ASA / FTD | ✅ | `ASA Version` の行、`show version` の Hardware / Serial Number |
 | Palo Alto PAN-OS | ✅ | `show system info` の model / sw-version / serial |
 | Arista EOS | ✅ | 見出しの `! device: ... (DCS-..., EOS-4.x)`、`show version` |
+| アライドテレシス AlliedWare Plus | ✅ | 見出しの `AlliedWare Plus (tm) version ...`、`Base Model` / `Serial number` |
 | Aruba CX（AOS-CX） | ✅ | 見出しの `!Version ArubaOS-CX ...` と `!Model: ...` |
 
 文字コードは Shift_JIS でも UTF-8 でも構いません。
