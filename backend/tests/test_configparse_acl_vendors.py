@@ -117,3 +117,76 @@ def test_a_policy_that_is_turned_off_is_not_read_as_a_rule():
     """止めたままの行を並びに混ぜると、影の判定が狂う。"""
     acl = _acl(FORTI, "firewall policy")
     assert acl.entries[1].action == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# Juniper SRX（security policies）
+# ---------------------------------------------------------------------------
+
+
+def test_srx_policies_carry_their_zones():
+    """SRX の許否はゾーンの組み合わせごとに並ぶ。
+
+    条件にゾーンを入れておかないと、別のゾーン宛ての行どうしを
+    「上が下を覆っている」と取り違える。
+    """
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    acl = next(a for a in parsed.acls if a.name == "security policies")
+    entries = {e.raw: e for e in acl.entries}
+
+    web = entries["policy allow-web"]
+    assert (web.source, web.destination) == ("untrust:any", "trust:WEB-SERVER")
+    # アドレス帳の名前は、中身が分かるときだけ解決しておく
+    assert web.destination_value == "trust:10.9.0.10/32"
+    assert web.destination_port == "アプリ junos-https"
+    assert web.log is True
+
+    out = entries["policy trust-out"]
+    assert (out.source, out.destination) == ("trust:any", "untrust:any")
+    # 戻りは自動で通る機種なので、出る側が広いことを「実質全通し」と言わない
+    assert acl.stateful is True
+
+
+def test_srx_source_nat_is_read():
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    assert parsed.nat is not None
+    rule = next(r for r in parsed.nat.rules if r.kind == "dynamic")
+    assert rule.matched == "10.1.0.0/24"
+    assert rule.translated == "出口のアドレス"
+    assert rule.overload is True
+    assert parsed.nat.outside_interfaces == ["untrust"]
+
+
+def test_the_zone_of_a_port_is_written_on_the_physical_port():
+    """ゾーンは論理の単位に付くが、図と台帳で見るのは物理のポート。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert "zone trust" in (ports["ge-0/0/0"].description or "")
+    assert "zone untrust" in (ports["ge-0/0/1"].description or "")
+    assert "ge-0/0/0.0" not in ports
+
+
+def test_a_table_followed_by_config_does_not_become_neighbors():
+    """show の表の下に config が続いていても、行を隣接情報にしない。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    assert [n.remote_hostname for n in parsed.neighbors] == ["core-sw-01"]

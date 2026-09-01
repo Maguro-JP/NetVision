@@ -26,6 +26,7 @@ from app.services.configparse.base import (
     ParsedDhcp,
     ParsedDhcpPool,
     ParsedIkePolicy,
+    ParsedInterface,
     ParsedNat,
     ParsedNatPool,
     ParsedNatRule,
@@ -35,7 +36,7 @@ from app.services.configparse.base import (
     ParsedQosPolicy,
     ParsedTransformSet,
 )
-from app.services.configparse.ifname import expand
+from app.services.configparse.ifname import expand, normalize
 
 
 def parse_cisco_crypto(text: str, parsed: ParsedConfig) -> None:
@@ -791,3 +792,222 @@ def _fortios_setting(entry: ParsedAclEntry, name: str, value: str) -> None:
     elif name == "logtraffic" and first.lower() != "disable":
         entry.log = True
     entry.raw = f"{entry.raw} {name} {first}".strip()
+
+
+# ---------------------------------------------------------------------------
+# Junos の security policies（SRX）
+# ---------------------------------------------------------------------------
+#
+# SRX の許否は、ゾーンの組み合わせごとに並ぶ。同じ「上から順に、最初に
+# 当たった行」なので、器は ACL と同じものを使う。PAN-OS と同じく、条件には
+# ゾーンを含めておく。含めないと、別のゾーン宛ての行どうしを「上が下を
+# 覆っている」と取り違える。
+
+_SRX_POLICY = re.compile(
+    r"^set\s+security\s+policies\s+from-zone\s+(?P<from>\S+)\s+to-zone\s+(?P<to>\S+)\s+"
+    r"policy\s+(?P<name>\S+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+_SRX_ADDRESS = re.compile(
+    r"^set\s+security\s+(?:zones\s+security-zone\s+\S+\s+)?address-book\s+"
+    r"(?:global\s+)?address\s+(?P<name>\S+)\s+(?P<value>\S+)",
+    re.IGNORECASE,
+)
+_SRX_ZONE_INTERFACE = re.compile(
+    r"^set\s+security\s+zones\s+security-zone\s+(?P<zone>\S+)\s+interfaces\s+(?P<interface>\S+)",
+    re.IGNORECASE,
+)
+_SRX_NAT_SOURCE = re.compile(
+    r"^set\s+security\s+nat\s+source\s+rule-set\s+(?P<set>\S+)\s+(?P<rest>.+)$", re.IGNORECASE
+)
+_SRX_NAT_STATIC = re.compile(
+    r"^set\s+security\s+nat\s+static\s+rule-set\s+(?P<set>\S+)\s+rule\s+(?P<rule>\S+)\s+"
+    r"(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+
+
+def parse_junos_security(text: str, parsed: ParsedConfig) -> None:
+    """SRX の許否・アドレス帳・ゾーン・source NAT を読む。"""
+    values = _srx_addresses(text)
+    _srx_zones(text, parsed)
+    _srx_policies(text, parsed, values)
+    _srx_nat(text, parsed)
+
+
+def _srx_addresses(text: str) -> dict[str, str]:
+    """アドレス帳。名前のままでは、覆っているかどうかを言えない。"""
+    values: dict[str, str] = {}
+    for raw in text.splitlines():
+        found = _SRX_ADDRESS.match(raw.strip())
+        if found:
+            values[found.group("name")] = found.group("value")
+    return values
+
+
+def _srx_zones(text: str, parsed: ParsedConfig) -> None:
+    """どのポートがどのゾーンかを、ポートの説明に残す。
+
+    ゾーンが分からないと、図の上で「外向きの口」がどれか分からない。
+    """
+    for raw in text.splitlines():
+        found = _SRX_ZONE_INTERFACE.match(raw.strip())
+        if not found:
+            continue
+        # ゾーンは論理の単位（`ge-0/0/1.0`）に付くが、台帳と図で見るのは
+        # 物理のポート。同じ名前のポートが既にあれば、そちらに書く
+        name = found.group("interface")
+        base = name.split(".")[0]
+        known = {item.key: item for item in parsed.interfaces}
+        interface = known.get(normalize(base)) or parsed.add_interface(ParsedInterface(name=name))
+        note = f"zone {found.group('zone')}"
+        current = interface.description or ""
+        if note not in current:
+            interface.description = f"{current} / {note}".strip(" /") if current else note
+
+
+def _srx_policies(text: str, parsed: ParsedConfig, values: dict[str, str]) -> None:
+    rules: dict[tuple[str, str, str], ParsedAclEntry] = {}
+    order: list[tuple[str, str, str]] = []
+    zones: dict[tuple[str, str, str], tuple[str, str]] = {}
+
+    for raw in text.splitlines():
+        found = _SRX_POLICY.match(raw.strip())
+        if not found:
+            continue
+        key = (found.group("from"), found.group("to"), found.group("name"))
+        entry = rules.get(key)
+        if entry is None:
+            entry = ParsedAclEntry(
+                seq=str(len(order) + 1),
+                action="permit",
+                raw=f"policy {found.group('name')}",
+            )
+            rules[key] = entry
+            zones[key] = (found.group("from"), found.group("to"))
+            order.append(key)
+        _srx_policy_option(entry, found.group("rest"))
+
+    if not order:
+        return
+
+    for key in order:
+        entry = rules[key]
+        source_zone, target_zone = zones[key]
+        entry.source = _srx_scoped(source_zone, entry.source)
+        entry.destination = _srx_scoped(target_zone, entry.destination)
+        entry.source_value = _srx_resolved(source_zone, entry.source, values)
+        entry.destination_value = _srx_resolved(target_zone, entry.destination, values)
+
+    parsed.acls.append(
+        ParsedAcl(
+            name="security policies",
+            kind="policy",
+            entries=[rules[key] for key in order],
+            applied_to=["ポリシー表"],
+            stateful=True,  # SRX は戻りを自動で通す。出る側を広く開けるのが普通
+        )
+    )
+
+
+def _srx_policy_option(entry: ParsedAclEntry, rest: str) -> None:
+    words = rest.split()
+    if not words:
+        return
+    head = words[0].lower()
+
+    if head == "match" and len(words) >= 3:
+        what, value = words[1].lower(), words[2]
+        if what == "source-address":
+            entry.source = value
+        elif what == "destination-address":
+            entry.destination = value
+        elif what == "application":
+            entry.destination_port = f"アプリ {value}"
+        elif what == "source-identity":
+            entry.remark = f"利用者 {value}"
+        return
+
+    if head == "then" and len(words) >= 2:
+        action = words[1].lower()
+        if action in ("permit", "deny", "reject"):
+            entry.action = "permit" if action == "permit" else "deny"
+        elif action == "log":
+            entry.log = True
+        return
+
+    if head == "description":
+        entry.remark = " ".join(words[1:])
+
+
+def _srx_scoped(zone: str, address: str | None) -> str:
+    """ゾーンとアドレスを1つの条件にする（PAN-OS と同じ考え方）。"""
+    value = address or "any"
+    return value if zone == "any" else f"{zone}:{value}"
+
+
+def _srx_resolved(zone: str, scoped: str, values: dict[str, str]) -> str | None:
+    _, _, address = scoped.partition(":") if ":" in scoped else ("", "", scoped)
+    address = address or scoped
+    if address in ("any", "any-ipv4", ""):
+        return None
+    value = values.get(address)
+    return None if value is None else _srx_scoped(zone, value)
+
+
+def _srx_nat(text: str, parsed: ParsedConfig) -> None:
+    """source NAT（出ていく通信の変換）と static NAT を読む。"""
+    nat = parsed.nat or ParsedNat()
+    rules: dict[str, ParsedNatRule] = {}
+    found_any = False
+
+    for raw in text.splitlines():
+        line = raw.strip()
+
+        source = _SRX_NAT_SOURCE.match(line)
+        if source:
+            rest = source.group("rest").split()
+            if len(rest) >= 2 and rest[0].lower() == "to" and rest[1].lower() == "zone":
+                nat.outside_interfaces.append(rest[2] if len(rest) > 2 else "")
+                continue
+            if not rest or rest[0].lower() != "rule":
+                continue
+            found_any = True
+            name = rest[1] if len(rest) > 1 else source.group("set")
+            rule = rules.setdefault(
+                name,
+                ParsedNatRule(
+                    kind="dynamic",
+                    direction="inside",
+                    matched="内側から出る通信",
+                    matched_is_name=False,
+                    overload=True,
+                    raw=line,
+                ),
+            )
+            body = rest[2:]
+            matched = len(body) >= 3 and body[0].lower() == "match"
+            if matched and body[1].lower() == "source-address":
+                rule.matched = body[2]
+            elif len(body) >= 2 and body[0].lower() == "then":
+                rule.translated = "出口のアドレス" if body[-1].lower() == "interface" else body[-1]
+            continue
+
+        static = _SRX_NAT_STATIC.match(line)
+        if static:
+            found_any = True
+            rule = rules.setdefault(
+                f"static {static.group('rule')}",
+                ParsedNatRule(kind="static", direction="outside", matched_is_name=False, raw=line),
+            )
+            body = static.group("rest").split()
+            if len(body) >= 3 and body[0].lower() == "match":
+                rule.matched = body[2]
+            elif len(body) >= 2 and body[0].lower() == "then":
+                rule.translated = body[-1]
+
+    if not found_any:
+        return
+    nat.rules.extend(rules.values())
+    nat.outside_interfaces = [name for name in nat.outside_interfaces if name]
+    parsed.nat = nat

@@ -13,3 +13,19 @@ set interfaces ge-0/0/2 disable
 edge-rt-01> show lldp neighbors
 Local Interface  Parent Interface  Chassis Id         Port info          System Name
 ge-0/0/0         -                 00:11:22:33:44:55  GigabitEthernet1/0/1  core-sw-01
+set security zones security-zone untrust interfaces ge-0/0/1.0
+set security zones security-zone trust interfaces ge-0/0/0.0
+set security address-book global address WEB-SERVER 10.9.0.10/32
+set security policies from-zone untrust to-zone trust policy allow-web match source-address any
+set security policies from-zone untrust to-zone trust policy allow-web match destination-address WEB-SERVER
+set security policies from-zone untrust to-zone trust policy allow-web match application junos-https
+set security policies from-zone untrust to-zone trust policy allow-web then permit
+set security policies from-zone untrust to-zone trust policy allow-web then log session-close
+set security policies from-zone trust to-zone untrust policy trust-out match source-address any
+set security policies from-zone trust to-zone untrust policy trust-out match destination-address any
+set security policies from-zone trust to-zone untrust policy trust-out match application any
+set security policies from-zone trust to-zone untrust policy trust-out then permit
+set security nat source rule-set trust-to-untrust from zone trust
+set security nat source rule-set trust-to-untrust to zone untrust
+set security nat source rule-set trust-to-untrust rule napt match source-address 10.1.0.0/24
+set security nat source rule-set trust-to-untrust rule napt then source-nat interface

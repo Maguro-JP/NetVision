@@ -134,7 +134,9 @@ def test_juniper_config_and_lldp():
 
     interfaces = {i.name: i for i in parsed.interfaces}
     assert interfaces["ge-0/0/0"].ip_address == "10.0.0.1/24"
-    assert interfaces["ge-0/0/0"].description == "->core-sw-01"
+    # SRX のゾーンは、PAN-OS と同じくポートの説明に足す。
+    # どの口が外向きかは、ゾーンが分からないと図の上で言えない
+    assert interfaces["ge-0/0/0"].description == "->core-sw-01 / zone trust"
     assert interfaces["ge-0/0/2"].enabled is False
 
     assert len(parsed.neighbors) == 1

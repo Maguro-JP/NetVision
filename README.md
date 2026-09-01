@@ -282,7 +282,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | ベンダー | 系統 | 備考 |
 |---|---|---|
 | Cisco | IOS / IOS-XE / NX-OS | Catalyst 2960 / 2960-X / 3850 / 9300 / 9500 などを確認済み |
-| Juniper | Junos | |
+| Juniper | Junos / SRX | ルーターとファイアウォール。`firewall filter` に加え、SRX の `security policies`（ゾーンごとの許否）・アドレス帳・source NAT を読みます |
 | Fortinet | FortiOS | |
 | NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式、拠点間 IPsec（`ike proposal` / `ipsec autokey-map`）を読みます |
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |

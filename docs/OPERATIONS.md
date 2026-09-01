@@ -44,7 +44,7 @@ running-config
 | ベンダー | 対応 | 型番が取れる出力 |
 |---|---|---|
 | Cisco IOS / IOS-XE / NX-OS | ✅ | `show version`（Catalyst 2960 〜 9500 で確認済み） |
-| Juniper Junos | ✅ | `show version` / `show chassis hardware` |
+| Juniper Junos / SRX | ✅ | `show version` / `show chassis hardware`（SRX は `security policies` も読みます） |
 | Fortinet FortiOS | ✅ | `get system status` |
 | NEC IX シリーズ | ✅ | `show version`（`IX Series IX2215 ...` の行） |
 | NEC QX シリーズ | ✅ | `display version`（Comware ベース） |

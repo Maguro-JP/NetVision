@@ -96,6 +96,7 @@ def parse(text: str) -> ParsedConfig:
     tunnels.parse_junos(text, parsed)
     routing.parse_junos(text, parsed)
     policy.parse_junos(text, parsed)
+    policy.parse_junos_security(text, parsed)
     _parse_nat(text, parsed)
     _parse_dhcp(text, parsed)
     _parse_ipsec(text, parsed)
@@ -542,6 +543,12 @@ _LLDP_HEADER = re.compile(
 )
 
 
+#: 表の1列目に出てくるポート名。`ge-0/0/1` `xe-1/0/0` `ae0` `em0` `irb`
+_LLDP_PORT = re.compile(
+    r"^(?:[a-z]{2,3}-\d+/\d+/\d+(?:\.\d+)?|ae\d+|em\d+|irb(?:\.\d+)?)$", re.IGNORECASE
+)
+
+
 def _parse_lldp_table(text: str, parsed: ParsedConfig) -> None:
     lines = text.splitlines()
     for index, line in enumerate(lines):
@@ -553,6 +560,10 @@ def _parse_lldp_table(text: str, parsed: ParsedConfig) -> None:
             columns = row.split()
             if len(columns) < 5:
                 continue
+            if not _LLDP_PORT.match(columns[0]):
+                # 表の下にそのまま config が続いていることがある。
+                # 空行で終わるとは限らないので、ポート名に見えなくなったら止める
+                break
             parsed.add_neighbor(
                 ParsedNeighbor(
                     local_interface=columns[0],
