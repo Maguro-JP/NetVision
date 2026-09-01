@@ -65,6 +65,24 @@ def _note(level: str, title: str, why: str, evidence: list[str]) -> Finding:
     return Finding(level=level, title=title, why=why, evidence=[e for e in evidence if e][:5])
 
 
+def _serves(pool, address: str) -> bool:  # noqa: ANN001
+    """そのアドレスを、実際に端末へ配るか。
+
+    配る範囲をそのまま書く機種では、範囲の外にあるものは配られない。
+    範囲が書かれていない（Cisco のように network から引く）ときは、
+    配る側に倒す。言えないことを言わない代わりに、見落としも作らない。
+    """
+    if not pool.range_start or not pool.range_end:
+        return True
+    try:
+        low = ipaddress.ip_address(pool.range_start)
+        high = ipaddress.ip_address(pool.range_end)
+        target = ipaddress.ip_address(address)
+    except ValueError:
+        return True
+    return low <= target <= high
+
+
 def _names(parsed: ParsedConfig, kind: str) -> set[str]:
     return {policy.name for policy in parsed.policies if policy.kind == kind}
 
@@ -485,7 +503,8 @@ def _nat(parsed: ParsedConfig) -> list[Finding]:
     for rule in nat.rules:
         if rule.kind != "dynamic":
             continue
-        if rule.matched and rule.matched not in acl_names and rule.matched not in route_maps:
+        known = acl_names | route_maps | set(parsed.address_objects)
+        if rule.matched_is_name and rule.matched and rule.matched not in known:
             findings.append(
                 _note(
                     HIGH,
@@ -582,7 +601,7 @@ def _dhcp(parsed: ParsedConfig) -> list[Finding]:
                         [head, f"default-router {router}"],
                     )
                 )
-            elif router not in excluded:
+            elif _serves(pool, router) and router not in excluded:
                 findings.append(
                     _note(
                         MEDIUM,
@@ -708,7 +727,12 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
         head = f"crypto ipsec transform-set {transform.name}"
         for value in transform.transforms:
             findings.extend(_weak(value, head, "中身の暗号化"))
-        if not any(value.lower().startswith("esp-") for value in transform.transforms):
+        # AH だけを指定している書き方のときに言う。ESP が当たり前の機種
+        # （FortiGate の proposal など）では、そもそも esp- と書かない
+        ah_only = any(
+            value.lower().startswith("ah-") for value in transform.transforms
+        ) and not any(value.lower().startswith("esp-") for value in transform.transforms)
+        if ah_only:
             findings.append(
                 _note(
                     HIGH,
@@ -738,7 +762,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
                     [head],
                 )
             )
-        if entry.match_address and entry.match_address not in acl_names:
+        if entry.match_is_acl and entry.match_address and entry.match_address not in acl_names:
             findings.append(
                 _note(
                     HIGH,

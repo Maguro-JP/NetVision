@@ -169,9 +169,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="制限",
         name="NAT",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。変換の対応表は読んでいません。",
+        note="何が何に変わるか、ポートで束ねているか、内側と外側がどのポートかまで"
+        "読みます。束ねていない動的変換、内外の片方しか無い、指している名前が無い、"
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos の書き方です。",
     ),
     Capability(
         area="足まわり",
@@ -185,17 +187,21 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="足まわり",
         name="DHCP（サーバー / リレー）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="転送先まで。配布範囲は読んでいません。",
+        note="配る範囲・既定ゲートウェイ・名前解決の先・転送先まで読みます。"
+        "ゲートウェイが範囲の外、ゲートウェイまで配ってしまう、配っていない、"
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos の書き方です。",
     ),
     Capability(
         area="足まわり",
         name="QoS",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。",
+        note="区分と動作、当てているポートまで読み、どこにも当たっていない"
+        "policy-map を指摘します。読めるのは Cisco IOS の書き方です。"
+        "帯域の配分が妥当かどうかは、通る量が分からないので言いません。",
     ),
     Capability(
         area="足まわり",
@@ -217,9 +223,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="拠点間",
         name="IPsec / VPN",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="トンネルの種別・送信元・宛先まで。鍵や暗号方式は読んでいません。",
+        note="相手・暗号方式・鍵の作り方・暗号化する範囲まで読みます。"
+        "破られている方式（DES / MD5 / DH group 1・2・5）、相手や範囲の抜け、"
+        "どのポートにも当たっていない設定を指摘します。読めるのは Cisco IOS・"
+        "FortiGate・Junos の書き方です。合言葉そのものは持ちません。",
     ),
     Capability(
         area="拠点間",

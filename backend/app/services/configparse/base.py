@@ -152,6 +152,9 @@ class ParsedConfig:
     features: list[ParsedFeature] = field(default_factory=list)
     #: 通信の制限（中身と、当てている場所まで）
     acls: list[ParsedAcl] = field(default_factory=list)
+    #: 名前で書かれたアドレスの定義（FortiGate の firewall address など）。
+    #: 「指している名前が無い」を言うために、名前だけ控える
+    address_objects: list[str] = field(default_factory=list)
     #: アドレス変換。読めなければ None（無いのか読めていないのかは区別しない）
     nat: ParsedNat | None = None
     dhcp: ParsedDhcp | None = None
@@ -450,6 +453,9 @@ class ParsedNatRule:
     translated: str | None = None
     #: 1つのアドレスにポートで束ねる（NAPT）
     overload: bool = False
+    #: `matched` が名前（ACL / アドレス object）か、アドレスそのものか。
+    #: 名前なら「その名前が Config に無い」と言えるが、アドレスには言えない
+    matched_is_name: bool = True
     protocol: str | None = None  # static-port のとき tcp / udp
     raw: str = ""
 
@@ -467,6 +473,10 @@ class ParsedNat:
 class ParsedDhcpPool:
     name: str
     network: str | None = None
+    #: 配る範囲をそのまま書く機種（FortiGate / Junos）はここに入る。
+    #: Cisco のように「network から excluded を引く」形とは別に持つ
+    range_start: str | None = None
+    range_end: str | None = None
     default_routers: list[str] = field(default_factory=list)
     dns_servers: list[str] = field(default_factory=list)
     domain: str | None = None
@@ -540,8 +550,11 @@ class ParsedCryptoMapEntry:
     kind: str = "ipsec-isakmp"
     peers: list[str] = field(default_factory=list)
     transform_sets: list[str] = field(default_factory=list)
-    #: 何を暗号化するか（ACL 名）。ここが両側で裏返しになっていないと通らない
+    #: 何を暗号化するか（ACL 名、または範囲そのもの）。
+    #: ここが両側で裏返しになっていないと通らない
     match_address: str | None = None
+    #: `match_address` が ACL の名前か。範囲を直に書く機種では False
+    match_is_acl: bool = True
     pfs: str | None = None
     profile: str | None = None
 
