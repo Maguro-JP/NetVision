@@ -28,7 +28,8 @@ def test_kansai_branch_diagram_is_readable(db_session):
     placed = {n.hostname: n for n in graph.nodes}
     svg = render_svg(graph, title="関西支社 物理構成", style="simple")
     out = SAMPLES / "netvision-kansai.svg"
-    out.write_text(svg, encoding="utf-8")
+    # 時刻は外して置く（毎回の差分を出さないため）
+    out.write_text(svgread.without_timestamp(svg), encoding="utf-8")
     svg_findings = evaluate_svg(svg, graph)
     failed_svg = [item.detail for item in svg_findings if not item.ok]
     assert is_acceptable(svg_findings), failed_svg

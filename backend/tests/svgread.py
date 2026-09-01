@@ -23,6 +23,16 @@ def _visible(inner: str) -> str:
     return _TAGS.sub("", _TITLE.sub("", inner)).strip()
 
 
+def without_timestamp(svg: str) -> str:
+    """右上の「いつ時点か」を外す。
+
+    見本の SVG は試験を流すたびに書き直される。時刻がそのまま入っていると、
+    図が1px も変わっていなくても差分が出て、毎回コミットに混ざる。
+    見本に要るのは図であって、その図を描いた時刻ではない。
+    """
+    return re.sub(r'<text[^>]*text-anchor="end"[^>]*>[^<]*時点[^<]*</text>\n?', "", svg)
+
+
 def elements(svg: str, css_class: str | None = None) -> list[tuple[str, dict[str, str]]]:
     """`<text>` を (見えている文字, 属性) の形で返す。"""
     out: list[tuple[str, dict[str, str]]] = []
