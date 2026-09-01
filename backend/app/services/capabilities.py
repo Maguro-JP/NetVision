@@ -173,7 +173,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="何が何に変わるか、ポートで束ねているか、内側と外側がどのポートかまで"
         "読みます。束ねていない動的変換、内外の片方しか無い、指している名前が無い、"
-        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos の書き方です。",
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
+        "書き方です。",
     ),
     Capability(
         area="足まわり",
@@ -191,7 +192,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="配る範囲・既定ゲートウェイ・名前解決の先・転送先まで読みます。"
         "ゲートウェイが範囲の外、ゲートウェイまで配ってしまう、配っていない、"
-        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos の書き方です。",
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
+        "書き方です。",
     ),
     Capability(
         area="足まわり",
@@ -201,7 +203,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="区分と動作、当てているポートまで読み、どこにも当たっていないものを"
         "指摘します。読めるのは Cisco IOS の policy-map、FortiGate の shaper、"
-        "Junos の scheduler-map です。帯域の配分が妥当かどうかは、"
+        "Junos の scheduler-map、NEC QX の qos policy です（NEC IX は"
+        "確かめられる設定が無いので読んでいません）。帯域の配分が妥当かどうかは、"
         "実際に通る量が分からないので言いません。",
     ),
     Capability(
