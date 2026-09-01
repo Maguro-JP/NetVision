@@ -151,9 +151,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="冗長",
         name="スタック / 機器間の同期",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることは分かります。中身は見ていません。",
+        note="FortiGate HA・ASA failover・Aruba VSX・Arista MLAG・IRF（QX）を同じ形で"
+        "読み、機器をまたいで、相手が台帳に無い、両方とも primary、優先度が同じ、"
+        "を指摘します。スタック（1台の中の話）は入っていることまでです。",
     ),
     Capability(
         area="制限",
@@ -164,7 +166,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="1行ずつ、当て先まで読みます。上の行に覆われて読まれない行、"
         "当てていない ACL、実質すべて通している ACL、落としているのに記録が"
         "残らない ACL、存在しない ACL を指しているところを指摘します。"
-        "読めるのは Cisco IOS・Comware（NEC QX）・NEC IX・Junos・FortiOS の"
+        "読めるのは Cisco IOS・Arista EOS・Comware（NEC QX）・NEC IX・Junos・"
+        "FortiOS・ヤマハ（ip filter）・Aruba CX・アライドテレシス（ハードウェア ACL）の"
         "書き方です。通すべき通信が通るかどうかは、要件が要るので言いません。",
     ),
     Capability(
@@ -174,13 +177,15 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="FortiOS の firewall policy を、上から順の1行ずつとして読みます。"
+        "どの口から、どの口へ（srcintf / dstintf）も条件に含めます。"
         "ACL と同じ器に入れてあるので、上の行に覆われて読まれない行や、"
         "実質すべて通している状態も同じように指摘します。止めてある行"
         "（set status disable）は並びの検算から外します。通す通信の中身は"
         "起こしません。業務が決まらないと決められないところで、"
         "当てずっぽうで開けると意味が無くなります。"
-        "Palo Alto は、ゾーンの組み合わせまで条件として読みます（アドレスが同じでも"
-        "ゾーンが違えば別の条件なので、そこを混ぜると読み違えます）。"
+        "Palo Alto（set 形式と XML）と Juniper SRX は、ゾーンの組み合わせまで条件として"
+        "読みます（アドレスが同じでもゾーンが違えば別の条件なので、そこを混ぜると"
+        "読み違えます）。"
         "Cisco ASA は、口の名前（nameif）と内側らしさ（security-level）まで読み、"
         "外向きの名前なのに内側と同じ数字、同じ数字の口が2つ、"
         "外に面した口に入る側の制限が無い、を指摘します。",
@@ -193,8 +198,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="何が何に変わるか、ポートで束ねているか、内側と外側がどのポートかまで"
         "読みます。束ねていない動的変換、内外の片方しか無い、指している名前が無い、"
-        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
-        "書き方です。",
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos（SRX の source NAT を含む）・"
+        "NEC（IX / QX）・ヤマハ・Cisco ASA・Palo Alto の書き方です。",
     ),
     Capability(
         area="足まわり",
@@ -204,8 +209,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="モードと優先度まで読み、端末用の口に BPDU guard が無い、"
         "スイッチをつなぐ口に portfast が入っている、モードを決めていない、"
-        "を指摘します。ルートをどこに置くのが妥当かは、"
-        "相手側の優先度まで見ないと言えないので見ていません。",
+        "ポートで使っているのに定義が無い VLAN、を指摘します。"
+        "木の根（ルート）の位置は機器をまたいで見ます。誰も優先度を決めていない、"
+        "VLAN によって根が違う、予備が無い、末端の機器が根になっている、"
+        "モードがそろっていない、を指摘します（Aruba CX の段の書き方も実際の値に"
+        "そろえて比べます）。",
     ),
     Capability(
         area="足まわり",
@@ -258,8 +266,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="相手・暗号方式・鍵の作り方・暗号化する範囲まで読みます。"
         "破られている方式（DES / MD5 / DH group 1・2・5）、相手や範囲の抜け、"
         "どのポートにも当たっていない設定を指摘します。読めるのは Cisco IOS・"
-        "FortiGate・Junos・NEC QX の書き方です（NEC IX は確かめられる設定が"
-        "無いので読んでいません）。合言葉そのものは持ちません。",
+        "FortiGate・Junos・NEC（IX / QX）・ヤマハ（tunnel select）の書き方です。"
+        "合言葉そのものは持ちません。",
     ),
     Capability(
         area="拠点間",
@@ -287,6 +295,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="SSID の守り方・落とし先の VLAN・合言葉の置き方まで読み、"
         "誰でも入れる SSID、WEP / WPA1 / TKIP、素のまま書かれた合言葉、"
         "問い合わせ先の無い 802.1X、来客が業務と同じ VLAN を指摘します。"
+        "AP 側は、管理の入口に telnet / http が開いているものを指摘します。"
         "読めるのは Cisco IOS-XE / AireOS・Aruba Instant・FortiGate の書き方です。"
         "電波の設計（置き場所・出力・チャネル）は見ていません。",
     ),
