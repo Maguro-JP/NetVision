@@ -87,10 +87,13 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="経路",
         name="BGP",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="AS・ピア・広告するネットワークと、当てている route-map の名前まで。"
-        "route-map の中身の評価はしていません。",
+        note="AS・ピア・広告するネットワークに加え、相手ごとの出入りのフィルタ・"
+        "受ける経路の上限・合言葉・update-source まで読みます。"
+        "外の AS へ出す経路を絞っていない、上限が無い、掛けた route-map が"
+        "この Config に無い、といったところを指摘します。"
+        "経路設計そのもの（どこへ何を出すべきか）は要件が要るので言いません。",
     ),
     Capability(
         area="経路",
@@ -156,19 +159,26 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="制限",
         name="ACL / フィルター",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていること・本数・どのポートに当てているかまで。"
-        "1行ずつの評価はしていません。順番と網羅の判断が要るためです。",
+        note="1行ずつ、当て先まで読みます。上の行に覆われて読まれない行、"
+        "当てていない ACL、実質すべて通している ACL、落としているのに記録が"
+        "残らない ACL、存在しない ACL を指しているところを指摘します。"
+        "読めるのは Cisco IOS・Comware（NEC QX）・NEC IX・Junos・FortiOS の"
+        "書き方です。通すべき通信が通るかどうかは、要件が要るので言いません。",
     ),
     Capability(
         area="制限",
         name="ファイアウォールのポリシー",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="ゾーンとポリシーが入っていることまで。通す通信の中身は起こしません。"
-        "業務が決まらないと決められないところで、当てずっぽうで開けると意味が無くなります。",
+        note="FortiOS の firewall policy を、上から順の1行ずつとして読みます。"
+        "ACL と同じ器に入れてあるので、上の行に覆われて読まれない行や、"
+        "実質すべて通している状態も同じように指摘します。止めてある行"
+        "（set status disable）は並びの検算から外します。通す通信の中身は"
+        "起こしません。業務が決まらないと決められないところで、"
+        "当てずっぽうで開けると意味が無くなります。",
     ),
     Capability(
         area="制限",
@@ -276,9 +286,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="管理",
         name="SNMP / Syslog / NTP / AAA",
         read=FULL,
-        review=NONE,
+        review=PARTIAL,
         generate=PARTIAL,
-        note="送り先まで読みます。起こす Config には入れません。"
+        note="送り先まで読み、送り先が1つも無い（記録が再起動で消える）、"
+        "SNMP の合言葉が既定のまま、SNMP から書き換えられる、"
+        "といったところを指摘します。起こす Config には入れません。"
         "既存と違う値が入るほうが困るためです。",
     ),
     Capability(
