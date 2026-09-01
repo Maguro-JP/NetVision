@@ -1,10 +1,14 @@
 name: CI
 
-# 走らせる回数を絞る。private リポジトリの Actions は無料枠に限りがあり、
-# ジョブは1分未満でも1分として数えられる。同じコミットを2度見ない。
+# 走らせる回数と、1回に使う分数の両方を絞る。private リポジトリの Actions は
+# 無料枠に限りがあり、ジョブは1分未満でも1分として数えられる。だから
+#
+#   ・同じコミットを2度見ない（作業ブランチは PR 側だけで見る）
+#   ・ジョブを分けない（分けるほど、待ち時間と端数のぶんだけ余計に数えられる）
+#   ・触っていないところは動かさない（backend だけの変更で npm を入れない）
+#   ・止まったまま回り続けないよう、頭打ちの時間を置く
 on:
-  # 作業ブランチは PR 側で見るので、push で走らせるのは本線だけにする。
-  # 以前は push と pull_request の両方が走り、1回の push で2回ぶん使っていた
+  # 作業ブランチは PR 側で見るので、push で走らせるのは本線だけにする
   push:
     branches:
       - main
@@ -27,39 +31,120 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  backend:
+  check:
+    # 下書きは、まだ人に見せる形になっていない
     if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    # 手元では backend 2分・frontend 1分ほど。詰まったまま回り続けたら止める
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
     steps:
       - uses: actions/checkout@v7
+        with:
+          # 触ったところを見るために、比べる先まで取る
+          fetch-depth: 0
+
+      # 積み上げ PR と、未マージのまま次の PR を出すことを止める。
+      # ルールの本文は AGENTS.md。PR が立った時点と、下書きを外した時点だけ見る
+      - name: PR の並び方を見る
+        if: >-
+          github.event_name == 'pull_request' &&
+          contains(fromJSON('["opened","reopened","ready_for_review"]'), github.event.action)
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const MAINLINE = 'main';
+            // 作業ブランチの付け方は道具によって変わる。増えても落ちないよう並べる
+            const WORK = ['claude/', 'cursor/', 'codex/'];
+            const isWork = (name) => WORK.some((prefix) => name.startsWith(prefix));
+            const pr = context.payload.pull_request;
+            const { base: { ref: base }, head: { ref: head }, number } = pr;
+            const errors = [];
+
+            if (isWork(head) && isWork(base)) {
+              errors.push(
+                `積み上げ PR は禁止です。base が \`${base}\` になっています。` +
+                  `本線 \`${MAINLINE}\` へ向けてください。`
+              );
+            } else if (isWork(head) && base !== MAINLINE) {
+              errors.push(
+                `機能の PR の base は \`${MAINLINE}\` だけです。今は \`${base}\` です。`
+              );
+            }
+
+            const openPrs = await github.paginate(github.rest.pulls.list, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              state: 'open',
+              per_page: 100,
+            });
+            const others = openPrs.filter(
+              (p) => p.number !== number && isWork(p.head.ref) && !p.draft
+            );
+            if (others.length > 0) {
+              const list = others.map((p) => `#${p.number} （${p.head.ref}）`).join('、');
+              errors.push(
+                `未マージの PR が残っています: ${list}。` +
+                  `新しい PR を出す前に Merge するか、その PR に変更を足してください。`
+              );
+            }
+
+            if (errors.length > 0) {
+              core.setFailed(errors.join('\n'));
+            } else {
+              core.info(`OK: #${number} ${head} → ${base}`);
+            }
+
+      # 触っていないところは動かさない。backend だけの変更で npm を入れると、
+      # それだけで1分ぶん数えられる。分からないときは両方動かす（見落とすより安い）
+      - id: touched
+        name: どこを触ったか
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            base="${{ github.event.pull_request.base.sha }}"
+          else
+            base="${{ github.event.before }}"
+          fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+            echo "backend=true" >> "$GITHUB_OUTPUT"
+            echo "frontend=true" >> "$GITHUB_OUTPUT"
+            echo "比べる先が取れないので、両方見ます"
+            exit 0
+          fi
+          changed="$(git diff --name-only "$base" HEAD)"
+          echo "$changed"
+          grep -q '^backend/' <<<"$changed" && echo "backend=true" >> "$GITHUB_OUTPUT" || echo "backend=false" >> "$GITHUB_OUTPUT"
+          grep -q '^frontend/' <<<"$changed" && echo "frontend=true" >> "$GITHUB_OUTPUT" || echo "frontend=false" >> "$GITHUB_OUTPUT"
+
       - uses: actions/setup-python@v7
+        if: steps.touched.outputs.backend == 'true'
         with:
           python-version: "3.11"
           # 依存を毎回取りに行くと、そのぶん実行時間が伸びる
           cache: pip
           cache-dependency-path: backend/pyproject.toml
-      - run: pip install -e ".[dev]"
-      - run: ruff check .
-      - run: ruff format --check .
-      - run: pytest -q
+      - name: backend
+        if: steps.touched.outputs.backend == 'true'
+        working-directory: backend
+        run: |
+          pip install -e ".[dev]"
+          ruff check .
+          ruff format --check .
+          pytest -q
 
-  frontend:
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: frontend
-    steps:
-      - uses: actions/checkout@v7
       - uses: actions/setup-node@v7
+        if: steps.touched.outputs.frontend == 'true'
         with:
           node-version: "22"
           cache: npm
           cache-dependency-path: frontend/package-lock.json
-      - run: npm ci
-      - run: npm run typecheck
-      - run: npm test
-      - run: npm run build
+      - name: frontend
+        if: steps.touched.outputs.frontend == 'true'
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
