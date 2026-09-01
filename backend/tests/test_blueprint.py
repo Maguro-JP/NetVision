@@ -221,3 +221,23 @@ def test_the_api_can_place_and_remove_the_test_site(client):
     removed = client.delete(f"{API}/blueprint/test-sites/{site_id}")
     assert removed.status_code == 200
     assert client.get(f"{API}/blueprint/test-sites").json() == []
+
+
+def test_aruba_cx_configs_read_back_with_the_same_tool():
+    """AOS-CX の書式で出したものを、同じ道具の読み手で読み戻せること。"""
+    from app.services import configparse
+    from app.services.configparse import Vendor
+
+    plan = _plan(bp.SEPARATE, bp.REDUNDANT, vendor="Aruba")
+    for hostname, body in plan.configs.items():
+        parsed = configparse.parse(body)
+        assert parsed.vendor is Vendor.ARUBA_CX, hostname
+        assert parsed.hostname == hostname
+        # ポートは AOS-CX の形で、全部 no shutdown を書いてある
+        assert all(i.name.startswith("1/1/") for i in parsed.interfaces), hostname
+        assert all(i.enabled for i in parsed.interfaces), hostname
+    routed = [p for p in plan.ports if p.routed]
+    assert routed, "ルーターが挟まっていれば L3 のポートがある"
+    body = plan.configs[routed[0].hostname]
+    assert "vrrp" in body
+    assert "routing" in body

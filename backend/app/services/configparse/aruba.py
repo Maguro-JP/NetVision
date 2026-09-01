@@ -59,6 +59,9 @@ def detect(text: str) -> Vendor | None:
         r"^\s*vlan access\s+\d+",
         r"^apply\s+access-list\s+ip\s",
         r"^vsx\s*$",
+        r"^\s+(?:no\s+)?routing\s*$",
+        r"^(?:ssh|https)-?server\s+vrf\s",
+        r"^\s+vrrp\s+\d+\s+address-family\s",
     ):
         if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
             return Vendor.ARUBA_CX

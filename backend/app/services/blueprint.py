@@ -320,7 +320,7 @@ def _wire(
     """
     base = _base_network(plan, request)
     subnets = list(base.subnets(new_prefix=24))
-    ports = _PortAllocator()
+    ports = _PortAllocator(request.vendor)
 
     primary = [d for d in middle if not d.hostname.endswith("-02")]
     firewalls = [d for d in primary if d.device_type is DeviceType.FIREWALL]
@@ -495,13 +495,18 @@ class _PortAllocator:
     配る場所を1か所にまとめて、そこを起こさないようにする。
     """
 
-    #: 機器の種類ごとの、ポート名の作り方
-    def __init__(self) -> None:
+    #: 機器の種類ごとの、ポート名の作り方。書式（ベンダー）で名前の形が変わる
+    def __init__(self, vendor: str = "Cisco") -> None:
         self._used: dict[str, int] = {}
+        self._aruba = "aruba" in vendor.lower()
 
     def take(self, device: PlannedDevice) -> str:
         count = self._used.get(device.hostname, 0)
         self._used[device.hostname] = count + 1
+        if self._aruba:
+            # AOS-CX は `1/1/1` の形。上流側は後ろの番号から使う
+            start = 24 if device.device_type is DeviceType.SWITCH else 1
+            return f"1/1/{start - count if start == 24 else start + count}"
         if device.device_type is DeviceType.SWITCH:
             return f"GigabitEthernet1/0/{24 - count}"
         return f"GigabitEthernet0/{count}"
@@ -590,11 +595,11 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
     そのまま貼って使うものに説明が混ざると、貼る前に消す手間が要るうえ、
     消し忘れがそのまま機器に入る。
     """
-    comware = "nec" in request.vendor.lower()
+    lowered = request.vendor.lower()
+    writer = _comware if "nec" in lowered else _aruba_cx if "aruba" in lowered else _cisco
     for device in plan.devices:
         ports = [p for p in plan.ports if p.hostname == device.hostname]
         addresses = [a for a in plan.addresses if a.hostname == device.hostname]
-        writer = _comware if comware else _cisco
         body, notes = writer(plan, device, ports, addresses)
         plan.configs[device.hostname] = body
         plan.notes[device.hostname] = notes
@@ -701,6 +706,60 @@ def _comware(
     lines.append("undo ip http enable")
     lines.append("undo ip https enable")
     lines.append("#")
+
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
+
+
+def _aruba_cx(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """AOS-CX。ポートは既定で落ちているので no shutdown を書く。アドレスは長さ付き。"""
+    lines = [f"hostname {device.hostname}", "!"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"vlan {vlan_id}")
+        lines.append(f"    name {_ascii(name)}")
+    if vlans:
+        lines.append("!")
+
+    for port in ports:
+        lines.append(f"interface {port.interface}")
+        lines.append("    no shutdown")
+        lines.append(f"    description to {port.peer}")
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                lines.append("    routing")
+                prefixlen = ipaddress.ip_network(f"0.0.0.0/{found.netmask}").prefixlen
+                lines.append(f"    ip address {found.address}/{prefixlen}")
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    lines.append(f"    vrrp {group} address-family ipv4")
+                    lines.append(f"        address {found.virtual_ip} primary")
+                    lines.append(f"        priority {found.priority}")
+                    lines.append("        no shutdown")
+        elif port.vlan_id is not None and port.peer_routed:
+            lines.append("    no routing")
+            lines.append(f"    vlan access {port.vlan_id}")
+        elif port.vlan_id is not None:
+            lines.append("    no routing")
+            lines.append(f"    vlan trunk allowed {port.vlan_id}")
+        lines.append("!")
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        lines.append(f"ip route {route.destination} {route.next_hop}")
+    if any(r.hostname == device.hostname for r in plan.routes):
+        lines.append("!")
+
+    lines.append("ssh server vrf default")
+    lines.append("no https-server vrf default")
+    lines.append("!")
 
     notes.extend(_notes_for(plan, device, addresses))
     return "\n".join(lines) + "\n", notes
