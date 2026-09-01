@@ -38,6 +38,15 @@ from app.services.configparse.base import (
 from app.services.configparse.ifname import expand
 
 
+def parse_cisco_crypto(text: str, parsed: ParsedConfig) -> None:
+    """拠点間の暗号化だけを読む。
+
+    ASA は ACL も NAT も書き方が違うが、VPN のところは IOS と同じ書き方に
+    なっている。そこだけ切り出して使えるようにしておく。
+    """
+    parsed.crypto = _crypto(text)
+
+
 def parse_cisco(text: str, parsed: ParsedConfig) -> None:
     """Cisco IOS / IOS-XE / NX-OS の書き方で読む。"""
     parsed.acls = _acls(text)

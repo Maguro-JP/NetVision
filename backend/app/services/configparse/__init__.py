@@ -6,7 +6,16 @@
 
 from __future__ import annotations
 
-from app.services.configparse import cisco, features, fortinet, juniper, nec, wireless, yamaha
+from app.services.configparse import (
+    asa,
+    cisco,
+    features,
+    fortinet,
+    juniper,
+    nec,
+    wireless,
+    yamaha,
+)
 from app.services.configparse.base import (
     FEATURE_LABELS,
     NeighborProtocol,
@@ -30,11 +39,19 @@ from app.services.configparse.ifname import expand, normalize, normalize_hostnam
 
 # 判別は「特徴が強い順」に試す
 # NEC は Cisco 風に見える箇所があるので、Cisco より先に試す
-_DETECTORS = (fortinet.detect, juniper.detect, yamaha.detect, nec.detect, cisco.detect)
+_DETECTORS = (
+    fortinet.detect,
+    juniper.detect,
+    yamaha.detect,
+    asa.detect,
+    nec.detect,
+    cisco.detect,
+)
 
 VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.CISCO_IOS: "Cisco IOS / IOS-XE",
     Vendor.CISCO_NXOS: "Cisco NX-OS",
+    Vendor.CISCO_ASA: "Cisco ASA / FTD",
     Vendor.JUNIPER: "Juniper Junos",
     Vendor.FORTINET: "Fortinet FortiOS",
     Vendor.NEC_IX: "NEC IX シリーズ",
@@ -46,6 +63,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
 VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.CISCO_IOS: "Cisco",
     Vendor.CISCO_NXOS: "Cisco",
+    Vendor.CISCO_ASA: "Cisco",
     Vendor.JUNIPER: "Juniper",
     Vendor.FORTINET: "Fortinet",
     Vendor.NEC_IX: "NEC",
@@ -75,6 +93,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = nec.parse(text, vendor)
     elif vendor is Vendor.YAMAHA:
         parsed = yamaha.parse(text)
+    elif vendor is Vendor.CISCO_ASA:
+        parsed = asa.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)
