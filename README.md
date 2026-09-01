@@ -284,7 +284,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Cisco | IOS / IOS-XE / NX-OS | Catalyst 2960 / 2960-X / 3850 / 9300 / 9500 などを確認済み |
 | Juniper | Junos | |
 | Fortinet | FortiOS | |
-| NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式 |
+| NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式、拠点間 IPsec（`ike proposal` / `ipsec autokey-map`）を読みます |
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
