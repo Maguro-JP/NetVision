@@ -124,6 +124,9 @@ _RULES: tuple[_Rule, ...] = (
     _rule(AGGREGATION, "LAG", r"^\s*channel-group\s+(\d+)", "グループ"),
     _rule(AGGREGATION, "LAG", r"^\s*port\s+link-aggregation\s+group\s+(\d+)", "グループ"),
     _rule(AGGREGATION, "LAG", r"^\s*set\s+interfaces\s+ae\d+\b"),
+    # Aruba CX は `lag 1`、アライドテレシスは `static-channel-group 1`
+    _rule(AGGREGATION, "LAG", r"^\s+lag\s+(\d+)\s*$", "グループ"),
+    _rule(AGGREGATION, "LAG", r"^\s*static-channel-group\s+(\d+)", "グループ"),
     # 優先制御
     _rule(QOS, "QoS", r"^\s*(?:policy-map|class-map)\s+"),
     _rule(QOS, "QoS", r"^\s*qos\s+(?:policy|apply|trust)\b"),
@@ -147,6 +150,8 @@ _RULES: tuple[_Rule, ...] = (
     _rule(VPN, "IPsec", r"^\s*ipsec\s+(?:policy|profile|transform-set)\b"),
     _rule(VPN, "IPsec", r"^\s*config\s+vpn\s+ipsec\b"),
     _rule(VPN, "IPsec", r"^\s*set\s+security\s+ipsec\b"),
+    # ヤマハ（tunnel select の下に ipsec を書く）と NEC IX（autokey-map）
+    _rule(VPN, "IPsec", r"^\s*ipsec\s+(?:ike|sa\s+policy|autokey-map|autokey-proposal)\b"),
     # マルチキャスト
     _rule(MULTICAST, "PIM", r"^\s*ip\s+pim\s+(?:sparse-mode|dense-mode|sparse-dense-mode)\b"),
     _rule(MULTICAST, "PIM", r"^\s*pim\s+(?:sm|dm)\b"),
@@ -162,6 +167,10 @@ _RULES: tuple[_Rule, ...] = (
     _rule(HIGH_AVAILABILITY, "VRRP", r"^\s*vrrp\s+(?:vrid\s+)?\d+\s+(?:ip|virtual-ip)\b"),
     _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:switch\s+\d+\s+provision|stack-port|irf-port)\b"),
     _rule(HIGH_AVAILABILITY, "機器間の同期", r"^\s*config\s+system\s+ha\s*$"),
+    # Aruba CX は VSX、Arista は MLAG で2台を1台に見せる。
+    # どちらも「片方を落としても通る」ことの前提になるので、入っていることを残す
+    _rule(HIGH_AVAILABILITY, "VSX", r"^vsx\s*$"),
+    _rule(HIGH_AVAILABILITY, "MLAG", r"^mlag\s+configuration\s*$"),
 )
 
 
