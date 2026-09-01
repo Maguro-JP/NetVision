@@ -18,6 +18,7 @@ class Vendor(enum.StrEnum):
     NEC_IX = "nec_ix"
     NEC_QX = "nec_qx"
     YAMAHA = "yamaha"
+    PALO_ALTO = "palo_alto"
     UNKNOWN = "unknown"
 
 
@@ -415,6 +416,10 @@ class ParsedAclEntry:
     destination_port: str | None = None
     log: bool = False
     remark: str | None = None
+    #: 名前で書かれたアドレスの中身。分かるときだけ入れる。
+    #: 表には名前を出したいが、覆っているかどうかは中身で見ないと言えない
+    source_value: str | None = None
+    destination_value: str | None = None
     raw: str = ""
 
     @property

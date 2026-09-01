@@ -73,3 +73,49 @@ def test_a_rule_with_no_limits_is_wide_open():
     assert not aclcheck.is_wide_open(
         rule(protocol="tcp", source="any", destination="any", destination_port="eq 443")
     )
+
+
+# ---------------------------------------------------------------------------
+# ゾーンで許否が決まる機種
+# ---------------------------------------------------------------------------
+
+
+def test_the_zone_is_part_of_the_condition():
+    """アドレスが同じでも、ゾーンが違えば別の条件。覆っているとは言えない。"""
+    upper = ParsedAclEntry(seq="1", action="permit", source="trust:any", destination="untrust:any")
+    lower = ParsedAclEntry(seq="2", action="permit", source="untrust:any", destination="dmz:any")
+    assert aclcheck.covers(upper, lower) is False
+
+
+def test_the_same_zone_pair_still_covers():
+    upper = ParsedAclEntry(seq="1", action="permit", source="untrust:any", destination="dmz:any")
+    lower = ParsedAclEntry(
+        seq="2", action="permit", source="untrust:any", destination="dmz:10.9.0.10/32"
+    )
+    assert aclcheck.covers(upper, lower) is True
+
+
+def test_a_rule_without_a_zone_covers_any_zone():
+    """ゾーンを書いていない側は、どのゾーンにも当たる。"""
+    upper = ParsedAclEntry(seq="1", action="permit", source="any", destination="any")
+    lower = ParsedAclEntry(seq="2", action="permit", source="trust:any", destination="untrust:any")
+    assert aclcheck.covers(upper, lower) is True
+
+
+def test_an_address_written_as_a_name_is_compared_by_its_value():
+    """表には名前を出したいが、覆っているかどうかは中身で見ないと言えない。"""
+    upper = ParsedAclEntry(seq="1", action="permit", source="any", destination="10.9.0.0/24")
+    lower = ParsedAclEntry(
+        seq="2",
+        action="permit",
+        source="any",
+        destination="WEB-SERVER",
+        destination_value="10.9.0.10/32",
+    )
+    assert aclcheck.covers(upper, lower) is True
+
+
+def test_a_name_whose_value_is_unknown_is_not_called_covered():
+    upper = ParsedAclEntry(seq="1", action="permit", source="any", destination="10.9.0.0/24")
+    lower = ParsedAclEntry(seq="2", action="permit", source="any", destination="WEB-SERVER")
+    assert aclcheck.covers(upper, lower) is False

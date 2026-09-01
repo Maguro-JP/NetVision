@@ -288,6 +288,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter` を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
+| Palo Alto | PAN-OS | ファイアウォール。`set` 形式。ゾーン・セキュリティポリシー・NAT を読みます（XML 形式は未対応） |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。

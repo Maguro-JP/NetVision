@@ -13,6 +13,7 @@ from app.services.configparse import (
     fortinet,
     juniper,
     nec,
+    panos,
     wireless,
     yamaha,
 )
@@ -43,6 +44,7 @@ _DETECTORS = (
     fortinet.detect,
     juniper.detect,
     yamaha.detect,
+    panos.detect,
     asa.detect,
     nec.detect,
     cisco.detect,
@@ -57,6 +59,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.NEC_IX: "NEC IX シリーズ",
     Vendor.NEC_QX: "NEC QX シリーズ",
     Vendor.YAMAHA: "ヤマハ RTX / NVR",
+    Vendor.PALO_ALTO: "Palo Alto PAN-OS",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -69,6 +72,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.NEC_IX: "NEC",
     Vendor.NEC_QX: "NEC",
     Vendor.YAMAHA: "ヤマハ",
+    Vendor.PALO_ALTO: "Palo Alto",
 }
 
 
@@ -95,6 +99,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = yamaha.parse(text)
     elif vendor is Vendor.CISCO_ASA:
         parsed = asa.parse(text)
+    elif vendor is Vendor.PALO_ALTO:
+        parsed = panos.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

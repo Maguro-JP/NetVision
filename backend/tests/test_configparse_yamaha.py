@@ -49,6 +49,8 @@ def test_filters_are_grouped_by_where_they_are_applied():
     """ip filter は番号ごとの1行で、並びは当て先の側に書いてある。"""
     acls = {a.name: a for a in parsed().acls}
     assert [e.seq for e in acls["PP1 入り"].entries] == ["200003", "200020"]
+    # 並べた順がそのまま評価の順になる。落とす行を先に、通す行を後に置く
+    assert [e.seq for e in acls["PP1 出"].entries] == ["200099", "200013"]
     assert acls["PP1 入り"].applied_to == ["interface PP1 入り"]
     assert [e.seq for e in acls["LAN1 入り"].entries] == ["200030", "200031"]
     # reject-log は落としたことが記録に残る
@@ -86,6 +88,15 @@ def test_the_dhcp_scope_keeps_the_range_and_the_segment():
     assert (pool.range_start, pool.range_end) == ("192.168.100.2", "192.168.100.191")
     assert pool.default_routers == ["192.168.100.1"]
     assert pool.dns_servers == ["192.168.100.1", "8.8.8.8"]
+
+
+def test_a_pass_all_placed_first_hides_the_rest():
+    """番号を並べる順を間違えると、後ろの行は読まれない。"""
+    text = load().replace(
+        " ip pp secure filter out 200099 200013 dynamic 200080",
+        " ip pp secure filter out 200013 200099 dynamic 200080",
+    )
+    assert [t for t in titles(text) if "200099" in t and "読まれません" in t]
 
 
 def test_a_clean_config_gets_no_findings_but_the_real_ones_still_come_out():
