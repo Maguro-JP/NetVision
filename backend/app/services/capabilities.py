@@ -199,9 +199,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=PARTIAL,
         review=PARTIAL,
         generate=NONE,
-        note="区分と動作、当てているポートまで読み、どこにも当たっていない"
-        "policy-map を指摘します。読めるのは Cisco IOS の書き方です。"
-        "帯域の配分が妥当かどうかは、通る量が分からないので言いません。",
+        note="区分と動作、当てているポートまで読み、どこにも当たっていないものを"
+        "指摘します。読めるのは Cisco IOS の policy-map、FortiGate の shaper、"
+        "Junos の scheduler-map です。帯域の配分が妥当かどうかは、"
+        "実際に通る量が分からないので言いません。",
     ),
     Capability(
         area="足まわり",

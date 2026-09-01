@@ -1,4 +1,4 @@
-"""NAT / DHCP / IPsec を、Cisco 以外の書き方でも読む。
+"""NAT / DHCP / QoS / IPsec を、Cisco 以外の書き方でも読む。
 
 書き方は違っても、決めていることは同じ（何が何に変わるか、どこからどこまで
 配るか、誰とどの方式で暗号化するか）。同じ器に入れておけば、粗を見るところは
@@ -59,6 +59,21 @@ config system dhcp server
         end
     next
 end
+config firewall shaper traffic-shaper
+    edit "voice"
+        set guaranteed-bandwidth 2000
+        set maximum-bandwidth 5000
+        set priority high
+    next
+end
+config firewall shaping-policy
+    edit 1
+        set name "voice-out"
+        set service "SIP"
+        set dstintf "port2"
+        set traffic-shaper "voice"
+    next
+end
 config vpn ipsec phase1-interface
     edit "to-hq"
         set interface "port2"
@@ -91,6 +106,11 @@ set access address-assignment pool office family inet range r1 low 10.2.0.100
 set access address-assignment pool office family inet range r1 high 10.2.0.200
 set access address-assignment pool office family inet dhcp-attributes router 10.2.0.1
 set access address-assignment pool office family inet dhcp-attributes name-server 10.2.0.53
+set class-of-service classifiers dscp c1 forwarding-class expedited-forwarding code-points 101110
+set class-of-service schedulers voice transmit-rate percent 30
+set class-of-service schedulers voice priority strict-high
+set class-of-service scheduler-maps sm1 forwarding-class expedited-forwarding scheduler voice
+set class-of-service interfaces ge-0/0/0 scheduler-map sm1
 set security ike proposal ike-prop authentication-method pre-shared-keys
 set security ike proposal ike-prop dh-group group14
 set security ike proposal ike-prop encryption-algorithm aes-256-cbc
@@ -168,6 +188,21 @@ def test_fortigate_reports_an_old_method():
     assert "des" in found and "md5" in found
 
 
+def test_fortigate_shaper_is_read_with_what_uses_it():
+    """型（shaper）と当て先（shaping-policy）を、Cisco と同じ形へ読み替える。"""
+    qos = configparse.parse(FORTIGATE).qos
+    assert qos is not None
+    voice = next(p for p in qos.policies if p.name == "voice")
+    assert [a.class_name for a in voice.classes] == ["voice-out"]
+    assert "上限 5000 kbps" in voice.classes[0].actions
+    assert ("port2", "output", "voice") in qos.applied
+
+
+def test_fortigate_shaper_that_nothing_uses_is_reported():
+    text = FORTIGATE.replace('        set traffic-shaper "voice"\n', "")
+    assert "優先制御の voice は、どのポートにも当たっていません" in titles(text)
+
+
 # ---------------------------------------------------------------------------
 # Junos
 # ---------------------------------------------------------------------------
@@ -207,6 +242,22 @@ def test_junos_ipsec_is_tied_back_to_its_gateway_and_interface():
 
 def test_a_clean_junos_config_gets_no_findings():
     assert titles(JUNOS) == []
+
+
+def test_junos_cos_is_read_as_the_same_three_things():
+    qos = configparse.parse(JUNOS).qos
+    assert qos is not None
+    policy = next(p for p in qos.policies if p.name == "sm1")
+    action = policy.classes[0]
+    assert action.class_name == "expedited-forwarding"
+    # scheduler の中身（出し方）まで、その仕分けの行に添える
+    assert "transmit-rate percent 30" in action.actions
+    assert ("ge-0/0/0", "output", "sm1") in qos.applied
+
+
+def test_junos_scheduler_map_that_is_not_applied_is_reported():
+    text = JUNOS.replace("set class-of-service interfaces ge-0/0/0 scheduler-map sm1\n", "")
+    assert "優先制御の sm1 は、どのポートにも当たっていません" in titles(text)
 
 
 def test_junos_reports_a_weak_group():

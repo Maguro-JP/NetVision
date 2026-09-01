@@ -18,6 +18,10 @@ from app.services.configparse.base import (
     ParsedNatPool,
     ParsedNatRule,
     ParsedNeighbor,
+    ParsedQos,
+    ParsedQosAction,
+    ParsedQosClass,
+    ParsedQosPolicy,
     ParsedTransformSet,
     ParsedVrf,
     Vendor,
@@ -95,6 +99,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_nat(text, parsed)
     _parse_dhcp(text, parsed)
     _parse_ipsec(text, parsed)
+    _parse_cos(text, parsed)
     return parsed
 
 
@@ -244,6 +249,95 @@ def _dhcp_detail(pool: ParsedDhcpPool, rest: str) -> None:
     lease = re.match(r"^dhcp-attributes maximum-lease-time\s+(\S+)", rest, re.IGNORECASE)
     if lease:
         pool.lease = lease.group(1)
+
+
+def _parse_cos(text: str, parsed: ParsedConfig) -> None:
+    """優先制御（CoS）を読む。
+
+    Junos は classifier（どう仕分けるか）・scheduler（どう出すか）・
+    scheduler-map（仕分けと出し方の対応）・interfaces（当て先）に分かれる。
+    Cisco の class-map / policy-map / service-policy と役割が同じなので、
+    そこへ読み替える。当て先の無い scheduler-map が「書いてあるだけ」になる。
+    """
+    qos = ParsedQos()
+    schedulers: dict[str, list[str]] = {}
+    maps: dict[str, ParsedQosPolicy] = {}
+    classifiers: dict[str, ParsedQosClass] = {}
+
+    for raw in text.splitlines():
+        line = raw.strip()
+
+        found = re.match(
+            r"^set class-of-service classifiers \S+ (\S+) forwarding-class (\S+)\s*(.*)$",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            entry = classifiers.setdefault(found.group(1), ParsedQosClass(name=found.group(1)))
+            detail = f"{found.group(2)} {found.group(3)}".strip()
+            if detail not in entry.matches:
+                entry.matches.append(detail)
+            continue
+
+        found = re.match(r"^set class-of-service schedulers (\S+)\s+(.+)$", line, re.IGNORECASE)
+        if found:
+            schedulers.setdefault(found.group(1), []).append(found.group(2))
+            continue
+
+        found = re.match(
+            r"^set class-of-service scheduler-maps (\S+) forwarding-class (\S+) scheduler (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            policy = maps.setdefault(found.group(1), ParsedQosPolicy(name=found.group(1)))
+            policy.classes.append(
+                ParsedQosAction(class_name=found.group(2), actions=[f"scheduler {found.group(3)}"])
+            )
+            continue
+
+        found = re.match(
+            r"^set class-of-service interfaces (\S+)(?:\s+unit \S+)? scheduler-map (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            # Junos の scheduler-map は出る側に当てる
+            qos.applied.append((found.group(1), "output", found.group(2)))
+            continue
+
+        found = re.match(
+            r"^set class-of-service interfaces (\S+)(?:\s+unit \S+)? classifiers \S+ (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            qos.applied.append((found.group(1), "input", found.group(2)))
+
+    # 仕分けの名前（forwarding-class）は、書かなくても最初からある4つを含む。
+    # 定義が無い＝間違い、ではないので、既定の名前も一覧に入れておく
+    known = {"best-effort", "expedited-forwarding", "assured-forwarding", "network-control"}
+    for raw in text.splitlines():
+        found = re.match(
+            r"^set class-of-service forwarding-classes (?:queue \S+|class) (\S+)",
+            raw.strip(),
+            re.IGNORECASE,
+        )
+        if found:
+            known.add(found.group(1))
+    used = {action.class_name for policy in maps.values() for action in policy.classes}
+    for name in sorted(known & used):
+        classifiers.setdefault(name, ParsedQosClass(name=name, matches=["forwarding-class"]))
+
+    for policy in maps.values():
+        for action in policy.classes:
+            name = action.actions[0].split()[-1]
+            action.actions.extend(schedulers.get(name, []))
+    qos.policies.extend(maps.values())
+    qos.classes.extend(classifiers.values())
+
+    if qos.policies or qos.classes:
+        parsed.qos = qos
 
 
 def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:

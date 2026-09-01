@@ -16,6 +16,10 @@ from app.services.configparse.base import (
     ParsedNat,
     ParsedNatPool,
     ParsedNatRule,
+    ParsedQos,
+    ParsedQosAction,
+    ParsedQosClass,
+    ParsedQosPolicy,
     ParsedTransformSet,
     ParsedVrf,
     Vendor,
@@ -59,6 +63,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_nat(text, parsed)
     _parse_dhcp(text, parsed)
     _parse_ipsec(text, parsed)
+    _parse_qos(text, parsed)
     return parsed
 
 
@@ -210,6 +215,64 @@ def _dhcp_ranges(text: str) -> dict[str, tuple[str | None, str | None]]:
                 else:
                     end = found.group(2)
     return out
+
+
+def _parse_qos(text: str, parsed: ParsedConfig) -> None:
+    """優先制御を読む。FortiGate は「速さの型」と「どの通信に当てるか」に分かれる。
+
+    - `firewall shaper traffic-shaper`（型。上限と優先度）
+    - `firewall shaping-policy`（当て先。どの通信に、どの型を当てるか）
+
+    Cisco の class-map / policy-map / service-policy と役割が同じなので、
+    そこへ読み替える。当て先の無い型が「書いてあるだけ」として残る。
+    """
+    qos = ParsedQos()
+
+    # どの型を、どの当て先が使っているか。Cisco の policy-map は中に class を
+    # 並べるので、同じ形になるよう先に集める
+    users: dict[str, list[str]] = {}
+    for name, values in fortitext.blocks(text, "firewall shaping-policy"):
+        label = values.get("name") or f"shaping-policy {name}"
+        for key in ("traffic-shaper", "traffic-shaper-reverse", "per-ip-shaper"):
+            if values.get(key):
+                users.setdefault(values[key], []).append(label)
+
+    for name, values in fortitext.blocks(text, "firewall shaper traffic-shaper"):
+        actions = []
+        if values.get("maximum-bandwidth"):
+            actions.append(f"上限 {values['maximum-bandwidth']} kbps")
+        if values.get("guaranteed-bandwidth"):
+            actions.append(f"最低 {values['guaranteed-bandwidth']} kbps")
+        if values.get("priority"):
+            actions.append(f"優先度 {values['priority']}")
+        qos.policies.append(
+            ParsedQosPolicy(
+                name=name,
+                classes=[
+                    ParsedQosAction(class_name=label, actions=actions)
+                    for label in users.get(name, [])
+                ],
+            )
+        )
+
+    for name, values in fortitext.blocks(text, "firewall shaping-policy"):
+        service = " ".join(fortitext.words(values.get("service"))) or "すべて"
+        qos.classes.append(
+            ParsedQosClass(
+                name=values.get("name") or f"shaping-policy {name}",
+                matches=[f"service {service}"],
+            )
+        )
+        for key in ("traffic-shaper", "traffic-shaper-reverse", "per-ip-shaper"):
+            shaper = values.get(key)
+            if not shaper:
+                continue
+            direction = "input" if key == "traffic-shaper-reverse" else "output"
+            for interface in fortitext.words(values.get("dstintf")) or ["shaping-policy"]:
+                qos.applied.append((interface, direction, shaper))
+
+    if qos.policies or qos.classes:
+        parsed.qos = qos
 
 
 def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:

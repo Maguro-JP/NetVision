@@ -673,7 +673,9 @@ def _qos(parsed: ParsedConfig) -> list[Finding]:
             findings.append(
                 _note(
                     MEDIUM,
-                    f"policy-map {policy.name} は、どのポートにも当たっていません",
+                    # 名前の付き方は機種で違う（policy-map / shaper /
+                    # scheduler-map）。どれでも読めるよう、種類の語は入れない
+                    f"優先制御の {policy.name} は、どのポートにも当たっていません",
                     "優先制御は当てたポートでしか効きません。混む場所に当てていなければ、"
                     "書いてあっても順番は変わりません。",
                     [f"policy-map {policy.name}"],
