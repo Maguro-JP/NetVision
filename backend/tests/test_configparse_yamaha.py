@@ -148,3 +148,15 @@ def test_an_old_tunnel_is_pointed_out():
     found = titles(text)
     assert [t for t in found if "破られている方式" in t]
     assert [t for t in found if "鍵の作り方が古い" in t]
+
+
+def test_the_device_name_comes_from_the_console_prompt():
+    """ヤマハには hostname にあたる命令が無い。
+
+    現場では `console prompt` に機器名を入れて見分けている。ここを読まないと、
+    台帳の機器名が空のまま取り込まれる。
+    """
+    assert parsed().hostname == "rtx-osaka-01"
+    # 書いていなければ、無いものは無いままにする（推測で埋めない）
+    without = load().replace("console prompt rtx-osaka-01\n", "")
+    assert configparse.parse(without).hostname is None

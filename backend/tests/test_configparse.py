@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.services import configparse
 from app.services.configparse import Vendor, detect_vendor, expand, normalize_hostname, parse
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -215,3 +216,40 @@ def test_cdp_and_lldp_for_the_same_link_are_merged():
     parsed = parse(text)
 
     assert len(parsed.neighbors) == 1
+
+
+def test_every_vendor_has_a_label_and_a_name():
+    """ベンダーを足したら、表示名と台帳に書く名前も必ず足す。
+
+    どちらかが抜けていると、画面では「判別できません」、台帳では空欄に
+    なる。読めているのに空で出るのがいちばん分かりにくいので、増やした
+    ときにここで止める。
+    """
+    for vendor in Vendor:
+        assert vendor in configparse.VENDOR_LABELS, vendor
+        if vendor is Vendor.UNKNOWN:
+            continue  # 判別できなかったものは、台帳の「メーカー」を空で出す
+        assert vendor in configparse.VENDOR_NAMES, vendor
+
+
+def test_each_vendor_fixture_is_detected_and_named():
+    """見本の config が、どれも判別できてメーカー名まで出ること。"""
+    fixtures = FIXTURES
+    expected = {
+        "core-sw-01.txt": "Cisco",
+        "edge-rt-01.txt": "Juniper",
+        "fw-01.txt": "Fortinet",
+        "ix-rt-01.txt": "NEC",
+        "qx-sw-01.txt": "NEC",
+        "rtx-osaka-01.txt": "ヤマハ",
+        "asa-hq-01.txt": "Cisco",
+        "panos-hq-01.txt": "Palo Alto",
+        "arista-dc-01.txt": "Arista",
+        "aruba-cx-01.txt": "Aruba",
+        "allied-x530-01.txt": "アライドテレシス",
+    }
+    for filename, name in expected.items():
+        parsed = configparse.parse((fixtures / filename).read_text())
+        assert parsed.vendor is not Vendor.UNKNOWN, filename
+        assert configparse.VENDOR_NAMES[parsed.vendor] == name, filename
+        assert parsed.hostname, filename
