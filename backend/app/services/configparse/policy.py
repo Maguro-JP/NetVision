@@ -746,10 +746,16 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
 
     ACL とは形が違うが、上から順に見て最初に当たった行で決まるところは同じ。
     同じ器に入れておけば、影の行を見つける仕組みをそのまま使える。
-    アドレスもサービスも名前で書かれるので、中身が分かるのは `all` だけ。
+
+    許否は「どの口から、どの口へ」（srcintf / dstintf）の組み合わせごとに
+    並ぶ。PAN-OS のゾーンと同じで、条件に含めておかないと別の口宛ての
+    行どうしを「上が下を覆っている」と取り違える。アドレスの名前は
+    `firewall address` の中身が分かるときだけ解決する。
     """
+    values = _fortios_addresses(text)
     acl = ParsedAcl(name="firewall policy", kind="policy", applied_to=["ポリシー表"])
     current: ParsedAclEntry | None = None
+    interfaces: dict[str, tuple[str, str]] = {}
     inside = False
 
     for raw in text.splitlines():
@@ -767,15 +773,65 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
                 seq=edit.group(1), action="deny", raw=f"policy {edit.group(1)}"
             )
             acl.entries.append(current)
+            interfaces[current.seq or ""] = ("any", "any")
             continue
         if current is None:
             continue
         setting = re.match(r"^set\s+(\S+)\s+(.+)$", line, re.IGNORECASE)
-        if setting:
-            _fortios_setting(current, setting.group(1).lower(), setting.group(2))
+        if not setting:
+            continue
+        name, value = setting.group(1).lower(), setting.group(2)
+        if name in ("srcintf", "dstintf"):
+            first = value.replace('"', "").split()
+            side = first[0] if first else "any"
+            source, target = interfaces[current.seq or ""]
+            interfaces[current.seq or ""] = (side, target) if name == "srcintf" else (source, side)
+            continue
+        _fortios_setting(current, name, value)
+
+    for entry in acl.entries:
+        source_side, target_side = interfaces.get(entry.seq or "", ("any", "any"))
+        entry.source_value = _fortios_resolved(source_side, entry.source, values)
+        entry.destination_value = _fortios_resolved(target_side, entry.destination, values)
+        entry.source = _fortios_scoped(source_side, entry.source)
+        entry.destination = _fortios_scoped(target_side, entry.destination)
 
     if acl.entries:
         parsed.acls.append(acl)
+
+
+def _fortios_addresses(text: str) -> dict[str, str]:
+    """`firewall address` の中身。subnet の形だけ解決する（範囲や FQDN は名前のまま）。"""
+    from app.services.configparse import fortitext
+
+    values: dict[str, str] = {}
+    for name, settings in fortitext.blocks(text, "firewall address"):
+        subnet = settings.get("subnet")
+        if not subnet:
+            continue
+        parts = subnet.split()
+        if len(parts) == 2 and _looks_like_mask(parts[1]):
+            from app.services.configparse.routing import to_prefix
+
+            prefix = to_prefix(parts[0], parts[1])
+            if prefix:
+                values[name] = prefix
+        elif "/" in subnet:
+            values[name] = subnet
+    return values
+
+
+def _fortios_scoped(side: str, address: str | None) -> str:
+    """口とアドレスを1つの条件にする。口が any のときだけアドレスだけで言える。"""
+    value = address or "any"
+    return value if side == "any" else f"{side}:{value}"
+
+
+def _fortios_resolved(side: str, address: str | None, values: dict[str, str]) -> str | None:
+    if not address or address == "any":
+        return None
+    value = values.get(address)
+    return None if value is None else _fortios_scoped(side, value)
 
 
 def _fortios_setting(entry: ParsedAclEntry, name: str, value: str) -> None:

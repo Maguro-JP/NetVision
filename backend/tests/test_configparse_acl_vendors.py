@@ -109,8 +109,12 @@ def test_a_fortios_policy_table_is_read_as_rules_in_order():
     assert acl.kind == "policy"
     assert acl.applied_to == ["ポリシー表"]  # ポリシー表は、書いた時点で効いている
     assert acl.entries[0].action == "permit"
-    assert acl.entries[0].destination == "any"  # all は、どこへでも
-    assert acl.entries[0].source == "LAN"
+    # 口（srcintf / dstintf）は条件に含める。含めないと、別の口宛ての行どうしを
+    # 「上が下を覆っている」と取り違える
+    assert acl.entries[0].destination == "wan1:any"
+    assert acl.entries[0].source == "internal:LAN"
+    # 口を書いていない行は、アドレスだけで言う
+    assert acl.entries[1].source == "GUEST"
 
 
 def test_a_policy_that_is_turned_off_is_not_read_as_a_rule():
@@ -190,3 +194,70 @@ def test_a_table_followed_by_config_does_not_become_neighbors():
     text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
     parsed = configparse.parse(text)
     assert [n.remote_hostname for n in parsed.neighbors] == ["core-sw-01"]
+
+
+def test_fortios_address_names_are_resolved_when_the_subnet_is_known():
+    """名前のままでは、覆っているかどうかを言えない。"""
+    text = (
+        FORTI
+        + """
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+    edit "HQ"
+        set subnet 10.0.0.0/8
+    next
+end
+"""
+    )
+    acl = _acl(text, "firewall policy")
+    assert acl.entries[0].source_value == "internal:10.1.0.0/24"
+    assert acl.entries[0].destination_value is None
+
+
+def test_a_wider_row_above_on_the_same_interfaces_shadows_the_one_below():
+    text = """
+config system global
+    set hostname "fw-01"
+end
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+    edit "HQ"
+        set subnet 10.0.0.0/8
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "internal"
+        set dstintf "wan1"
+        set srcaddr "HQ"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+    edit 2
+        set srcintf "internal"
+        set dstintf "wan1"
+        set srcaddr "LAN"
+        set dstaddr "all"
+        set action deny
+        set service "ALL"
+    next
+    edit 3
+        set srcintf "dmz"
+        set dstintf "wan1"
+        set srcaddr "LAN"
+        set dstaddr "all"
+        set action deny
+        set service "ALL"
+    next
+end
+"""
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    shadowed = [t for t in titles if "読まれません" in t]
+    # 2 番は 1 番に覆われて読まれない。3 番は口が違うので覆われない
+    assert len(shadowed) == 1
+    assert "2" in shadowed[0]
