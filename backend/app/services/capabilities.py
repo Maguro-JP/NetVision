@@ -135,9 +135,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="冗長",
         name="LAG（ポートの束ね）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="束ねている番号まで。両端で束ね方が食い違っていないかは見ていません。",
+        note="束ねている番号と方式まで読み、結線が入っていれば両端で突き合わせます。"
+        "片側だけ束ねている、方式が違う（LACP と決め打ち）を指摘します。"
+        "束ねた線の負荷の分かれ方は、通る量が分からないので見ていません。",
     ),
     Capability(
         area="冗長",

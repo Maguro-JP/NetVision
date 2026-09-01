@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -131,6 +132,7 @@ def _compare(a: Interface, b: Interface) -> list[Finding]:
     found.extend(_mtu(a, b))
     found.extend(_speed_duplex(a, b))
     found.extend(_lag(a, b))
+    found.extend(_addresses(a, b))
     return found
 
 
@@ -223,6 +225,75 @@ def _native_vlan(a: Interface, b: Interface) -> list[Finding]:
             evidence=[f"{a.name}: VLAN {left}", f"{b.name}: VLAN {right}"],
         )
     ]
+
+
+def _addresses(a: Interface, b: Interface) -> list[Finding]:
+    """両端のアドレスが、同じセグメントに乗っているか。
+
+    機器どうしを直接つなぐところは、両端が同じセグメントでなければ通じない。
+    片側だけ別の区画にしてあっても、機器の中では正しい設定に見えるので、
+    1台ずつ見ている限り見つからない。経路だけ入れて確かめると「相手が
+    見えない」とだけ出て、原因はここにある、というのがよくある形。
+
+    片側にアドセスが無い場合は何も言わない。L2 の口として使っていることも、
+    取り込んだ Config が抜粋なことも、どちらもあるため。
+    """
+    left, right = _both(a, b, "ip_address")
+    if not left or not right:
+        return []
+    a_net, a_addr = _network_of(left)
+    b_net, b_addr = _network_of(right)
+    if a_net is None or b_net is None:
+        return []
+
+    if a_addr == b_addr:
+        return [
+            Finding(
+                level=HIGH,
+                title="両端に同じアドレスが入っています",
+                why="どちらが応えているのか決まりません。片方は届き、片方は届かない、"
+                "という形になります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        ]
+
+    # 区切りが違っても、互いに相手を「同じ線の上」と見ているなら通じている。
+    # 別のセグメントと言い切ると、直す必要の無いところを直させてしまう
+    reaches = b_addr in a_net and a_addr in b_net
+    if not reaches:
+        return [
+            Finding(
+                level=HIGH,
+                title="両端が別のセグメントです",
+                why="同じ線でつながっていても、別の区画にいるので直接は通じません。"
+                "経路を入れても「相手が見えない」とだけ出て、原因はここにあります。",
+                evidence=[f"{a.name}: {left}（{a_net}）", f"{b.name}: {right}（{b_net}）"],
+            )
+        ]
+
+    if a_net != b_net or a_net.prefixlen != b_net.prefixlen:
+        return [
+            Finding(
+                level=MEDIUM,
+                title="両端でセグメントの区切りが違います",
+                why="いまは通じていても、区切りの外にいる相手へは片側だけが直接"
+                "届く形になります。増設したときに、そこだけ通らなくなります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        ]
+    return []
+
+
+def _network_of(value: str):  # noqa: ANN201
+    """`10.0.0.1/30` を (ネットワーク, アドレス) にする。読めなければ (None, None)。"""
+    text = value.strip().split()[0]
+    if "/" not in text:
+        return None, None
+    try:
+        interface = ipaddress.ip_interface(text)
+    except ValueError:
+        return None, None
+    return interface.network, interface.ip
 
 
 def _mtu(a: Interface, b: Interface) -> list[Finding]:
