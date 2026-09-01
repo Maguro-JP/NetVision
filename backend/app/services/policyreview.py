@@ -758,7 +758,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
     for entry in crypto.maps:
         # 番号を付けない機種（NEC IX の autokey-map など）がある。
         # 「None 番」と出すくらいなら、名前だけで呼ぶ
-        label = f"{entry.name} の {entry.seq} 番" if entry.seq else entry.name
+        label = f"{entry.name} の {entry.seq} 番" if entry.seq else f"{entry.name} "
         head = f"crypto map {entry.name} {entry.seq}" if entry.seq else f"crypto map {entry.name}"
         missing = []
         if not entry.peers:

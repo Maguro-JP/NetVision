@@ -20,6 +20,7 @@ KIND_LABELS = {
     "asa-failover": "ASA failover",
     "vsx": "Aruba VSX",
     "mlag": "Arista MLAG",
+    "irf": "IRF（QX / Comware）",
 }
 
 
@@ -45,11 +46,15 @@ _ASA_KEY = re.compile(r"^failover\s+key\b", re.IGNORECASE)
 _ASA_LINK = re.compile(r"^failover\s+lan\s+interface\s+(\S+)\s+(\S+)", re.IGNORECASE)
 _VSX = re.compile(r"^vsx\s*$", re.IGNORECASE)
 _MLAG = re.compile(r"^mlag\s+configuration\s*$", re.IGNORECASE)
+_IRF_DOMAIN = re.compile(r"^\s*irf\s+domain\s+(\d+)", re.IGNORECASE | re.MULTILINE)
+_IRF_PRIORITY = re.compile(
+    r"^\s*irf\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
+)
 
 
 def parse(text: str) -> ParsedHaPair | None:
     """入っていれば1つ返す。2つ以上の仕組みを同時に入れる機器は見ない。"""
-    for reader in (_fortigate, _asa, _vsx, _mlag):
+    for reader in (_fortigate, _asa, _vsx, _mlag, _irf):
         found = reader(text)
         if found is not None:
             return found
@@ -147,4 +152,18 @@ def _mlag(text: str) -> ParsedHaPair | None:
             pair.peer_address = words[1]
         elif head == "peer-link" and len(words) > 1:
             pair.link = words[1]
+    return pair
+
+
+def _irf(text: str) -> ParsedHaPair | None:
+    """Comware の IRF。`irf domain` で組を、`irf member N priority` で主を決める。"""
+    domain = _IRF_DOMAIN.search(text)
+    priority = _IRF_PRIORITY.search(text)
+    if domain is None and priority is None:
+        return None
+    pair = ParsedHaPair(kind="irf")
+    if domain:
+        pair.group = domain.group(1)
+    if priority:
+        pair.priority = int(priority.group(2))
     return pair

@@ -63,6 +63,8 @@ def test_each_vendor_is_read_into_the_same_shape():
     assert hapair.parse(VSX_P).role == "primary"
     assert hapair.parse(MLAG).group == "DC1"
     assert hapair.parse(MLAG).peer_address == "10.255.0.2"
+    irf = hapair.parse("irf domain 10\nirf member 1 priority 32\n")
+    assert (irf.kind, irf.group, irf.priority) == ("irf", "10", 32)
     assert hapair.parse("hostname sw\ninterface Gi1\n") is None
 
 
