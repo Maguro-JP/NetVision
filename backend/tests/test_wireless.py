@@ -151,3 +151,37 @@ def test_the_findings_ride_along_with_the_other_checks():
     """無線の指摘も、ほかの点検と同じ出口から出る。"""
     titles_all = [f.title for f in policyreview.review(configparse.parse(IOSXE))]
     assert "SSID GUEST-WIFI は誰でも入れます" in titles_all
+
+
+def test_an_ap_profile_with_telnet_open_is_reported():
+    """AP は天井にあって手が届かない。開けたままの入口は気づかれないまま残る。"""
+    text = IOSXE + "ap profile default-ap-profile\n telnet\n ssh\n"
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["profile default-ap-profile"].insecure_access == ["telnet"]
+    assert [f.title for f in wirelessreview.review(parsed) if "telnet" in f.title]
+
+
+def test_an_ap_profile_with_only_ssh_is_quiet():
+    text = IOSXE + "ap profile default-ap-profile\n ssh\n"
+    parsed = configparse.parse(text)
+    assert not [f.title for f in wirelessreview.review(parsed) if "telnet" in f.title]
+
+
+def test_aireos_telnet_on_an_ap_is_reported():
+    text = (
+        "config wlan create 1 OFFICE OFFICE\n"
+        "config ap telnet enable AP-3F-01\n"
+        "config ap ssh enable AP-3F-02\n"
+    )
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-3F-01"].insecure_access == ["telnet"]
+    assert "AP-3F-02" not in aps or aps["AP-3F-02"].insecure_access == []
+
+
+def test_the_tags_of_an_ap_are_read():
+    text = IOSXE + "ap name AP-3F-01 policy-tag OFFICE-TAG\n"
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-3F-01"].profile == "OFFICE-TAG"

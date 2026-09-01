@@ -443,7 +443,71 @@ def _fortinet(text: str, found: ParsedWireless) -> None:
 # ---------------------------------------------------------------------------
 
 
+_IOSXE_AP_PROFILE = re.compile(r"^ap\s+profile\s+(\S+)", re.IGNORECASE)
+_IOSXE_AP_TAG = re.compile(
+    r"^ap\s+name\s+(\S+)\s+(policy-tag|site-tag|rf-tag)\s+(\S+)", re.IGNORECASE
+)
+_AIRE_AP_ACCESS = re.compile(
+    r"^config\s+ap\s+(telnet|ssh)\s+(enable|disable)\s+(\S+)", re.IGNORECASE
+)
+
+
+def _ap_side(text: str, found: ParsedWireless) -> None:
+    """AP 側の入口。IOS-XE は `ap profile` の中、AireOS は `config ap telnet`。
+
+    telnet は合言葉がそのまま流れる。AP は天井に付いていて手が届かないので、
+    開けたままだと気づかれないまま残る。
+    """
+    profile_access: dict[str, list[str]] = {}
+    ap_profile: dict[str, str] = {}
+    current: str | None = None
+
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line.strip():
+            continue
+        body = line.strip()
+        indented = line.startswith((" ", "\t"))
+
+        if not indented:
+            current = None
+            head = _IOSXE_AP_PROFILE.match(body)
+            if head:
+                current = head.group(1)
+                profile_access.setdefault(current, [])
+                continue
+            tag = _IOSXE_AP_TAG.match(body)
+            if tag:
+                ap = _ap(found, tag.group(1))
+                ap.profile = ap.profile or tag.group(3)
+                continue
+            aire = _AIRE_AP_ACCESS.match(body)
+            if aire and aire.group(2).lower() == "enable" and aire.group(1).lower() == "telnet":
+                ap = _ap(found, aire.group(3))
+                if "telnet" not in ap.insecure_access:
+                    ap.insecure_access.append("telnet")
+            continue
+
+        if current is not None:
+            lowered = body.lower()
+            if lowered == "telnet":
+                profile_access[current].append("telnet")
+            elif lowered in ("http", "no https"):
+                profile_access[current].append("http")
+
+    # プロファイルに開いている入口は、それを当てている AP に効く。
+    # どの AP にも当てていなくても、プロファイルそのものを残しておく
+    for name, access in profile_access.items():
+        if not access:
+            continue
+        ap = _ap(found, f"profile {name}")
+        for item in access:
+            if item not in ap.insecure_access:
+                ap.insecure_access.append(item)
+
+
 def _common(text: str, found: ParsedWireless) -> None:
+    _ap_side(text, found)
     for raw in text.splitlines():
         body = raw.strip()
         country = _COUNTRY.match(body)

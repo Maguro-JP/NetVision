@@ -40,6 +40,7 @@ def review(parsed: ParsedConfig) -> list[Finding]:
     for wlan in live:
         findings.extend(_one(wlan))
     findings.extend(_across(live))
+    findings.extend(_ap_access(wireless))
     if wireless.wlans and wireless.country is None:
         findings.append(
             Finding(
@@ -223,3 +224,20 @@ def _across(live: list[ParsedWlan]) -> list[Finding]:
                 )
             )
     return out
+
+
+def _ap_access(wireless) -> list[Finding]:  # noqa: ANN001
+    """AP の管理の入口に、合言葉がそのまま流れるものが開いている。"""
+    opened = [ap for ap in wireless.aps if ap.insecure_access]
+    if not opened:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title=f"AP の管理に telnet / http が開いています（{len(opened)} 件）",
+            why="telnet と http は合言葉がそのまま流れます。AP は天井に付いていて"
+            "手が届かないので、開けたままだと気づかれないまま残ります。"
+            "ssh と https だけにしてください。",
+            evidence=[f"{ap.name}: {' / '.join(ap.insecure_access)}" for ap in opened[:5]],
+        )
+    ]
