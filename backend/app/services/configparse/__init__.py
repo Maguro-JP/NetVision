@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from app.services.configparse import (
     arista,
+    aruba,
     asa,
     cisco,
     features,
@@ -48,6 +49,7 @@ _DETECTORS = (
     panos.detect,
     asa.detect,
     arista.detect,
+    aruba.detect,
     nec.detect,
     cisco.detect,
 )
@@ -63,6 +65,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.YAMAHA: "ヤマハ RTX / NVR",
     Vendor.PALO_ALTO: "Palo Alto PAN-OS",
     Vendor.ARISTA: "Arista EOS",
+    Vendor.ARUBA_CX: "Aruba CX（AOS-CX）",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -77,6 +80,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.YAMAHA: "ヤマハ",
     Vendor.PALO_ALTO: "Palo Alto",
     Vendor.ARISTA: "Arista",
+    Vendor.ARUBA_CX: "Aruba",
 }
 
 
@@ -107,6 +111,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = panos.parse(text)
     elif vendor is Vendor.ARISTA:
         parsed = arista.parse(text)
+    elif vendor is Vendor.ARUBA_CX:
+        parsed = aruba.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

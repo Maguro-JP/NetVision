@@ -20,6 +20,7 @@ class Vendor(enum.StrEnum):
     YAMAHA = "yamaha"
     PALO_ALTO = "palo_alto"
     ARISTA = "arista"
+    ARUBA_CX = "aruba_cx"
     UNKNOWN = "unknown"
 
 

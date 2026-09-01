@@ -1,0 +1,92 @@
+!Version ArubaOS-CX FL.10.09.0010
+!Model: 6300M-48G-4SFP56
+!export-password: default
+hostname sw-aruba-01
+user admin group administrators password ciphertext AQBapXXXXX
+!
+ntp server pool.ntp.org
+ntp enable
+!
+vlan 1
+vlan 10
+    name USERS
+vlan 20
+    name SERVERS
+vlan 100
+    name GUEST
+!
+access-list ip WEB-IN
+    10 permit tcp any 10.0.20.0/24 eq 443
+    20 permit tcp any 10.0.20.0/24 eq 80 log
+    30 deny any any any
+!
+access-list ip GUEST-IN
+    10 permit any any any
+!
+interface lag 1
+    no shutdown
+    description to-core-01
+    no routing
+    vlan trunk native 1
+    vlan trunk allowed 10,20
+    lacp mode active
+!
+interface 1/1/1
+    no shutdown
+    description to-core-01-a
+    lag 1
+!
+interface 1/1/2
+    no shutdown
+    description to-core-01-b
+    lag 1
+!
+interface 1/1/10
+    no shutdown
+    description server-01
+    no routing
+    vlan access 20
+!
+interface 1/1/11
+    description yobi-port
+    no routing
+    vlan access 20
+!
+interface 1/1/24
+    no shutdown
+    description guest-ap
+    no routing
+    vlan access 100
+    apply access-list ip GUEST-IN in
+!
+interface vlan 10
+    ip address 10.0.10.1/24
+    ip ospf 1 area 0.0.0.0
+    ip ospf hello-interval 10
+    ip ospf dead-interval 40
+!
+interface vlan 20
+    ip address 10.0.20.1/24
+    ip ospf 1 area 0.0.0.0
+    apply access-list ip WEB-IN in
+!
+interface vlan 100
+    vrf attach GUEST
+    ip address 10.0.100.1/24
+!
+ip route 0.0.0.0/0 10.0.10.254
+ip route 10.9.0.0/16 10.0.20.254 200
+!
+router ospf 1
+    router-id 10.0.10.1
+    area 0.0.0.0
+!
+router bgp 65001
+    bgp router-id 10.0.10.1
+    neighbor 10.0.10.2 remote-as 65002
+!
+vsx
+    system-mac 02:01:00:00:01:00
+    inter-switch-link lag 1
+    role primary
+!
