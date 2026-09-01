@@ -101,3 +101,10 @@ def test_bgp_is_still_read_by_the_ios_side(parsed):
     assert parsed.bgp is not None
     assert parsed.bgp.local_as == "65001"
     assert [n.address for n in parsed.bgp.neighbors] == ["10.0.10.2"]
+
+
+def test_the_lldp_table_gives_the_lines_for_the_diagram(parsed):
+    """`show lldp neighbor-info` の表。PORT-DESC に空白が入っていても崩れない。"""
+    pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors]
+    assert ("1/1/1", "core-aruba-01", "1/1/24") in pairs
+    assert ("1/1/2", "core-sw-01", "GigabitEthernet1/0/1") in pairs

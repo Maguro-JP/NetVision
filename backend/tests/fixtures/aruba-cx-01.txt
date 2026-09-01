@@ -90,3 +90,9 @@ vsx
     inter-switch-link lag 1
     role primary
 !
+!
+! show lldp neighbor-info
+LOCAL-PORT  CHASSIS-ID         PORT-ID    PORT-DESC       TTL  SYS-NAME
+-------------------------------------------------------------------------
+1/1/1       00:11:22:33:44:55  1/1/24     to aruba        120  core-aruba-01
+1/1/2       00:11:22:33:44:66  Gi1/0/1    uplink          120  core-sw-01

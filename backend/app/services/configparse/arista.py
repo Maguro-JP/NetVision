@@ -15,7 +15,14 @@ from __future__ import annotations
 import re
 
 from app.services.configparse import cisco
-from app.services.configparse.base import ParsedConfig, ParsedRoute, Vendor
+from app.services.configparse.base import (
+    NeighborProtocol,
+    ParsedConfig,
+    ParsedNeighbor,
+    ParsedRoute,
+    Vendor,
+)
+from app.services.configparse.ifname import expand
 from app.services.configparse.routing import to_prefix
 
 #: EOS が既定で掛けている、受ける経路の上限。書かなくてもここで止まる
@@ -29,6 +36,10 @@ _ROUTE = re.compile(
     r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
     r"(?P<dest>\d+\.\d+\.\d+\.\d+/\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
+)
+#: `show lldp neighbors` の見出し。Port / Neighbor Device ID / Neighbor Port ID / TTL
+_LLDP_HEADER = re.compile(
+    r"^\s*Port\s+Neighbor Device ID\s+Neighbor Port ID\s+TTL\s*$", re.IGNORECASE
 )
 _MAXIMUM_ROUTES = re.compile(r"^\s*neighbor\s+(\S+)\s+maximum-routes\s+(\d+)", re.IGNORECASE)
 
@@ -74,6 +85,7 @@ def parse(text: str) -> ParsedConfig:
 
     _parse_routes(text, parsed)
     _maximum_routes(text, parsed)
+    _parse_lldp_table(text, parsed)
     return parsed
 
 
@@ -120,3 +132,32 @@ def _maximum_routes(text: str, parsed: ParsedConfig) -> None:
             neighbor.maximum_prefix = limit
         else:
             neighbor.maximum_prefix = None
+
+
+def _parse_lldp_table(text: str, parsed: ParsedConfig) -> None:
+    """`show lldp neighbors` の表。図の線はここから引く。
+
+    列は Port / Neighbor Device ID / Neighbor Port ID / TTL。ポートは `Et1` の
+    ように略されるので、正式名に伸ばして持つ。
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _LLDP_HEADER.match(line):
+            continue
+        for row in lines[index + 1 :]:
+            stripped = row.strip()
+            if not stripped:
+                break
+            if stripped.startswith("-"):
+                continue
+            columns = stripped.split()
+            if len(columns) < 4 or not columns[-1].isdigit():
+                break
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=expand(columns[0]),
+                    remote_hostname=columns[1],
+                    remote_interface=" ".join(columns[2:-1]),
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )

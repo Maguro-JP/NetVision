@@ -64,3 +64,8 @@ line vty 0 4
  exec-timeout 10 0
 !
 end
+!
+! show lldp neighbors
+Local Port  Neighbor Chassis ID     Neighbor Port     System Name
+port1.0.1   0011.2233.4455          port1.0.24        core-at-01
+port1.0.2   0011.2233.4466          Gi1/0/2           core-sw-01

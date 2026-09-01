@@ -72,3 +72,10 @@ def test_hardware_acls_are_read_and_their_port_is_known(parsed):
     assert [e.seq for e in acls["GUEST-IN"].entries] == ["10", "20"]
     assert acls["GUEST-IN"].entries[0].destination_port == "eq 53"
     assert acls["GUEST-IN"].applied_to == ["interface port1.0.24 入り"]
+
+
+def test_the_lldp_table_gives_the_lines_for_the_diagram(parsed):
+    """`show lldp neighbors` の表。図の線はここから引く。"""
+    pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors]
+    assert ("port1.0.1", "core-at-01", "port1.0.24") in pairs
+    assert ("port1.0.2", "core-sw-01", "GigabitEthernet1/0/2") in pairs

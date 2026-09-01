@@ -21,10 +21,12 @@ import re
 
 from app.services.configparse import cisco
 from app.services.configparse.base import (
+    NeighborProtocol,
     ParsedAcl,
     ParsedAclEntry,
     ParsedConfig,
     ParsedInterface,
+    ParsedNeighbor,
     ParsedRoute,
     Vendor,
 )
@@ -40,6 +42,10 @@ _ROUTE = re.compile(
 )
 _ACL_HEAD = re.compile(r"^access-list\s+ip\s+(\S+)\s*$", re.IGNORECASE)
 _ACL_ENTRY = re.compile(r"^(?P<seq>\d+)\s+(?P<action>permit|deny)\s+(?P<rest>.+)$", re.IGNORECASE)
+#: `show lldp neighbor-info` の見出し
+_LLDP_HEADER = re.compile(
+    r"^\s*LOCAL-PORT\s+CHASSIS-ID\s+PORT-ID\s+PORT-DESC\s+TTL\s+SYS-NAME\s*$", re.IGNORECASE
+)
 _APPLY = re.compile(r"^apply\s+access-list\s+ip\s+(\S+)\s+(in|out)\b", re.IGNORECASE)
 
 
@@ -83,6 +89,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_interfaces(text, parsed)
     _parse_routes(text, parsed)
     _parse_acls(text, parsed)
+    _parse_lldp_table(text, parsed)
     return parsed
 
 
@@ -311,3 +318,35 @@ def _port(tokens: list[str]) -> tuple[str | None, list[str]]:
     if head == "range" and len(tokens) >= 3:
         return f"range {tokens[1]} {tokens[2]}", tokens[3:]
     return None, tokens
+
+
+def _parse_lldp_table(text: str, parsed: ParsedConfig) -> None:
+    """`show lldp neighbor-info` の表。図の線はここから引く。
+
+    列は LOCAL-PORT / CHASSIS-ID / PORT-ID / PORT-DESC / TTL / SYS-NAME。
+    PORT-DESC に空白が入ることがあるので、TTL（数字）を目印に前後を分ける。
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if not _LLDP_HEADER.match(line):
+            continue
+        for row in lines[index + 1 :]:
+            stripped = row.strip()
+            if not stripped:
+                break
+            if stripped.startswith("-"):
+                continue
+            columns = stripped.split()
+            if len(columns) < 5:
+                break
+            ttl_at = next((i for i in range(len(columns) - 1, 1, -1) if columns[i].isdigit()), None)
+            if ttl_at is None or ttl_at + 1 >= len(columns):
+                continue
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=columns[0],
+                    remote_hostname=columns[ttl_at + 1],
+                    remote_interface=columns[2],
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
