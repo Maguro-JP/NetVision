@@ -4,6 +4,7 @@
 """
 
 import os
+import time
 
 os.environ.setdefault("NETVISION_SKIP_SCHEMA", "true")
 
@@ -48,8 +49,26 @@ def client(db_session):
     )()
     with TestClient(app) as c:
         yield c
+    _wait_for_background_jobs()
     app.dependency_overrides.clear()
     db_module.new_session = original_new_session
+
+
+def _wait_for_background_jobs(timeout: float = 5.0) -> None:
+    """裏で走っている処理が終わるまで待つ。
+
+    試験が終わると db_session の後始末が表を落とす。裏の取り込みがまだ
+    書いている最中に落とすと、SQLite が "not an error" という分かりにくい
+    形で失敗する。終わったのを見てから落とす。
+    """
+    from app.services import jobs
+
+    limit = time.time() + timeout
+    while time.time() < limit:
+        running = [j for j in jobs.recent(limit=100) if j.status in {"pending", "running"}]
+        if not running:
+            return
+        time.sleep(0.01)
 
 
 @pytest.fixture()
