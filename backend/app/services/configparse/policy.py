@@ -821,6 +821,21 @@ def _fortios_addresses(text: str) -> dict[str, str]:
     return values
 
 
+def _fortios_many(cleaned: str) -> str:
+    """複数書ける欄。1つ目までを読み、残りは数で示す（PAN-OS と同じ）。
+
+    まとめて1つの名前にすると、中身を解決したときに1つ目だけで
+    「覆っている」と言ってしまう。2つ以上あるときは解決しない。
+    """
+    values = cleaned.split()
+    if not values:
+        return "any"
+    head = "any" if values[0].lower() == "all" else values[0]
+    if len(values) > 1:
+        return f"{head} ほか{len(values) - 1}件"
+    return head
+
+
 def _fortios_scoped(side: str, address: str | None) -> str:
     """口とアドレスを1つの条件にする。口が any のときだけアドレスだけで言える。"""
     value = address or "any"
@@ -843,9 +858,9 @@ def _fortios_setting(entry: ParsedAclEntry, name: str, value: str) -> None:
         # 止めたままの行。効いていないので、並びの検算からは外す
         entry.action = "disabled"
     elif name == "srcaddr":
-        entry.source = "any" if first.lower() == "all" else first
+        entry.source = _fortios_many(cleaned)
     elif name == "dstaddr":
-        entry.destination = "any" if first.lower() == "all" else first
+        entry.destination = _fortios_many(cleaned)
     elif name == "service":
         entry.destination_port = None if first.upper() == "ALL" else f"サービス {first}"
     elif name == "name":

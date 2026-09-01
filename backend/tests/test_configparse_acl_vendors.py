@@ -261,3 +261,20 @@ end
     # 2 番は 1 番に覆われて読まれない。3 番は口が違うので覆われない
     assert len(shadowed) == 1
     assert "2" in shadowed[0]
+
+
+def test_several_addresses_on_one_fortios_row_are_not_resolved_as_one():
+    """2つ以上あるときは、1つ目だけで「覆っている」と言わない。"""
+    text = (
+        FORTI.replace('set srcaddr "LAN"', 'set srcaddr "LAN" "GUEST"')
+        + """
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+end
+"""
+    )
+    acl = _acl(text, "firewall policy")
+    assert acl.entries[0].source == "internal:LAN ほか1件"
+    assert acl.entries[0].source_value is None
