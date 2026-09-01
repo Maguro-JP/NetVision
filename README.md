@@ -290,6 +290,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
 | Palo Alto | PAN-OS | ファイアウォール。`set` 形式。ゾーン・セキュリティポリシー・NAT を読みます（XML 形式は未対応） |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
+| Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
