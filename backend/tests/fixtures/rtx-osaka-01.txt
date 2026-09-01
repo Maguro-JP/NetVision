@@ -37,3 +37,17 @@ dhcp scope option 1 router=192.168.100.1 dns=192.168.100.1,8.8.8.8
 dns host lan1
 dns server 8.8.8.8
 syslog host 192.168.100.10
+tunnel select 1
+ description tunnel to-honsha
+ ipsec tunnel 101
+  ipsec sa policy 101 1 esp aes-cbc sha256-hmac
+  ipsec ike keepalive use 1 on
+  ipsec ike encryption 1 aes-cbc
+  ipsec ike hash 1 sha256
+  ipsec ike group 1 modp2048
+  ipsec ike local address 1 192.168.100.1
+  ipsec ike pre-shared-key 1 text himitsu
+  ipsec ike remote address 1 203.0.113.2
+ ip tunnel tcp mss limit auto
+ tunnel enable 1
+ipsec auto refresh on

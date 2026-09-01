@@ -26,12 +26,16 @@ from app.services.configparse.base import (
     ParsedAcl,
     ParsedAclEntry,
     ParsedConfig,
+    ParsedCrypto,
     ParsedDhcp,
     ParsedDhcpPool,
+    ParsedIkePolicy,
     ParsedInterface,
     ParsedNat,
     ParsedNatRule,
     ParsedRoute,
+    ParsedTransformSet,
+    ParsedTunnel,
     Vendor,
 )
 
@@ -96,6 +100,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_filters(text, parsed)
     _parse_nat(text, parsed)
     _parse_dhcp(text, parsed)
+    _parse_tunnels(text, parsed)
     return parsed
 
 
@@ -427,3 +432,117 @@ def _dhcp_option(pool: ParsedDhcpPool, rest: str) -> None:
             pool.dns_servers.extend(value.split(","))
         elif key.lower() == "domain":
             pool.domain = value
+
+
+# ---------------------------------------------------------------------------
+# トンネル（IPsec / L2TP）
+# ---------------------------------------------------------------------------
+
+_TUNNEL_SELECT = re.compile(r"^tunnel\s+select\s+(\S+)\s*$", re.IGNORECASE)
+_TUNNEL_ENABLE = re.compile(r"^tunnel\s+enable\s+(\S+)\s*$", re.IGNORECASE)
+_IKE_LOCAL = re.compile(r"^ipsec\s+ike\s+local\s+address\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_IKE_REMOTE = re.compile(r"^ipsec\s+ike\s+remote\s+address\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_IKE_ENCRYPTION = re.compile(r"^ipsec\s+ike\s+encryption\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_IKE_HASH = re.compile(r"^ipsec\s+ike\s+hash\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_IKE_GROUP = re.compile(r"^ipsec\s+ike\s+group\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_IKE_PSK = re.compile(r"^ipsec\s+ike\s+pre-shared-key\s+(\d+)\s+(\S+)", re.IGNORECASE)
+_SA_POLICY = re.compile(r"^ipsec\s+sa\s+policy\s+(\d+)\s+(\d+)\s+(esp|ah)\s+(.+)$", re.IGNORECASE)
+_L2TP = re.compile(r"^tunnel\s+encapsulation\s+(\S+)", re.IGNORECASE)
+_TUNNEL_DESCRIPTION = re.compile(r"^description\s+tunnel\s+(.+)$", re.IGNORECASE)
+#: 鍵の作り方。ヤマハは長さで書くので、判断の側と同じ群の番号に直しておく
+_DH_GROUPS = {"modp768": "1", "modp1024": "2", "modp1536": "5", "modp2048": "14"}
+
+
+def _parse_tunnels(text: str, parsed: ParsedConfig) -> None:
+    """`tunnel select N` の下を読む。
+
+    ヤマハは1つのトンネルの設定が、`tunnel select` の下と、その外の
+    `ipsec ike ...` の両方に散らばる。番号（ゲートウェイ番号）でつながって
+    いるので、番号を鍵にして拾い直す。
+
+    暗号の強さは、ここで crypto の形に移しておく。そうすると DES や MD5 が
+    残っているときの指摘が、Cisco と同じ判断で出る。
+    """
+    crypto = parsed.crypto or ParsedCrypto()
+    current: ParsedTunnel | None = None
+    #: `tunnel select` の中で使っているゲートウェイ番号 → トンネル
+    by_gateway: dict[str, ParsedTunnel] = {}
+    policies: dict[str, ParsedIkePolicy] = {}
+    keyed_gateways: list[str] = []
+    found_any = False
+
+    for raw in text.splitlines():
+        body = raw.strip()
+        if not body:
+            continue
+
+        select = _TUNNEL_SELECT.match(body)
+        if select:
+            current = parsed.add_tunnel(ParsedTunnel(name=f"tunnel{select.group(1)}"))
+            continue
+        if _TUNNEL_ENABLE.match(body):
+            current = None
+            continue
+
+        encapsulation = _L2TP.match(body)
+        if encapsulation and current is not None:
+            current.kind = encapsulation.group(1).lower()
+            continue
+
+        described = _TUNNEL_DESCRIPTION.match(body)
+        if described and current is not None:
+            current.description = described.group(1).strip()
+            continue
+
+        for pattern, field_name in ((_IKE_LOCAL, "source"), (_IKE_REMOTE, "destination")):
+            match = pattern.match(body)
+            if not match:
+                continue
+            found_any = True
+            tunnel = current or by_gateway.get(match.group(1))
+            if tunnel is None:
+                continue
+            by_gateway[match.group(1)] = tunnel
+            tunnel.kind = tunnel.kind or "ipsec"
+            setattr(tunnel, field_name, match.group(2))
+
+        for pattern, field_name in (
+            (_IKE_ENCRYPTION, "encryption"),
+            (_IKE_HASH, "hash"),
+            (_IKE_GROUP, "group"),
+        ):
+            match = pattern.match(body)
+            if match:
+                found_any = True
+                policy = policies.setdefault(match.group(1), ParsedIkePolicy(number=match.group(1)))
+                value = match.group(2)
+                if field_name == "group":
+                    value = _DH_GROUPS.get(value.lower(), value)
+                setattr(policy, field_name, value)
+
+        psk = _IKE_PSK.match(body)
+        if psk:
+            found_any = True
+            # 合言葉そのものは持たない。どのゲートウェイに置いてあるかだけ覚えて、
+            # 相手のアドレスは読み終わってから当てる（書く順が前後するため）
+            keyed_gateways.append(psk.group(1))
+            if current is not None:
+                by_gateway.setdefault(psk.group(1), current)
+
+        sa = _SA_POLICY.match(body)
+        if sa:
+            found_any = True
+            prefix = sa.group(3).lower()
+            transforms = [f"{prefix}-{value.lower()}" for value in sa.group(4).split()]
+            crypto.transform_sets.append(
+                ParsedTransformSet(name=f"sa policy {sa.group(1)}", transforms=transforms)
+            )
+
+    if not found_any:
+        return
+    for gateway in keyed_gateways:
+        tunnel = by_gateway.get(gateway)
+        peer = tunnel.destination if tunnel else None
+        crypto.keyed_peers.append(peer or f"gateway {gateway}")
+    crypto.ike_policies.extend(policies.values())
+    parsed.crypto = crypto

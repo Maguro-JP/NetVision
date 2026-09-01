@@ -286,7 +286,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Fortinet | FortiOS | |
 | NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式 |
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
-| ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter` を読みます |
+| ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
 | Palo Alto | PAN-OS | ファイアウォール。`set` 形式。ゾーン・セキュリティポリシー・NAT を読みます（XML 形式は未対応） |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
