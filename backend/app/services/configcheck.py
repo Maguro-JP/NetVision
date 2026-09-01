@@ -177,6 +177,8 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
+    found.extend(_stp(text))
+    found.extend(_port_admission(text))
     return _sorted(found)
 
 
@@ -324,6 +326,183 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                 evidence=[f"VLAN {', '.join(str(v) for v in idle[:10])}"],
             )
         )
+    return out
+
+
+def _stp(text: str) -> list[Finding]:
+    """ループを止める仕組み（STP）まわりで、後から効いてくるもの。
+
+    STP は「入っていれば動く」ものではない。端末をつなぐ口に、誰かが
+    スイッチを挿したときにどうなるかまで決めて、はじめて意味がある。
+    ここで見るのは、その決め忘れである。
+
+    ルートをどこに置くかは、1台の Config だけでは言えない（相手側の
+    優先度が分からない）ので、ここでは見ない。
+    """
+    out: list[Finding] = []
+    ports = _interface_blocks(text)
+
+    fast_without_guard = [
+        name
+        for name, body in ports
+        if any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+        and not any("bpduguard" in line.lower() for line in body)
+    ]
+    if fast_without_guard:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="端末用の口に、BPDU guard が入っていません",
+                why="portfast はつないだ瞬間に通す設定です。そこへ誰かがスイッチを"
+                "挿すと、輪ができて網全体が止まります。BPDU guard を入れておけば、"
+                "その口だけが落ちて済みます。",
+                evidence=[
+                    f"{name}: spanning-tree portfast のみ" for name in fast_without_guard[:5]
+                ],
+            )
+        )
+
+    fast_on_trunk = [
+        name
+        for name, body in ports
+        if any(line.lower().startswith("switchport mode trunk") for line in body)
+        and any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+    ]
+    if fast_on_trunk:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="スイッチをつなぐ口に portfast が入っています",
+                why="機器どうしをつなぐ口で待ち時間を飛ばすと、輪ができていても"
+                "そのまま通してしまいます。トランクに入れるなら "
+                "portfast trunk（意図した指定）にしてください。",
+                evidence=[
+                    f"{name}: trunk なのに spanning-tree portfast" for name in fast_on_trunk[:5]
+                ],
+            )
+        )
+
+    lines = [line.strip() for line in text.splitlines()]
+    if any(line.lower().startswith("spanning-tree ") for line in lines) and not any(
+        line.lower().startswith("spanning-tree mode ") for line in lines
+    ):
+        out.append(
+            Finding(
+                level=LOW,
+                title="STP のモードを決めていません",
+                why="既定のまま動きます。相手の機器が別のモードだと、"
+                "収束の速さも VLAN ごとの木の作られ方も揃いません。"
+                "現場で1つに決めて、そろえてください。",
+                evidence=["spanning-tree mode の行なし"],
+            )
+        )
+    return out
+
+
+def _port_admission(text: str) -> list[Finding]:
+    """口に誰を入れるか（802.1X / ポートセキュリティ）の決め忘れ。
+
+    入れてあるだけでは効かない。問い合わせ先が無い、破ったときに何もしない、
+    仕組みは入れたのにどの口にも当てていない。どれも「入っている」という
+    見た目になるので、入っているつもりで残る。
+    """
+    out: list[Finding] = []
+    lines = [line.strip() for line in text.splitlines()]
+    lowered = [line.lower() for line in lines]
+    ports = _interface_blocks(text)
+
+    controlled = [
+        name
+        for name, body in ports
+        if any("port-control auto" in line.lower() for line in body)
+        or any(line.lower().startswith("dot1x port-control auto") for line in body)
+    ]
+    has_server = any(
+        line.startswith(("radius-server ", "radius server", "aaa group server radius"))
+        for line in lowered
+    )
+    if controlled and not has_server:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="802.1X を当てていますが、問い合わせ先がありません",
+                why="本人確認を RADIUS に頼む設定なのに、その相手が書かれていません。"
+                "そのままだと、その口につないだ端末は誰も通れません。",
+                evidence=[f"{name}: port-control auto" for name in controlled[:5]],
+            )
+        )
+
+    dot1x_on = any(
+        line.startswith(("dot1x system-auth-control", "aaa authentication dot1x"))
+        for line in lowered
+    )
+    if dot1x_on and not controlled:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="802.1X を入れてありますが、どの口にも当てていません",
+                why="仕組みだけ有効になっていて、実際には誰の確認もしていません。"
+                "入っているように見えるので、確認しているつもりのまま残ります。",
+                evidence=["dot1x の全体設定あり / port-control auto のポートなし"],
+            )
+        )
+
+    quiet_security = [
+        name
+        for name, body in ports
+        if any(line.lower().startswith("switchport port-security") for line in body)
+        and not any("violation" in line.lower() for line in body)
+    ]
+    if quiet_security:
+        out.append(
+            Finding(
+                level=LOW,
+                title="ポートセキュリティの、破ったときの動きを決めていません",
+                why="既定では口ごと落ちます（shutdown）。意図しているなら問題ありませんが、"
+                "決めていないと、端末を入れ替えただけで口が落ちて、"
+                "現場では原因の分からない不通になります。",
+                evidence=[f"{name}: violation の指定なし" for name in quiet_security[:5]],
+            )
+        )
+
+    protect_only = [
+        name for name, body in ports if any("violation protect" in line.lower() for line in body)
+    ]
+    if protect_only:
+        out.append(
+            Finding(
+                level=LOW,
+                title="ポートセキュリティが、黙って落とす設定になっています",
+                why="protect は、超えた分を捨てるだけで記録も残りません。"
+                "つながらないという申告だけが来て、機器側には何の跡もありません。"
+                "restrict なら記録が残ります。",
+                evidence=[f"{name}: violation protect" for name in protect_only[:5]],
+            )
+        )
+    return out
+
+
+def _interface_blocks(text: str) -> list[tuple[str, list[str]]]:
+    """`interface X` ごとに、その中の行を集める。"""
+    out: list[tuple[str, list[str]]] = []
+    name: str | None = None
+    body: list[str] = []
+    for raw in text.splitlines():
+        head = re.match(r"^interface\s+(\S+)", raw, re.IGNORECASE)
+        if head:
+            if name is not None:
+                out.append((name, body))
+            name, body = head.group(1), []
+            continue
+        if name is None:
+            continue
+        if raw and not raw.startswith((" ", "\t")):
+            out.append((name, body))
+            name, body = None, []
+            continue
+        body.append(raw.strip())
+    if name is not None:
+        out.append((name, body))
     return out
 
 

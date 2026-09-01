@@ -891,6 +891,48 @@ class LinkReportRead(BaseModel):
     notes: list[str]
 
 
+class VlanFindingRead(BaseModel):
+    vlan_id: int
+    level: str
+    title: str
+    why: str
+    evidence: list[str]
+
+
+class VlanReportRead(BaseModel):
+    vlans_seen: int
+    devices_with_vlans: int
+    findings: list[VlanFindingRead]
+    notes: list[str]
+
+
+@router.get("/vlan-check", response_model=VlanReportRead)
+def check_vlans(db: DbSession) -> VlanReportRead:
+    """VLAN の名前が、機器と台帳でそろっているかを見る。
+
+    番号は同じでも名前が食い違うと、作業の指示が通らなくなる。
+    「10 番を止めて」が、別の機器では別の意味になる。
+    """
+    from app.services import vlanreview
+
+    report = vlanreview.review(db)
+    return VlanReportRead(
+        vlans_seen=report.vlans_seen,
+        devices_with_vlans=report.devices_with_vlans,
+        findings=[
+            VlanFindingRead(
+                vlan_id=item.vlan_id,
+                level=item.finding.level,
+                title=item.finding.title,
+                why=item.finding.why,
+                evidence=item.finding.evidence,
+            )
+            for item in report.findings
+        ],
+        notes=report.notes,
+    )
+
+
 @router.get("/link-check", response_model=LinkReportRead)
 def check_links(db: DbSession) -> LinkReportRead:
     """引けている線を、両端の設定で突き合わせる。

@@ -57,6 +57,15 @@ class ParsedInterface:
     #: 速度と二重。片方だけ固定すると、遅くはなるが通ってしまう
     speed: str | None = None
     duplex: str | None = None
+    #: OSPF の決めごと。両端で1つでも食い違うと、隣どうしとして認識しない。
+    #: 上がらないので気づきはするが、原因がここだと分かるまでが長い
+    ospf_area: str | None = None
+    ospf_hello: int | None = None
+    ospf_dead: int | None = None
+    #: 線の見立て（point-to-point / broadcast）。ここが違うと隣にならない
+    ospf_network: str | None = None
+    #: 合言葉の掛け方（none / text / md5）。値は持たない
+    ospf_auth: str | None = None
     enabled: bool = True
 
     @property
@@ -152,11 +161,16 @@ class ParsedConfig:
     features: list[ParsedFeature] = field(default_factory=list)
     #: 通信の制限（中身と、当てている場所まで）
     acls: list[ParsedAcl] = field(default_factory=list)
+    #: 名前で書かれたアドレスの定義（FortiGate の firewall address など）。
+    #: 「指している名前が無い」を言うために、名前だけ控える
+    address_objects: list[str] = field(default_factory=list)
     #: アドレス変換。読めなければ None（無いのか読めていないのかは区別しない）
     nat: ParsedNat | None = None
     dhcp: ParsedDhcp | None = None
     qos: ParsedQos | None = None
     crypto: ParsedCrypto | None = None
+    #: 無線（SSID と AP）。読めなければ None
+    wireless: ParsedWireless | None = None
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""
@@ -448,6 +462,9 @@ class ParsedNatRule:
     translated: str | None = None
     #: 1つのアドレスにポートで束ねる（NAPT）
     overload: bool = False
+    #: `matched` が名前（ACL / アドレス object）か、アドレスそのものか。
+    #: 名前なら「その名前が Config に無い」と言えるが、アドレスには言えない
+    matched_is_name: bool = True
     protocol: str | None = None  # static-port のとき tcp / udp
     raw: str = ""
 
@@ -465,6 +482,10 @@ class ParsedNat:
 class ParsedDhcpPool:
     name: str
     network: str | None = None
+    #: 配る範囲をそのまま書く機種（FortiGate / Junos）はここに入る。
+    #: Cisco のように「network から excluded を引く」形とは別に持つ
+    range_start: str | None = None
+    range_end: str | None = None
     default_routers: list[str] = field(default_factory=list)
     dns_servers: list[str] = field(default_factory=list)
     domain: str | None = None
@@ -538,8 +559,11 @@ class ParsedCryptoMapEntry:
     kind: str = "ipsec-isakmp"
     peers: list[str] = field(default_factory=list)
     transform_sets: list[str] = field(default_factory=list)
-    #: 何を暗号化するか（ACL 名）。ここが両側で裏返しになっていないと通らない
+    #: 何を暗号化するか（ACL 名、または範囲そのもの）。
+    #: ここが両側で裏返しになっていないと通らない
     match_address: str | None = None
+    #: `match_address` が ACL の名前か。範囲を直に書く機種では False
+    match_is_acl: bool = True
     pfs: str | None = None
     profile: str | None = None
 
@@ -553,6 +577,72 @@ class ParsedCrypto:
     applied: list[tuple[str, str]] = field(default_factory=list)
     #: 合言葉を入れてある相手（値は持たない）
     keyed_peers: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedWlan:
+    """電波で流している網1つ分（SSID）。
+
+    有線と違い、届く範囲を線で仕切れない。だから「どの守り方で、どの
+    VLAN へ落としているか」がそのまま入口の強さになる。合言葉そのものは
+    持たない（資料に載せるものではない）。置いてあるかどうかだけを持つ。
+    """
+
+    #: 設定上の名前（プロファイル名）。SSID と別に付けられる機種がある
+    name: str
+    #: 電波に乗って見える名前
+    ssid: str | None = None
+    #: 有効か。作ってあるが止めてある SSID は珍しくない
+    enabled: bool = True
+    #: 名前を伏せているか（隠しても守りにはならないが、意図として持つ）
+    broadcast: bool = True
+    #: 守り方。open / wep / wpa / wpa2 / wpa3 を並べる（併用があるため）
+    security: list[str] = field(default_factory=list)
+    #: 本人確認のしかた。psk / dot1x / sae / owe / mac
+    akm: list[str] = field(default_factory=list)
+    #: 暗号。tkip / aes(ccmp) / gcmp
+    ciphers: list[str] = field(default_factory=list)
+    #: 合言葉が Config に書いてあるか。値は持たない
+    has_psk: bool = False
+    #: 合言葉が伏せ字になっていない（そのまま読める）
+    psk_in_clear: bool = False
+    #: 落とす先の VLAN
+    vlan: int | None = None
+    #: 802.1X の問い合わせ先（authentication list / RADIUS の名前）
+    auth_list: str | None = None
+    #: 同じ SSID につなげる台数の上限
+    client_limit: int | None = None
+    #: 管理フレームの守り（PMF）。disabled / optional / required
+    pmf: str | None = None
+    #: 使う帯（2.4 / 5 / 6）
+    bands: list[str] = field(default_factory=list)
+    #: つないだ端末どうしを通さない（ゲスト用途で要る）
+    client_isolation: bool = False
+    raw: str = ""
+
+
+@dataclass
+class ParsedWirelessAp:
+    """アクセスポイント側の決めごと。"""
+
+    name: str
+    #: 電波の国。ここが違うと使えない周波数を使うことになる
+    country: str | None = None
+    #: 当てているプロファイル・タグ
+    profile: str | None = None
+    #: 管理の入口（telnet / http）が開いているか
+    insecure_access: list[str] = field(default_factory=list)
+
+
+@dataclass
+class ParsedWireless:
+    """無線の設定。SSID と AP、それに国の指定。"""
+
+    wlans: list[ParsedWlan] = field(default_factory=list)
+    aps: list[ParsedWirelessAp] = field(default_factory=list)
+    country: str | None = None
+    #: 不正な AP を見張る仕組みが入っているか
+    rogue_detection: bool = False
 
 
 @dataclass

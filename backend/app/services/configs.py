@@ -482,6 +482,11 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.duplex = item.duplex
         interface.lag_group = item.lag_group
         interface.lag_mode = item.lag_mode
+        interface.ospf_area = item.ospf_area
+        interface.ospf_hello = item.ospf_hello
+        interface.ospf_dead = item.ospf_dead
+        interface.ospf_network = item.ospf_network
+        interface.ospf_auth = item.ospf_auth
         interface.enabled = item.enabled
 
     # Config から消えたポートは実機に無いということなので削除する

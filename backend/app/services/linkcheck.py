@@ -14,6 +14,7 @@
 
 from __future__ import annotations
 
+import ipaddress
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -131,6 +132,8 @@ def _compare(a: Interface, b: Interface) -> list[Finding]:
     found.extend(_mtu(a, b))
     found.extend(_speed_duplex(a, b))
     found.extend(_lag(a, b))
+    found.extend(_addresses(a, b))
+    found.extend(_ospf(a, b))
     return found
 
 
@@ -223,6 +226,138 @@ def _native_vlan(a: Interface, b: Interface) -> list[Finding]:
             evidence=[f"{a.name}: VLAN {left}", f"{b.name}: VLAN {right}"],
         )
     ]
+
+
+def _addresses(a: Interface, b: Interface) -> list[Finding]:
+    """両端のアドレスが、同じセグメントに乗っているか。
+
+    機器どうしを直接つなぐところは、両端が同じセグメントでなければ通じない。
+    片側だけ別の区画にしてあっても、機器の中では正しい設定に見えるので、
+    1台ずつ見ている限り見つからない。経路だけ入れて確かめると「相手が
+    見えない」とだけ出て、原因はここにある、というのがよくある形。
+
+    片側にアドセスが無い場合は何も言わない。L2 の口として使っていることも、
+    取り込んだ Config が抜粋なことも、どちらもあるため。
+    """
+    left, right = _both(a, b, "ip_address")
+    if not left or not right:
+        return []
+    a_net, a_addr = _network_of(left)
+    b_net, b_addr = _network_of(right)
+    if a_net is None or b_net is None:
+        return []
+
+    if a_addr == b_addr:
+        return [
+            Finding(
+                level=HIGH,
+                title="両端に同じアドレスが入っています",
+                why="どちらが応えているのか決まりません。片方は届き、片方は届かない、"
+                "という形になります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        ]
+
+    # 区切りが違っても、互いに相手を「同じ線の上」と見ているなら通じている。
+    # 別のセグメントと言い切ると、直す必要の無いところを直させてしまう
+    reaches = b_addr in a_net and a_addr in b_net
+    if not reaches:
+        return [
+            Finding(
+                level=HIGH,
+                title="両端が別のセグメントです",
+                why="同じ線でつながっていても、別の区画にいるので直接は通じません。"
+                "経路を入れても「相手が見えない」とだけ出て、原因はここにあります。",
+                evidence=[f"{a.name}: {left}（{a_net}）", f"{b.name}: {right}（{b_net}）"],
+            )
+        ]
+
+    if a_net != b_net or a_net.prefixlen != b_net.prefixlen:
+        return [
+            Finding(
+                level=MEDIUM,
+                title="両端でセグメントの区切りが違います",
+                why="いまは通じていても、区切りの外にいる相手へは片側だけが直接"
+                "届く形になります。増設したときに、そこだけ通らなくなります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        ]
+    return []
+
+
+#: OSPF の決めごとのうち、両端でそろっていないと隣にならないもの
+_OSPF_MUST_MATCH = (
+    ("ospf_area", "エリア"),
+    ("ospf_hello", "あいさつの間隔（hello）"),
+    ("ospf_dead", "見切りの時間（dead）"),
+    ("ospf_network", "線の見立て（network type）"),
+)
+
+
+def _ospf(a: Interface, b: Interface) -> list[Finding]:
+    """OSPF の決めごとが、両端でそろっているか。
+
+    1つでも違うと隣どうしとして認識しない。上がらないので気づきはするが、
+    「なぜ上がらないのか」を Config から追うと時間がかかる。ここで並べて
+    出しておけば、どこが違うかは一目で分かる。
+
+    片側にしか OSPF が入っていない場合は言わない。片側を意図的に外して
+    いること（受け側だけ静的経路にする）があるため。
+    """
+    out: list[Finding] = []
+    if not _runs_ospf(a) or not _runs_ospf(b):
+        return out
+
+    for name, label in _OSPF_MUST_MATCH:
+        left, right = _both(a, b, name)
+        if left is None or right is None or left == right:
+            continue
+        out.append(
+            Finding(
+                level=HIGH,
+                title=f"OSPF の{label}が両端で違います",
+                why="1つでも違うと、隣どうしとして認識しません。"
+                "線はつながっているのに経路が流れないので、"
+                "配線や故障を先に疑って時間を使うことになります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        )
+
+    left_auth, right_auth = _both(a, b, "ospf_auth")
+    if (left_auth or "none") != (right_auth or "none"):
+        out.append(
+            Finding(
+                level=HIGH,
+                title="OSPF の合言葉の掛け方が両端で違います",
+                why="片側だけ合言葉を求めていると、隣になりません。"
+                "掛けるなら両端で、掛けないなら両端で外してください。",
+                evidence=[
+                    f"{a.name}: {left_auth or '掛けていない'}",
+                    f"{b.name}: {right_auth or '掛けていない'}",
+                ],
+            )
+        )
+    return out
+
+
+def _runs_ospf(interface: Interface) -> bool:
+    """そのポートで OSPF を話しているか（読み取れた範囲で）。"""
+    return any(
+        getattr(interface, name) is not None
+        for name in ("ospf_area", "ospf_hello", "ospf_dead", "ospf_network", "ospf_auth")
+    )
+
+
+def _network_of(value: str):  # noqa: ANN201
+    """`10.0.0.1/30` を (ネットワーク, アドレス) にする。読めなければ (None, None)。"""
+    text = value.strip().split()[0]
+    if "/" not in text:
+        return None, None
+    try:
+        interface = ipaddress.ip_interface(text)
+    except ValueError:
+        return None, None
+    return interface.network, interface.ip
 
 
 def _mtu(a: Interface, b: Interface) -> list[Finding]:

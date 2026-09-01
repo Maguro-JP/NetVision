@@ -406,3 +406,145 @@ def test_a_config_that_sends_nowhere_is_told_it_leaves_no_trace(db_session):
     titles = _titles(configcheck.check(db_session, body))
     assert "ログの送り先が入っていません" in titles
     assert "時刻の参照先が入っていません" in titles
+
+
+# ---------------------------------------------------------------------------
+# ループを止める仕組み（STP）
+# ---------------------------------------------------------------------------
+
+STP_LOOSE = """
+hostname sw-loose
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/1
+ description 端末
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+!
+interface GigabitEthernet1/0/24
+ description 上位へ
+ switchport mode trunk
+ spanning-tree portfast
+!
+"""
+
+STP_TIDY = """
+hostname sw-tidy
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/1
+ description 端末
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+!
+interface GigabitEthernet1/0/24
+ description 上位へ
+ switchport mode trunk
+!
+"""
+
+
+def test_portfast_without_bpdu_guard_is_called_out(db_session):
+    """端末用の口にスイッチを挿されると、輪ができて網ごと止まる。"""
+    result = configcheck.check(db_session, STP_LOOSE)
+    finding = next(f for f in result.findings if "BPDU guard" in f.title)
+    assert finding.level == MEDIUM
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+
+
+def test_portfast_on_a_trunk_is_called_out(db_session):
+    result = configcheck.check(db_session, STP_LOOSE)
+    finding = next(f for f in result.findings if "portfast が入っています" in f.title)
+    assert finding.level == MEDIUM
+    assert any("GigabitEthernet1/0/24" in line for line in finding.evidence)
+
+
+def test_a_missing_stp_mode_is_mentioned(db_session):
+    text = STP_LOOSE.replace("spanning-tree mode rapid-pvst\n", "")
+    titles = _titles(configcheck.check(db_session, text))
+    assert any("STP のモードを決めていません" in title for title in titles)
+
+
+def test_a_tidy_stp_config_says_nothing_about_stp(db_session):
+    titles = _titles(configcheck.check(db_session, STP_TIDY))
+    assert not [t for t in titles if "BPDU guard" in t or "portfast" in t or "STP の" in t]
+
+
+# ---------------------------------------------------------------------------
+# 口に誰を入れるか（802.1X / ポートセキュリティ）
+# ---------------------------------------------------------------------------
+
+ADMISSION = """
+hostname sw-adm
+dot1x system-auth-control
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ authentication port-control auto
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport port-security
+ switchport port-security maximum 2
+!
+interface GigabitEthernet1/0/3
+ switchport mode access
+ switchport port-security
+ switchport port-security violation protect
+!
+"""
+
+
+def test_dot1x_without_a_radius_is_the_heaviest(db_session):
+    """本人確認を頼む相手が無い。その口には誰も入れない。"""
+    result = configcheck.check(db_session, ADMISSION)
+    finding = next(f for f in result.findings if "問い合わせ先がありません" in f.title)
+    assert finding.level == HIGH
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+
+
+def test_dot1x_enabled_but_applied_nowhere_is_mentioned(db_session):
+    """入れたつもりで、誰の確認もしていない状態。"""
+    text = ADMISSION.replace(" authentication port-control auto\n", "")
+    titles = _titles(configcheck.check(db_session, text))
+    assert any("どの口にも当てていません" in title for title in titles)
+
+
+def test_port_security_without_a_violation_action_is_mentioned(db_session):
+    result = configcheck.check(db_session, ADMISSION)
+    finding = next(f for f in result.findings if "破ったときの動き" in f.title)
+    assert finding.level == LOW
+    assert any("GigabitEthernet1/0/2" in line for line in finding.evidence)
+
+
+def test_protect_leaves_no_trace_and_is_mentioned(db_session):
+    result = configcheck.check(db_session, ADMISSION)
+    finding = next(f for f in result.findings if "黙って落とす" in f.title)
+    assert any("GigabitEthernet1/0/3" in line for line in finding.evidence)
+
+
+def test_a_tidy_admission_config_says_nothing_about_it(db_session):
+    tidy = """
+hostname sw-ok
+dot1x system-auth-control
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ authentication port-control auto
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport port-security
+ switchport port-security violation restrict
+!
+"""
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [
+        t
+        for t in titles
+        if "問い合わせ先" in t or "どの口にも" in t or "破ったとき" in t or "黙って落とす" in t
+    ]

@@ -182,3 +182,91 @@ def test_the_api_returns_the_report(client, db_session):
     assert body["findings"]
     assert body["findings"][0]["a_hostname"] == "sw-a"
     assert body["findings"][0]["why"]
+
+
+# ---------------------------------------------------------------------------
+# 両端のアドレス
+# ---------------------------------------------------------------------------
+
+
+def test_both_ends_in_different_segments_is_the_heaviest(db_session):
+    """同じ線でも、別の区画にいれば直接は通じない。"""
+    _pair(
+        db_session,
+        {"ip_address": "10.0.0.1/30"},
+        {"ip_address": "10.0.1.2/30"},
+    )
+    report = linkcheck.review(db_session)
+    assert report.findings[0].finding.title == "両端が別のセグメントです"
+    assert report.findings[0].finding.level == HIGH
+
+
+def test_the_same_address_on_both_ends_is_reported(db_session):
+    _pair(db_session, {"ip_address": "10.0.0.1/30"}, {"ip_address": "10.0.0.1/30"})
+    assert "両端に同じアドレスが入っています" in _titles(db_session)
+
+
+def test_a_different_mask_is_reported_even_when_it_works_today(db_session):
+    _pair(db_session, {"ip_address": "10.0.0.1/24"}, {"ip_address": "10.0.0.2/30"})
+    report = linkcheck.review(db_session)
+    assert report.findings[0].finding.title == "両端でセグメントの区切りが違います"
+    assert report.findings[0].finding.level == MEDIUM
+
+
+def test_a_matching_pair_of_addresses_gets_no_complaints(db_session):
+    _pair(db_session, {"ip_address": "10.0.0.1/30"}, {"ip_address": "10.0.0.2/30"})
+    assert _titles(db_session) == []
+
+
+def test_nothing_is_said_when_one_end_has_no_address(db_session):
+    """L2 の口かもしれないし、取り込んだ Config が抜粋かもしれない。"""
+    _pair(db_session, {"ip_address": "10.0.0.1/30"}, {"mode": "access", "vlan": 10})
+    assert _titles(db_session) == []
+
+
+# ---------------------------------------------------------------------------
+# OSPF
+# ---------------------------------------------------------------------------
+
+
+def test_a_matching_ospf_pair_is_quiet(db_session):
+    values = {
+        "ip_address": "10.0.0.1/30",
+        "ospf_area": "0",
+        "ospf_hello": 10,
+        "ospf_dead": 40,
+        "ospf_network": "point-to-point",
+    }
+    _pair(db_session, dict(values), {**values, "ip_address": "10.0.0.2/30"})
+    assert _titles(db_session) == []
+
+
+def test_a_different_area_is_reported(db_session):
+    _pair(
+        db_session,
+        {"ospf_area": "0", "ospf_hello": 10},
+        {"ospf_area": "1", "ospf_hello": 10},
+    )
+    report = linkcheck.review(db_session)
+    assert report.findings[0].finding.title == "OSPF のエリアが両端で違います"
+    assert report.findings[0].finding.level == HIGH
+
+
+def test_a_different_hello_is_reported(db_session):
+    _pair(db_session, {"ospf_area": "0", "ospf_hello": 5}, {"ospf_area": "0", "ospf_hello": 10})
+    assert "OSPF のあいさつの間隔（hello）が両端で違います" in _titles(db_session)
+
+
+def test_authentication_on_only_one_side_is_reported(db_session):
+    _pair(
+        db_session,
+        {"ospf_area": "0", "ospf_auth": "md5"},
+        {"ospf_area": "0"},
+    )
+    assert "OSPF の合言葉の掛け方が両端で違います" in _titles(db_session)
+
+
+def test_nothing_is_said_when_only_one_side_runs_ospf(db_session):
+    """片側だけ静的経路にしてあることがある。そこは意図として扱う。"""
+    _pair(db_session, {"ospf_area": "0", "ospf_hello": 10}, {"mode": "access", "vlan": 10})
+    assert _titles(db_session) == []

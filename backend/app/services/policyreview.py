@@ -1,4 +1,4 @@
-"""読み取った ACL / NAT / DHCP / QoS / IPsec / BGP の中身を見て、粗を挙げる。
+"""読み取った ACL / NAT / DHCP / QoS / IPsec / BGP / 無線の中身を見て、粗を挙げる。
 
 Config を書く道具である以上、書いたものが効いているかどうかまで言えないと
 使えない。ここで見るのは、動かしてみなくても言えることに限る。
@@ -18,7 +18,7 @@ from __future__ import annotations
 import ipaddress
 import re
 
-from app.services import aclcheck
+from app.services import aclcheck, wirelessreview
 from app.services.configparse import ParsedConfig
 from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -55,6 +55,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
+    findings.extend(wirelessreview.review(parsed))
     if text is not None:
         findings.extend(_management_access(text, parsed))
     return findings
@@ -62,6 +63,24 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
 
 def _note(level: str, title: str, why: str, evidence: list[str]) -> Finding:
     return Finding(level=level, title=title, why=why, evidence=[e for e in evidence if e][:5])
+
+
+def _serves(pool, address: str) -> bool:  # noqa: ANN001
+    """そのアドレスを、実際に端末へ配るか。
+
+    配る範囲をそのまま書く機種では、範囲の外にあるものは配られない。
+    範囲が書かれていない（Cisco のように network から引く）ときは、
+    配る側に倒す。言えないことを言わない代わりに、見落としも作らない。
+    """
+    if not pool.range_start or not pool.range_end:
+        return True
+    try:
+        low = ipaddress.ip_address(pool.range_start)
+        high = ipaddress.ip_address(pool.range_end)
+        target = ipaddress.ip_address(address)
+    except ValueError:
+        return True
+    return low <= target <= high
 
 
 def _names(parsed: ParsedConfig, kind: str) -> set[str]:
@@ -484,7 +503,8 @@ def _nat(parsed: ParsedConfig) -> list[Finding]:
     for rule in nat.rules:
         if rule.kind != "dynamic":
             continue
-        if rule.matched and rule.matched not in acl_names and rule.matched not in route_maps:
+        known = acl_names | route_maps | set(parsed.address_objects)
+        if rule.matched_is_name and rule.matched and rule.matched not in known:
             findings.append(
                 _note(
                     HIGH,
@@ -581,7 +601,7 @@ def _dhcp(parsed: ParsedConfig) -> list[Finding]:
                         [head, f"default-router {router}"],
                     )
                 )
-            elif router not in excluded:
+            elif _serves(pool, router) and router not in excluded:
                 findings.append(
                     _note(
                         MEDIUM,
@@ -653,7 +673,9 @@ def _qos(parsed: ParsedConfig) -> list[Finding]:
             findings.append(
                 _note(
                     MEDIUM,
-                    f"policy-map {policy.name} は、どのポートにも当たっていません",
+                    # 名前の付き方は機種で違う（policy-map / shaper /
+                    # scheduler-map）。どれでも読めるよう、種類の語は入れない
+                    f"優先制御の {policy.name} は、どのポートにも当たっていません",
                     "優先制御は当てたポートでしか効きません。混む場所に当てていなければ、"
                     "書いてあっても順番は変わりません。",
                     [f"policy-map {policy.name}"],
@@ -707,7 +729,12 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
         head = f"crypto ipsec transform-set {transform.name}"
         for value in transform.transforms:
             findings.extend(_weak(value, head, "中身の暗号化"))
-        if not any(value.lower().startswith("esp-") for value in transform.transforms):
+        # AH だけを指定している書き方のときに言う。ESP が当たり前の機種
+        # （FortiGate の proposal など）では、そもそも esp- と書かない
+        ah_only = any(
+            value.lower().startswith("ah-") for value in transform.transforms
+        ) and not any(value.lower().startswith("esp-") for value in transform.transforms)
+        if ah_only:
             findings.append(
                 _note(
                     HIGH,
@@ -737,7 +764,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
                     [head],
                 )
             )
-        if entry.match_address and entry.match_address not in acl_names:
+        if entry.match_is_acl and entry.match_address and entry.match_address not in acl_names:
             findings.append(
                 _note(
                     HIGH,
@@ -778,10 +805,35 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
     return findings
 
 
+def _method_name(value: str) -> str:
+    """方式の書き方を、比べられる形にそろえる。
+
+    同じ方式でも、機種ごとに書き方が違う（des / des-cbc / esp-des、
+    sha256 / sha-256 / hmac-sha-256-128）。頭の付け方と鍵長の書き方を外して、
+    方式の名前だけを取り出す。強さを表す数字が付いているものは、そのまま残す
+    （sha と sha-256 は別物で、混ぜると新しい方まで古いと言ってしまう）。
+    """
+    token = value.strip().lower().split()[0]
+    # 頭に付く「どの部分を守るか」（esp / ah）と、鍵付きハッシュの印（hmac）を外す。
+    # Cisco の esp-des のように、そのままの形で表に載っているものは呼ぶ側で先に見る
+    token = re.sub(r"^(?:esp-|ah-|hmac-)+", "", token)
+    parts = token.split("-")
+    if not parts:
+        return token
+    head = parts[0]
+    # 続きが強さの数字なら、方式の名前に含める（sha-256 → sha256）
+    if len(parts) > 1 and parts[1].isdigit():
+        return f"{head}{parts[1]}"
+    # 続きが動作の種類（cbc / gcm など）なら、方式の名前だけにする
+    return head
+
+
 def _weak(value: str | None, head: str, what: str) -> list[Finding]:
     if not value:
         return []
-    token = value.strip().lower().split()[0]
+    raw = value.strip().lower().split()[0]
+    # 表に載っている書き方をそのまま見て、無ければ方式の名前だけで見る
+    token = raw if raw in _BROKEN_CRYPTO or raw in _WEAK_CRYPTO else _method_name(value)
     if token in _BROKEN_CRYPTO:
         return [
             _note(

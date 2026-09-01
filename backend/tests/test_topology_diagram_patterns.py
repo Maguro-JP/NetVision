@@ -17,6 +17,7 @@ from app.services.topology_quality import (
     is_acceptable,
     score_diagram,
 )
+from tests import svgread
 from tests.test_topology_layers import _device, _link, _port
 from tests.test_topology_scope import build, build_center
 
@@ -25,7 +26,8 @@ PATTERNS = Path(__file__).resolve().parents[2] / "docs" / "topology-samples" / "
 
 def _write(name: str, svg: str) -> None:
     PATTERNS.mkdir(parents=True, exist_ok=True)
-    (PATTERNS / name).write_text(svg, encoding="utf-8")
+    # 時刻は外して置く。入れておくと、図が変わっていなくても毎回差分が出る
+    (PATTERNS / name).write_text(svgread.without_timestamp(svg), encoding="utf-8")
 
 
 def _ok(graph, title: str, filename: str) -> None:

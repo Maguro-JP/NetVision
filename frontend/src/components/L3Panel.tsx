@@ -314,7 +314,7 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
 
       {data.controls.length > 0 && (
         <>
-          <h3>制限・変換・配布・優先・暗号化</h3>
+          <h3>制限・変換・配布・優先・暗号化・電波</h3>
           <p className="muted" style={{ marginTop: -8 }}>
             書いてあるだけでは何も起きません。当て先が空のものは、当て忘れか、
             使わなくなったものが残っているかのどちらかです。

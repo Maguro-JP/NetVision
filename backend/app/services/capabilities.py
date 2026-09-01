@@ -78,16 +78,22 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=PARTIAL,
         generate=PARTIAL,
-        note="エリアと載せているネットワークまで。コスト設計や再配布の妥当性は見ていません。",
+        note="エリアと載せているネットワークに加え、ポートごとの決めごと"
+        "（エリア・hello / dead・線の見立て・合言葉の掛け方）まで読みます。"
+        "結線が入っていれば、両端で食い違っているところを指摘します。"
+        "コスト設計や再配布の妥当性は見ていません。",
     ),
     Capability(
         area="経路",
         name="BGP",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="AS・ピア・広告するネットワークと、当てている route-map の名前まで。"
-        "route-map の中身の評価はしていません。",
+        note="AS・ピア・広告するネットワークに加え、相手ごとの出入りのフィルタ・"
+        "受ける経路の上限・合言葉・update-source まで読みます。"
+        "外の AS へ出す経路を絞っていない、上限が無い、掛けた route-map が"
+        "この Config に無い、といったところを指摘します。"
+        "経路設計そのもの（どこへ何を出すべきか）は要件が要るので言いません。",
     ),
     Capability(
         area="経路",
@@ -135,9 +141,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="冗長",
         name="LAG（ポートの束ね）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="束ねている番号まで。両端で束ね方が食い違っていないかは見ていません。",
+        note="束ねている番号と方式まで読み、結線が入っていれば両端で突き合わせます。"
+        "片側だけ束ねている、方式が違う（LACP と決め打ち）を指摘します。"
+        "束ねた線の負荷の分かれ方は、通る量が分からないので見ていません。",
     ),
     Capability(
         area="冗長",
@@ -151,51 +159,71 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="制限",
         name="ACL / フィルター",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていること・本数・どのポートに当てているかまで。"
-        "1行ずつの評価はしていません。順番と網羅の判断が要るためです。",
+        note="1行ずつ、当て先まで読みます。上の行に覆われて読まれない行、"
+        "当てていない ACL、実質すべて通している ACL、落としているのに記録が"
+        "残らない ACL、存在しない ACL を指しているところを指摘します。"
+        "読めるのは Cisco IOS・Comware（NEC QX）・NEC IX・Junos・FortiOS の"
+        "書き方です。通すべき通信が通るかどうかは、要件が要るので言いません。",
     ),
     Capability(
         area="制限",
         name="ファイアウォールのポリシー",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="ゾーンとポリシーが入っていることまで。通す通信の中身は起こしません。"
-        "業務が決まらないと決められないところで、当てずっぽうで開けると意味が無くなります。",
+        note="FortiOS の firewall policy を、上から順の1行ずつとして読みます。"
+        "ACL と同じ器に入れてあるので、上の行に覆われて読まれない行や、"
+        "実質すべて通している状態も同じように指摘します。止めてある行"
+        "（set status disable）は並びの検算から外します。通す通信の中身は"
+        "起こしません。業務が決まらないと決められないところで、"
+        "当てずっぽうで開けると意味が無くなります。",
     ),
     Capability(
         area="制限",
         name="NAT",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。変換の対応表は読んでいません。",
+        note="何が何に変わるか、ポートで束ねているか、内側と外側がどのポートかまで"
+        "読みます。束ねていない動的変換、内外の片方しか無い、指している名前が無い、"
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
+        "書き方です。",
     ),
     Capability(
         area="足まわり",
         name="STP",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="モードと優先度まで。ルートがどこかの妥当性は見ていません。",
+        note="モードと優先度まで読み、端末用の口に BPDU guard が無い、"
+        "スイッチをつなぐ口に portfast が入っている、モードを決めていない、"
+        "を指摘します。ルートをどこに置くのが妥当かは、"
+        "相手側の優先度まで見ないと言えないので見ていません。",
     ),
     Capability(
         area="足まわり",
         name="DHCP（サーバー / リレー）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="転送先まで。配布範囲は読んでいません。",
+        note="配る範囲・既定ゲートウェイ・名前解決の先・転送先まで読みます。"
+        "ゲートウェイが範囲の外、ゲートウェイまで配ってしまう、配っていない、"
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
+        "書き方です。",
     ),
     Capability(
         area="足まわり",
         name="QoS",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。",
+        note="区分と動作、当てているポートまで読み、どこにも当たっていないものを"
+        "指摘します。読めるのは Cisco IOS の policy-map、FortiGate の shaper、"
+        "Junos の scheduler-map、NEC QX の qos policy です（NEC IX は"
+        "確かめられる設定が無いので読んでいません）。帯域の配分が妥当かどうかは、"
+        "実際に通る量が分からないので言いません。",
     ),
     Capability(
         area="足まわり",
@@ -209,17 +237,24 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="足まわり",
         name="802.1X / ポートセキュリティ",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。",
+        note="当てている口まで読み、問い合わせ先（RADIUS）が無い、"
+        "仕組みは入れたのにどの口にも当てていない、破ったときの動きを"
+        "決めていない、黙って落とす設定になっている、を指摘します。"
+        "誰を通すべきかという方針そのものは、要件が要るので言いません。",
     ),
     Capability(
         area="拠点間",
         name="IPsec / VPN",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="トンネルの種別・送信元・宛先まで。鍵や暗号方式は読んでいません。",
+        note="相手・暗号方式・鍵の作り方・暗号化する範囲まで読みます。"
+        "破られている方式（DES / MD5 / DH group 1・2・5）、相手や範囲の抜け、"
+        "どのポートにも当たっていない設定を指摘します。読めるのは Cisco IOS・"
+        "FortiGate・Junos・NEC QX の書き方です（NEC IX は確かめられる設定が"
+        "無いので読んでいません）。合言葉そのものは持ちません。",
     ),
     Capability(
         area="拠点間",
@@ -242,27 +277,34 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="上位",
         name="無線（コントローラ / AP）",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="機器としては台帳に載せられます。SSID や電波の設計は見ていません。",
+        note="SSID の守り方・落とし先の VLAN・合言葉の置き方まで読み、"
+        "誰でも入れる SSID、WEP / WPA1 / TKIP、素のまま書かれた合言葉、"
+        "問い合わせ先の無い 802.1X、来客が業務と同じ VLAN を指摘します。"
+        "読めるのは Cisco IOS-XE / AireOS・Aruba Instant・FortiGate の書き方です。"
+        "電波の設計（置き場所・出力・チャネル）は見ていません。",
     ),
     Capability(
         area="管理",
         name="SNMP / Syslog / NTP / AAA",
         read=FULL,
-        review=NONE,
+        review=PARTIAL,
         generate=PARTIAL,
-        note="送り先まで読みます。起こす Config には入れません。"
+        note="送り先まで読み、送り先が1つも無い（記録が再起動で消える）、"
+        "SNMP の合言葉が既定のまま、SNMP から書き換えられる、"
+        "といったところを指摘します。起こす Config には入れません。"
         "既存と違う値が入るほうが困るためです。",
     ),
     Capability(
         area="運用",
         name="ログの解析",
-        read=NONE,
-        review=NONE,
+        read=PARTIAL,
+        review=PARTIAL,
         generate=NONE,
-        note="NetVision は Config と台帳を扱う道具で、流れているログは受けていません。"
-        "やるなら Syslog を受ける口から作ることになります。",
+        note="人が貼ったログを読み、機器・重さ・並びで数えたうえで、"
+        "障害・設定の食い違い・攻撃の兆しを根拠つきで挙げます。"
+        "機器から自動で集めることはしません（外へ通信しない道具のため）。",
     ),
     Capability(
         area="運用",

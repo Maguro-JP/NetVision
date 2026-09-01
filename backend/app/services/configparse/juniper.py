@@ -8,8 +8,21 @@ from app.services.configparse import policy, routing, tunnels
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
+    ParsedCrypto,
+    ParsedCryptoMapEntry,
+    ParsedDhcp,
+    ParsedDhcpPool,
+    ParsedIkePolicy,
     ParsedInterface,
+    ParsedNat,
+    ParsedNatPool,
+    ParsedNatRule,
     ParsedNeighbor,
+    ParsedQos,
+    ParsedQosAction,
+    ParsedQosClass,
+    ParsedQosPolicy,
+    ParsedTransformSet,
     ParsedVrf,
     Vendor,
 )
@@ -83,7 +96,371 @@ def parse(text: str) -> ParsedConfig:
     tunnels.parse_junos(text, parsed)
     routing.parse_junos(text, parsed)
     policy.parse_junos(text, parsed)
+    _parse_nat(text, parsed)
+    _parse_dhcp(text, parsed)
+    _parse_ipsec(text, parsed)
+    _parse_cos(text, parsed)
     return parsed
+
+
+# ---------------------------------------------------------------------------
+# アドレス変換 / アドレス配布 / 拠点間の暗号化
+#
+# Junos は書き方が Cisco と大きく違うが、決めていることは同じである。
+# 同じ器（ParsedNat / ParsedDhcp / ParsedCrypto）へ入れておけば、粗を見る
+# ところは1つで足りる。ここでやるのは読み替えだけで、判断はしない。
+# ---------------------------------------------------------------------------
+
+_NAT_RULE = re.compile(
+    r"^set security nat (?P<kind>source|destination|static) rule-set (?P<set>\S+)\s+"
+    r"(?:rule (?P<rule>\S+)\s+)?(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+_NAT_POOL = re.compile(
+    r"^set security nat (?:source|destination) pool (?P<name>\S+)\s+"
+    r"address (?P<address>\S+?)(?:\s+to\s+address\s+(?P<end>\S+))?\s*$",
+    re.IGNORECASE,
+)
+
+
+def _parse_nat(text: str, parsed: ParsedConfig) -> None:
+    nat = ParsedNat()
+    rules: dict[str, ParsedNatRule] = {}
+
+    for raw in text.splitlines():
+        line = raw.strip()
+        pool = _NAT_POOL.match(line)
+        if pool:
+            nat.pools.append(
+                ParsedNatPool(
+                    name=pool.group("name"),
+                    start=pool.group("address"),
+                    end=pool.group("end"),
+                )
+            )
+            continue
+
+        found = _NAT_RULE.match(line)
+        if not found:
+            continue
+        kind, rule_set, rule = found.group("kind"), found.group("set"), found.group("rule")
+        rest = found.group("rest")
+        if rule is None:
+            # rule-set そのものへの指定（from zone / to zone）
+            _nat_zone(nat, rest)
+            continue
+        key = f"{rule_set}/{rule}"
+        entry = rules.get(key)
+        if entry is None:
+            entry = ParsedNatRule(
+                kind="dynamic" if kind == "source" else "static",
+                direction="inside" if kind == "source" else "outside",
+                raw=f"nat {kind} rule-set {rule_set} rule {rule}",
+            )
+            rules[key] = entry
+            nat.rules.append(entry)
+        _nat_detail(entry, rest)
+
+    if nat.rules or nat.pools:
+        parsed.nat = nat
+
+
+def _nat_zone(nat: ParsedNat, rest: str) -> None:
+    """どちら向きの変換かは、from zone / to zone で決まる。"""
+    found = re.match(r"^(from|to) (?:zone|interface)\s+(\S+)", rest, re.IGNORECASE)
+    if not found:
+        return
+    where = nat.inside_interfaces if found.group(1).lower() == "from" else nat.outside_interfaces
+    if found.group(2) not in where:
+        where.append(found.group(2))
+
+
+def _nat_detail(entry: ParsedNatRule, rest: str) -> None:
+    lowered = rest.lower()
+    match_from = re.search(r"match source-address\s+(\S+)", lowered)
+    if match_from:
+        entry.matched = match_from.group(1)
+        entry.matched_is_name = False
+    match_to = re.search(r"match destination-address\s+(\S+)", lowered)
+    if match_to and entry.direction == "outside":
+        entry.matched = match_to.group(1)
+        entry.matched_is_name = False
+    if "then source-nat interface" in lowered:
+        # 出口のアドレスに束ねる。Cisco の overload と同じ
+        entry.translated = "出口のアドレス"
+        entry.overload = True
+    pool = re.search(r"then (?:source-nat|destination-nat) pool\s+(\S+)", lowered)
+    if pool:
+        entry.translated = pool.group(1)
+        entry.overload = entry.direction == "inside"
+    if "then source-nat off" in lowered:
+        entry.kind = "static"
+        entry.translated = "変換しない"
+    entry.raw = f"{entry.raw} {rest}".strip()
+
+
+_DHCP_POOL = re.compile(
+    r"^set access address-assignment pool (?P<name>\S+) family inet (?P<rest>.+)$",
+    re.IGNORECASE,
+)
+
+
+def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
+    """配るアドレスを読む。Junos は範囲をそのまま書く。"""
+    dhcp = ParsedDhcp()
+    pools: dict[str, ParsedDhcpPool] = {}
+
+    for raw in text.splitlines():
+        found = _DHCP_POOL.match(raw.strip())
+        if not found:
+            continue
+        name = found.group("name")
+        pool = pools.get(name)
+        if pool is None:
+            pool = ParsedDhcpPool(name=f"pool {name}")
+            pools[name] = pool
+            dhcp.pools.append(pool)
+        _dhcp_detail(pool, found.group("rest"))
+
+    if dhcp.pools:
+        parsed.dhcp = dhcp
+
+
+def _dhcp_detail(pool: ParsedDhcpPool, rest: str) -> None:
+    network = re.match(r"^network\s+(\S+)", rest, re.IGNORECASE)
+    if network:
+        pool.network = network.group(1)
+        return
+    span = re.match(r"^range\s+\S+\s+(low|high)\s+(\S+)", rest, re.IGNORECASE)
+    if span:
+        if span.group(1).lower() == "low":
+            pool.range_start = span.group(2)
+        else:
+            pool.range_end = span.group(2)
+        return
+    router = re.match(r"^dhcp-attributes router\s+(\S+)", rest, re.IGNORECASE)
+    if router:
+        pool.default_routers.append(router.group(1))
+        return
+    dns = re.match(r"^dhcp-attributes name-server\s+(\S+)", rest, re.IGNORECASE)
+    if dns:
+        pool.dns_servers.append(dns.group(1))
+        return
+    lease = re.match(r"^dhcp-attributes maximum-lease-time\s+(\S+)", rest, re.IGNORECASE)
+    if lease:
+        pool.lease = lease.group(1)
+
+
+def _parse_cos(text: str, parsed: ParsedConfig) -> None:
+    """優先制御（CoS）を読む。
+
+    Junos は classifier（どう仕分けるか）・scheduler（どう出すか）・
+    scheduler-map（仕分けと出し方の対応）・interfaces（当て先）に分かれる。
+    Cisco の class-map / policy-map / service-policy と役割が同じなので、
+    そこへ読み替える。当て先の無い scheduler-map が「書いてあるだけ」になる。
+    """
+    qos = ParsedQos()
+    schedulers: dict[str, list[str]] = {}
+    maps: dict[str, ParsedQosPolicy] = {}
+    classifiers: dict[str, ParsedQosClass] = {}
+
+    for raw in text.splitlines():
+        line = raw.strip()
+
+        found = re.match(
+            r"^set class-of-service classifiers \S+ (\S+) forwarding-class (\S+)\s*(.*)$",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            entry = classifiers.setdefault(found.group(1), ParsedQosClass(name=found.group(1)))
+            detail = f"{found.group(2)} {found.group(3)}".strip()
+            if detail not in entry.matches:
+                entry.matches.append(detail)
+            continue
+
+        found = re.match(r"^set class-of-service schedulers (\S+)\s+(.+)$", line, re.IGNORECASE)
+        if found:
+            schedulers.setdefault(found.group(1), []).append(found.group(2))
+            continue
+
+        found = re.match(
+            r"^set class-of-service scheduler-maps (\S+) forwarding-class (\S+) scheduler (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            policy = maps.setdefault(found.group(1), ParsedQosPolicy(name=found.group(1)))
+            policy.classes.append(
+                ParsedQosAction(class_name=found.group(2), actions=[f"scheduler {found.group(3)}"])
+            )
+            continue
+
+        found = re.match(
+            r"^set class-of-service interfaces (\S+)(?:\s+unit \S+)? scheduler-map (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            # Junos の scheduler-map は出る側に当てる
+            qos.applied.append((found.group(1), "output", found.group(2)))
+            continue
+
+        found = re.match(
+            r"^set class-of-service interfaces (\S+)(?:\s+unit \S+)? classifiers \S+ (\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            qos.applied.append((found.group(1), "input", found.group(2)))
+
+    # 仕分けの名前（forwarding-class）は、書かなくても最初からある4つを含む。
+    # 定義が無い＝間違い、ではないので、既定の名前も一覧に入れておく
+    known = {"best-effort", "expedited-forwarding", "assured-forwarding", "network-control"}
+    for raw in text.splitlines():
+        found = re.match(
+            r"^set class-of-service forwarding-classes (?:queue \S+|class) (\S+)",
+            raw.strip(),
+            re.IGNORECASE,
+        )
+        if found:
+            known.add(found.group(1))
+    used = {action.class_name for policy in maps.values() for action in policy.classes}
+    for name in sorted(known & used):
+        classifiers.setdefault(name, ParsedQosClass(name=name, matches=["forwarding-class"]))
+
+    for policy in maps.values():
+        for action in policy.classes:
+            name = action.actions[0].split()[-1]
+            action.actions.extend(schedulers.get(name, []))
+    qos.policies.extend(maps.values())
+    qos.classes.extend(classifiers.values())
+
+    if qos.policies or qos.classes:
+        parsed.qos = qos
+
+
+def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
+    """拠点間の暗号化を読む。
+
+    Junos は proposal（方式）・policy（束ね）・gateway / vpn（相手と範囲）に
+    分かれる。Cisco の isakmp policy / transform-set / crypto map と役割が
+    同じなので、そこへ読み替える。
+    """
+    crypto = ParsedCrypto()
+    ike: dict[str, ParsedIkePolicy] = {}
+    proposals: dict[str, ParsedTransformSet] = {}
+    gateways: dict[str, str] = {}
+    #: gateway ごとの出口ポート。VPN と結び直してから当て先として持つ
+    bound: dict[str, str] = {}
+    vpns: dict[str, ParsedCryptoMapEntry] = {}
+    ike_policy_proposals: dict[str, list[str]] = {}
+
+    for raw in text.splitlines():
+        line = raw.strip()
+
+        found = re.match(r"^set security ike proposal (\S+)\s+(.+)$", line, re.IGNORECASE)
+        if found:
+            entry = ike.setdefault(
+                found.group(1), ParsedIkePolicy(number=found.group(1), version=2)
+            )
+            _ike_detail(entry, found.group(2))
+            continue
+
+        found = re.match(r"^set security ike policy (\S+) proposals?\s+(\S+)", line, re.IGNORECASE)
+        if found:
+            ike_policy_proposals.setdefault(found.group(1), []).append(found.group(2))
+            continue
+
+        found = re.match(
+            r"^set security ike gateway (\S+) (?:address|ike-policy|external-interface)\s+(\S+)",
+            line,
+            re.IGNORECASE,
+        )
+        if found:
+            name, value = found.group(1), found.group(2)
+            if " address " in line:
+                gateways[name] = value
+            elif " external-interface " in line:
+                bound[name] = value
+            continue
+
+        found = re.match(r"^set security ipsec proposal (\S+)\s+(.+)$", line, re.IGNORECASE)
+        if found:
+            entry = proposals.setdefault(found.group(1), ParsedTransformSet(name=found.group(1)))
+            value = found.group(2).split()
+            if len(value) >= 2 and value[0] in ("encryption-algorithm", "authentication-algorithm"):
+                entry.transforms.append(value[1])
+            continue
+
+        found = re.match(r"^set security ipsec vpn (\S+)\s+(.+)$", line, re.IGNORECASE)
+        if found:
+            name = found.group(1)
+            entry = vpns.setdefault(name, ParsedCryptoMapEntry(name=name, kind="ipsec-vpn"))
+            _vpn_detail(entry, found.group(2), gateways)
+            continue
+
+    for entry in vpns.values():
+        # 相手も出口も gateway の側に書いてある。VPN の名前で引けるよう結び直す
+        if not entry.peers and entry.profile in gateways:
+            entry.peers = [gateways[entry.profile]]
+        if entry.profile in bound:
+            crypto.applied.append((bound[entry.profile], entry.name))
+        crypto.maps.append(entry)
+    crypto.ike_policies.extend(ike.values())
+    crypto.transform_sets.extend(proposals.values())
+    for name, wanted in ike_policy_proposals.items():
+        for proposal in wanted:
+            if proposal not in ike:
+                crypto.ike_policies.append(ParsedIkePolicy(number=f"{name} → {proposal}"))
+
+    if crypto.maps or crypto.ike_policies:
+        parsed.crypto = crypto
+
+
+def _ike_detail(entry: ParsedIkePolicy, rest: str) -> None:
+    parts = rest.split()
+    if len(parts) < 2:
+        return
+    key, value = parts[0].lower(), parts[1]
+    if key == "encryption-algorithm":
+        entry.encryption = value
+    elif key == "authentication-algorithm":
+        entry.hash = value
+    elif key == "dh-group":
+        entry.group = value.replace("group", "")
+    elif key == "authentication-method":
+        entry.authentication = value
+    elif key == "lifetime-seconds" and value.isdigit():
+        entry.lifetime = int(value)
+
+
+def _vpn_detail(entry: ParsedCryptoMapEntry, rest: str, gateways: dict[str, str]) -> None:
+    lowered = rest.lower()
+    gateway = re.match(r"^ike gateway\s+(\S+)", rest, re.IGNORECASE)
+    if gateway:
+        entry.profile = gateway.group(1)
+        if gateway.group(1) in gateways:
+            entry.peers = [gateways[gateway.group(1)]]
+        return
+    proposal = re.match(r"^ike ipsec-policy\s+(\S+)", rest, re.IGNORECASE)
+    if proposal:
+        entry.transform_sets.append(proposal.group(1))
+        return
+    traffic = re.match(r"^traffic-selector \S+ (local|remote)-ip\s+(\S+)", rest, re.IGNORECASE)
+    if traffic:
+        side = "local" if traffic.group(1).lower() == "local" else "remote"
+        current = entry.match_address or ""
+        entry.match_address = (
+            f"{traffic.group(2)} → {current.split(' → ')[-1] if ' → ' in current else 'any'}"
+            if side == "local"
+            else f"{current.split(' → ')[0] if ' → ' in current else 'any'} → {traffic.group(2)}"
+        )
+        entry.match_is_acl = False
+        return
+    if "bind-interface" in lowered:
+        entry.match_address = entry.match_address or "経路で決まる（bind-interface）"
+        entry.match_is_acl = False
 
 
 def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:

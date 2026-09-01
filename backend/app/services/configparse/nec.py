@@ -20,8 +20,21 @@ from app.services.configparse import policy, routing, tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
+    ParsedCrypto,
+    ParsedCryptoMapEntry,
+    ParsedDhcp,
+    ParsedDhcpPool,
+    ParsedIkePolicy,
     ParsedInterface,
+    ParsedNat,
+    ParsedNatPool,
+    ParsedNatRule,
     ParsedNeighbor,
+    ParsedQos,
+    ParsedQosAction,
+    ParsedQosClass,
+    ParsedQosPolicy,
+    ParsedTransformSet,
     ParsedVrf,
     Vendor,
 )
@@ -244,7 +257,132 @@ def _parse_ix(text: str) -> ParsedConfig:
     tunnels.parse_block_style(text, parsed)
     routing.parse_ix(text, parsed)
     policy.parse_ix(text, parsed)
+    _parse_ix_napt(text, parsed)
+    _parse_ix_dhcp(text, parsed)
     return parsed
+
+
+# --- IX の変換と配布 --------------------------------------------------------
+#
+# IX は Cisco とも Comware とも違う書き方をする。読めるのは、実機の設定で
+# ふつうに出てくる形（ip napt enable / ip napt static / ip dhcp profile）に
+# 限ってある。自信の無い書き方を当てずっぽうで読むと、間違った断定が資料に
+# 載るので、読めないものは読めないままにしてある。
+
+_IX_NAPT_ENABLE = re.compile(r"^\s*ip\s+napt\s+enable\s*$", re.IGNORECASE)
+_IX_NAPT_STATIC = re.compile(r"^\s*ip\s+napt\s+static\s+(.+)$", re.IGNORECASE)
+_IX_DHCP_PROFILE = re.compile(r"^ip\s+dhcp\s+profile\s+(\S+)", re.IGNORECASE)
+_IX_DHCP_BINDING = re.compile(r"^\s*ip\s+dhcp\s+binding\s+(\S+)", re.IGNORECASE)
+_IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
+
+
+def _parse_ix_napt(text: str, parsed: ParsedConfig) -> None:
+    """NAPT を読む。IX は変換をポートごとに有効にする。"""
+    nat = ParsedNat()
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _IX_INTERFACE.match(raw)
+        if head:
+            interface = head.group(1)
+            continue
+        if _IX_NAPT_ENABLE.match(raw):
+            # 出口のアドレスに束ねる。Cisco の overload と同じ
+            nat.rules.append(
+                ParsedNatRule(
+                    kind="dynamic",
+                    direction="inside",
+                    matched="内側から出る通信",
+                    translated=interface or "出口のアドレス",
+                    overload=True,
+                    matched_is_name=False,
+                    raw=f"interface {interface} ip napt enable",
+                )
+            )
+            if interface and interface not in nat.outside_interfaces:
+                nat.outside_interfaces.append(interface)
+            continue
+        static = _IX_NAPT_STATIC.match(raw)
+        if static:
+            # 引数の並びは版で違うので、順番には頼らない。読み取れるのは
+            # 「外側と内側のアドレス」までにして、原文をそのまま残す
+            addresses = _IPV4.findall(static.group(1))
+            nat.rules.append(
+                ParsedNatRule(
+                    kind="static-port",
+                    direction="outside",
+                    matched=addresses[0] if addresses else None,
+                    translated=addresses[1] if len(addresses) > 1 else None,
+                    matched_is_name=False,
+                    raw=raw.strip(),
+                )
+            )
+
+    if nat.rules:
+        # 内側は「napt を掛けていないポート」なので、ここでは決められない。
+        # 片側しか無いことを理由にした指摘が出ないよう、両方を埋めておく
+        nat.inside_interfaces = [
+            i.name for i in parsed.interfaces if i.name not in nat.outside_interfaces
+        ]
+        parsed.nat = nat
+
+
+def _parse_ix_dhcp(text: str, parsed: ParsedConfig) -> None:
+    """配るアドレスを読む。IX は profile を作って、ポートに結ぶ。"""
+    dhcp = ParsedDhcp()
+    pools: dict[str, ParsedDhcpPool] = {}
+    current: ParsedDhcpPool | None = None
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _IX_DHCP_PROFILE.match(raw)
+        if head:
+            current = ParsedDhcpPool(name=f"dhcp profile {head.group(1)}")
+            pools[head.group(1)] = current
+            dhcp.pools.append(current)
+            interface = None
+            continue
+        if not raw.startswith((" ", "\t")):
+            found = _IX_INTERFACE.match(raw)
+            interface = found.group(1) if found else None
+            current = None
+        body = raw.strip()
+        if current is not None:
+            _ix_dhcp_detail(current, body)
+            continue
+        bound = _IX_DHCP_BINDING.match(raw)
+        if bound and bound.group(1) in pools and interface:
+            pool = pools[bound.group(1)]
+            pool.name = f"{pool.name}（{interface}）"
+
+    if dhcp.pools:
+        parsed.dhcp = dhcp
+
+
+def _ix_dhcp_detail(pool: ParsedDhcpPool, body: str) -> None:
+    found = re.match(r"^assignable-range\s+(\S+)\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.range_start, pool.range_end = found.group(1), found.group(2)
+        return
+    found = re.match(r"^network\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.network = found.group(1)
+        return
+    found = re.match(r"^default-gateway\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.default_routers.append(found.group(1))
+        return
+    found = re.match(r"^dns-server\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        pool.dns_servers.extend(found.group(1).split())
+        return
+    found = re.match(r"^lease-time\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.lease = found.group(1)
+        return
+    found = re.match(r"^domain-name\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.domain = found.group(1)
 
 
 def _parse_ix_vrfs(text: str, parsed: ParsedConfig) -> None:
@@ -543,7 +681,357 @@ def _parse_qx(text: str) -> ParsedConfig:
     tunnels.parse_block_style(text, parsed)
     routing.parse_comware(text, parsed)
     policy.parse_comware(text, parsed)
+    _parse_qx_nat(text, parsed)
+    _parse_qx_dhcp(text, parsed)
+    _parse_qx_qos(text, parsed)
+    _parse_qx_ipsec(text, parsed)
     return parsed
+
+
+# --- QX（Comware）の変換・配布・優先制御 ------------------------------------
+
+_QX_NAT_GROUP = re.compile(r"^nat address-group\s+(\S+)", re.IGNORECASE)
+_QX_NAT_OUTBOUND = re.compile(
+    r"^\s*nat outbound(?:\s+(?P<acl>\d+|\S+))?"
+    r"(?:\s+address-group\s+(?P<group>\S+))?(?P<rest>.*)$",
+    re.IGNORECASE,
+)
+_QX_NAT_SERVER = re.compile(
+    r"^\s*nat server\s+(?:protocol\s+(?P<protocol>\S+)\s+)?global\s+(?P<global>\S+)"
+    r"(?:\s+(?P<gport>\S+))?\s+inside\s+(?P<inside>\S+)(?:\s+(?P<iport>\S+))?",
+    re.IGNORECASE,
+)
+_QX_DHCP_POOL = re.compile(r"^dhcp server ip-pool\s+(\S+)", re.IGNORECASE)
+_QX_CLASSIFIER = re.compile(r"^traffic classifier\s+(\S+)", re.IGNORECASE)
+_QX_BEHAVIOR = re.compile(r"^traffic behavior\s+(\S+)", re.IGNORECASE)
+_QX_POLICY = re.compile(r"^qos policy\s+(\S+)", re.IGNORECASE)
+_QX_APPLY = re.compile(r"^\s*qos apply policy\s+(\S+)\s+(inbound|outbound)", re.IGNORECASE)
+
+
+def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
+    """アドレス変換を読む。Comware は変換をポートの下に書く。"""
+    nat = ParsedNat()
+    interface: str | None = None
+    group: ParsedNatPool | None = None
+
+    for raw in text.splitlines():
+        head = _QX_INTERFACE.match(raw)
+        if head:
+            interface, group = head.group(1), None
+            continue
+        found = _QX_NAT_GROUP.match(raw)
+        if found:
+            group = ParsedNatPool(name=found.group(1))
+            nat.pools.append(group)
+            interface = None
+            continue
+        body = raw.strip()
+        if group is not None and body.lower().startswith("address "):
+            parts = body.split()
+            group.start = parts[1] if len(parts) > 1 else None
+            group.end = parts[2] if len(parts) > 2 else None
+            continue
+
+        outbound = _QX_NAT_OUTBOUND.match(raw)
+        if outbound and raw.strip().lower().startswith("nat outbound"):
+            pool = outbound.group("group")
+            nat.rules.append(
+                ParsedNatRule(
+                    kind="dynamic",
+                    direction="inside",
+                    matched=outbound.group("acl") or "内側から出る通信",
+                    translated=pool or (interface or "出口のアドレス"),
+                    # address-group に no-pat が付いていなければポートで束ねる
+                    overload="no-pat" not in outbound.group("rest").lower(),
+                    matched_is_name=bool(outbound.group("acl")),
+                    raw=body,
+                )
+            )
+            if interface and interface not in nat.outside_interfaces:
+                nat.outside_interfaces.append(interface)
+            continue
+
+        server = _QX_NAT_SERVER.match(raw)
+        if server:
+            nat.rules.append(
+                ParsedNatRule(
+                    kind="static-port" if server.group("gport") else "static",
+                    direction="outside",
+                    matched=server.group("global"),
+                    translated=server.group("inside"),
+                    protocol=server.group("protocol"),
+                    matched_is_name=False,
+                    raw=body,
+                )
+            )
+            if interface and interface not in nat.outside_interfaces:
+                nat.outside_interfaces.append(interface)
+
+    if nat.rules or nat.pools:
+        nat.inside_interfaces = [
+            i.name for i in parsed.interfaces if i.name not in nat.outside_interfaces
+        ]
+        parsed.nat = nat
+        # 変換で使っている ACL は「どこにも当たっていない」ではない
+        by_name = {acl.name: acl for acl in parsed.acls}
+        for rule in nat.rules:
+            acl = by_name.get(rule.matched or "")
+            if acl is not None and "NAT" not in acl.referenced_by:
+                acl.referenced_by.append("NAT")
+
+
+_QX_IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
+_QX_TRANSFORM = re.compile(r"^ipsec transform-set\s+(\S+)", re.IGNORECASE)
+_QX_IPSEC_POLICY = re.compile(r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+_QX_IPSEC_APPLY = re.compile(r"^\s*ipsec apply policy\s+(\S+)", re.IGNORECASE)
+_QX_IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:address|hostname)\s+(\S+)", re.IGNORECASE)
+
+
+def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
+    """拠点間の暗号化を読む。
+
+    Comware は ike proposal（鍵の交換）・ipsec transform-set（中身の暗号化）・
+    ipsec policy（相手と範囲）に分かれる。Cisco の isakmp policy /
+    transform-set / crypto map と役割が同じなので、そこへ読み替える。
+    """
+    crypto = ParsedCrypto()
+    ike: ParsedIkePolicy | None = None
+    transform: ParsedTransformSet | None = None
+    entry: ParsedCryptoMapEntry | None = None
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _QX_IKE_PROPOSAL.match(raw)
+        if head:
+            ike = ParsedIkePolicy(number=head.group(1), version=2)
+            crypto.ike_policies.append(ike)
+            transform = entry = interface = None
+            continue
+        head = _QX_TRANSFORM.match(raw)
+        if head:
+            transform = ParsedTransformSet(name=head.group(1))
+            crypto.transform_sets.append(transform)
+            ike = entry = interface = None
+            continue
+        head = _QX_IPSEC_POLICY.match(raw)
+        if head:
+            entry = ParsedCryptoMapEntry(
+                name=head.group(1),
+                seq=head.group(2),
+                kind=(head.group(3) or "isakmp").lower(),
+            )
+            crypto.maps.append(entry)
+            ike = transform = interface = None
+            continue
+        head = _QX_INTERFACE.match(raw)
+        if head:
+            interface = head.group(1)
+            ike = transform = entry = None
+            continue
+
+        if raw and not raw.startswith((" ", "\t")):
+            # 見出しの行だが、こちらで扱うものではない（ike keychain など）。
+            # 前の塊のままにしておくと、その中身として読んでしまう
+            ike = transform = entry = None
+            if not _QX_INTERFACE.match(raw):
+                interface = None
+
+        body = raw.strip()
+        if ike is not None:
+            _qx_ike_detail(ike, body)
+            continue
+        if transform is not None:
+            _qx_transform_detail(transform, body)
+            continue
+        if entry is not None:
+            _qx_policy_detail(entry, body)
+            continue
+        applied = _QX_IPSEC_APPLY.match(raw)
+        if applied and interface:
+            crypto.applied.append((interface, applied.group(1)))
+            continue
+        key = _QX_IKE_KEY.match(raw)
+        if key:
+            crypto.keyed_peers.append(key.group(1))
+
+    if crypto.maps or crypto.ike_policies:
+        parsed.crypto = crypto
+        # 暗号化する範囲に使っている ACL は「どこにも当たっていない」ではない
+        by_name = {acl.name: acl for acl in parsed.acls}
+        for item in crypto.maps:
+            acl = by_name.get(item.match_address or "")
+            if acl is not None and "IPsec" not in acl.referenced_by:
+                acl.referenced_by.append("IPsec")
+
+
+def _qx_ike_detail(ike: ParsedIkePolicy, body: str) -> None:
+    found = re.match(r"^encryption-algorithm\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.encryption = found.group(1)
+        return
+    found = re.match(r"^authentication-algorithm\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.hash = found.group(1)
+        return
+    found = re.match(r"^dh\s+group(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.group = found.group(1)
+        return
+    found = re.match(r"^authentication-method\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.authentication = found.group(1)
+        return
+    found = re.match(r"^sa duration\s+(\d+)", body, re.IGNORECASE)
+    if found:
+        ike.lifetime = int(found.group(1))
+
+
+def _qx_transform_detail(transform: ParsedTransformSet, body: str) -> None:
+    found = re.match(
+        r"^(esp|ah)\s+(?:encryption|authentication)-algorithm\s+(.+)$", body, re.IGNORECASE
+    )
+    if found:
+        # Cisco の transform-set と読み比べられるよう、esp- / ah- を頭に付ける
+        for value in found.group(2).split():
+            transform.transforms.append(f"{found.group(1).lower()}-{value}")
+        return
+    found = re.match(r"^encapsulation-mode\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        transform.mode = found.group(1)
+
+
+def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
+    found = re.match(r"^transform-set\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        entry.transform_sets.extend(found.group(1).split())
+        return
+    found = re.match(r"^security acl\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.match_address = found.group(1)
+        return
+    found = re.match(r"^remote-address\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.peers.append(found.group(1))
+        return
+    found = re.match(r"^ike-profile\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.profile = found.group(1)
+        return
+    found = re.match(r"^pfs\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.pfs = found.group(1)
+
+
+def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
+    """配るアドレスを読む。Comware は pool の中に範囲と配るものを書く。"""
+    dhcp = ParsedDhcp()
+    current: ParsedDhcpPool | None = None
+
+    for raw in text.splitlines():
+        head = _QX_DHCP_POOL.match(raw)
+        if head:
+            current = ParsedDhcpPool(name=f"ip-pool {head.group(1)}")
+            dhcp.pools.append(current)
+            continue
+        if not raw.startswith((" ", "\t")):
+            current = None
+        body = raw.strip()
+        relay = re.match(r"^dhcp select relay|^\s*dhcp server select relay", raw, re.IGNORECASE)
+        if relay:
+            continue
+        if current is None:
+            continue
+        found = re.match(r"^network\s+(\S+)(?:\s+mask\s+(\S+))?", body, re.IGNORECASE)
+        if found:
+            current.network = (
+                f"{found.group(1)} {found.group(2)}" if found.group(2) else found.group(1)
+            )
+            continue
+        found = re.match(r"^gateway-list\s+(.+)$", body, re.IGNORECASE)
+        if found:
+            current.default_routers.extend(found.group(1).split())
+            continue
+        found = re.match(r"^dns-list\s+(.+)$", body, re.IGNORECASE)
+        if found:
+            current.dns_servers.extend(found.group(1).split())
+            continue
+        found = re.match(r"^domain-name\s+(\S+)", body, re.IGNORECASE)
+        if found:
+            current.domain = found.group(1)
+            continue
+        found = re.match(r"^forbidden-ip\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE)
+        if found:
+            # 配らないアドレス。Cisco の excluded-address と同じ扱いにする
+            dhcp.excluded.append((found.group(1), found.group(2) or found.group(1)))
+            continue
+        found = re.match(r"^expired\s+(.+)$", body, re.IGNORECASE)
+        if found:
+            current.lease = found.group(1)
+
+    if dhcp.pools:
+        parsed.dhcp = dhcp
+
+
+def _parse_qx_qos(text: str, parsed: ParsedConfig) -> None:
+    """優先制御を読む。Comware は classifier・behavior・policy に分かれる。"""
+    qos = ParsedQos()
+    behaviors: dict[str, list[str]] = {}
+    classifier: ParsedQosClass | None = None
+    behavior: str | None = None
+    qos_policy: ParsedQosPolicy | None = None
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _QX_CLASSIFIER.match(raw)
+        if head:
+            classifier = ParsedQosClass(name=head.group(1))
+            qos.classes.append(classifier)
+            behavior = qos_policy = interface = None
+            continue
+        head = _QX_BEHAVIOR.match(raw)
+        if head:
+            behavior = head.group(1)
+            behaviors.setdefault(behavior, [])
+            classifier = qos_policy = interface = None
+            continue
+        head = _QX_POLICY.match(raw)
+        if head:
+            qos_policy = ParsedQosPolicy(name=head.group(1))
+            qos.policies.append(qos_policy)
+            classifier = behavior = interface = None
+            continue
+        head = _QX_INTERFACE.match(raw)
+        if head:
+            interface = head.group(1)
+            classifier = behavior = qos_policy = None
+            continue
+
+        body = raw.strip()
+        if classifier is not None and body.lower().startswith("if-match"):
+            classifier.matches.append(body)
+            continue
+        if behavior is not None and body and not body.startswith("#"):
+            behaviors[behavior].append(body)
+            continue
+        if qos_policy is not None:
+            found = re.match(r"^classifier\s+(\S+)\s+behavior\s+(\S+)", body, re.IGNORECASE)
+            if found:
+                qos_policy.classes.append(
+                    ParsedQosAction(class_name=found.group(1), actions=[found.group(2)])
+                )
+            continue
+        applied = _QX_APPLY.match(raw)
+        if applied and interface:
+            direction = "input" if applied.group(2).lower() == "inbound" else "output"
+            qos.applied.append((interface, direction, applied.group(1)))
+
+    # behavior に書いてある中身を、その仕分けの行に添える
+    for policy_entry in qos.policies:
+        for action in policy_entry.classes:
+            action.actions.extend(behaviors.get(action.actions[0], []))
+
+    if qos.policies or qos.classes:
+        parsed.qos = qos
 
 
 def _parse_qx_vpn_instances(text: str, parsed: ParsedConfig) -> None:

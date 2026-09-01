@@ -161,7 +161,7 @@ def _bgp_read(parsed: ParsedConfig) -> dict | None:
 
 
 def _controls(parsed: ParsedConfig) -> list[dict]:
-    """通信の制限・変換・配布・優先制御・暗号化を、同じ形で並べる。
+    """通信の制限・変換・配布・優先制御・暗号化・電波を、同じ形で並べる。
 
     見る側が知りたいのはどれも同じ3つ、「何が」「どういう中身で」「どこに
     当たっているか」である。種類ごとに違う表を出すより、1つに揃えたほうが
@@ -237,7 +237,36 @@ def _controls(parsed: ParsedConfig) -> list[dict]:
             method = ", ".join(entry.transform_sets) or entry.profile or "方式なし"
             add("拠点間の暗号化", f"{entry.name} {entry.seq}", f"{peers} / {method}", where)
 
+    if parsed.wireless is not None:
+        for wlan in parsed.wireless.wlans:
+            add(
+                "電波",
+                wlan.ssid or wlan.name,
+                _wlan_detail(wlan),
+                [f"VLAN {wlan.vlan}"] if wlan.vlan is not None else [],
+            )
+
     return out
+
+
+def _wlan_detail(wlan) -> str:  # noqa: ANN001
+    """SSID 1つの中身を、1行で読める形にする。
+
+    見る側が最初に知りたいのは「どう守っているか」なので、そこを先に出す。
+    止めてある SSID は、その旨を頭に付ける（あとの語が同じでも意味が違う）。
+    """
+    guard = "/".join(wlan.security) or "守り無し"
+    if wlan.akm:
+        guard += f"（{'/'.join(wlan.akm)}）"
+    if wlan.ciphers:
+        guard += f" {'/'.join(wlan.ciphers)}"
+    parts = [guard]
+    if not wlan.broadcast:
+        parts.append("名前を伏せる")
+    if wlan.client_isolation:
+        parts.append("端末どうしを通さない")
+    detail = " / ".join(parts)
+    return detail if wlan.enabled else f"止めてある: {detail}"
 
 
 def _acl_rows(rules: list) -> list[dict]:  # noqa: ANN001

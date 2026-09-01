@@ -1,4 +1,5 @@
 import type {
+  VlanReport,
   PlacedPortName,
   LinkSide,
   AdditionPlan,
@@ -796,6 +797,7 @@ export const api = {
 
   /** 線の両端で、設定がそろっているか。 */
   linkCheck: () => request<LinkReport>("/topology/link-check"),
+  vlanCheck: () => request<VlanReport>("/topology/vlan-check"),
 
   /** 経路の情報から見つけた線の候補。LLDP が無い現場でも図を立ち上げる。 */
   linkCandidates: () => request<LinkCandidate[]>("/topology/link-candidates"),
