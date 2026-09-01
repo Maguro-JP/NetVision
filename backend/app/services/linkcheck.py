@@ -132,9 +132,34 @@ def _compare(a: Interface, b: Interface) -> list[Finding]:
     found.extend(_mtu(a, b))
     found.extend(_speed_duplex(a, b))
     found.extend(_lag(a, b))
+    found.extend(_enabled(a, b))
     found.extend(_addresses(a, b))
     found.extend(_ospf(a, b))
     return found
+
+
+def _enabled(a: Interface, b: Interface) -> list[Finding]:
+    """片側だけ落としてある線。
+
+    線としては引けているのに、片側が shutdown だと通らない。図の上では
+    つながって見えるので、いちばん気づきにくい形になる。両側とも落として
+    あるなら、それは「まだ使っていない線」なので言わない。
+    """
+    left, right = _both(a, b, "enabled")
+    if left == right:
+        return []
+    down = a if not left else b
+    up = b if not left else a
+    return [
+        Finding(
+            level=HIGH,
+            title="片側だけポートが落ちています",
+            why="図の上ではつながって見えますが、片側が落ちているので通りません。"
+            "使う線なら落ちている側を上げ、使わない線なら両端を落として"
+            "「使っていない」と分かる形にしてください。",
+            evidence=[f"{down.name}: 落ちている", f"{up.name}: 上がっている"],
+        )
+    ]
 
 
 def _both(a: Interface, b: Interface, name: str) -> tuple:

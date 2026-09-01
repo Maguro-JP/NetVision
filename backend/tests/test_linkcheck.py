@@ -270,3 +270,24 @@ def test_nothing_is_said_when_only_one_side_runs_ospf(db_session):
     """片側だけ静的経路にしてあることがある。そこは意図として扱う。"""
     _pair(db_session, {"ospf_area": "0", "ospf_hello": 10}, {"mode": "access", "vlan": 10})
     assert _titles(db_session) == []
+
+
+def test_only_one_side_being_shut_down_is_the_heaviest(db_session):
+    """図の上ではつながって見えるのに通らない。いちばん気づきにくい形。"""
+    _pair(
+        db_session,
+        {"mode": "trunk", "enabled": True},
+        {"mode": "trunk", "enabled": False},
+    )
+    titles = _titles(db_session)
+    assert "片側だけポートが落ちています" in titles
+
+
+def test_both_sides_shut_down_is_left_alone(db_session):
+    """両端とも落としてあるなら、まだ使っていない線。直すものではない。"""
+    _pair(
+        db_session,
+        {"mode": "trunk", "enabled": False},
+        {"mode": "trunk", "enabled": False},
+    )
+    assert "片側だけポートが落ちています" not in _titles(db_session)
