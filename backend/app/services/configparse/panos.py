@@ -2,7 +2,10 @@
 
 現場で貼られるのは `set` 形式が多い（`configure` してから `show` した形）。
 1行が1つの設定で、階層をそのまま空白で並べる。ここではその形を読む。
-XML 形式は別物なので読んでいない。
+
+XML（`export configuration` で落とすファイル）も同じ中身を木の形で持って
+いるだけなので、`set` の行に直してから同じ読み手に渡す。読み手を2つ持つと、
+片方だけ直したときに黙って食い違う。
 
 PAN-OS のポリシーも、上から順に見て最初に当たった行で決まる。そこは ACL と
 同じなので、同じ器へ入れる。影の行を見つける仕組みがそのまま使える。
@@ -44,6 +47,8 @@ _SERIAL = re.compile(r"^serial:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 def detect(text: str) -> Vendor | None:
     """PAN-OS かどうか。この機種にしか無い並びで見る。"""
+    if _looks_like_xml(text):
+        return Vendor.PALO_ALTO
     for pattern in (
         r"^set\s+rulebase\s+security\s+rules\s",
         r"^set\s+network\s+interface\s+ethernet\s+\S+\s+layer3\s",
@@ -57,6 +62,8 @@ def detect(text: str) -> Vendor | None:
 
 
 def parse(text: str) -> ParsedConfig:
+    if _looks_like_xml(text):
+        text = to_set_format(text)
     parsed = ParsedConfig(vendor=Vendor.PALO_ALTO, os_name="PAN-OS")
 
     found = _HOSTNAME.search(text)
@@ -464,3 +471,77 @@ def _parse_objects(lines: list[list[str]], parsed: ParsedConfig) -> None:
                 parsed.address_objects.append(rest[0])
     for word in ("any", "application-default"):
         parsed.address_objects.append(word)
+
+
+# ---------------------------------------------------------------------------
+# XML 形式
+# ---------------------------------------------------------------------------
+#
+# 画面から落とす設定ファイルは XML になる。中身は `set` 形式と同じもので、
+# 並べ方が木か行かの違いしかない。だから読み手は増やさず、行に直してから
+# 同じところへ渡す。読み手を2つ持つと、片方だけ直したときに黙って食い違う。
+
+#: XML の入れ物。`set` の行には出てこないので、頭から落とす
+_WRAPPERS = ("config", "devices", "shared")
+#: 値を並べる書き方。`<member>` は1つずつ別の行になる
+_MEMBER = "member"
+
+
+def _looks_like_xml(text: str) -> bool:
+    head = text.lstrip()[:400].lower()
+    if not head.startswith(("<?xml", "<config", "<!--")):
+        return False
+    return "<config" in text[:2000].lower()
+
+
+def to_set_format(text: str) -> str:
+    """PAN-OS の XML を、同じ意味の `set` の行に直す。
+
+    木をたどって、通ってきた札の名前をそのまま語として並べる。`entry` の
+    name はその場の名前になるので、札の代わりに名前を置く。葉に書いてある
+    値が最後の語になる。これは PAN-OS 自身が `set` として見せる形と同じ。
+    """
+    from xml.etree import ElementTree
+
+    try:
+        root = ElementTree.fromstring(text)
+    except ElementTree.ParseError:
+        return ""
+
+    lines: list[str] = []
+    _walk(root, [], lines, parent="")
+    return "\n".join(lines)
+
+
+def _walk(node, path: list[str], lines: list[str], parent: str) -> None:  # noqa: ANN001
+    tag = node.tag
+    words = list(path)
+
+    if tag == _MEMBER:
+        value = (node.text or "").strip()
+        if value:
+            lines.append("set " + " ".join([*words, value]))
+        return
+
+    if tag == "entry":
+        # `entry` は入れ物の名前。札ではなく名前の方を語にする。
+        # ただし `devices` の直下だけは機器そのもの（localhost.localdomain）で、
+        # PAN-OS 自身の `set` にも出てこないので落とす
+        name = node.get("name")
+        if name and parent != "devices":
+            words.append(name)
+    elif tag not in _WRAPPERS:
+        words.append(tag)
+
+    children = list(node)
+    if not children:
+        value = (node.text or "").strip()
+        if value:
+            lines.append("set " + " ".join([*words, value]))
+        elif tag == "entry" and node.get("name"):
+            # 中身の無い entry も、名前だけで意味を持つことがある（アドレスなど）
+            lines.append("set " + " ".join(words))
+        return
+
+    for child in children:
+        _walk(child, words, lines, parent=tag)

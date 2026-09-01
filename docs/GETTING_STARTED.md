@@ -100,7 +100,7 @@ running-config
 
 対応ベンダーは Cisco（IOS / IOS-XE / NX-OS）、Juniper Junos、Fortinet FortiOS、
 NEC（IX シリーズ / QX シリーズ）、ヤマハ（RTX / NVR / FWX）、Cisco ASA / FTD、
-Palo Alto PAN-OS（`set` 形式）、Arista EOS、Aruba CX（AOS-CX）、アライドテレシス AlliedWare Plus です（自動判別）。
+Palo Alto PAN-OS（`set` 形式と XML）、Arista EOS、Aruba CX（AOS-CX）、アライドテレシス AlliedWare Plus です（自動判別）。
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 
 ## 2. まとめて取り込む

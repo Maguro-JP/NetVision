@@ -117,3 +117,60 @@ def test_a_disabled_rule_is_left_out_of_the_ordering_check():
     )
     entries = {e.remark: e for e in configparse.parse(text).acls[0].entries}
     assert entries["trust-out"].action == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# XML 形式
+# ---------------------------------------------------------------------------
+
+
+def _xml() -> str:
+    return (FIXTURES / "panos-hq-02.xml").read_text(encoding="utf-8")
+
+
+def test_the_xml_export_is_detected_as_panos():
+    parsed = configparse.parse(_xml())
+    assert parsed.vendor is Vendor.PALO_ALTO
+    assert parsed.hostname == "fw-pan-02"
+
+
+def test_the_xml_is_turned_into_the_same_set_lines():
+    """読み手は増やさない。XML は set の行に直してから同じところへ渡す。
+
+    入れ物（config / devices / 機器そのものの entry）は set には出てこない
+    ので落とす。`member` は1つずつ別の行になる。
+    """
+    from app.services.configparse import panos
+
+    lines = panos.to_set_format(_xml()).splitlines()
+    assert "set deviceconfig system hostname fw-pan-02" in lines
+    assert "set vsys vsys1 zone trust network layer3 ethernet1/2" in lines
+    assert "set vsys vsys1 rulebase security rules allow-web from untrust" in lines
+    assert not [line for line in lines if "localhost.localdomain" in line]
+
+
+def test_the_xml_gives_the_same_shape_as_the_set_format():
+    parsed = configparse.parse(_xml())
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["Ethernet1/1"].ip_address == "203.0.113.2/30"
+    assert "WAN-kaisen" in (ports["Ethernet1/1"].description or "")
+    # ゾーンも、set 形式と同じようにポートの説明へ入る
+    assert "zone trust" in (ports["Ethernet1/2"].description or "")
+
+    routes = {r.destination: r for r in parsed.routes}
+    assert routes["0.0.0.0/0"].next_hop == "203.0.113.1"
+
+    acl = parsed.acls[0]
+    assert [e.action for e in acl.entries] == ["permit", "deny"]
+    assert acl.entries[0].source == "untrust:any"
+    assert acl.entries[0].destination == "trust:WEB-SERVER"
+
+    assert parsed.nat is not None
+    assert [r.kind for r in parsed.nat.rules] == ["dynamic"]
+
+
+def test_a_broken_xml_does_not_raise():
+    """途中で切れたファイルを貼られても、道具は止めない。"""
+    from app.services.configparse import panos
+
+    assert panos.to_set_format("<config><devices>") == ""

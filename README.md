@@ -288,7 +288,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
-| Palo Alto | PAN-OS | ファイアウォール。`set` 形式。ゾーン・セキュリティポリシー・NAT を読みます（XML 形式は未対応） |
+| Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
 | アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路を読みます |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
