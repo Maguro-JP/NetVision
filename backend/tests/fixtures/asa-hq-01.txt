@@ -1,0 +1,46 @@
+: Saved
+:
+ASA Version 9.16(4)
+!
+hostname fw-hq-01
+domain-name example.local
+!
+interface GigabitEthernet0/0
+ nameif outside
+ security-level 0
+ ip address 203.0.113.2 255.255.255.252
+!
+interface GigabitEthernet0/1
+ nameif inside
+ security-level 100
+ ip address 10.1.0.1 255.255.255.0
+!
+interface GigabitEthernet0/2
+ nameif dmz
+ security-level 50
+ ip address 10.9.0.1 255.255.255.0
+!
+object network INSIDE-NET
+ subnet 10.1.0.0 255.255.255.0
+ nat (inside,outside) dynamic interface
+!
+object network WEB-SERVER
+ host 10.9.0.10
+ nat (dmz,outside) static 203.0.113.10
+!
+object-group service WEB-PORTS tcp
+ port-object eq 80
+ port-object eq 443
+!
+access-list OUTSIDE-IN extended permit tcp any object WEB-SERVER object-group WEB-PORTS
+access-list OUTSIDE-IN extended deny ip any any log
+access-list INSIDE-OUT extended permit ip 10.1.0.0 255.255.255.0 any
+!
+access-group OUTSIDE-IN in interface outside
+access-group INSIDE-OUT in interface inside
+!
+route outside 0.0.0.0 0.0.0.0 203.0.113.1 1
+route inside 10.20.0.0 255.255.0.0 10.1.0.254 1
+!
+Hardware:   ASA5516, 8192 MB RAM, CPU Atom C2000 series 2416 MHz
+Serial Number: JAD12345678
