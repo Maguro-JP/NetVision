@@ -237,9 +237,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="足まわり",
         name="802.1X / ポートセキュリティ",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="入っていることまで。",
+        note="当てている口まで読み、問い合わせ先（RADIUS）が無い、"
+        "仕組みは入れたのにどの口にも当てていない、破ったときの動きを"
+        "決めていない、黙って落とす設定になっている、を指摘します。"
+        "誰を通すべきかという方針そのものは、要件が要るので言いません。",
     ),
     Capability(
         area="拠点間",
