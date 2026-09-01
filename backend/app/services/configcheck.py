@@ -177,6 +177,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
+    found.extend(_stp(text))
     return _sorted(found)
 
 
@@ -324,6 +325,100 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                 evidence=[f"VLAN {', '.join(str(v) for v in idle[:10])}"],
             )
         )
+    return out
+
+
+def _stp(text: str) -> list[Finding]:
+    """ループを止める仕組み（STP）まわりで、後から効いてくるもの。
+
+    STP は「入っていれば動く」ものではない。端末をつなぐ口に、誰かが
+    スイッチを挿したときにどうなるかまで決めて、はじめて意味がある。
+    ここで見るのは、その決め忘れである。
+
+    ルートをどこに置くかは、1台の Config だけでは言えない（相手側の
+    優先度が分からない）ので、ここでは見ない。
+    """
+    out: list[Finding] = []
+    ports = _interface_blocks(text)
+
+    fast_without_guard = [
+        name
+        for name, body in ports
+        if any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+        and not any("bpduguard" in line.lower() for line in body)
+    ]
+    if fast_without_guard:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="端末用の口に、BPDU guard が入っていません",
+                why="portfast はつないだ瞬間に通す設定です。そこへ誰かがスイッチを"
+                "挿すと、輪ができて網全体が止まります。BPDU guard を入れておけば、"
+                "その口だけが落ちて済みます。",
+                evidence=[
+                    f"{name}: spanning-tree portfast のみ" for name in fast_without_guard[:5]
+                ],
+            )
+        )
+
+    fast_on_trunk = [
+        name
+        for name, body in ports
+        if any(line.lower().startswith("switchport mode trunk") for line in body)
+        and any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+    ]
+    if fast_on_trunk:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="スイッチをつなぐ口に portfast が入っています",
+                why="機器どうしをつなぐ口で待ち時間を飛ばすと、輪ができていても"
+                "そのまま通してしまいます。トランクに入れるなら "
+                "portfast trunk（意図した指定）にしてください。",
+                evidence=[
+                    f"{name}: trunk なのに spanning-tree portfast" for name in fast_on_trunk[:5]
+                ],
+            )
+        )
+
+    lines = [line.strip() for line in text.splitlines()]
+    if any(line.lower().startswith("spanning-tree ") for line in lines) and not any(
+        line.lower().startswith("spanning-tree mode ") for line in lines
+    ):
+        out.append(
+            Finding(
+                level=LOW,
+                title="STP のモードを決めていません",
+                why="既定のまま動きます。相手の機器が別のモードだと、"
+                "収束の速さも VLAN ごとの木の作られ方も揃いません。"
+                "現場で1つに決めて、そろえてください。",
+                evidence=["spanning-tree mode の行なし"],
+            )
+        )
+    return out
+
+
+def _interface_blocks(text: str) -> list[tuple[str, list[str]]]:
+    """`interface X` ごとに、その中の行を集める。"""
+    out: list[tuple[str, list[str]]] = []
+    name: str | None = None
+    body: list[str] = []
+    for raw in text.splitlines():
+        head = re.match(r"^interface\s+(\S+)", raw, re.IGNORECASE)
+        if head:
+            if name is not None:
+                out.append((name, body))
+            name, body = head.group(1), []
+            continue
+        if name is None:
+            continue
+        if raw and not raw.startswith((" ", "\t")):
+            out.append((name, body))
+            name, body = None, []
+            continue
+        body.append(raw.strip())
+    if name is not None:
+        out.append((name, body))
     return out
 
 

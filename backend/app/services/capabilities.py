@@ -185,9 +185,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="足まわり",
         name="STP",
         read=PARTIAL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="モードと優先度まで。ルートがどこかの妥当性は見ていません。",
+        note="モードと優先度まで読み、端末用の口に BPDU guard が無い、"
+        "スイッチをつなぐ口に portfast が入っている、モードを決めていない、"
+        "を指摘します。ルートをどこに置くのが妥当かは、"
+        "相手側の優先度まで見ないと言えないので見ていません。",
     ),
     Capability(
         area="足まわり",
