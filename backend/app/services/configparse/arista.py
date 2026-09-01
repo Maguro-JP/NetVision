@@ -50,7 +50,7 @@ def detect(text: str) -> Vendor | None:
         return Vendor.ARISTA
     for pattern in (
         r"^\s*Software image version:\s*4\.",
-        r"^management api http-commands",
+        r"^management\s+(?:api|ssh|telnet|console|security)\b",
         r"^mlag configuration",
         r"^\s*neighbor\s+\S+\s+maximum-routes\s+\d+",
     ):
