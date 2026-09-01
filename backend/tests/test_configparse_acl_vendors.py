@@ -278,3 +278,20 @@ end
     acl = _acl(text, "firewall policy")
     assert acl.entries[0].source == "internal:LAN ほか1件"
     assert acl.entries[0].source_value is None
+
+
+def test_several_addresses_on_one_srx_policy_are_not_resolved_as_one():
+    """同じ欄に2行目以降が来ても、最後の行で上書きしない。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text() + (
+        "set security policies from-zone untrust to-zone trust policy allow-web "
+        "match destination-address DB-SERVER\n"
+    )
+    parsed = configparse.parse(text)
+    acl = next(a for a in parsed.acls if a.name == "security policies")
+    web = next(e for e in acl.entries if e.raw == "policy allow-web")
+    assert web.destination == "trust:WEB-SERVER ほか1件"
+    assert web.destination_value is None

@@ -995,9 +995,9 @@ def _srx_policy_option(entry: ParsedAclEntry, rest: str) -> None:
     if head == "match" and len(words) >= 3:
         what, value = words[1].lower(), words[2]
         if what == "source-address":
-            entry.source = value
+            entry.source = _srx_more(entry.source, value)
         elif what == "destination-address":
-            entry.destination = value
+            entry.destination = _srx_more(entry.destination, value)
         elif what == "application":
             entry.destination_port = f"アプリ {value}"
         elif what == "source-identity":
@@ -1014,6 +1014,18 @@ def _srx_policy_option(entry: ParsedAclEntry, rest: str) -> None:
 
     if head == "description":
         entry.remark = " ".join(words[1:])
+
+
+def _srx_more(current: str | None, value: str) -> str:
+    """同じ欄に2行目以降が来たら、1つ目までを読み、残りは数で示す。
+
+    最後の行で上書きすると、先に書いた条件が消える。PAN-OS と同じ形にする。
+    """
+    if current is None:
+        return value
+    head, _, rest = current.partition(" ほか")
+    count = int(rest.rstrip("件")) if rest else 0
+    return f"{head} ほか{count + 1}件"
 
 
 def _srx_scoped(zone: str, address: str | None) -> str:
