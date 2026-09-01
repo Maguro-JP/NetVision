@@ -232,7 +232,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="相手・暗号方式・鍵の作り方・暗号化する範囲まで読みます。"
         "破られている方式（DES / MD5 / DH group 1・2・5）、相手や範囲の抜け、"
         "どのポートにも当たっていない設定を指摘します。読めるのは Cisco IOS・"
-        "FortiGate・Junos の書き方です。合言葉そのものは持ちません。",
+        "FortiGate・Junos・NEC QX の書き方です（NEC IX は確かめられる設定が"
+        "無いので読んでいません）。合言葉そのものは持ちません。",
     ),
     Capability(
         area="拠点間",

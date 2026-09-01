@@ -805,10 +805,35 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
     return findings
 
 
+def _method_name(value: str) -> str:
+    """方式の書き方を、比べられる形にそろえる。
+
+    同じ方式でも、機種ごとに書き方が違う（des / des-cbc / esp-des、
+    sha256 / sha-256 / hmac-sha-256-128）。頭の付け方と鍵長の書き方を外して、
+    方式の名前だけを取り出す。強さを表す数字が付いているものは、そのまま残す
+    （sha と sha-256 は別物で、混ぜると新しい方まで古いと言ってしまう）。
+    """
+    token = value.strip().lower().split()[0]
+    # 頭に付く「どの部分を守るか」（esp / ah）と、鍵付きハッシュの印（hmac）を外す。
+    # Cisco の esp-des のように、そのままの形で表に載っているものは呼ぶ側で先に見る
+    token = re.sub(r"^(?:esp-|ah-|hmac-)+", "", token)
+    parts = token.split("-")
+    if not parts:
+        return token
+    head = parts[0]
+    # 続きが強さの数字なら、方式の名前に含める（sha-256 → sha256）
+    if len(parts) > 1 and parts[1].isdigit():
+        return f"{head}{parts[1]}"
+    # 続きが動作の種類（cbc / gcm など）なら、方式の名前だけにする
+    return head
+
+
 def _weak(value: str | None, head: str, what: str) -> list[Finding]:
     if not value:
         return []
-    token = value.strip().lower().split()[0]
+    raw = value.strip().lower().split()[0]
+    # 表に載っている書き方をそのまま見て、無ければ方式の名前だけで見る
+    token = raw if raw in _BROKEN_CRYPTO or raw in _WEAK_CRYPTO else _method_name(value)
     if token in _BROKEN_CRYPTO:
         return [
             _note(

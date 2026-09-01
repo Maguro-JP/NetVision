@@ -1,4 +1,4 @@
-"""NEC（IX / QX）の変換・配布・優先制御を読む。
+"""NEC（IX / QX）の変換・配布・優先制御・暗号化を読む。
 
 IX は自社系、QX は Comware ベースで書き方がまったく違う。どちらも
 Cisco と同じ器へ読み替えて、粗を見るところは1つのままにする。
@@ -44,6 +44,31 @@ interface Ten-GigabitEthernet1/0/1
 #
 interface Vlan-interface5
  ip address 10.5.0.1 255.255.255.0
+#
+ike proposal 10
+ encryption-algorithm aes-cbc-256
+ authentication-algorithm sha256
+ dh group14
+#
+ike keychain kc1
+ pre-shared-key address 198.51.100.1 key cipher $c$xxxx
+#
+acl advanced 3001
+ rule 5 permit ip source 10.5.0.0 0.0.0.255 destination 10.1.0.0 0.0.0.255
+#
+ipsec transform-set ts1
+ esp encryption-algorithm aes-cbc-256
+ esp authentication-algorithm sha256
+#
+ipsec policy pol1 10 isakmp
+ transform-set ts1
+ security acl 3001
+ remote-address 198.51.100.1
+ pfs dh-group14
+#
+interface Ten-GigabitEthernet1/0/2
+ ip address 203.0.113.6 255.255.255.252
+ ipsec apply policy pol1
 #
 """
 
@@ -133,6 +158,34 @@ def test_qx_policy_that_is_not_applied_is_reported():
 
 def test_a_clean_qx_config_gets_no_findings():
     assert titles(QX) == []
+
+
+def test_qx_ipsec_is_read_as_the_same_three_things():
+    crypto = configparse.parse(QX).crypto
+    assert crypto is not None
+    assert [(i.encryption, i.hash, i.group) for i in crypto.ike_policies] == [
+        ("aes-cbc-256", "sha256", "14")
+    ]
+    # Cisco の transform-set と読み比べられるよう esp- を頭に付ける
+    assert crypto.transform_sets[0].transforms == ["esp-aes-cbc-256", "esp-sha256"]
+    entry = crypto.maps[0]
+    assert (entry.name, entry.seq, entry.peers) == ("pol1", "10", ["198.51.100.1"])
+    assert ("Ten-GigabitEthernet1/0/2", "pol1") in crypto.applied
+    # 合言葉は「置いてある相手」だけ控える。値そのものは持たない
+    assert crypto.keyed_peers == ["198.51.100.1"]
+
+
+def test_qx_acl_used_by_ipsec_is_not_called_unused():
+    assert "ACL 3001 は、どこにも当たっていません" not in titles(QX)
+
+
+def test_qx_ipsec_with_an_old_method_is_reported():
+    text = QX.replace("encryption-algorithm aes-cbc-256", "encryption-algorithm des-cbc").replace(
+        "dh group14", "dh group1"
+    )
+    found = " ".join(titles(text))
+    assert "des" in found
+    assert "group 1" in found
 
 
 # ---------------------------------------------------------------------------

@@ -20,8 +20,11 @@ from app.services.configparse import policy, routing, tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
+    ParsedCrypto,
+    ParsedCryptoMapEntry,
     ParsedDhcp,
     ParsedDhcpPool,
+    ParsedIkePolicy,
     ParsedInterface,
     ParsedNat,
     ParsedNatPool,
@@ -31,6 +34,7 @@ from app.services.configparse.base import (
     ParsedQosAction,
     ParsedQosClass,
     ParsedQosPolicy,
+    ParsedTransformSet,
     ParsedVrf,
     Vendor,
 )
@@ -680,6 +684,7 @@ def _parse_qx(text: str) -> ParsedConfig:
     _parse_qx_nat(text, parsed)
     _parse_qx_dhcp(text, parsed)
     _parse_qx_qos(text, parsed)
+    _parse_qx_ipsec(text, parsed)
     return parsed
 
 
@@ -773,6 +778,148 @@ def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
             acl = by_name.get(rule.matched or "")
             if acl is not None and "NAT" not in acl.referenced_by:
                 acl.referenced_by.append("NAT")
+
+
+_QX_IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
+_QX_TRANSFORM = re.compile(r"^ipsec transform-set\s+(\S+)", re.IGNORECASE)
+_QX_IPSEC_POLICY = re.compile(r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+_QX_IPSEC_APPLY = re.compile(r"^\s*ipsec apply policy\s+(\S+)", re.IGNORECASE)
+_QX_IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:address|hostname)\s+(\S+)", re.IGNORECASE)
+
+
+def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
+    """拠点間の暗号化を読む。
+
+    Comware は ike proposal（鍵の交換）・ipsec transform-set（中身の暗号化）・
+    ipsec policy（相手と範囲）に分かれる。Cisco の isakmp policy /
+    transform-set / crypto map と役割が同じなので、そこへ読み替える。
+    """
+    crypto = ParsedCrypto()
+    ike: ParsedIkePolicy | None = None
+    transform: ParsedTransformSet | None = None
+    entry: ParsedCryptoMapEntry | None = None
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _QX_IKE_PROPOSAL.match(raw)
+        if head:
+            ike = ParsedIkePolicy(number=head.group(1), version=2)
+            crypto.ike_policies.append(ike)
+            transform = entry = interface = None
+            continue
+        head = _QX_TRANSFORM.match(raw)
+        if head:
+            transform = ParsedTransformSet(name=head.group(1))
+            crypto.transform_sets.append(transform)
+            ike = entry = interface = None
+            continue
+        head = _QX_IPSEC_POLICY.match(raw)
+        if head:
+            entry = ParsedCryptoMapEntry(
+                name=head.group(1),
+                seq=head.group(2),
+                kind=(head.group(3) or "isakmp").lower(),
+            )
+            crypto.maps.append(entry)
+            ike = transform = interface = None
+            continue
+        head = _QX_INTERFACE.match(raw)
+        if head:
+            interface = head.group(1)
+            ike = transform = entry = None
+            continue
+
+        if raw and not raw.startswith((" ", "\t")):
+            # 見出しの行だが、こちらで扱うものではない（ike keychain など）。
+            # 前の塊のままにしておくと、その中身として読んでしまう
+            ike = transform = entry = None
+            if not _QX_INTERFACE.match(raw):
+                interface = None
+
+        body = raw.strip()
+        if ike is not None:
+            _qx_ike_detail(ike, body)
+            continue
+        if transform is not None:
+            _qx_transform_detail(transform, body)
+            continue
+        if entry is not None:
+            _qx_policy_detail(entry, body)
+            continue
+        applied = _QX_IPSEC_APPLY.match(raw)
+        if applied and interface:
+            crypto.applied.append((interface, applied.group(1)))
+            continue
+        key = _QX_IKE_KEY.match(raw)
+        if key:
+            crypto.keyed_peers.append(key.group(1))
+
+    if crypto.maps or crypto.ike_policies:
+        parsed.crypto = crypto
+        # 暗号化する範囲に使っている ACL は「どこにも当たっていない」ではない
+        by_name = {acl.name: acl for acl in parsed.acls}
+        for item in crypto.maps:
+            acl = by_name.get(item.match_address or "")
+            if acl is not None and "IPsec" not in acl.referenced_by:
+                acl.referenced_by.append("IPsec")
+
+
+def _qx_ike_detail(ike: ParsedIkePolicy, body: str) -> None:
+    found = re.match(r"^encryption-algorithm\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.encryption = found.group(1)
+        return
+    found = re.match(r"^authentication-algorithm\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.hash = found.group(1)
+        return
+    found = re.match(r"^dh\s+group(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.group = found.group(1)
+        return
+    found = re.match(r"^authentication-method\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        ike.authentication = found.group(1)
+        return
+    found = re.match(r"^sa duration\s+(\d+)", body, re.IGNORECASE)
+    if found:
+        ike.lifetime = int(found.group(1))
+
+
+def _qx_transform_detail(transform: ParsedTransformSet, body: str) -> None:
+    found = re.match(
+        r"^(esp|ah)\s+(?:encryption|authentication)-algorithm\s+(.+)$", body, re.IGNORECASE
+    )
+    if found:
+        # Cisco の transform-set と読み比べられるよう、esp- / ah- を頭に付ける
+        for value in found.group(2).split():
+            transform.transforms.append(f"{found.group(1).lower()}-{value}")
+        return
+    found = re.match(r"^encapsulation-mode\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        transform.mode = found.group(1)
+
+
+def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
+    found = re.match(r"^transform-set\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        entry.transform_sets.extend(found.group(1).split())
+        return
+    found = re.match(r"^security acl\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.match_address = found.group(1)
+        return
+    found = re.match(r"^remote-address\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.peers.append(found.group(1))
+        return
+    found = re.match(r"^ike-profile\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.profile = found.group(1)
+        return
+    found = re.match(r"^pfs\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        entry.pfs = found.group(1)
 
 
 def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
