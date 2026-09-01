@@ -17,3 +17,17 @@ interface GigaEthernet1.0
 interface Loopback0.0
   ip address 10.255.0.1/32
 !
+ip access-list ipsec-acl permit ip src 192.168.10.0/24 dest 192.168.20.0/24
+!
+ike proposal ike-prop encryption aes hash sha256 group 2048-bit lifetime 24h
+ike policy ike-pol peer 203.0.113.10 key ipsec-key ike-prop
+ike keepalive ike-pol 10 6
+ipsec autokey-proposal ipsec-prop esp-aes esp-sha256-hmac lifetime-time 8h
+ipsec autokey-map ipsec-map ipsec-acl 203.0.113.10 ipsec-prop
+!
+interface Tunnel0.0
+  tunnel mode ipsec-ipv4
+  ip address 172.16.0.1/30
+  ipsec policy ipsec-map out
+  no shutdown
+!

@@ -6,7 +6,7 @@ IX は自社系、QX は H3C Comware ベースで書式がまったく違う。
 
 from pathlib import Path
 
-from app.services import configparse
+from app.services import configparse, policyreview
 from app.services.configparse.base import Vendor
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -367,3 +367,43 @@ def test_hostname_falls_back_to_the_prompt():
         "mie-rt-01# show version\nIX Series IX2215 (magellan-sec) Software, Version 10.6.21\n"
     )
     assert ix.hostname == "mie-rt-01"
+
+
+def test_ix_ipsec_is_read_into_the_same_shape_as_cisco():
+    """拠点間 VPN の強さを、Cisco と同じ器へ移す。
+
+    そうすると DES や MD5 が残っているときの指摘が、判断層を足さずに
+    そのまま出る。合言葉そのものは持たない。
+    """
+    parsed = configparse.parse((FIXTURES / "ix-rt-01.txt").read_text())
+    crypto = parsed.crypto
+    assert crypto is not None
+    policy = crypto.ike_policies[0]
+    assert (policy.number, policy.encryption, policy.hash) == ("ike-prop", "aes", "sha256")
+    # 鍵の作り方は長さで書かれる。判断の側と同じ群の番号に直す
+    assert policy.group == "14"
+    assert crypto.transform_sets[0].transforms == ["esp-aes", "esp-sha256-hmac"]
+    assert crypto.maps[0].peers == ["203.0.113.10"]
+    assert crypto.applied == [("Tunnel0.0", "ipsec-map")]
+    assert crypto.keyed_peers == ["203.0.113.10"]
+    assert "ipsec-key" not in str(crypto)
+
+
+def test_an_old_ix_tunnel_is_pointed_out():
+    text = (FIXTURES / "ix-rt-01.txt").read_text()
+    old = text.replace(
+        "ike proposal ike-prop encryption aes hash sha256 group 2048-bit",
+        "ike proposal ike-prop encryption des hash md5 group 768-bit",
+    )
+    parsed = configparse.parse(old)
+    found = [f.title for f in policyreview.review(parsed, old)]
+    assert [t for t in found if "破られている方式" in t]
+    assert [t for t in found if "鍵の作り方が古い" in t]
+
+
+def test_the_range_an_ipsec_map_points_at_is_not_called_unused():
+    """IPsec から参照している ACL を「どこにも当たっていない」と言わない。"""
+    text = (FIXTURES / "ix-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    found = [f.title for f in policyreview.review(parsed, text)]
+    assert not [t for t in found if "ipsec-acl" in t and "当たっていません" in t]

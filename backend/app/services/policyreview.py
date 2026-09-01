@@ -756,7 +756,10 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
             )
 
     for entry in crypto.maps:
-        head = f"crypto map {entry.name} {entry.seq}"
+        # 番号を付けない機種（NEC IX の autokey-map など）がある。
+        # 「None 番」と出すくらいなら、名前だけで呼ぶ
+        label = f"{entry.name} の {entry.seq} 番" if entry.seq else entry.name
+        head = f"crypto map {entry.name} {entry.seq}" if entry.seq else f"crypto map {entry.name}"
         missing = []
         if not entry.peers:
             missing.append("相手（set peer）")
@@ -768,7 +771,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
             findings.append(
                 _note(
                     HIGH,
-                    f"{entry.name} の {entry.seq} 番は、このままでは上がりません",
+                    f"{label}は、このままでは上がりません",
                     f"{'、'.join(missing)}が書かれていません。"
                     "3つそろってはじめてトンネルになります。",
                     [head],
@@ -807,7 +810,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
             findings.append(
                 _note(
                     LOW,
-                    f"{entry.name} の {entry.seq} 番は、鍵を作り直していません",
+                    f"{label}は、鍵を作り直していません",
                     "PFS を入れておくと、鍵が1つ漏れても、それ以前の通信までは読まれません。",
                     [head],
                 )

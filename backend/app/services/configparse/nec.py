@@ -259,6 +259,7 @@ def _parse_ix(text: str) -> ParsedConfig:
     policy.parse_ix(text, parsed)
     _parse_ix_napt(text, parsed)
     _parse_ix_dhcp(text, parsed)
+    _parse_ix_ipsec(text, parsed)
     return parsed
 
 
@@ -1127,3 +1128,106 @@ def _parse_qx_lldp_list(text: str, parsed: ParsedConfig) -> None:
                     protocol=NeighborProtocol.LLDP,
                 )
             )
+
+
+# --- IX の IPsec ------------------------------------------------------------
+#
+# 拠点間 VPN。トンネルは `interface Tunnel0.0` として既に読めているので、
+# ここでは強さ（鍵の交換と中身の暗号化）と、相手をどこに置いてあるかを
+# 読む。器は Cisco と同じものを使う。そうすると DES や MD5 が残っている
+# ときの指摘が、判断層を足さずにそのまま出る。
+
+_IKE_PROPOSAL = re.compile(r"^ike\s+proposal\s+(\S+)\s+(.+)$", re.IGNORECASE)
+_IKE_POLICY = re.compile(r"^ike\s+policy\s+(\S+)\s+peer\s+(\S+)\s+key\s+\S+\s+(\S+)", re.IGNORECASE)
+_IPSEC_PROPOSAL = re.compile(r"^ipsec\s+autokey-proposal\s+(\S+)\s+(.+)$", re.IGNORECASE)
+_IPSEC_MAP = re.compile(r"^ipsec\s+autokey-map\s+(\S+)\s+(\S+)\s+(\S+)\s+(\S+)", re.IGNORECASE)
+_IPSEC_APPLY = re.compile(r"^\s*ipsec\s+policy\s+(\S+)\s+(\S+)", re.IGNORECASE)
+#: `encryption aes hash sha group 1024-bit lifetime 24h` のような並び
+_KEYWORD = re.compile(r"(encryption|hash|group|lifetime)\s+(\S+)", re.IGNORECASE)
+
+
+def _parse_ix_ipsec(text: str, parsed: ParsedConfig) -> None:
+    crypto = parsed.crypto or ParsedCrypto()
+    found_any = False
+    interface: str | None = None
+
+    for raw in text.splitlines():
+        head = _IX_INTERFACE.match(raw)
+        if head:
+            interface = head.group(1)
+            continue
+
+        body = raw.strip()
+
+        proposal = _IKE_PROPOSAL.match(body)
+        if proposal:
+            found_any = True
+            values = {key.lower(): value for key, value in _KEYWORD.findall(proposal.group(2))}
+            crypto.ike_policies.append(
+                ParsedIkePolicy(
+                    number=proposal.group(1),
+                    encryption=values.get("encryption"),
+                    hash=values.get("hash"),
+                    group=_dh_group(values.get("group")),
+                )
+            )
+            continue
+
+        policy = _IKE_POLICY.match(body)
+        if policy:
+            found_any = True
+            # 合言葉そのものは持たない。どの相手に置いてあるかだけ残す
+            crypto.keyed_peers.append(policy.group(2))
+            continue
+
+        transform = _IPSEC_PROPOSAL.match(body)
+        if transform:
+            found_any = True
+            crypto.transform_sets.append(
+                ParsedTransformSet(
+                    name=transform.group(1),
+                    transforms=[
+                        value
+                        for value in transform.group(2).split()
+                        if value.lower().startswith(("esp-", "ah-"))
+                    ],
+                )
+            )
+            continue
+
+        mapped = _IPSEC_MAP.match(body)
+        if mapped:
+            found_any = True
+            crypto.maps.append(
+                ParsedCryptoMapEntry(
+                    name=mapped.group(1),
+                    seq=None,
+                    peers=[mapped.group(3)],
+                    transform_sets=[mapped.group(4)],
+                    match_address=mapped.group(2),
+                )
+            )
+            continue
+
+        applied = _IPSEC_APPLY.match(body)
+        if applied and interface is not None and raw[:1].isspace():
+            found_any = True
+            crypto.applied.append((interface, applied.group(1)))
+
+    if not found_any:
+        return
+    parsed.crypto = crypto
+    # 暗号化する範囲に使っている ACL は「どこにも当たっていない」ではない
+    by_name = {acl.name: acl for acl in parsed.acls}
+    for item in crypto.maps:
+        acl = by_name.get(item.match_address or "")
+        if acl is not None and "IPsec" not in acl.referenced_by:
+            acl.referenced_by.append("IPsec")
+
+
+def _dh_group(value: str | None) -> str | None:
+    """鍵の作り方。IX は長さで書くので、判断の側と同じ群の番号に直す。"""
+    if value is None:
+        return None
+    lengths = {"768-bit": "1", "1024-bit": "2", "1536-bit": "5", "2048-bit": "14"}
+    return lengths.get(value.lower(), value)
