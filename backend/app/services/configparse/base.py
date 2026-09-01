@@ -19,6 +19,7 @@ class Vendor(enum.StrEnum):
     NEC_QX = "nec_qx"
     YAMAHA = "yamaha"
     PALO_ALTO = "palo_alto"
+    ARISTA = "arista"
     UNKNOWN = "unknown"
 
 

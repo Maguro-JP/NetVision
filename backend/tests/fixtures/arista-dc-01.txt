@@ -1,0 +1,53 @@
+! device: sw-arista-01 (DCS-7050SX3-48YC8, EOS-4.29.2F)
+!
+hostname sw-arista-01
+!
+vlan 10
+   name USERS
+!
+vlan 20
+   name SERVERS
+!
+interface Ethernet1
+   description to-core-01
+   switchport mode trunk
+   switchport trunk allowed vlan 10,20
+!
+interface Ethernet2
+   description to-server-01
+   switchport access vlan 20
+   spanning-tree portfast
+   spanning-tree bpduguard enable
+!
+interface Vlan10
+   ip address 10.0.10.1/24
+!
+interface Vlan20
+   ip address 10.0.20.1/24
+!
+ip routing
+!
+ip route 0.0.0.0/0 10.0.10.254
+ip route 10.9.0.0/16 10.0.20.254 200
+!
+router bgp 65001
+   router-id 10.0.10.1
+   neighbor 10.0.10.2 remote-as 65002
+   neighbor 10.0.10.2 maximum-routes 30000
+   neighbor 10.0.10.2 route-map RM-IN in
+   neighbor 10.0.10.2 route-map RM-OUT out
+   neighbor 10.0.10.2 password 7 xxxxx
+   network 10.0.10.0/24
+!
+route-map RM-IN permit 10
+   match ip address prefix-list PL-IN
+!
+route-map RM-OUT permit 10
+   match ip address prefix-list PL-OUT
+!
+ip prefix-list PL-IN seq 10 permit 10.9.0.0/16
+ip prefix-list PL-OUT seq 10 permit 10.0.10.0/24
+!
+management api http-commands
+   no shutdown
+!

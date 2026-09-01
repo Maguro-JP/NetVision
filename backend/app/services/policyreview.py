@@ -93,6 +93,11 @@ def _names(parsed: ParsedConfig, kind: str) -> set[str]:
 # ---------------------------------------------------------------------------
 
 
+#: 相手の状態が変わったことを、書かなくても記録する機種。
+#: 「書いていない＝残らない」と読むと、そこだけ誤って言うことになる
+_LOGS_BGP_BY_DEFAULT = {"arista"}
+
+
 def _bgp(parsed: ParsedConfig) -> list[Finding]:
     bgp = parsed.bgp
     if bgp is None:
@@ -121,7 +126,8 @@ def _bgp(parsed: ParsedConfig) -> list[Finding]:
             )
         )
 
-    if not bgp.log_neighbor_changes and bgp.neighbors:
+    logs_anyway = parsed.vendor.value in _LOGS_BGP_BY_DEFAULT
+    if not bgp.log_neighbor_changes and bgp.neighbors and not logs_anyway:
         findings.append(
             _note(
                 LOW,
