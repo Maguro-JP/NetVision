@@ -367,7 +367,10 @@ def _lets_everything_through(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> lis
     影の行としては出ない（後ろに行が無ければ隠れるものが無い）ので、別に見る。
     当てていない ACL には言わない。何も止めていなくても、効いていなければ害は無い。
     """
-    if not acl.applied_to:
+    if not acl.applied_to or acl.stateful:
+        # 戻りの通信を動的に通す仕組みと組み合わせているものは、出る側を
+        # 広く開けておくのが普通の書き方になる。そこを毎回言うと、
+        # 直す必要の無いものが並んで、本当の指摘が埋もれる
         return []
     wide = next(
         (entry for entry in rules if entry.action == "permit" and aclcheck.is_wide_open(entry)),

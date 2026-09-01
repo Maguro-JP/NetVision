@@ -16,6 +16,7 @@ class Vendor(enum.StrEnum):
     FORTINET = "fortinet"
     NEC_IX = "nec_ix"
     NEC_QX = "nec_qx"
+    YAMAHA = "yamaha"
     UNKNOWN = "unknown"
 
 
@@ -436,6 +437,9 @@ class ParsedAcl:
     applied_to: list[str] = field(default_factory=list)
     #: 経路の道具や NAT から参照されている場合の参照元
     referenced_by: list[str] = field(default_factory=list)
+    #: 戻りの通信を動的に通す仕組みと組み合わせて使っている並びか
+    #: （ヤマハの dynamic フィルタなど）。「実質すべて通している」の判断が変わる
+    stateful: bool = False
 
 
 @dataclass

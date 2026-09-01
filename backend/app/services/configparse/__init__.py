@@ -6,7 +6,7 @@
 
 from __future__ import annotations
 
-from app.services.configparse import cisco, features, fortinet, juniper, nec, wireless
+from app.services.configparse import cisco, features, fortinet, juniper, nec, wireless, yamaha
 from app.services.configparse.base import (
     FEATURE_LABELS,
     NeighborProtocol,
@@ -30,7 +30,7 @@ from app.services.configparse.ifname import expand, normalize, normalize_hostnam
 
 # 判別は「特徴が強い順」に試す
 # NEC は Cisco 風に見える箇所があるので、Cisco より先に試す
-_DETECTORS = (fortinet.detect, juniper.detect, nec.detect, cisco.detect)
+_DETECTORS = (fortinet.detect, juniper.detect, yamaha.detect, nec.detect, cisco.detect)
 
 VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.CISCO_IOS: "Cisco IOS / IOS-XE",
@@ -39,6 +39,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.FORTINET: "Fortinet FortiOS",
     Vendor.NEC_IX: "NEC IX シリーズ",
     Vendor.NEC_QX: "NEC QX シリーズ",
+    Vendor.YAMAHA: "ヤマハ RTX / NVR",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -49,6 +50,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.FORTINET: "Fortinet",
     Vendor.NEC_IX: "NEC",
     Vendor.NEC_QX: "NEC",
+    Vendor.YAMAHA: "ヤマハ",
 }
 
 
@@ -71,6 +73,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = fortinet.parse(text)
     elif vendor in (Vendor.NEC_IX, Vendor.NEC_QX):
         parsed = nec.parse(text, vendor)
+    elif vendor is Vendor.YAMAHA:
+        parsed = yamaha.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)
