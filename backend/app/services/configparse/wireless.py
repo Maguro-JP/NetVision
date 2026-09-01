@@ -459,7 +459,6 @@ def _ap_side(text: str, found: ParsedWireless) -> None:
     開けたままだと気づかれないまま残る。
     """
     profile_access: dict[str, list[str]] = {}
-    ap_profile: dict[str, str] = {}
     current: str | None = None
 
     for raw in text.splitlines():
