@@ -57,6 +57,15 @@ class ParsedInterface:
     #: 速度と二重。片方だけ固定すると、遅くはなるが通ってしまう
     speed: str | None = None
     duplex: str | None = None
+    #: OSPF の決めごと。両端で1つでも食い違うと、隣どうしとして認識しない。
+    #: 上がらないので気づきはするが、原因がここだと分かるまでが長い
+    ospf_area: str | None = None
+    ospf_hello: int | None = None
+    ospf_dead: int | None = None
+    #: 線の見立て（point-to-point / broadcast）。ここが違うと隣にならない
+    ospf_network: str | None = None
+    #: 合言葉の掛け方（none / text / md5）。値は持たない
+    ospf_auth: str | None = None
     enabled: bool = True
 
     @property

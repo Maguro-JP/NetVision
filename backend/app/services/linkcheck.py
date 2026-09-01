@@ -133,6 +133,7 @@ def _compare(a: Interface, b: Interface) -> list[Finding]:
     found.extend(_speed_duplex(a, b))
     found.extend(_lag(a, b))
     found.extend(_addresses(a, b))
+    found.extend(_ospf(a, b))
     return found
 
 
@@ -282,6 +283,69 @@ def _addresses(a: Interface, b: Interface) -> list[Finding]:
             )
         ]
     return []
+
+
+#: OSPF の決めごとのうち、両端でそろっていないと隣にならないもの
+_OSPF_MUST_MATCH = (
+    ("ospf_area", "エリア"),
+    ("ospf_hello", "あいさつの間隔（hello）"),
+    ("ospf_dead", "見切りの時間（dead）"),
+    ("ospf_network", "線の見立て（network type）"),
+)
+
+
+def _ospf(a: Interface, b: Interface) -> list[Finding]:
+    """OSPF の決めごとが、両端でそろっているか。
+
+    1つでも違うと隣どうしとして認識しない。上がらないので気づきはするが、
+    「なぜ上がらないのか」を Config から追うと時間がかかる。ここで並べて
+    出しておけば、どこが違うかは一目で分かる。
+
+    片側にしか OSPF が入っていない場合は言わない。片側を意図的に外して
+    いること（受け側だけ静的経路にする）があるため。
+    """
+    out: list[Finding] = []
+    if not _runs_ospf(a) or not _runs_ospf(b):
+        return out
+
+    for name, label in _OSPF_MUST_MATCH:
+        left, right = _both(a, b, name)
+        if left is None or right is None or left == right:
+            continue
+        out.append(
+            Finding(
+                level=HIGH,
+                title=f"OSPF の{label}が両端で違います",
+                why="1つでも違うと、隣どうしとして認識しません。"
+                "線はつながっているのに経路が流れないので、"
+                "配線や故障を先に疑って時間を使うことになります。",
+                evidence=[f"{a.name}: {left}", f"{b.name}: {right}"],
+            )
+        )
+
+    left_auth, right_auth = _both(a, b, "ospf_auth")
+    if (left_auth or "none") != (right_auth or "none"):
+        out.append(
+            Finding(
+                level=HIGH,
+                title="OSPF の合言葉の掛け方が両端で違います",
+                why="片側だけ合言葉を求めていると、隣になりません。"
+                "掛けるなら両端で、掛けないなら両端で外してください。",
+                evidence=[
+                    f"{a.name}: {left_auth or '掛けていない'}",
+                    f"{b.name}: {right_auth or '掛けていない'}",
+                ],
+            )
+        )
+    return out
+
+
+def _runs_ospf(interface: Interface) -> bool:
+    """そのポートで OSPF を話しているか（読み取れた範囲で）。"""
+    return any(
+        getattr(interface, name) is not None
+        for name in ("ospf_area", "ospf_hello", "ospf_dead", "ospf_network", "ospf_auth")
+    )
 
 
 def _network_of(value: str):  # noqa: ANN201

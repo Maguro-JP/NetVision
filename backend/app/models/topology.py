@@ -92,6 +92,13 @@ class Interface(Base):
     #: 速度と二重。片方だけ固定すると、遅くなるが通ってしまう
     speed: Mapped[str | None] = mapped_column(String(20), default=None)
     duplex: Mapped[str | None] = mapped_column(String(20), default=None)
+    #: OSPF の決めごと。両端で1つでも食い違うと隣どうしにならない。
+    #: 合言葉そのものは持たない（掛けてあるかどうかだけ）
+    ospf_area: Mapped[str | None] = mapped_column(String(20), default=None)
+    ospf_hello: Mapped[int | None] = mapped_column(Integer, default=None)
+    ospf_dead: Mapped[int | None] = mapped_column(Integer, default=None)
+    ospf_network: Mapped[str | None] = mapped_column(String(20), default=None)
+    ospf_auth: Mapped[str | None] = mapped_column(String(10), default=None)
     #: 束ねているポートの番号と、その束ね方
     lag_group: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     lag_mode: Mapped[str | None] = mapped_column(String(20), default=None)

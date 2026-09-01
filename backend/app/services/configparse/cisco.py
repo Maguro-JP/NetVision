@@ -213,6 +213,8 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
                 current.lag_group = int(parts[1])
             if "mode" in parts and parts.index("mode") + 1 < len(parts):
                 current.lag_mode = parts[parts.index("mode") + 1]
+        elif body.startswith("ip ospf ") or body.startswith("ospf "):
+            _ospf_option(current, body)
         elif body == "shutdown":
             current.enabled = False
         elif body == "no switchport":
@@ -223,6 +225,45 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     for interface in parsed.interfaces:
         if interface.mode == "trunk" and interface.key not in allowed_written:
             interface.trunk_all = True
+
+
+def _ospf_option(current: ParsedInterface, body: str) -> None:
+    """ポートに書いた OSPF の決めごと。
+
+    エリア・hello / dead・線の見立て・合言葉の掛け方は、両端でそろって
+    いないと隣どうしにならない。合言葉そのものは持たない（掛けてあるか
+    どうかだけが要る）。
+    """
+    parts = body.split()
+    # `ip ospf 1 area 0` の形。番号は機器ごとの都合なので、エリアだけ拾う
+    if "area" in parts:
+        index = parts.index("area")
+        if index + 1 < len(parts):
+            current.ospf_area = parts[index + 1]
+        return
+    if "hello-interval" in parts:
+        value = parts[parts.index("hello-interval") + 1 :]
+        if value and value[0].isdigit():
+            current.ospf_hello = int(value[0])
+        return
+    if "dead-interval" in parts:
+        value = parts[parts.index("dead-interval") + 1 :]
+        if value and value[0].isdigit():
+            current.ospf_dead = int(value[0])
+        return
+    if "network" in parts:
+        value = parts[parts.index("network") + 1 :]
+        if value:
+            current.ospf_network = value[0]
+        return
+    if "authentication" in parts:
+        current.ospf_auth = "md5" if "message-digest" in parts else "text"
+        return
+    if "message-digest-key" in parts:
+        current.ospf_auth = current.ospf_auth or "md5"
+        return
+    if "authentication-key" in parts:
+        current.ospf_auth = current.ospf_auth or "text"
 
 
 def _copy_to_group(current: ParsedInterface, group: list[ParsedInterface]) -> None:
@@ -243,6 +284,11 @@ def _copy_to_group(current: ParsedInterface, group: list[ParsedInterface]) -> No
             "duplex",
             "lag_group",
             "lag_mode",
+            "ospf_area",
+            "ospf_hello",
+            "ospf_dead",
+            "ospf_network",
+            "ospf_auth",
         ):
             setattr(other, name, getattr(current, name))
         other.trunk_vlans = list(current.trunk_vlans)

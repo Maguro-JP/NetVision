@@ -78,7 +78,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=PARTIAL,
         generate=PARTIAL,
-        note="エリアと載せているネットワークまで。コスト設計や再配布の妥当性は見ていません。",
+        note="エリアと載せているネットワークに加え、ポートごとの決めごと"
+        "（エリア・hello / dead・線の見立て・合言葉の掛け方）まで読みます。"
+        "結線が入っていれば、両端で食い違っているところを指摘します。"
+        "コスト設計や再配布の妥当性は見ていません。",
     ),
     Capability(
         area="経路",
