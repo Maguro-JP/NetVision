@@ -212,3 +212,20 @@ def test_fortigate_physical_status_is_read_per_paragraph():
     states = _states(configparse.parse(text))
     assert states["port1"] == "up"
     assert states["port2"] == "down"
+
+
+SHOW_INTERFACES = """
+show interfaces
+GigabitEthernet1/0/1 is up, line protocol is up (connected)
+  Hardware is Gigabit Ethernet, address is 0011.2233.4455 (bia 0011.2233.4455)
+  Description: to-acc-sw
+GigabitEthernet1/0/2 is down, line protocol is down (notconnect)
+  Hardware is Gigabit Ethernet, address is 0011.2233.4456 (bia 0011.2233.4456)
+"""
+
+
+def test_show_interfaces_paragraphs_are_read_from_their_first_line():
+    text = (FIXTURES / "core-sw-01.txt").read_text() + SHOW_INTERFACES
+    states = _states(configparse.parse(text))
+    assert states["GigabitEthernet1/0/1"] == "up"
+    assert states["GigabitEthernet1/0/2"] == "down"

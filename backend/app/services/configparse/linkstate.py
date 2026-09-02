@@ -13,6 +13,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
+- Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
 - Comware（NEC QX）`display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
@@ -40,6 +41,10 @@ _PANOS_STATE = re.compile(r"^[^/\s]+/[^/\s]+/(up|down)$", re.IGNORECASE)
 #: FortiGate `get system interface physical`。`==[port1]` の見出しの下に `status: up`
 _FORTI_PHYSICAL = re.compile(r"^\s*==\s*\[\s*(\S+?)\s*\]", re.IGNORECASE)
 _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
+#: `show interfaces` の段落の1行目。`X is up, line protocol is up (connected)`
+_PARAGRAPH = re.compile(
+    r"^(\S+) is (up|down|administratively down),\s*line protocol is (up|down)\b", re.IGNORECASE
+)
 #: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
 _COMWARE_HEADER = re.compile(
     r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
@@ -75,6 +80,7 @@ def parse(text: str, parsed: ParsedConfig) -> None:
         elif _PANOS_HEADER.match(line):
             _read_panos(lines[index + 1 :], parsed)
     _read_forti_physical(lines, parsed)
+    _read_paragraphs(lines, parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -213,3 +219,19 @@ def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
         if found:
             current.link_state = found.group(1).lower()
             current = None
+
+
+def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
+    """`show interfaces` の段落。1行目だけで状態が分かる。"""
+    for raw in lines:
+        found = _PARAGRAPH.match(raw.strip())
+        if not found:
+            continue
+        port = _port(parsed, found.group(1))
+        if port is None:
+            continue
+        admin, protocol = found.group(2).lower(), found.group(3).lower()
+        if admin == "administratively down":
+            port.link_state = "disabled"
+        else:
+            port.link_state = "up" if admin == "up" and protocol == "up" else "down"
