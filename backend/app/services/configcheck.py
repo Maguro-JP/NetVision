@@ -46,14 +46,28 @@ class CheckResult:
 #: 機器に紐づかなくても言えること。どれも「入っていないと後で困る」もの
 _HYGIENE = (
     (
-        re.compile(r"^\s*ip http server\s*$", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:ip http server\s*$"  # Cisco IOS
+            r"|set system services web-management http\b"  # Junos（https は別）
+            r"|set allowaccess\b.*\bhttp\b(?!s))",  # FortiGate
+            re.IGNORECASE,
+        ),
         HIGH,
         "管理用の web が開いています",
         "暗号化されない口が開いたままです。使っていないなら閉じてください"
         "（no ip http server）。踏み台にされたときに、いちばん気づきにくい入口です。",
     ),
     (
-        re.compile(r"^\s*transport input (?:all|telnet)\b", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:transport input (?:all|telnet)\b"  # Cisco IOS
+            r"|set system services telnet\b"  # Junos
+            r"|set allowaccess\b.*\btelnet\b"  # FortiGate
+            r"|telnetd service on\b"  # ヤマハ
+            r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
+            r"|telnet server enable\b"  # Comware
+            r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
+            re.IGNORECASE,
+        ),
         HIGH,
         "telnet で入れる状態です",
         "telnet は中身が丸見えで、パスワードもそのまま流れます。"

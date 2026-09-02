@@ -583,3 +583,25 @@ def test_default_snmp_communities_are_caught_in_junos_and_comware_too(db_session
     titles = _titles(configcheck.check(db_session, comware))
     assert "SNMP の合言葉が既定のままです" in titles
     assert "SNMP から設定を書き換えられます" in titles
+
+
+def test_telnet_left_open_is_caught_in_every_vendor_s_wording(db_session):
+    samples = {
+        "junos": "set system host-name rt\nset system services telnet\n",
+        "fortios": 'config system global\n    set hostname "fw"\nend\n'
+        "config system interface\n"
+        '    edit "port1"\n'
+        "        set allowaccess ping https ssh telnet\n"
+        "    next\nend\n",
+        "yamaha": "# RTX830 Rev.15.02.28\ntelnetd service on\n",
+        "allied": "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\n"
+        "hostname sw\nservice telnet\n",
+        "comware": "sysname sw\ntelnet server enable\n",
+        "asa": "ASA Version 9.16(4)\nhostname fw\ntelnet 10.0.0.0 255.255.255.0 inside\n",
+    }
+    for vendor, text in samples.items():
+        titles = _titles(configcheck.check(db_session, text))
+        assert "telnet で入れる状態です" in titles, vendor
+    # 止めた形は言わない
+    titles = _titles(configcheck.check(db_session, "hostname sw\nno service telnet\n"))
+    assert "telnet で入れる状態です" not in titles
