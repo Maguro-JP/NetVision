@@ -57,6 +57,7 @@ import type {
   ImpactReport,
   ProductImportResult,
   PlanOutputs,
+  PlanVerifyRead,
   ProductReference,
   RebuildResult,
   Remediation,
@@ -1084,6 +1085,12 @@ export const api = {
     request<void>(`/config-plans/${id}`, { method: "DELETE" }),
   planOutputs: (id: number) =>
     request<PlanOutputs>(`/config-plans/${id}/outputs`),
+  /** 投入後の config を取り込み、計画との差分がゼロか確かめる */
+  verifyPlan: (id: number, file: File) => {
+    const form = new FormData();
+    form.append("file", file);
+    return upload<PlanVerifyRead>(`/config-plans/${id}/verify`, form);
+  },
   draftConfig: (deviceId: number, body: { request: string; base?: string }) =>
     request<ConfigDraft>(`/devices/${deviceId}/config-draft`, {
       method: "POST",

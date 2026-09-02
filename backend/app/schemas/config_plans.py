@@ -83,6 +83,19 @@ class PlanOutputRead(BaseModel):
     diff: DiffRead
 
 
+class PlanVerifyRead(BaseModel):
+    """投入後の Config を取り込んで、将来フルと突き合わせた結果。"""
+
+    plan_id: int
+    snapshot_id: int | None
+    #: 取り込んだ Config と将来フルの差分が空か。空なら投入は完了している
+    converged: bool
+    #: 残っている差分（空なら投入済み）
+    remaining: DiffRead
+    status: str
+    message: str
+
+
 class DiffPreviewRequest(BaseModel):
     """plan を作らずに、その場で2つの config を比べる。"""
 

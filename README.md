@@ -1581,6 +1581,7 @@ NETVISION_ENV_FILE=config/aomori.env python -m uvicorn app.main:app
 | GET | `/config-plans/{id}/outputs` | 現行フル・将来フル・差分・切り戻しをまとめて取得 |
 | GET | `/config-plans/{id}/download/{kind}` | `current` / `future` / `diff` / `rollback` をファイルで取得 |
 | POST | `/config-plans/preview` | 計画を作らず2つの config をその場で比較 |
+| POST | `/config-plans/{id}/verify` | 投入後の config を取り込み、計画との差分がゼロなら「投入済み」に進める |
 | GET | `/devices/{id}/config-plans` | その機器の計画一覧 |
 | GET | `/replacement/plan?years=5` | 年度別の更改計画 |
 | GET | `/replacement/impact/{device_id}` | その機器を止めたときの影響範囲 |

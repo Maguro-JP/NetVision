@@ -4,7 +4,12 @@ import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import ConfigEditor from "../components/ConfigEditor";
 import { formatTimestamp } from "../lib/format";
-import type { ConfigDraft, ConfigPlan, DiffCommand } from "../api/types";
+import type {
+  ConfigDraft,
+  ConfigPlan,
+  DiffCommand,
+  PlanVerifyRead,
+} from "../api/types";
 
 const OUTPUT_TABS = [
   {
@@ -106,6 +111,20 @@ export default function ConfigPlansPage() {
       refresh();
     },
   });
+
+  const [verifyResult, setVerifyResult] = useState<PlanVerifyRead | null>(
+    null,
+  );
+  const verify = useMutation({
+    mutationFn: (file: File) => api.verifyPlan(selectedId!, file),
+    onSuccess: (result: PlanVerifyRead) => {
+      setVerifyResult(result);
+      refresh();
+    },
+  });
+  useEffect(() => {
+    setVerifyResult(null);
+  }, [selectedId]);
 
   const { data: llm } = useQuery({
     queryKey: ["llmStatus"],
@@ -707,6 +726,52 @@ export default function ConfigPlansPage() {
               <p className="muted">
                 内容を確認してから、手で機器に投入してください（このツールから投入はしません）。
               </p>
+              <div className="actions">
+                <label className="button">
+                  投入後の config で突合
+                  <input
+                    type="file"
+                    style={{ display: "none" }}
+                    disabled={verify.isPending}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      if (f) verify.mutate(f);
+                      e.target.value = "";
+                    }}
+                  />
+                </label>
+                {verify.isPending && <span className="muted">確認中…</span>}
+              </div>
+              {verify.error && (
+                <div
+                  className="card"
+                  style={{ borderColor: "var(--sev-critical)" }}
+                >
+                  {(verify.error as Error).message}
+                </div>
+              )}
+              {verifyResult && (
+                <div
+                  className="card"
+                  style={{
+                    borderColor: verifyResult.converged
+                      ? "var(--sev-ok)"
+                      : "var(--sev-warning)",
+                  }}
+                >
+                  <div>{verifyResult.message}</div>
+                  {!verifyResult.converged &&
+                    verifyResult.remaining.commands.length > 0 && (
+                      <pre className="diff" style={{ marginTop: 8 }}>
+                        {verifyResult.remaining.commands.map((c, i) => (
+                          <div key={i} style={{ color: KIND_COLOR[c.kind] }}>
+                            {c.rendered}
+                          </div>
+                        ))}
+                      </pre>
+                    )}
+                </div>
+              )}
             </>
           )}
         </>

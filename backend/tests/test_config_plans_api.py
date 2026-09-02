@@ -265,3 +265,41 @@ def test_preview_compares_two_configs_without_saving(client):
     assert res["verified"] is True
     assert "description new" in res["script"]
     assert client.get(f"{API}/config-plans").json() == []
+
+
+# ---------------------------------------------------------------------------
+# 投入後の突合
+# ---------------------------------------------------------------------------
+
+
+def test_verifying_with_the_config_after_the_change_marks_the_plan_applied(client, device_payload):
+    """取り込み → 差分ゼロ確認 を1操作に。差分が空のときだけ「投入済み」になる。"""
+    device_id = make_device(client, device_payload)
+    upload_config(client)
+    plan = make_plan(client, device_id).json()
+    future = plan["body"] + "!\nntp server 10.0.0.9\n"
+    client.patch(f"{API}/config-plans/{plan['id']}", json={"body": future, "status": "approved"})
+
+    # まだ投入していない Config を渡すと、差分が残る
+    res = client.post(
+        f"{API}/config-plans/{plan['id']}/verify",
+        files={"file": ("after.txt", FIXTURE.read_bytes(), "text/plain")},
+    )
+    assert res.status_code == 200, res.text
+    body = res.json()
+    assert body["converged"] is False
+    assert body["status"] == "approved"
+    assert body["remaining"]["script"]
+
+    # 投入後の Config を渡すと、差分ゼロで投入済みになる
+    res = client.post(
+        f"{API}/config-plans/{plan['id']}/verify",
+        files={"file": ("after.txt", future.encode(), "text/plain")},
+    )
+    body = res.json()
+    assert body["converged"] is True
+    assert body["status"] == "applied"
+    assert body["snapshot_id"]
+    plan_after = client.get(f"{API}/config-plans?device_id={device_id}").json()[0]
+    assert plan_after["status"] == "applied"
+    assert plan_after["base_snapshot_id"] == body["snapshot_id"]

@@ -780,6 +780,16 @@ export interface PlanOutputs {
   diff: PlanDiff;
 }
 
+/** 投入後の config を取り込んで、計画との差分がゼロか確かめた結果。 */
+export interface PlanVerifyRead {
+  plan_id: number;
+  snapshot_id: number | null;
+  converged: boolean;
+  remaining: PlanDiff;
+  status: string;
+  message: string;
+}
+
 /** 資料を根拠にした Config の下書き。 */
 export interface ConfigDraftLine {
   text: string;

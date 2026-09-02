@@ -1,12 +1,13 @@
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import ConfigPlan, Device
+from app.models.config_plan import PlanStatus
 from app.schemas.config_plans import (
     ConfigDraftRead,
     ConfigDraftRequest,
@@ -22,6 +23,7 @@ from app.schemas.config_plans import (
     GapRead,
     LlmStatusRead,
     PlanOutputRead,
+    PlanVerifyRead,
 )
 from app.schemas.jobs import JobRead, job_read
 from app.services import config_draft, jobs, llm
@@ -226,6 +228,61 @@ def download(plan_id: int, kind: str, db: DbSession) -> Response:
             "画面で収束しなかった箇所を確認してください",
         )
     return _as_text(body, filename)
+
+
+@router.post("/config-plans/{plan_id}/verify", response_model=PlanVerifyRead)
+async def verify_plan(
+    plan_id: int,
+    db: DbSession,
+    file: UploadFile = File(description="投入後に取った running-config"),
+) -> PlanVerifyRead:
+    """投入後の Config を取り込み、将来フルとの差分がゼロかを1操作で確かめる。
+
+    投入した「つもり」が残るのがいちばん困る。取り込みと突合を分けると、
+    突合を忘れて、計画は「投入待ち」のまま実機だけが進む。ここで両方やり、
+    差分が空になったときだけ計画を「投入済み」にする。
+    """
+    from app.api.routes.configs import MAX_CONFIG_BYTES, _decode
+    from app.models.topology import ConfigSnapshot
+    from app.services import configs
+
+    plan = _get_plan(db, plan_id)
+    content = await file.read()
+    if len(content) > MAX_CONFIG_BYTES:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 10MB）"
+        )
+    result = configs.ingest(
+        db, file.filename or "after.txt", _decode(content), device_id=plan.device_id
+    )
+    snapshot = db.get(ConfigSnapshot, result.snapshot_id) if result.snapshot_id else None
+    if snapshot is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Config を取り込めませんでした")
+
+    outputs = service.outputs(db, plan)
+    remaining = build(snapshot.content, plan.body, outputs.vendor)
+    converged = remaining.verified and not remaining.commands
+
+    if converged:
+        plan.status = PlanStatus.APPLIED
+        plan.base_snapshot_id = snapshot.id
+        message = "取り込んだ Config は将来フルと一致しました。計画を「投入済み」にしました。"
+    else:
+        count = len(remaining.commands)
+        message = (
+            f"将来フルとの差分が {count} 行残っています。投入漏れか、"
+            "計画に無い変更が実機に入っています。残った差分を確かめてください。"
+        )
+    db.commit()
+    db.refresh(plan)
+    return PlanVerifyRead(
+        plan_id=plan.id,
+        snapshot_id=snapshot.id,
+        converged=converged,
+        remaining=_diff_read(remaining),
+        status=str(plan.status),
+        message=message,
+    )
 
 
 @router.post("/config-plans/preview", response_model=DiffRead)
