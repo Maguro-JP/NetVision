@@ -140,7 +140,25 @@ _RULES: tuple[_Rule, ...] = (
     _rule(MANAGEMENT, "SNMP", r"^\s*snmp-agent\s"),
     _rule(MANAGEMENT, "Syslog", r"^\s*logging\s+(?:host\s+)?(\d+\.\d+\.\d+\.\d+)", "送り先"),
     _rule(MANAGEMENT, "Syslog", r"^\s*info-center\s+loghost\s+(\S+)", "送り先"),
+    # ASA は口の名前が間に入る（logging host inside 10.0.0.1）
+    _rule(MANAGEMENT, "Syslog", r"^\s*logging\s+host\s+\S+\s+(\d+\.\d+\.\d+\.\d+)", "送り先"),
+    # ヤマハ / Junos / アライドテレシス / FortiGate / PAN-OS
+    _rule(MANAGEMENT, "Syslog", r"^\s*syslog\s+host\s+(\S+)", "送り先"),
+    _rule(MANAGEMENT, "Syslog", r"^\s*set\s+system\s+syslog\s+host\s+(\S+)", "送り先"),
+    _rule(MANAGEMENT, "Syslog", r"^\s*log\s+host\s+(\S+)", "送り先"),
+    _rule(MANAGEMENT, "Syslog", r"^\s*config\s+log\s+syslogd\s+setting\s*$"),
+    _rule(MANAGEMENT, "Syslog", r"^\s*set\s+shared\s+log-settings\s+syslog\s+(\S+)", "送り先"),
     _rule(MANAGEMENT, "NTP", r"^\s*ntp(?:-service)?\s+(?:server|unicast-server)\s+(\S+)", "参照先"),
+    # ヤマハは ntpdate（schedule で定期実行する書き方も含む）
+    _rule(MANAGEMENT, "NTP", r"^\s*(?:schedule\s+at\s+.*?\s)?ntpdate\s+(\S+)", "参照先"),
+    _rule(MANAGEMENT, "NTP", r"^\s*set\s+system\s+ntp\s+server\s+(\S+)", "参照先"),
+    _rule(MANAGEMENT, "NTP", r"^\s*set\s+ntpsync\s+enable\s*$"),
+    _rule(
+        MANAGEMENT,
+        "NTP",
+        r"^\s*set\s+deviceconfig\s+system\s+ntp-servers\s+\S+\s+ntp-server-address\s+(\S+)",
+        "参照先",
+    ),
     _rule(MANAGEMENT, "AAA", r"^\s*aaa\s+(?:new-model|authentication|authorization)\b"),
     _rule(MANAGEMENT, "AAA", r"^\s*(?:radius|tacacs)-server\s"),
     _rule(MANAGEMENT, "SSH", r"^\s*transport\s+input\s+ssh\b"),

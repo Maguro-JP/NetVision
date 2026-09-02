@@ -222,3 +222,22 @@ def test_the_newer_vendors_are_picked_up_too():
     # ヤマハと NEC IX の拠点間 VPN
     assert "IPsec" in names("rtx-osaka-01.txt")
     assert "IPsec" in names("ix-rt-01.txt")
+
+
+def test_syslog_and_ntp_are_found_in_every_vendor_s_wording():
+    """送り先が入っているのに「入っていません」と言うのが、いちばん信用を落とす。"""
+    from app.services.configparse import features
+
+    samples = {
+        "yamaha": "syslog host 192.168.100.10\nschedule at 1 */* 06:00 * ntpdate ntp.nict.jp\n",
+        "junos": "set system syslog host 10.0.0.5 any any\nset system ntp server 10.0.0.6\n",
+        "asa": "logging host inside 10.0.0.5\nntp server 10.0.0.6 source inside\n",
+        "allied": "log host 10.0.0.5\nntp server 10.0.0.6\n",
+        "fortios": "config log syslogd setting\n    set status enable\nend\n"
+        "config system ntp\n    set ntpsync enable\nend\n",
+        "panos": "set shared log-settings syslog SRV server s1 server 10.0.0.5\n"
+        "set deviceconfig system ntp-servers primary-ntp-server ntp-server-address 10.0.0.6\n",
+    }
+    for vendor, text in samples.items():
+        names = {f.name for f in features.parse(text)}
+        assert {"Syslog", "NTP"} <= names, (vendor, names)
