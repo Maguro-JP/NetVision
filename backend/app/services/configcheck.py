@@ -122,7 +122,11 @@ _HYGIENE = (
         "作業の途中で放置された端末が、そのまま入口になります。",
     ),
     (
-        re.compile(r"^\s*username\s+\S+\s+password\s+", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:username\s+\S+\s+password\s+"  # Cisco IOS（secret なら言わない）
+            r"|(?:set\s+authentication\s+)?password\s+simple\s)",  # Comware（cipher なら言わない）
+            re.IGNORECASE,
+        ),
         MEDIUM,
         "利用者のパスワードが、元に戻せる形で入っています",
         "username ... secret を使うと、元に戻せない形で保存されます。",
