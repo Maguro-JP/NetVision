@@ -313,6 +313,7 @@ def _acls(parsed: ParsedConfig) -> list[Finding]:
             )
         findings.extend(_shadowed(acl, rules))
         findings.extend(_lets_everything_through(acl, rules))
+        findings.extend(_open_from_outside(parsed, acl, rules))
         findings.extend(_drops_without_a_trace(acl, rules))
     return findings
 
@@ -394,6 +395,62 @@ def _lets_everything_through(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> lis
             [wide.raw],
         )
     ]
+
+
+#: 外向きと読めるゾーン・口の名前。現場でこの名前を使うときは、外に面している
+_OUTSIDE_WORDS = ("outside", "wan", "internet", "untrust", "外部")
+
+
+def _outside_names(parsed: ParsedConfig) -> set[str]:
+    """外に面した口の名前。名前で分かるものと、役割（FortiGate の role wan）で分かるもの。"""
+    names: set[str] = set()
+    for interface in parsed.interfaces:
+        description = (interface.description or "").lower()
+        if "role wan" in description:
+            names.add(interface.name.lower())
+        for word in _OUTSIDE_WORDS:
+            if word in description.replace("role ", "") and "zone " in description:
+                names.add(interface.name.lower())
+    return names
+
+
+def _open_from_outside(
+    parsed: ParsedConfig, acl: ParsedAcl, rules: list[ParsedAclEntry]
+) -> list[Finding]:
+    """外に面したゾーン・口から、中へ何でも通している行。
+
+    ゾーンで許否が決まる機種（PAN-OS / SRX / FortiGate）向け。出る側を広く
+    開けるのは普通の書き方だが、入る側を広く開けるのは、外から中の全部に
+    届くということになる。1行で済むので、試験のつもりで入れたまま残る。
+    """
+    if acl.kind != "policy":
+        return []
+    outside_ports = _outside_names(parsed)
+    out: list[Finding] = []
+    for entry in rules:
+        if entry.action != "permit":
+            continue
+        zone, address = aclcheck.split_zone(entry.source)
+        if zone is None or (address or "any") != "any":
+            continue
+        lowered = zone.lower()
+        outward = lowered in outside_ports or any(word in lowered for word in _OUTSIDE_WORDS)
+        if not outward:
+            continue
+        _, target = aclcheck.split_zone(entry.destination)
+        if (target or "any") != "any" or entry.destination_port is not None:
+            continue
+        out.append(
+            _note(
+                HIGH,
+                f"{acl.name} の {entry.raw} は、外から中へすべて通しています",
+                f"{zone} から来た通信を、宛先もサービスも限定せずに通しています。"
+                "外に面した側を広く開けると、中の全部に外から届きます。"
+                "宛先かサービスを絞ってください。",
+                [entry.raw],
+            )
+        )
+    return out
 
 
 def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:

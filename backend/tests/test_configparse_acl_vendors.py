@@ -295,3 +295,56 @@ def test_several_addresses_on_one_srx_policy_are_not_resolved_as_one():
     web = next(e for e in acl.entries if e.raw == "policy allow-web")
     assert web.destination == "trust:WEB-SERVER ほか1件"
     assert web.destination_value is None
+
+
+def test_a_row_that_lets_everything_in_from_the_outside_is_the_heaviest():
+    """外に面した側を広く開けると、中の全部に外から届く。"""
+    forti = """
+config system global
+    set hostname "fw-01"
+end
+config system interface
+    edit "port1"
+        set role wan
+    next
+    edit "port2"
+        set role lan
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+    edit 2
+        set srcintf "port2"
+        set dstintf "port1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+end
+"""
+    found = [t for t in _titles(forti) if "外から中へすべて通しています" in t]
+    assert len(found) == 1 and "policy 1" in found[0]
+
+    panos = (
+        "set deviceconfig system hostname fw\n"
+        "set rulebase security rules wide-in from untrust\n"
+        "set rulebase security rules wide-in to trust\n"
+        "set rulebase security rules wide-in source any\n"
+        "set rulebase security rules wide-in destination any\n"
+        "set rulebase security rules wide-in service any\n"
+        "set rulebase security rules wide-in application any\n"
+        "set rulebase security rules wide-in action allow\n"
+    )
+    assert [t for t in _titles(panos) if "外から中へすべて通しています" in t]
+
+
+def _titles(text: str) -> list[str]:
+    return [f.title for f in policyreview.review(configparse.parse(text), text)]
