@@ -322,6 +322,8 @@ export interface TopologyVrf {
   interface_count: number;
   /** 同じ VRF 名なのに機器ごとに RD が違う */
   rd_mismatch: boolean;
+  /** import しているのに、どの機器も export していない route-target */
+  orphan_imports: string[];
 }
 
 export interface VlanCatalogEntry {

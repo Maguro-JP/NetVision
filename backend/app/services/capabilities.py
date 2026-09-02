@@ -127,7 +127,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=PARTIAL,
         generate=NONE,
-        note="名前と RD まで。経路の相互流入（route-target）は見ていません。",
+        note="名前と RD、経路の相互流入（route-target）まで読みます。同じ VRF 名なのに"
+        "機器ごとに RD が違う、import しているのにどの機器も export していない"
+        "route-target、を機器をまたいで指摘します（Cisco / Arista / Junos / Comware）。",
     ),
     Capability(
         area="冗長",

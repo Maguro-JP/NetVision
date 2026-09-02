@@ -2964,6 +2964,9 @@ class VrfView:
     device_names: list[str] = field(default_factory=list)
     interface_count: int = 0
     rd_mismatch: bool = False  # 機器ごとに RD が食い違っている
+    #: import しているのに、どの機器も export していない route-target。
+    #: 設定は入っているのに経路が流れてこない形
+    orphan_imports: list[str] = field(default_factory=list)
 
 
 def vrf_summary(db: Session) -> list[VrfView]:
@@ -2990,7 +2993,40 @@ def vrf_summary(db: Session) -> list[VrfView]:
         if view is not None:
             view.interface_count += 1
 
+    _mark_orphan_imports(db, views)
     return sorted(views.values(), key=lambda v: v.name)
+
+
+def _mark_orphan_imports(db: Session, views: dict[str, VrfView]) -> None:
+    """import しているのに誰も export していない route-target に印を付ける。
+
+    1台の Config の中では正しいので、機器をまたがないと見つからない。
+    route-target を書いている Config だけを軽い読み手で見る（全部は読み解かない）。
+    """
+    from app.models.topology import ConfigSnapshot
+    from app.services.configparse import routetarget
+
+    device_ids = {device_id for view in views.values() for device_id in view.device_ids}
+    if not device_ids:
+        return
+    exported: set[str] = set()
+    imported: dict[str, set[str]] = {}
+    for device_id in device_ids:
+        snapshot = db.scalars(
+            select(ConfigSnapshot)
+            .where(ConfigSnapshot.device_id == device_id)
+            .order_by(ConfigSnapshot.id.desc())
+            .limit(1)
+        ).first()
+        if snapshot is None or not routetarget.has_any(snapshot.content):
+            continue
+        for name, targets in routetarget.parse(snapshot.content).items():
+            exported |= targets.exports
+            imported.setdefault(name, set()).update(targets.imports)
+    for name, targets in imported.items():
+        view = views.get(name)
+        if view is not None:
+            view.orphan_imports = sorted(targets - exported)
 
 
 def suggested_canvas_size(node_count: int) -> tuple[int, int]:
