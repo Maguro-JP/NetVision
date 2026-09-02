@@ -13,8 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services import configparse
 from app.services.addition import latest_config
+from app.services.configparse import hapair
 from app.services.configparse.hapair import KIND_LABELS, ParsedHaPair
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
 
@@ -41,7 +41,9 @@ def review(db: Session) -> HaReport:
         snapshot = latest_config(db, device)
         if snapshot is None:
             continue
-        pair = configparse.parse(snapshot.content).ha_pair
+        # 全部を読み解く必要は無い。組の設定だけを見る読み手を直に使う
+        # （台帳が大きいと、1回の表示で全機器の Config を読み直すことになる）
+        pair = hapair.parse(snapshot.content)
         if pair is not None:
             members.append(Member(hostname=device.hostname, pair=pair))
 
