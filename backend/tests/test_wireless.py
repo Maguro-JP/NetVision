@@ -263,3 +263,24 @@ def test_aps_from_the_controller_land_in_the_ledger(client):
     assert devices["AP-3F-01"]["model"] == "C9120AXI-Q"
     assert devices["AP-3F-01"]["mgmt_ip"] == "10.0.30.11"
     assert devices["AP-3F-02"]["model"] == "手で入れた"
+
+
+ARUBA_DB = """
+show ap database
+
+AP Database
+-----------
+Name      Group    AP Type  IP Address  Status      Flags  Switch IP   Standby IP
+----      -----    -------  ----------  ------      -----  ---------   ----------
+AP-2F-01  default  335      10.0.20.11  Up 12d:3h          10.0.0.5    0.0.0.0
+AP-2F-02  guest    515      10.0.20.12  Down               10.0.0.5    0.0.0.0
+"""
+
+
+def test_the_ap_list_of_an_aruba_controller_is_read():
+    parsed = configparse.parse(ARUBA_DB)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-2F-01"].model == "335"
+    assert aps["AP-2F-01"].profile == "default"
+    assert aps["AP-2F-01"].ip_address == "10.0.20.11"
+    assert aps["AP-2F-02"].ip_address == "10.0.20.12"

@@ -51,6 +51,7 @@ _HINTS = (
     "ssid-profile",
     "config wlan create",
     "wireless-controller wtp",
+    "ap database",
 )
 
 
@@ -514,6 +515,8 @@ _MAC = re.compile(
 )
 _IPV4 = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
 _FORTI_WTP = re.compile(r"^\s*config\s+wireless-controller\s+wtp\s*$", re.IGNORECASE)
+#: Aruba コントローラ `show ap database`（Name / Group / AP Type / IP Address / Status …）
+_ARUBA_DB_HEADER = re.compile(r"^\s*Name\s+Group\s+AP Type\s+IP Address\s+Status\b", re.IGNORECASE)
 
 
 def _ap_inventory(text: str, found: ParsedWireless) -> None:
@@ -528,6 +531,8 @@ def _ap_inventory(text: str, found: ParsedWireless) -> None:
             _read_ap_summary(lines[index + 1 :], found)
         elif _FORTI_WTP.match(line):
             _read_forti_wtp(lines[index + 1 :], found)
+        elif _ARUBA_DB_HEADER.match(line):
+            _read_aruba_ap_database(lines[index + 1 :], found)
 
 
 def _read_ap_summary(rows: list[str], found: ParsedWireless) -> None:
@@ -559,6 +564,22 @@ def _read_ap_summary(rows: list[str], found: ParsedWireless) -> None:
             words = where[:-1] if len(where) >= 2 else []
             if words and ap.location is None:
                 ap.location = " ".join(words)
+
+
+def _read_aruba_ap_database(rows: list[str], found: ParsedWireless) -> None:
+    """Aruba コントローラの AP 一覧。名前・グループ・機種・アドレスの順で始まる。"""
+    for row in rows:
+        if row.strip().startswith("-"):
+            continue
+        columns = row.split()
+        if len(columns) < 4:
+            break
+        if not _IPV4.match(columns[3]):
+            break
+        ap = _ap(found, columns[0])
+        ap.profile = ap.profile or columns[1]
+        ap.model = ap.model or columns[2]
+        ap.ip_address = ap.ip_address or columns[3]
 
 
 def _read_forti_wtp(rows: list[str], found: ParsedWireless) -> None:

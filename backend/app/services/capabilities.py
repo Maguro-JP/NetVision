@@ -296,6 +296,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         "誰でも入れる SSID、WEP / WPA1 / TKIP、素のまま書かれた合言葉、"
         "問い合わせ先の無い 802.1X、来客が業務と同じ VLAN を指摘します。"
         "AP 側は、管理の入口に telnet / http が開いているものを指摘します。"
+        "コントローラの AP 一覧（Cisco の show ap summary、Aruba の show ap database、"
+        "FortiGate の wireless-controller wtp）から、台帳に無い AP を登録します。"
         "読めるのは Cisco IOS-XE / AireOS・Aruba Instant・FortiGate の書き方です。"
         "電波の設計（置き場所・出力・チャネル）は見ていません。",
     ),
