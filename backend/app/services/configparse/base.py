@@ -650,6 +650,12 @@ class ParsedWirelessAp:
     profile: str | None = None
     #: 管理の入口（telnet / http）が開いているか
     insecure_access: list[str] = field(default_factory=list)
+    #: 一覧（show ap summary / wtp）から分かるもの。台帳に載せる材料
+    model: str | None = None
+    mac: str | None = None
+    ip_address: str | None = None
+    serial: str | None = None
+    location: str | None = None
 
 
 @dataclass

@@ -50,6 +50,7 @@ _HINTS = (
     "wireless-controller vap",
     "ssid-profile",
     "config wlan create",
+    "wireless-controller wtp",
 )
 
 
@@ -505,8 +506,102 @@ def _ap_side(text: str, found: ParsedWireless) -> None:
                 ap.insecure_access.append(item)
 
 
+#: Cisco `show ap summary`。IOS-XE / AireOS とも、AP Name / Slots / AP Model /
+#: Ethernet MAC … の並びで始まる
+_AP_SUMMARY_HEADER = re.compile(r"^\s*AP Name\s+Slots\s+AP Model\s+Ethernet MAC\b", re.IGNORECASE)
+_MAC = re.compile(
+    r"^(?:[0-9a-f]{4}\.){2}[0-9a-f]{4}$|^(?:[0-9a-f]{2}:){5}[0-9a-f]{2}$", re.IGNORECASE
+)
+_IPV4 = re.compile(r"^\d+\.\d+\.\d+\.\d+$")
+_FORTI_WTP = re.compile(r"^\s*config\s+wireless-controller\s+wtp\s*$", re.IGNORECASE)
+
+
+def _ap_inventory(text: str, found: ParsedWireless) -> None:
+    """AP の一覧。コントローラの show / config から、台帳に載せる材料を拾う。
+
+    AP は台数が多く、1台ずつ登録すると抜ける。コントローラが持っている一覧を
+    そのまま台帳の下敷きにする。読めるのは並びが決まっているものだけ。
+    """
+    lines = text.splitlines()
+    for index, line in enumerate(lines):
+        if _AP_SUMMARY_HEADER.match(line):
+            _read_ap_summary(lines[index + 1 :], found)
+        elif _FORTI_WTP.match(line):
+            _read_forti_wtp(lines[index + 1 :], found)
+
+
+def _read_ap_summary(rows: list[str], found: ParsedWireless) -> None:
+    """列の幅は機種ごとに違うので、位置ではなく「MAC の直前が型番、直後が場所」で読む。"""
+    for row in rows:
+        if row.strip().startswith("-"):
+            continue  # 見出しの下の罫線
+        columns = row.split()
+        if len(columns) < 4:
+            break
+        macs = [i for i, token in enumerate(columns) if _MAC.match(token)]
+        if not macs:
+            break
+        first = macs[0]
+        if first < 3 or not columns[1].isdigit():
+            break
+        ap = _ap(found, columns[0])
+        ap.model = ap.model or " ".join(columns[2:first])
+        ap.mac = ap.mac or columns[first].lower()
+        # Ethernet MAC の後ろに Radio MAC が続く機種がある。その次からが場所
+        rest = columns[first + 1 :]
+        if rest and _MAC.match(rest[0]):
+            rest = rest[1:]
+        addresses = [token for token in rest if _IPV4.match(token)]
+        if addresses:
+            ap.ip_address = ap.ip_address or addresses[0]
+            # 場所と国の間に区切りが無い。国はアドレスの直前の1語なので、それを外す
+            where = rest[: rest.index(addresses[0])]
+            words = where[:-1] if len(where) >= 2 else []
+            if words and ap.location is None:
+                ap.location = " ".join(words)
+
+
+def _read_forti_wtp(rows: list[str], found: ParsedWireless) -> None:
+    """FortiGate は `config wireless-controller wtp` の下に AP がシリアルで並ぶ。"""
+    current: ParsedWirelessAp | None = None
+    serial: str | None = None
+    for row in rows:
+        body = row.strip()
+        if body.lower() == "end":
+            break
+        edit = re.match(r'^edit\s+"?([^"\s]+)"?', body, re.IGNORECASE)
+        if edit:
+            serial = edit.group(1)
+            current = None
+            continue
+        if body.lower() == "next":
+            if current is None and serial:
+                current = _ap(found, serial)
+                current.serial = serial
+            current, serial = None, None
+            continue
+        setting = re.match(r'^set\s+(\S+)\s+"?([^"\n]+?)"?\s*$', body, re.IGNORECASE)
+        if not setting or serial is None:
+            continue
+        key, value = setting.group(1).lower(), setting.group(2)
+        if key == "name":
+            current = _ap(found, value)
+            current.serial = serial
+        elif key == "wtp-profile":
+            if current is None:
+                current = _ap(found, serial)
+                current.serial = serial
+            current.profile = current.profile or value
+        elif key == "location":
+            if current is None:
+                current = _ap(found, serial)
+                current.serial = serial
+            current.location = value
+
+
 def _common(text: str, found: ParsedWireless) -> None:
     _ap_side(text, found)
+    _ap_inventory(text, found)
     for raw in text.splitlines():
         body = raw.strip()
         country = _COUNTRY.match(body)
@@ -515,7 +610,8 @@ def _common(text: str, found: ParsedWireless) -> None:
         lowered = body.lower()
         if "rogue" in lowered and ("detection" in lowered or "policy" in lowered):
             found.rogue_detection = True
-        name = re.match(r"^ap\s+name\s+(\S+)\s+", body, re.IGNORECASE)
+        # config の `ap name X …` だけ。show の見出し（AP Name  Slots …）は大文字なので当てない
+        name = re.match(r"^ap name (\S+) ", body)
         if name:
             _ap(found, name.group(1))
 

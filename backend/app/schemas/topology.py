@@ -100,6 +100,8 @@ class IngestResultRead(BaseModel):
     neighbor_count: int
     vlan_count: int
     links_created: int
+    #: コントローラの一覧から台帳に足した AP の数
+    aps_registered: int = 0
     diffs: list[FieldDiffRead]
     applied_fields: list[str]
     unresolved_neighbors: list[UnresolvedNeighborRead]

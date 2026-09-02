@@ -52,6 +52,7 @@ def _to_read(result: service.IngestResult) -> IngestResultRead:
         neighbor_count=result.neighbor_count,
         vlan_count=result.vlan_count,
         links_created=result.links_created,
+        aps_registered=result.aps_registered,
         diffs=[
             {
                 "field": d.field,

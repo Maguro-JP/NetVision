@@ -193,6 +193,8 @@ export interface IngestResult {
   neighbor_count: number;
   vlan_count: number;
   links_created: number;
+  /** コントローラの一覧から台帳に足した AP の数 */
+  aps_registered: number;
   diffs: FieldDiff[];
   applied_fields: string[];
   unresolved_neighbors: UnresolvedNeighbor[];
