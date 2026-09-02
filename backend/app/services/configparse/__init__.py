@@ -14,7 +14,9 @@ from app.services.configparse import (
     cisco,
     features,
     fortinet,
+    hapair,
     juniper,
+    linkstate,
     nec,
     panos,
     wireless,
@@ -50,8 +52,10 @@ _DETECTORS = (
     panos.detect,
     asa.detect,
     arista.detect,
-    aruba.detect,
+    # アライドテレシスの目印（port1.0.1 / vlan database）は Aruba CX より強い。
+    # vrrp の書き方が似ているので、先に見ないと取り違える
     allied.detect,
+    aruba.detect,
     nec.detect,
     cisco.detect,
 )
@@ -131,6 +135,9 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     parsed.wireless = wireless.parse(text)
+    parsed.ha_pair = hapair.parse(text)
+    # 線が実際に上がっているか。show の表からだけ分かる
+    linkstate.parse(text, parsed)
     return parsed
 
 

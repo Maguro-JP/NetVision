@@ -15,7 +15,7 @@ from datetime import datetime
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.models import Device, DeviceTunnel, DeviceVlan, DeviceVrf
+from app.models import Device, DeviceTunnel, DeviceType, DeviceVlan, DeviceVrf
 from app.models.change_log import ChangeSource
 from app.models.topology import ConfigSnapshot, Interface, Link, LinkOrigin
 from app.services import configparse
@@ -80,6 +80,8 @@ class IngestResult:
     applied_fields: list[str] = field(default_factory=list)
     unresolved_neighbors: list[UnresolvedNeighbor] = field(default_factory=list)
     message: str | None = None
+    #: コントローラの一覧から台帳に足した AP の数
+    aps_registered: int = 0
 
 
 def _digest(text: str) -> str:
@@ -155,6 +157,41 @@ def _create_from_config(db: Session, parsed: ParsedConfig) -> Device | None:
     db.add(device)
     db.flush()
     return device
+
+
+def _register_aps(db: Session, controller: Device, parsed: ParsedConfig) -> int:
+    """コントローラの一覧にある AP を、台帳に無ければ足す。
+
+    AP は台数が多く、1台ずつ登録すると抜ける。名前か MAC / シリアルで既に
+    載っているものは触らない（人が入れた値を上書きしない）。拠点は
+    コントローラと同じにする。AP はコントローラの配下にあるのが普通で、
+    違うなら人が直す方が早い。
+    """
+    wireless = parsed.wireless
+    if wireless is None or not wireless.aps:
+        return 0
+    count = 0
+    for ap in wireless.aps:
+        # 一覧から来たものだけ。プロファイル名だけの器（profile …）は機器ではない
+        if not (ap.model or ap.mac or ap.serial or ap.ip_address):
+            continue
+        if _find_device(db, ap.name, ap.serial) is not None:
+            continue
+        db.add(
+            Device(
+                hostname=ap.name,
+                vendor=controller.vendor,
+                model=ap.model or "",
+                serial_number=ap.serial,
+                device_type=DeviceType.WIRELESS_AP,
+                site_id=controller.site_id,
+                mgmt_ip=ap.ip_address,
+                rack=ap.location,
+            )
+        )
+        db.flush()
+        count += 1
+    return count
 
 
 def compute_diffs(device: Device | None, parsed: ParsedConfig) -> list[FieldDiff]:
@@ -298,6 +335,8 @@ def ingest(
 
             created, unresolved = _sync_links(db, device, parsed)
             result.links_created = created
+            if create_missing:
+                result.aps_registered = _register_aps(db, device, parsed)
             result.unresolved_neighbors = unresolved
 
         if result.unchanged and not result.message:
@@ -488,6 +527,7 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.ospf_network = item.ospf_network
         interface.ospf_auth = item.ospf_auth
         interface.enabled = item.enabled
+        interface.link_state = item.link_state
 
     # Config から消えたポートは実機に無いということなので削除する
     for key, interface in existing.items():

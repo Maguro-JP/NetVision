@@ -122,3 +122,22 @@ def test_simple_export_keeps_the_date(client):
     setup_pair(client)
     res = client.get(f"{API}/topology/export.svg", params={"style": "simple"})
     assert "時点" in res.text
+
+
+def test_a_line_that_is_down_on_the_device_is_flagged_on_the_edge(client):
+    """図には線があるのに、実機では上がっていない。図だけの線をそのまま信じない。"""
+    setup_pair(client)
+    edge = client.get(f"{API}/topology").json()["edges"][0]
+    assert edge["link_down"] is False  # show の表が無ければ何も言わない
+
+    status = (
+        "\nshow interfaces status\n"
+        "Port      Name               Status       Vlan       Duplex  Speed Type\n"
+        "Gi1/0/1   to-core            notconnect   trunk      auto    auto 10/100/1000BaseTX\n"
+    )
+    client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("acc-sw-01.txt", (ACC + status).encode(), "text/plain"))],
+    )
+    edge = client.get(f"{API}/topology").json()["edges"][0]
+    assert edge["link_down"] is True

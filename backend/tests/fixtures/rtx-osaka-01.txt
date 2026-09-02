@@ -7,6 +7,7 @@ login password *
 administrator password *
 ip route default gateway pp 1
 ip route 10.20.0.0/16 gateway 192.168.100.254
+console prompt rtx-osaka-01
 ip lan1 address 192.168.100.1/24
 ip lan1 secure filter in 200030 200031
 pp select 1

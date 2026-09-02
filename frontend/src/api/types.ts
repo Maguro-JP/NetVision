@@ -193,6 +193,8 @@ export interface IngestResult {
   neighbor_count: number;
   vlan_count: number;
   links_created: number;
+  /** コントローラの一覧から台帳に足した AP の数 */
+  aps_registered: number;
   diffs: FieldDiff[];
   applied_fields: string[];
   unresolved_neighbors: UnresolvedNeighbor[];
@@ -237,6 +239,8 @@ export interface NetworkInterface {
   trunk_vlans: string | null;
   vrf: string | null;
   enabled: boolean;
+  /** 実機の線の状態（show の出力から）。Config だけの取り込みでは null */
+  link_state: string | null;
 }
 
 export type LinkOrigin = "discovered" | "manual" | "inferred";
@@ -350,6 +354,8 @@ export interface TopologyEdge {
   vlan_mismatch: number[];
   native_vlan: number | null;
   native_mismatch: boolean;
+  /** 図には線があるのに、実機では片側でも上がっていない（show の表を読めたときだけ） */
+  link_down: boolean;
   vrf: string | null;
   /** 人が指定した引き出し位置。null なら位置関係から自動で決める */
   source_side: LinkSide | null;
@@ -1466,6 +1472,31 @@ export interface VlanReport {
   vlans_seen: number;
   devices_with_vlans: number;
   findings: VlanFinding[];
+  notes: string[];
+}
+
+export interface StpFinding {
+  level: "high" | "medium" | "low";
+  title: string;
+  why: string;
+  evidence: string[];
+}
+
+/** 木の根（STP のルート）が、どこに立つか。1台では言えないので機器をまたいで見る。 */
+export interface StpReport {
+  devices_seen: number;
+  /** VLAN 番号 → 根になる機器。全体に効く書き方しか無いときは "all"。 */
+  roots: Record<string, string>;
+  findings: StpFinding[];
+  notes: string[];
+}
+
+/** 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）が組として成り立っているか。 */
+export interface HaReport {
+  devices_seen: number;
+  /** 「種類 / 組の名前」 → 機器名 */
+  groups: Record<string, string[]>;
+  findings: StpFinding[];
   notes: string[];
 }
 

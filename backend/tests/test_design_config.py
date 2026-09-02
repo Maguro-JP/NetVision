@@ -100,7 +100,7 @@ def test_unknown_vendor_gets_the_design_not_invented_syntax(client):
 
     もっともらしい嘘の Config は、空欄より有害。
     """
-    device = make_device(client, "sw-01", "Arista", "DCS-7050")
+    device = make_device(client, "sw-01", "Extreme", "X465")
     body = design(client, device)["body"]
 
     assert "未対応" in body
@@ -208,3 +208,50 @@ def test_fortigate_gets_its_own_syntax_and_says_what_it_cannot_decide(client):
     assert "config system global" in body
     assert 'set hostname "fw-01"' in body
     assert "何も通りません" in body
+
+
+def _wire(client, core: int, access: int, a: str, b: str) -> None:
+    client.post(
+        f"{API}/topology/links",
+        json={"a_device_id": core, "a_interface": a, "b_device_id": access, "b_interface": b},
+    )
+    client.put(f"{API}/topology/vlans/catalog/10", json={"name": "USERS"})
+    client.put(f"{API}/topology/vlans/catalog/20", json={"name": "SERVERS"})
+
+
+def test_the_newer_vendors_get_their_own_syntax_and_it_reads_back(client):
+    """書き出した Config を、同じ道具の読み手で読み戻せること。
+
+    書式が違うと投入できない。読み戻せれば、少なくとも自分の読み手と
+    同じ理解で書けている。
+    """
+    from app.services import configparse
+    from app.services.configparse import Vendor
+
+    arista = make_device(client, "sw-arista-01", "Arista", "DCS-7050SX3", mgmt_ip="10.0.10.5")
+    aruba = make_device(client, "sw-aruba-01", "Aruba", "6300M", mgmt_ip="10.0.10.6")
+    allied = make_device(client, "at-x530-01", "Allied Telesis", "AT-x530-28GTXm")
+    peer = make_device(client, "core-sw-01", "Cisco", "C9500-40X")
+    _wire(client, arista, peer, "Ethernet1", "GigabitEthernet1/0/1")
+    _wire(client, aruba, peer, "1/1/1", "GigabitEthernet1/0/2")
+    _wire(client, allied, peer, "port1.0.1", "GigabitEthernet1/0/3")
+
+    body = design(client, arista)["body"]
+    parsed = configparse.parse(body)
+    assert parsed.vendor is Vendor.ARISTA
+    assert {i.name: i.trunk_vlans for i in parsed.interfaces}["Ethernet1"] == [10, 20]
+    assert "encapsulation dot1q" not in body  # EOS には無い
+
+    body = design(client, aruba)["body"]
+    parsed = configparse.parse(body)
+    assert parsed.vendor is Vendor.ARUBA_CX
+    port = {i.name: i for i in parsed.interfaces}["1/1/1"]
+    assert port.trunk_vlans == [10, 20]
+    assert port.enabled is True  # no shutdown を書いている
+    assert parsed.vlans[10] == "USERS"
+
+    body = design(client, allied)["body"]
+    parsed = configparse.parse(body)
+    assert parsed.vendor is Vendor.ALLIED
+    assert parsed.vlans[20] == "SERVERS"
+    assert {i.name: i.trunk_vlans for i in parsed.interfaces}["port1.0.1"] == [10, 20]

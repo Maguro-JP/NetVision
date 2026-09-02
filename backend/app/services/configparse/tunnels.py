@@ -18,7 +18,7 @@ from app.services.configparse.base import ParsedConfig, ParsedTunnel
 # 種別が名前から分かるもの。書いていなければ空のままにする
 _KIND_FROM_MODE = re.compile(r"^\s*tunnel\s+mode\s+(.+?)\s*$", re.IGNORECASE)
 
-_BLOCK_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_BLOCK_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _TUNNEL_NAME = re.compile(r"^(?:tunnel|st0|gr-|ipip|vti)", re.IGNORECASE)
 
 

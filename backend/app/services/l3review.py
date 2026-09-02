@@ -245,6 +245,14 @@ def _controls(parsed: ParsedConfig) -> list[dict]:
                 _wlan_detail(wlan),
                 [f"VLAN {wlan.vlan}"] if wlan.vlan is not None else [],
             )
+        # コントローラの一覧にある AP。台帳に載せる材料が1つでもあるものだけ
+        for ap in parsed.wireless.aps:
+            if not (ap.model or ap.ip_address or ap.serial or ap.mac):
+                continue
+            words = [w for w in (ap.model, ap.ip_address, ap.location, ap.serial) if w]
+            if ap.insecure_access:
+                words.append("入口: " + " / ".join(ap.insecure_access))
+            add("AP", ap.name, " / ".join(words), [ap.profile] if ap.profile else [])
 
     return out
 

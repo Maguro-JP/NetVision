@@ -44,16 +44,16 @@ running-config
 | ベンダー | 対応 | 型番が取れる出力 |
 |---|---|---|
 | Cisco IOS / IOS-XE / NX-OS | ✅ | `show version`（Catalyst 2960 〜 9500 で確認済み） |
-| Juniper Junos | ✅ | `show version` / `show chassis hardware` |
+| Juniper Junos / SRX | ✅ | `show version` / `show chassis hardware`（SRX は `security policies` も読みます） |
 | Fortinet FortiOS | ✅ | `get system status` |
 | NEC IX シリーズ | ✅ | `show version`（`IX Series IX2215 ...` の行） |
 | NEC QX シリーズ | ✅ | `display version`（Comware ベース） |
 | ヤマハ RTX / NVR / FWX | ✅ | `show config` の1行目（`# RTX830 Rev.15.02.28 ...`） |
 | Cisco ASA / FTD | ✅ | `ASA Version` の行、`show version` の Hardware / Serial Number |
-| Palo Alto PAN-OS | ✅ | `show system info` の model / sw-version / serial |
-| Arista EOS | ✅ | 見出しの `! device: ... (DCS-..., EOS-4.x)`、`show version` |
-| アライドテレシス AlliedWare Plus | ✅ | 見出しの `AlliedWare Plus (tm) version ...`、`Base Model` / `Serial number` |
-| Aruba CX（AOS-CX） | ✅ | 見出しの `!Version ArubaOS-CX ...` と `!Model: ...` |
+| Palo Alto PAN-OS | ✅ | `show system info` の model / sw-version / serial（XML は `<config>` の中身から） |
+| Arista EOS | ✅ | 見出しの `! device: ... (DCS-..., EOS-4.x)`、`show version`、結線は `show lldp neighbors` |
+| アライドテレシス AlliedWare Plus | ✅ | 見出しの `AlliedWare Plus (tm) version ...`、`Base Model` / `Serial number`、結線は `show lldp neighbors` |
+| Aruba CX（AOS-CX） | ✅ | 見出しの `!Version ArubaOS-CX ...` と `!Model: ...`、結線は `show lldp neighbor-info` |
 
 文字コードは Shift_JIS でも UTF-8 でも構いません。
 

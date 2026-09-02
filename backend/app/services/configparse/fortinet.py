@@ -389,6 +389,11 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             current.vrf = line[len("set vdom ") :].strip().strip('"')
         elif line == "set status down":
             current.enabled = False
+        elif line.startswith("set role "):
+            # 外に面した口かどうか。ポリシーの「外から中へ」を見るときの手掛かり
+            role = line[len("set role ") :].strip()
+            note = f"role {role}"
+            current.description = f"{current.description} / {note}" if current.description else note
         elif line == "next":
             current = None
 

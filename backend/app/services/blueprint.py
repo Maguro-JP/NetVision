@@ -320,7 +320,7 @@ def _wire(
     """
     base = _base_network(plan, request)
     subnets = list(base.subnets(new_prefix=24))
-    ports = _PortAllocator()
+    ports = _PortAllocator(request.vendor)
 
     primary = [d for d in middle if not d.hostname.endswith("-02")]
     firewalls = [d for d in primary if d.device_type is DeviceType.FIREWALL]
@@ -495,14 +495,23 @@ class _PortAllocator:
     配る場所を1か所にまとめて、そこを起こさないようにする。
     """
 
-    #: 機器の種類ごとの、ポート名の作り方
-    def __init__(self) -> None:
+    #: 機器の種類ごとの、ポート名の作り方。書式（ベンダー）で名前の形が変わる
+    def __init__(self, vendor: str = "Cisco") -> None:
         self._used: dict[str, int] = {}
+        self._style = _style_of(vendor)
 
     def take(self, device: PlannedDevice) -> str:
         count = self._used.get(device.hostname, 0)
         self._used[device.hostname] = count + 1
-        if device.device_type is DeviceType.SWITCH:
+        switch = device.device_type is DeviceType.SWITCH
+        if self._style == "aruba":
+            # AOS-CX は `1/1/1` の形。上流側は後ろの番号から使う
+            return f"1/1/{24 - count}" if switch else f"1/1/{1 + count}"
+        if self._style == "arista":
+            return f"Ethernet{48 - count}" if switch else f"Ethernet{1 + count}"
+        if self._style == "allied":
+            return f"port1.0.{24 - count}" if switch else f"port1.0.{1 + count}"
+        if switch:
             return f"GigabitEthernet1/0/{24 - count}"
         return f"GigabitEthernet0/{count}"
 
@@ -590,11 +599,15 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
     そのまま貼って使うものに説明が混ざると、貼る前に消す手間が要るうえ、
     消し忘れがそのまま機器に入る。
     """
-    comware = "nec" in request.vendor.lower()
+    writer = {
+        "nec": _comware,
+        "aruba": _aruba_cx,
+        "arista": _arista,
+        "allied": _allied,
+    }.get(_style_of(request.vendor), _cisco)
     for device in plan.devices:
         ports = [p for p in plan.ports if p.hostname == device.hostname]
         addresses = [a for a in plan.addresses if a.hostname == device.hostname]
-        writer = _comware if comware else _cisco
         body, notes = writer(plan, device, ports, addresses)
         plan.configs[device.hostname] = body
         plan.notes[device.hostname] = notes
@@ -701,6 +714,171 @@ def _comware(
     lines.append("undo ip http enable")
     lines.append("undo ip https enable")
     lines.append("#")
+
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
+
+
+def _style_of(vendor: str) -> str:
+    lowered = vendor.lower()
+    for key in ("nec", "aruba", "arista", "allied"):
+        if key in lowered:
+            return key
+    if "アライド" in vendor:
+        return "allied"
+    return "cisco"
+
+
+def _arista(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """EOS。IOS 風だが、アドレスと経路は長さ付き。冗長は VRRP。"""
+    lines = [f"hostname {device.hostname}", "!"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"vlan {vlan_id}")
+        lines.append(f"   name {_ascii(name)}")
+        lines.append("!")
+
+    for port in ports:
+        lines.append(f"interface {port.interface}")
+        lines.append(f"   description to {port.peer}")
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                prefixlen = ipaddress.ip_network(f"0.0.0.0/{found.netmask}").prefixlen
+                lines.append("   no switchport")
+                lines.append(f"   ip address {found.address}/{prefixlen}")
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    lines.append(f"   vrrp {group} ipv4 {found.virtual_ip}")
+                    lines.append(f"   vrrp {group} priority-level {found.priority}")
+        elif port.vlan_id is not None and port.peer_routed:
+            lines.append("   switchport mode access")
+            lines.append(f"   switchport access vlan {port.vlan_id}")
+        elif port.vlan_id is not None:
+            lines.append("   switchport mode trunk")
+            lines.append(f"   switchport trunk allowed vlan {port.vlan_id}")
+        lines.append("   no shutdown")
+        lines.append("!")
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        lines.append(f"ip route {route.destination} {route.next_hop}")
+    if any(r.hostname == device.hostname for r in plan.routes):
+        lines.append("!")
+
+    lines.append("management ssh")
+    lines.append("!")
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
+
+
+def _allied(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """AlliedWare Plus。VLAN の名前は vlan database の下、アドレスは長さ付き。"""
+    lines = [f"hostname {device.hostname}", "!", "no service telnet", "service ssh", "!"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    if vlans:
+        lines.append("vlan database")
+        for vlan_id, name in sorted(vlans.items()):
+            lines.append(f" vlan {vlan_id} name {_ascii(name)}")
+        lines.append("!")
+
+    for port in ports:
+        lines.append(f"interface {port.interface}")
+        lines.append(f" description to {port.peer}")
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                prefixlen = ipaddress.ip_network(f"0.0.0.0/{found.netmask}").prefixlen
+                lines.append(f" ip address {found.address}/{prefixlen}")
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    lines.append(f" vrrp {group} address-family ipv4")
+                    lines.append(f"  virtual-ip {found.virtual_ip} backup")
+                    lines.append(f"  priority {found.priority}")
+        elif port.vlan_id is not None and port.peer_routed:
+            lines.append(" switchport")
+            lines.append(" switchport mode access")
+            lines.append(f" switchport access vlan {port.vlan_id}")
+        elif port.vlan_id is not None:
+            lines.append(" switchport")
+            lines.append(" switchport mode trunk")
+            lines.append(f" switchport trunk allowed vlan add {port.vlan_id}")
+        lines.append("!")
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        lines.append(f"ip route {route.destination} {route.next_hop}")
+    if any(r.hostname == device.hostname for r in plan.routes):
+        lines.append("!")
+
+    lines.append("line vty 0 4")
+    lines.append(" exec-timeout 10 0")
+    lines.append("!")
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
+
+
+def _aruba_cx(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """AOS-CX。ポートは既定で落ちているので no shutdown を書く。アドレスは長さ付き。"""
+    lines = [f"hostname {device.hostname}", "!"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"vlan {vlan_id}")
+        lines.append(f"    name {_ascii(name)}")
+    if vlans:
+        lines.append("!")
+
+    for port in ports:
+        lines.append(f"interface {port.interface}")
+        lines.append("    no shutdown")
+        lines.append(f"    description to {port.peer}")
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                lines.append("    routing")
+                prefixlen = ipaddress.ip_network(f"0.0.0.0/{found.netmask}").prefixlen
+                lines.append(f"    ip address {found.address}/{prefixlen}")
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    lines.append(f"    vrrp {group} address-family ipv4")
+                    lines.append(f"        address {found.virtual_ip} primary")
+                    lines.append(f"        priority {found.priority}")
+                    lines.append("        no shutdown")
+        elif port.vlan_id is not None and port.peer_routed:
+            lines.append("    no routing")
+            lines.append(f"    vlan access {port.vlan_id}")
+        elif port.vlan_id is not None:
+            lines.append("    no routing")
+            lines.append(f"    vlan trunk allowed {port.vlan_id}")
+        lines.append("!")
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        lines.append(f"ip route {route.destination} {route.next_hop}")
+    if any(r.hostname == device.hostname for r in plan.routes):
+        lines.append("!")
+
+    lines.append("ssh server vrf default")
+    lines.append("no https-server vrf default")
+    lines.append("!")
 
     notes.extend(_notes_for(plan, device, addresses))
     return "\n".join(lines) + "\n", notes

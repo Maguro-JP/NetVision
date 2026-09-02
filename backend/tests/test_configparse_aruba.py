@@ -32,6 +32,9 @@ def test_a_port_without_no_shutdown_is_down(parsed):
     assert ports["1/1/10"].enabled is True
     # `no shutdown` を書いていないので落ちている。IOS の目だと見落とす
     assert ports["1/1/11"].enabled is False
+    # VLAN の口は作った時点で上がる。物理ポートと同じ目で見ると
+    # 「アドレスが振ってあるのに止めてある」と誤って言うことになる
+    assert ports["Vlan10"].enabled is True
 
 
 def test_the_vlan_of_a_port_is_read(parsed):
@@ -101,3 +104,10 @@ def test_bgp_is_still_read_by_the_ios_side(parsed):
     assert parsed.bgp is not None
     assert parsed.bgp.local_as == "65001"
     assert [n.address for n in parsed.bgp.neighbors] == ["10.0.10.2"]
+
+
+def test_the_lldp_table_gives_the_lines_for_the_diagram(parsed):
+    """`show lldp neighbor-info` の表。PORT-DESC に空白が入っていても崩れない。"""
+    pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors]
+    assert ("1/1/1", "core-aruba-01", "1/1/24") in pairs
+    assert ("1/1/2", "core-sw-01", "GigabitEthernet1/0/1") in pairs

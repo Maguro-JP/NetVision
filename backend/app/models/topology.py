@@ -103,6 +103,8 @@ class Interface(Base):
     lag_group: Mapped[int | None] = mapped_column(Integer, default=None, index=True)
     lag_mode: Mapped[str | None] = mapped_column(String(20), default=None)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    #: 実機の線の状態（show の出力から）。Config だけでは分からないので None がありうる
+    link_state: Mapped[str | None] = mapped_column(String(20), default=None)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()

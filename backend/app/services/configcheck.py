@@ -46,21 +46,39 @@ class CheckResult:
 #: 機器に紐づかなくても言えること。どれも「入っていないと後で困る」もの
 _HYGIENE = (
     (
-        re.compile(r"^\s*ip http server\s*$", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:ip http server\s*$"  # Cisco IOS
+            r"|set system services web-management http\b"  # Junos（https は別）
+            r"|set allowaccess\b.*\bhttp\b(?!s))",  # FortiGate
+            re.IGNORECASE,
+        ),
         HIGH,
         "管理用の web が開いています",
         "暗号化されない口が開いたままです。使っていないなら閉じてください"
         "（no ip http server）。踏み台にされたときに、いちばん気づきにくい入口です。",
     ),
     (
-        re.compile(r"^\s*transport input (?:all|telnet)\b", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:transport input (?:all|telnet)\b"  # Cisco IOS
+            r"|set system services telnet\b"  # Junos
+            r"|set allowaccess\b.*\btelnet\b"  # FortiGate
+            r"|telnetd service on\b"  # ヤマハ
+            r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
+            r"|telnet server enable\b"  # Comware
+            r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
+            re.IGNORECASE,
+        ),
         HIGH,
         "telnet で入れる状態です",
         "telnet は中身が丸見えで、パスワードもそのまま流れます。"
         "ssh だけに絞ってください（transport input ssh）。",
     ),
     (
-        re.compile(r"^\s*snmp-server community\s+(public|private)\b", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:snmp-server community|set snmp community"
+            r"|snmp-agent community\s+(?:read|write))\s+(public|private)\b",
+            re.IGNORECASE,
+        ),
         HIGH,
         "SNMP の合言葉が既定のままです",
         "public / private は誰でも知っている値です。機器の中身が読めてしまいます。",
@@ -72,7 +90,12 @@ _HYGIENE = (
         "enable password は元に戻せる形で保存されます。enable secret を使ってください。",
     ),
     (
-        re.compile(r"^\s*snmp-server community\s+\S+\s+(?:RW|rw)\b"),
+        re.compile(
+            r"^\s*(?:snmp-server community\s+\S+\s+rw\b"
+            r"|set snmp community\s+\S+\s+authorization\s+read-write\b"
+            r"|snmp-agent community\s+write\b)",
+            re.IGNORECASE,
+        ),
         HIGH,
         "SNMP から設定を書き換えられます",
         "RW は読むだけでなく書き込みも許す指定です。合言葉を知られた時点で、"
@@ -315,6 +338,30 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
             digits = "".join(c for c in i.name if c.isdigit())
             if digits:
                 used.add(int(digits))
+    # 逆向き。ポートで使っているのに、定義が無い VLAN。Cisco はこの状態の
+    # アクセスポートを inactive にして、線はつながっているのに通らなくなる。
+    # 定義を1つも読めていない Config（ルーターの抜粋など）では言わない
+    if parsed.vlans:
+        undefined: dict[int, list[str]] = {}
+        for i in parsed.interfaces:
+            for vlan in sorted(i.carried_vlans()):
+                if vlan not in parsed.vlans and vlan != 1:
+                    undefined.setdefault(vlan, []).append(i.name)
+        if undefined:
+            out.append(
+                Finding(
+                    level=HIGH,
+                    title="ポートで使っているのに、定義が無い VLAN があります",
+                    why="定義していない番号をアクセスポートに当てると、ポートは"
+                    "つながっているのに通りません。トランクの許可に入れていても、"
+                    "その番号の通信は落ちます。`vlan 番号` を定義してください。",
+                    evidence=[
+                        f"VLAN {vlan}: {', '.join(names[:3])}"
+                        for vlan, names in sorted(undefined.items())
+                    ][:5],
+                )
+            )
+
     idle = sorted(v for v in parsed.vlans if v not in used and v != 1)
     if idle:
         out.append(
@@ -416,9 +463,27 @@ def _port_admission(text: str) -> list[Finding]:
         for name, body in ports
         if any("port-control auto" in line.lower() for line in body)
         or any(line.lower().startswith("dot1x port-control auto") for line in body)
+        # Aruba CX（口の下に aaa authentication port-access dot1x authenticator）と
+        # Comware（口の下に dot1x だけ）
+        or any(line.lower().startswith("aaa authentication port-access dot1x") for line in body)
+        or any(line.lower() == "dot1x" for line in body)
+    ]
+    # Junos は口ごとの塊が無いので、行そのものを数える
+    controlled += [
+        line.split()[4]
+        for line in lowered
+        if line.startswith("set protocols dot1x authenticator interface ") and len(line.split()) > 4
     ]
     has_server = any(
-        line.startswith(("radius-server ", "radius server", "aaa group server radius"))
+        line.startswith(
+            (
+                "radius-server ",
+                "radius server",
+                "aaa group server radius",
+                "set access radius-server",  # Junos
+                "radius scheme",  # Comware
+            )
+        )
         for line in lowered
     )
     if controlled and not has_server:
@@ -433,7 +498,15 @@ def _port_admission(text: str) -> list[Finding]:
         )
 
     dot1x_on = any(
-        line.startswith(("dot1x system-auth-control", "aaa authentication dot1x"))
+        line.startswith(
+            (
+                "dot1x system-auth-control",
+                "aaa authentication dot1x",
+                "aaa authentication port-access dot1x",  # Aruba CX（全体）
+                "set protocols dot1x",  # Junos
+            )
+        )
+        or line == "dot1x"  # Comware（全体で有効にする行）
         for line in lowered
     )
     if dot1x_on and not controlled:

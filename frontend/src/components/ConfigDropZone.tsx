@@ -108,6 +108,9 @@ export default function ConfigDropZone({
               <li>台帳へ反映: {result.applied_fields.join(" / ")}</li>
             )}
             {result.links_created > 0 && <li>結線 {result.links_created} 本を追加しました</li>}
+            {result.aps_registered > 0 && (
+              <li>コントローラの一覧から AP {result.aps_registered} 台を台帳に登録しました</li>
+            )}
             {result.unchanged && <li className="muted">前回と同じ内容のため世代は増えていません</li>}
             {result.message && <li className="muted">{result.message}</li>}
           </ul>

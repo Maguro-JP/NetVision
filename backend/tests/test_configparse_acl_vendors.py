@@ -109,11 +109,242 @@ def test_a_fortios_policy_table_is_read_as_rules_in_order():
     assert acl.kind == "policy"
     assert acl.applied_to == ["ポリシー表"]  # ポリシー表は、書いた時点で効いている
     assert acl.entries[0].action == "permit"
-    assert acl.entries[0].destination == "any"  # all は、どこへでも
-    assert acl.entries[0].source == "LAN"
+    # 口（srcintf / dstintf）は条件に含める。含めないと、別の口宛ての行どうしを
+    # 「上が下を覆っている」と取り違える
+    assert acl.entries[0].destination == "wan1:any"
+    assert acl.entries[0].source == "internal:LAN"
+    # 口を書いていない行は、アドレスだけで言う
+    assert acl.entries[1].source == "GUEST"
 
 
 def test_a_policy_that_is_turned_off_is_not_read_as_a_rule():
     """止めたままの行を並びに混ぜると、影の判定が狂う。"""
     acl = _acl(FORTI, "firewall policy")
     assert acl.entries[1].action == "disabled"
+
+
+# ---------------------------------------------------------------------------
+# Juniper SRX（security policies）
+# ---------------------------------------------------------------------------
+
+
+def test_srx_policies_carry_their_zones():
+    """SRX の許否はゾーンの組み合わせごとに並ぶ。
+
+    条件にゾーンを入れておかないと、別のゾーン宛ての行どうしを
+    「上が下を覆っている」と取り違える。
+    """
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    acl = next(a for a in parsed.acls if a.name == "security policies")
+    entries = {e.raw: e for e in acl.entries}
+
+    web = entries["policy allow-web"]
+    assert (web.source, web.destination) == ("untrust:any", "trust:WEB-SERVER")
+    # アドレス帳の名前は、中身が分かるときだけ解決しておく
+    assert web.destination_value == "trust:10.9.0.10/32"
+    assert web.destination_port == "アプリ junos-https"
+    assert web.log is True
+
+    out = entries["policy trust-out"]
+    assert (out.source, out.destination) == ("trust:any", "untrust:any")
+    # 戻りは自動で通る機種なので、出る側が広いことを「実質全通し」と言わない
+    assert acl.stateful is True
+
+
+def test_srx_source_nat_is_read():
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    assert parsed.nat is not None
+    rule = next(r for r in parsed.nat.rules if r.kind == "dynamic")
+    assert rule.matched == "10.1.0.0/24"
+    assert rule.translated == "出口のアドレス"
+    assert rule.overload is True
+    assert parsed.nat.outside_interfaces == ["untrust"]
+
+
+def test_the_zone_of_a_port_is_written_on_the_physical_port():
+    """ゾーンは論理の単位に付くが、図と台帳で見るのは物理のポート。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert "zone trust" in (ports["ge-0/0/0"].description or "")
+    assert "zone untrust" in (ports["ge-0/0/1"].description or "")
+    assert "ge-0/0/0.0" not in ports
+
+
+def test_a_table_followed_by_config_does_not_become_neighbors():
+    """show の表の下に config が続いていても、行を隣接情報にしない。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text()
+    parsed = configparse.parse(text)
+    assert [n.remote_hostname for n in parsed.neighbors] == ["core-sw-01"]
+
+
+def test_fortios_address_names_are_resolved_when_the_subnet_is_known():
+    """名前のままでは、覆っているかどうかを言えない。"""
+    text = (
+        FORTI
+        + """
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+    edit "HQ"
+        set subnet 10.0.0.0/8
+    next
+end
+"""
+    )
+    acl = _acl(text, "firewall policy")
+    assert acl.entries[0].source_value == "internal:10.1.0.0/24"
+    assert acl.entries[0].destination_value is None
+
+
+def test_a_wider_row_above_on_the_same_interfaces_shadows_the_one_below():
+    text = """
+config system global
+    set hostname "fw-01"
+end
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+    edit "HQ"
+        set subnet 10.0.0.0/8
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "internal"
+        set dstintf "wan1"
+        set srcaddr "HQ"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+    edit 2
+        set srcintf "internal"
+        set dstintf "wan1"
+        set srcaddr "LAN"
+        set dstaddr "all"
+        set action deny
+        set service "ALL"
+    next
+    edit 3
+        set srcintf "dmz"
+        set dstintf "wan1"
+        set srcaddr "LAN"
+        set dstaddr "all"
+        set action deny
+        set service "ALL"
+    next
+end
+"""
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    shadowed = [t for t in titles if "読まれません" in t]
+    # 2 番は 1 番に覆われて読まれない。3 番は口が違うので覆われない
+    assert len(shadowed) == 1
+    assert "2" in shadowed[0]
+
+
+def test_several_addresses_on_one_fortios_row_are_not_resolved_as_one():
+    """2つ以上あるときは、1つ目だけで「覆っている」と言わない。"""
+    text = (
+        FORTI.replace('set srcaddr "LAN"', 'set srcaddr "LAN" "GUEST"')
+        + """
+config firewall address
+    edit "LAN"
+        set subnet 10.1.0.0 255.255.255.0
+    next
+end
+"""
+    )
+    acl = _acl(text, "firewall policy")
+    assert acl.entries[0].source == "internal:LAN ほか1件"
+    assert acl.entries[0].source_value is None
+
+
+def test_several_addresses_on_one_srx_policy_are_not_resolved_as_one():
+    """同じ欄に2行目以降が来ても、最後の行で上書きしない。"""
+    from pathlib import Path
+
+    from app.services import configparse
+
+    text = (Path(__file__).parent / "fixtures" / "edge-rt-01.txt").read_text() + (
+        "set security policies from-zone untrust to-zone trust policy allow-web "
+        "match destination-address DB-SERVER\n"
+    )
+    parsed = configparse.parse(text)
+    acl = next(a for a in parsed.acls if a.name == "security policies")
+    web = next(e for e in acl.entries if e.raw == "policy allow-web")
+    assert web.destination == "trust:WEB-SERVER ほか1件"
+    assert web.destination_value is None
+
+
+def test_a_row_that_lets_everything_in_from_the_outside_is_the_heaviest():
+    """外に面した側を広く開けると、中の全部に外から届く。"""
+    forti = """
+config system global
+    set hostname "fw-01"
+end
+config system interface
+    edit "port1"
+        set role wan
+    next
+    edit "port2"
+        set role lan
+    next
+end
+config firewall policy
+    edit 1
+        set srcintf "port1"
+        set dstintf "port2"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+    edit 2
+        set srcintf "port2"
+        set dstintf "port1"
+        set srcaddr "all"
+        set dstaddr "all"
+        set action accept
+        set service "ALL"
+    next
+end
+"""
+    found = [t for t in _titles(forti) if "外から中へすべて通しています" in t]
+    assert len(found) == 1 and "policy 1" in found[0]
+
+    panos = (
+        "set deviceconfig system hostname fw\n"
+        "set rulebase security rules wide-in from untrust\n"
+        "set rulebase security rules wide-in to trust\n"
+        "set rulebase security rules wide-in source any\n"
+        "set rulebase security rules wide-in destination any\n"
+        "set rulebase security rules wide-in service any\n"
+        "set rulebase security rules wide-in application any\n"
+        "set rulebase security rules wide-in action allow\n"
+    )
+    assert [t for t in _titles(panos) if "外から中へすべて通しています" in t]
+
+
+def _titles(text: str) -> list[str]:
+    return [f.title for f in policyreview.review(configparse.parse(text), text)]

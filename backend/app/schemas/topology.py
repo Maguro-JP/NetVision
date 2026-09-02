@@ -100,6 +100,8 @@ class IngestResultRead(BaseModel):
     neighbor_count: int
     vlan_count: int
     links_created: int
+    #: コントローラの一覧から台帳に足した AP の数
+    aps_registered: int = 0
     diffs: list[FieldDiffRead]
     applied_fields: list[str]
     unresolved_neighbors: list[UnresolvedNeighborRead]
@@ -157,6 +159,7 @@ class InterfaceRead(BaseModel):
     lag_group: int | None = None
     lag_mode: str | None = None
     enabled: bool
+    link_state: str | None = None
 
 
 class TopologyNodeRead(BaseModel):
@@ -229,6 +232,8 @@ class TopologyEdgeRead(BaseModel):
     vlan_mismatch: list[int] = []
     native_vlan: int | None = None
     native_mismatch: bool = False
+    #: 図には線があるのに、実機では片側でも上がっていない
+    link_down: bool = False
     vrf: str | None = None
     source_side: str | None = None
     target_side: str | None = None

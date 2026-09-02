@@ -111,7 +111,7 @@ _IOS_ROUTE = re.compile(
 )
 _IOS_ROUTER_OSPF = re.compile(r"^router ospf\s+(\S+)", re.IGNORECASE)
 _IOS_ROUTER_BGP = re.compile(r"^router bgp\s+(\S+)", re.IGNORECASE)
-_IOS_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_IOS_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 
 
 def parse_cisco(text: str, parsed: ParsedConfig) -> None:
@@ -344,7 +344,7 @@ _QX_ROUTE = re.compile(
 )
 _QX_OSPF = re.compile(r"^ospf(?:\s+(\d+))?(?:\s+router-id\s+(\S+))?\s*$", re.IGNORECASE)
 _QX_BGP = re.compile(r"^bgp\s+(\S+)\s*$", re.IGNORECASE)
-_QX_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 
 
 def parse_comware(text: str, parsed: ParsedConfig) -> None:

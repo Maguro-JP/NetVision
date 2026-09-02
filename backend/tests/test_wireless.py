@@ -151,3 +151,136 @@ def test_the_findings_ride_along_with_the_other_checks():
     """無線の指摘も、ほかの点検と同じ出口から出る。"""
     titles_all = [f.title for f in policyreview.review(configparse.parse(IOSXE))]
     assert "SSID GUEST-WIFI は誰でも入れます" in titles_all
+
+
+def test_an_ap_profile_with_telnet_open_is_reported():
+    """AP は天井にあって手が届かない。開けたままの入口は気づかれないまま残る。"""
+    text = IOSXE + "ap profile default-ap-profile\n telnet\n ssh\n"
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["profile default-ap-profile"].insecure_access == ["telnet"]
+    assert [f.title for f in wirelessreview.review(parsed) if "telnet" in f.title]
+
+
+def test_an_ap_profile_with_only_ssh_is_quiet():
+    text = IOSXE + "ap profile default-ap-profile\n ssh\n"
+    parsed = configparse.parse(text)
+    assert not [f.title for f in wirelessreview.review(parsed) if "telnet" in f.title]
+
+
+def test_aireos_telnet_on_an_ap_is_reported():
+    text = (
+        "config wlan create 1 OFFICE OFFICE\n"
+        "config ap telnet enable AP-3F-01\n"
+        "config ap ssh enable AP-3F-02\n"
+    )
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-3F-01"].insecure_access == ["telnet"]
+    assert "AP-3F-02" not in aps or aps["AP-3F-02"].insecure_access == []
+
+
+def test_the_tags_of_an_ap_are_read():
+    text = IOSXE + "ap name AP-3F-01 policy-tag OFFICE-TAG\n"
+    parsed = configparse.parse(text)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-3F-01"].profile == "OFFICE-TAG"
+
+
+AP_SUMMARY = """
+show ap summary
+Number of APs: 2
+
+AP Name   Slots AP Model    Ethernet MAC    Radio MAC       Location Country IP Address  State
+----------------------------------------------------------------------------------------------
+AP-3F-01  2     C9120AXI-Q  0011.2233.4455  0011.2233.4460  3F east  JP      10.0.30.11  Registered
+AP-3F-02  2     C9120AXI-Q  0011.2233.4466  0011.2233.4470  3F west  JP      10.0.30.12  Registered
+"""
+
+FORTI_WTP = """
+config system global
+    set hostname "fw-01"
+end
+config wireless-controller wtp
+    edit "FP231FTF21000001"
+        set name "AP-1F-01"
+        set location "1F entrance"
+        set admin enable
+        set wtp-profile "FAP231F-default"
+    next
+    edit "FP231FTF21000002"
+        set admin enable
+        set wtp-profile "FAP231F-default"
+    next
+end
+"""
+
+
+def test_the_ap_list_of_a_cisco_controller_is_read():
+    """AP は台数が多い。コントローラの一覧をそのまま台帳の下敷きにする。"""
+    parsed = configparse.parse(IOSXE + AP_SUMMARY)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-3F-01"].model == "C9120AXI-Q"
+    assert aps["AP-3F-01"].mac == "0011.2233.4455"
+    assert aps["AP-3F-01"].ip_address == "10.0.30.11"
+    assert aps["AP-3F-01"].location == "3F east"
+    assert aps["AP-3F-02"].ip_address == "10.0.30.12"
+
+
+def test_the_ap_list_of_a_fortigate_is_read_by_serial():
+    parsed = configparse.parse(FORTI_WTP)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-1F-01"].serial == "FP231FTF21000001"
+    assert aps["AP-1F-01"].location == "1F entrance"
+    assert aps["AP-1F-01"].profile == "FAP231F-default"
+    # 名前を付けていない AP はシリアルで呼ぶ
+    assert aps["FP231FTF21000002"].serial == "FP231FTF21000002"
+
+
+def test_aps_from_the_controller_land_in_the_ledger(client):
+    """コントローラの Config を取り込むと、一覧の AP が台帳に載る。"""
+    from tests.conftest import API
+
+    client.post(
+        f"{API}/devices",
+        json={
+            "hostname": "AP-3F-02",
+            "vendor": "Cisco",
+            "model": "手で入れた",
+            "device_type": "wireless_ap",
+        },
+    )
+    res = client.post(
+        f"{API}/configs/upload",
+        files=[("files", ("wlc.txt", (IOSXE + AP_SUMMARY).encode(), "text/plain"))],
+    )
+    assert res.status_code == 200, res.text
+    result = res.json()[0]
+    assert result["aps_registered"] == 1  # 既に載っている AP-3F-02 は触らない
+
+    devices = {d["hostname"]: d for d in client.get(f"{API}/devices").json()}
+    assert devices["AP-3F-01"]["device_type"] == "wireless_ap"
+    assert devices["AP-3F-01"]["model"] == "C9120AXI-Q"
+    assert devices["AP-3F-01"]["mgmt_ip"] == "10.0.30.11"
+    assert devices["AP-3F-02"]["model"] == "手で入れた"
+
+
+ARUBA_DB = """
+show ap database
+
+AP Database
+-----------
+Name      Group    AP Type  IP Address  Status      Flags  Switch IP   Standby IP
+----      -----    -------  ----------  ------      -----  ---------   ----------
+AP-2F-01  default  335      10.0.20.11  Up 12d:3h          10.0.0.5    0.0.0.0
+AP-2F-02  guest    515      10.0.20.12  Down               10.0.0.5    0.0.0.0
+"""
+
+
+def test_the_ap_list_of_an_aruba_controller_is_read():
+    parsed = configparse.parse(ARUBA_DB)
+    aps = {ap.name: ap for ap in parsed.wireless.aps}
+    assert aps["AP-2F-01"].model == "335"
+    assert aps["AP-2F-01"].profile == "default"
+    assert aps["AP-2F-01"].ip_address == "10.0.20.11"
+    assert aps["AP-2F-02"].ip_address == "10.0.20.12"

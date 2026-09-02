@@ -2,6 +2,7 @@ from pathlib import Path
 
 import pytest
 
+from app.services import configparse
 from app.services.configparse import Vendor, detect_vendor, expand, normalize_hostname, parse
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -133,7 +134,9 @@ def test_juniper_config_and_lldp():
 
     interfaces = {i.name: i for i in parsed.interfaces}
     assert interfaces["ge-0/0/0"].ip_address == "10.0.0.1/24"
-    assert interfaces["ge-0/0/0"].description == "->core-sw-01"
+    # SRX のゾーンは、PAN-OS と同じくポートの説明に足す。
+    # どの口が外向きかは、ゾーンが分からないと図の上で言えない
+    assert interfaces["ge-0/0/0"].description == "->core-sw-01 / zone trust"
     assert interfaces["ge-0/0/2"].enabled is False
 
     assert len(parsed.neighbors) == 1
@@ -215,3 +218,60 @@ def test_cdp_and_lldp_for_the_same_link_are_merged():
     parsed = parse(text)
 
     assert len(parsed.neighbors) == 1
+
+
+def test_every_vendor_has_a_label_and_a_name():
+    """ベンダーを足したら、表示名と台帳に書く名前も必ず足す。
+
+    どちらかが抜けていると、画面では「判別できません」、台帳では空欄に
+    なる。読めているのに空で出るのがいちばん分かりにくいので、増やした
+    ときにここで止める。
+    """
+    for vendor in Vendor:
+        assert vendor in configparse.VENDOR_LABELS, vendor
+        if vendor is Vendor.UNKNOWN:
+            continue  # 判別できなかったものは、台帳の「メーカー」を空で出す
+        assert vendor in configparse.VENDOR_NAMES, vendor
+
+
+def test_each_vendor_fixture_is_detected_and_named():
+    """見本の config が、どれも判別できてメーカー名まで出ること。"""
+    fixtures = FIXTURES
+    expected = {
+        "core-sw-01.txt": "Cisco",
+        "edge-rt-01.txt": "Juniper",
+        "fw-01.txt": "Fortinet",
+        "ix-rt-01.txt": "NEC",
+        "qx-sw-01.txt": "NEC",
+        "rtx-osaka-01.txt": "ヤマハ",
+        "asa-hq-01.txt": "Cisco",
+        "panos-hq-01.txt": "Palo Alto",
+        "arista-dc-01.txt": "Arista",
+        "aruba-cx-01.txt": "Aruba",
+        "allied-x530-01.txt": "アライドテレシス",
+    }
+    for filename, name in expected.items():
+        parsed = configparse.parse((fixtures / filename).read_text())
+        assert parsed.vendor is not Vendor.UNKNOWN, filename
+        assert configparse.VENDOR_NAMES[parsed.vendor] == name, filename
+        assert parsed.hostname, filename
+
+
+def test_two_configs_pasted_into_one_file_do_not_break_the_reader():
+    """別のベンダーの出力が1ファイルに混ざっていても、読み手は落ちない。
+
+    現場では show の出力を1ファイルに貼り足すことが多い。ある機種の見出しが
+    別の機種の読み手に引っかかって落ちる、を防ぐ。
+    """
+    from app.services import policyreview
+
+    texts = {path.name: load(path.stem) for path in FIXTURES.glob("*.txt")}
+    texts["panos-hq-02.xml"] = (FIXTURES / "panos-hq-02.xml").read_text(encoding="utf-8")
+    names = sorted(texts)
+    for first in names:
+        for second in names:
+            if first == second:
+                continue
+            text = texts[first] + "\n" + texts[second]
+            parsed = configparse.parse(text)
+            policyreview.review(parsed, text)

@@ -73,6 +73,9 @@ class ParsedInterface:
     #: 合言葉の掛け方（none / text / md5）。値は持たない
     ospf_auth: str | None = None
     enabled: bool = True
+    #: 実機の線の状態（up / down / notconnect など、show の出力から）。
+    #: Config だけでは分からない。書いていなければ None のまま（推測しない）
+    link_state: str | None = None
 
     @property
     def key(self) -> str:
@@ -177,6 +180,8 @@ class ParsedConfig:
     crypto: ParsedCrypto | None = None
     #: 無線（SSID と AP）。読めなければ None
     wireless: ParsedWireless | None = None
+    #: 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）。読めなければ None
+    ha_pair: object | None = None
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""
@@ -645,6 +650,12 @@ class ParsedWirelessAp:
     profile: str | None = None
     #: 管理の入口（telnet / http）が開いているか
     insecure_access: list[str] = field(default_factory=list)
+    #: 一覧（show ap summary / wtp）から分かるもの。台帳に載せる材料
+    model: str | None = None
+    mac: str | None = None
+    ip_address: str | None = None
+    serial: str | None = None
+    location: str | None = None
 
 
 @dataclass

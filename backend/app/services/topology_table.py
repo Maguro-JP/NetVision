@@ -58,6 +58,8 @@ def rows(db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = None)
             continue
 
         warnings: list[str] = []
+        if edge.link_down:
+            warnings.append("実機では線が上がっていない")
         if edge.native_mismatch:
             warnings.append("ネイティブVLAN不一致")
         if edge.vlan_mismatch:

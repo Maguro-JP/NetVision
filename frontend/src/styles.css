@@ -855,6 +855,11 @@ button:disabled {
   stroke: var(--sev-critical);
   stroke-width: 2.6;
 }
+/* 図には線があるのに実機では上がっていない。点線で「図だけの線」と分かるようにする */
+.react-flow__edge.topo-edge.down .react-flow__edge-path {
+  stroke: var(--sev-critical);
+  stroke-dasharray: 6 4;
+}
 .react-flow__edge.selected .react-flow__edge-path {
   stroke-width: 3.5;
 }

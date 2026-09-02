@@ -369,3 +369,30 @@ def test_the_report_shows_the_acl_line_by_line_with_the_unread_ones_marked(db_se
     acl = next(entry for entry in report.controls if entry["kind"] == "通信の制限")
     assert [row["reads"] for row in acl["rows"]] == [True, False]
     assert acl["rows"][1]["hidden_by"] == "permit ip any any"
+
+
+def test_the_aps_of_a_controller_are_listed_with_the_ssids(db_session):
+    """コントローラの一覧にある AP を、SSID と同じ表に出す。"""
+    from app.services import l3review
+
+    wlc = _device(db_session, "wlc-01")
+    content = (
+        "hostname wlc-01\n"
+        "wlan OFFICE 1 OFFICE\n"
+        " security wpa psk set-key ascii 0 himitsu\n"
+        " no shutdown\n"
+        "show ap summary\n"
+        "AP Name   Slots AP Model    Ethernet MAC    Radio MAC       "
+        "Location Country IP Address  State\n"
+        "AP-3F-01  2     C9120AXI-Q  0011.2233.4455  0011.2233.4460  "
+        "3F east  JP      10.0.30.11  Registered\n"
+    )
+    _snapshot(db_session, wlc, content, "a" * 64)
+
+    report = l3review.review(db_session, wlc)
+    aps = [c for c in report.controls if c["kind"] == "AP"]
+    assert len(aps) == 1
+    assert aps[0]["name"] == "AP-3F-01"
+    assert "C9120AXI-Q" in aps[0]["detail"]
+    assert "10.0.30.11" in aps[0]["detail"]
+    assert "3F east" in aps[0]["detail"]

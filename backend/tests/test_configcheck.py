@@ -548,3 +548,83 @@ interface GigabitEthernet1/0/2
         for t in titles
         if "問い合わせ先" in t or "どの口にも" in t or "破ったとき" in t or "黙って落とす" in t
     ]
+
+
+def test_a_vlan_used_on_a_port_but_never_defined_is_the_heaviest(db_session):
+    """定義していない番号を当てたポートは、つながっているのに通らない。"""
+    text = "hostname sw\nvlan 10\n name USERS\ninterface Gi1/0/1\n switchport access vlan 20\n"
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "定義が無い VLAN" in f.title)
+    assert finding.level == HIGH
+    assert any("VLAN 20" in line for line in finding.evidence)
+
+
+def test_a_config_without_any_vlan_definition_is_not_accused(db_session):
+    """ルーターの抜粋など、定義を1つも読めていないときは言わない。"""
+    text = (
+        "hostname rt\n"
+        "interface Gi0/0.20\n"
+        " encapsulation dot1Q 20\n"
+        " ip address 10.0.20.1 255.255.255.0\n"
+    )
+    result = configcheck.check(db_session, text)
+    assert not [f for f in result.findings if "定義が無い VLAN" in f.title]
+
+
+def test_default_snmp_communities_are_caught_in_junos_and_comware_too(db_session):
+    """public のままなのは、書き方が違っても同じ穴。"""
+    junos = "set system host-name rt\nset snmp community public authorization read-write\n"
+    result = configcheck.check(db_session, junos)
+    titles = _titles(result)
+    assert "SNMP の合言葉が既定のままです" in titles
+    assert "SNMP から設定を書き換えられます" in titles
+
+    comware = "sysname sw\nsnmp-agent community write private\n"
+    titles = _titles(configcheck.check(db_session, comware))
+    assert "SNMP の合言葉が既定のままです" in titles
+    assert "SNMP から設定を書き換えられます" in titles
+
+
+def test_telnet_left_open_is_caught_in_every_vendor_s_wording(db_session):
+    samples = {
+        "junos": "set system host-name rt\nset system services telnet\n",
+        "fortios": 'config system global\n    set hostname "fw"\nend\n'
+        "config system interface\n"
+        '    edit "port1"\n'
+        "        set allowaccess ping https ssh telnet\n"
+        "    next\nend\n",
+        "yamaha": "# RTX830 Rev.15.02.28\ntelnetd service on\n",
+        "allied": "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\n"
+        "hostname sw\nservice telnet\n",
+        "comware": "sysname sw\ntelnet server enable\n",
+        "asa": "ASA Version 9.16(4)\nhostname fw\ntelnet 10.0.0.0 255.255.255.0 inside\n",
+    }
+    for vendor, text in samples.items():
+        titles = _titles(configcheck.check(db_session, text))
+        assert "telnet で入れる状態です" in titles, vendor
+    # 止めた形は言わない
+    titles = _titles(configcheck.check(db_session, "hostname sw\nno service telnet\n"))
+    assert "telnet で入れる状態です" not in titles
+
+
+def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_session):
+    samples = {
+        "aruba": (
+            "!Version ArubaOS-CX FL.10.09.0010\nhostname sw\n"
+            "aaa authentication port-access dot1x authenticator\n    enable\n"
+            "interface 1/1/5\n    no shutdown\n"
+            "    aaa authentication port-access dot1x authenticator\n        enable\n"
+        ),
+        "junos": (
+            "set system host-name sw\n"
+            "set protocols dot1x authenticator interface ge-0/0/5.0 supplicant multiple\n"
+        ),
+        "comware": "sysname sw\ndot1x\ninterface GigabitEthernet1/0/5\n dot1x\n",
+    }
+    for vendor, text in samples.items():
+        titles = _titles(configcheck.check(db_session, text))
+        assert "802.1X を当てていますが、問い合わせ先がありません" in titles, vendor
+    # 問い合わせ先があれば言わない
+    with_server = samples["junos"] + "set access radius-server 10.0.0.9 secret x\n"
+    titles = _titles(configcheck.check(db_session, with_server))
+    assert "802.1X を当てていますが、問い合わせ先がありません" not in titles

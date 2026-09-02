@@ -49,7 +49,7 @@ _IX_HOSTNAME_LINE = re.compile(r"^\s*Hostname:\s*(\S+)", re.IGNORECASE | re.MULT
 _IX_SERIAL = re.compile(
     r"^\s*(?:System\s+)?[Ss]erial\s*(?:number|No\.?)\s*[:=]?\s*(\S+)", re.MULTILINE
 )
-_IX_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_IX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _IX_IP = re.compile(r"^\s*ip\s+address\s+(\d+\.\d+\.\d+\.\d+(?:/\d+)?)", re.IGNORECASE)
 # 回線から貰う設定。アドレスは決め打ちできないが、使っているポートだとは分かる
 _IX_IP_LEARNED = re.compile(r"^\s*ip\s+address\s+(dhcp|ipcp)\b", re.IGNORECASE)
@@ -74,7 +74,7 @@ _QX_HINT = re.compile(
     r"Comware|\bH3C\b|\bNEC\b|port\s+link-type|interface\s+Vlan-interface|^\s*undo\s+",
     re.IGNORECASE | re.MULTILINE,
 )
-_QX_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _QX_IP = re.compile(
     r"^\s*ip\s+address\s+(\d+\.\d+\.\d+\.\d+)\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE
 )

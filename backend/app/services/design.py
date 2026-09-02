@@ -204,6 +204,12 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
         return _junos(plan)
     if vendor is Vendor.FORTINET:
         return _fortios(plan)
+    if vendor is Vendor.ARISTA:
+        return _arista(plan)
+    if vendor is Vendor.ARUBA_CX:
+        return _aruba_cx(plan)
+    if vendor is Vendor.ALLIED:
+        return _allied(plan)
     return _outline(plan, vendor)
 
 
@@ -221,6 +227,13 @@ def vendor_of(device: Device) -> Vendor:
         return Vendor.NEC_QX if model.startswith("QX") else Vendor.NEC_IX
     if "cisco" in name:
         return Vendor.CISCO_NXOS if model.startswith(("N9", "N7", "N5", "N3")) else Vendor.CISCO_IOS
+    if "arista" in name:
+        return Vendor.ARISTA
+    if "aruba" in name or "hpe" in name:
+        # Aruba CX（6xxx / 8xxx）。旧 ProVision 系は書式が別物なので、型番で分ける
+        return Vendor.ARUBA_CX if model.startswith(("6", "8", "CX", "R")) else Vendor.UNKNOWN
+    if "allied" in name or "アライド" in name:
+        return Vendor.ALLIED
     return Vendor.UNKNOWN
 
 
@@ -493,6 +506,163 @@ def _fortios(plan: DesignInput) -> str:
 # ---------------------------------------------------------------------------
 # 判別できないベンダー
 # ---------------------------------------------------------------------------
+
+
+# ---------------------------------------------------------------------------
+# Arista EOS
+# ---------------------------------------------------------------------------
+
+
+def _arista(plan: DesignInput) -> str:
+    """見た目は IOS 風。`encapsulation dot1q` は無く、アドレスは長さ付き。"""
+    lines = _header(plan, Vendor.ARISTA, "!")
+    lines.append(f"hostname {plan.device.hostname}")
+    lines.append("!")
+    for vlan in plan.vlans:
+        lines.append(f"vlan {vlan.vlan_id}")
+        lines.append(f"   name {plan.vlan_name(vlan.vlan_id)}")
+        lines.append("!")
+
+    allowed = _trunk_vlans(plan)
+    for link in plan.links:
+        lines.append(f"interface {link.local_interface}")
+        lines.append(f"   description {link.description}")
+        if link.is_infrastructure and allowed:
+            lines.append("   switchport mode trunk")
+            lines.append(f"   switchport trunk allowed vlan {allowed}")
+            lines.append(f"! タグ無し VLAN（native）: {TODO}")
+        elif link.is_infrastructure:
+            lines.append(f"! VLAN が台帳に無いため許可 VLAN を出せません: {TODO}")
+        else:
+            lines.append("   switchport mode access")
+            lines.append(f"! アクセス VLAN: {TODO}")
+            lines.append("   spanning-tree portfast")
+            lines.append("   spanning-tree bpduguard enable")
+        lines.append("!")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_prefixlen:
+        lines.append(f"interface Vlan{plan.mgmt_vlan_id}")
+        lines.append("   description management")
+        lines.append(f"   ip address {plan.device.mgmt_ip}/{plan.mgmt_prefixlen}")
+        lines.append("!")
+    elif plan.device.mgmt_ip:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"! 管理VLAN / マスク: {TODO}")
+        lines.append("!")
+
+    lines.append("management ssh")
+    lines.append("!")
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
+    lines.append(f"! アクセスポートの割り当て: {TODO}")
+    lines.append(f"! 経路制御・ACL・認証・冗長化（MLAG）: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Aruba CX（AOS-CX）
+# ---------------------------------------------------------------------------
+
+
+def _aruba_cx(plan: DesignInput) -> str:
+    """ポートは既定で落ちている。`no shutdown` を書いて初めて上がる。"""
+    lines = _header(plan, Vendor.ARUBA_CX, "!")
+    lines.append(f"hostname {plan.device.hostname}")
+    lines.append("!")
+    for vlan in plan.vlans:
+        lines.append(f"vlan {vlan.vlan_id}")
+        lines.append(f"    name {plan.vlan_name(vlan.vlan_id)}")
+    if plan.vlans:
+        lines.append("!")
+
+    allowed = _trunk_vlans(plan)
+    for link in plan.links:
+        lines.append(f"interface {link.local_interface}")
+        lines.append("    no shutdown")
+        lines.append(f"    description {link.description}")
+        lines.append("    no routing")
+        if link.is_infrastructure and allowed:
+            lines.append(f"    vlan trunk allowed {allowed}")
+            lines.append(f"! タグ無し VLAN（native）: {TODO}")
+        elif link.is_infrastructure:
+            lines.append(f"! VLAN が台帳に無いため許可 VLAN を出せません: {TODO}")
+        else:
+            lines.append(f"! アクセス VLAN: {TODO}（vlan access 番号）")
+            lines.append("    spanning-tree port-type admin-edge")
+            lines.append("    spanning-tree bpdu-guard")
+        lines.append("!")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_prefixlen:
+        lines.append(f"interface vlan {plan.mgmt_vlan_id}")
+        lines.append("    description management")
+        lines.append(f"    ip address {plan.device.mgmt_ip}/{plan.mgmt_prefixlen}")
+        lines.append("!")
+    elif plan.device.mgmt_ip:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"! 管理VLAN / マスク: {TODO}")
+        lines.append("!")
+
+    lines.append("ssh server vrf default")
+    lines.append("!")
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
+    lines.append(f"! アクセスポートの割り当て: {TODO}")
+    lines.append(f"! 経路制御・ACL・認証・冗長化（VSX）: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# アライドテレシス AlliedWare Plus
+# ---------------------------------------------------------------------------
+
+
+def _allied(plan: DesignInput) -> str:
+    """IOS 風だが、VLAN の名前は `vlan database` の下に1行で並ぶ。"""
+    lines = _header(plan, Vendor.ALLIED, "!")
+    lines.append(f"hostname {plan.device.hostname}")
+    lines.append("!")
+    lines.append("service password-encryption")
+    lines.append("no service telnet")
+    lines.append("service ssh")
+    lines.append("!")
+    if plan.vlans:
+        lines.append("vlan database")
+        for vlan in plan.vlans:
+            lines.append(f" vlan {vlan.vlan_id} name {plan.vlan_name(vlan.vlan_id)}")
+        lines.append("!")
+
+    allowed = _trunk_vlans(plan)
+    for link in plan.links:
+        lines.append(f"interface {link.local_interface}")
+        lines.append(f" description {link.description}")
+        lines.append(" switchport")
+        if link.is_infrastructure and allowed:
+            lines.append(" switchport mode trunk")
+            lines.append(f" switchport trunk allowed vlan add {allowed}")
+            lines.append(f"! タグ無し VLAN（native）: {TODO}")
+        elif link.is_infrastructure:
+            lines.append(f"! VLAN が台帳に無いため許可 VLAN を出せません: {TODO}")
+        else:
+            lines.append(" switchport mode access")
+            lines.append(f"! アクセス VLAN: {TODO}")
+            lines.append(" spanning-tree portfast")
+            lines.append(" spanning-tree portfast bpdu-guard enable")
+        lines.append("!")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_prefixlen:
+        lines.append(f"interface vlan{plan.mgmt_vlan_id}")
+        lines.append(f" ip address {plan.device.mgmt_ip}/{plan.mgmt_prefixlen}")
+        lines.append("!")
+    elif plan.device.mgmt_ip:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"! 管理VLAN / マスク: {TODO}")
+        lines.append("!")
+
+    lines.append("line vty 0 4")
+    lines.append(" exec-timeout 10 0")
+    lines.append("!")
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
+    lines.append(f"! アクセスポートの割り当て: {TODO}")
+    lines.append(f"! 経路制御・ACL・認証・冗長化: {TODO}")
+    return "\n".join(lines) + "\n"
 
 
 def _outline(plan: DesignInput, vendor: Vendor) -> str:

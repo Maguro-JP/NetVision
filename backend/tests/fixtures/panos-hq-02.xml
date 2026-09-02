@@ -1,0 +1,115 @@
+<?xml version="1.0"?>
+<config version="11.1.0" urldb="paloaltonetworks">
+  <devices>
+    <entry name="localhost.localdomain">
+      <deviceconfig>
+        <system>
+          <hostname>fw-pan-02</hostname>
+        </system>
+      </deviceconfig>
+      <network>
+        <interface>
+          <ethernet>
+            <entry name="ethernet1/1">
+              <layer3>
+                <ip>
+                  <entry name="203.0.113.2/30"/>
+                </ip>
+              </layer3>
+              <comment>WAN-kaisen</comment>
+            </entry>
+            <entry name="ethernet1/2">
+              <layer3>
+                <ip>
+                  <entry name="10.1.0.1/24"/>
+                </ip>
+              </layer3>
+            </entry>
+          </ethernet>
+        </interface>
+        <virtual-router>
+          <entry name="default">
+            <routing-table>
+              <ip>
+                <static-route>
+                  <entry name="default">
+                    <destination>0.0.0.0/0</destination>
+                    <nexthop>
+                      <ip-address>203.0.113.1</ip-address>
+                    </nexthop>
+                    <interface>ethernet1/1</interface>
+                  </entry>
+                </static-route>
+              </ip>
+            </routing-table>
+          </entry>
+        </virtual-router>
+      </network>
+      <vsys>
+        <entry name="vsys1">
+          <zone>
+            <entry name="untrust">
+              <network>
+                <layer3>
+                  <member>ethernet1/1</member>
+                </layer3>
+              </network>
+            </entry>
+            <entry name="trust">
+              <network>
+                <layer3>
+                  <member>ethernet1/2</member>
+                </layer3>
+              </network>
+            </entry>
+          </zone>
+          <address>
+            <entry name="WEB-SERVER">
+              <ip-netmask>10.1.0.10/32</ip-netmask>
+            </entry>
+          </address>
+          <rulebase>
+            <security>
+              <rules>
+                <entry name="allow-web">
+                  <from><member>untrust</member></from>
+                  <to><member>trust</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>WEB-SERVER</member></destination>
+                  <service><member>service-https</member></service>
+                  <application><member>ssl</member></application>
+                  <action>allow</action>
+                  <log-end>yes</log-end>
+                </entry>
+                <entry name="deny-all">
+                  <from><member>any</member></from>
+                  <to><member>any</member></to>
+                  <source><member>any</member></source>
+                  <destination><member>any</member></destination>
+                  <action>deny</action>
+                  <log-end>yes</log-end>
+                </entry>
+              </rules>
+            </security>
+            <nat>
+              <rules>
+                <entry name="out-napt">
+                  <from><member>trust</member></from>
+                  <to><member>untrust</member></to>
+                  <source><member>any</member></source>
+                  <source-translation>
+                    <dynamic-ip-and-port>
+                      <interface-address>
+                        <interface>ethernet1/1</interface>
+                      </interface-address>
+                    </dynamic-ip-and-port>
+                  </source-translation>
+                </entry>
+              </rules>
+            </nat>
+          </rulebase>
+        </entry>
+      </vsys>
+    </entry>
+  </devices>
+</config>

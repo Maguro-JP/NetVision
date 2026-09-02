@@ -197,3 +197,47 @@ def test_the_device_l3_view_carries_the_features(client, db_session):
     body = client.get(f"{API}/devices/{device.id}/l3").json()
     assert any(f["name"] == "ACL" for f in body["features"])
     assert all(f["category_label"] for f in body["features"])
+
+
+def test_the_newer_vendors_are_picked_up_too():
+    """ベンダーを足したら、機能の拾い出しにも同じ意味の行を足す。
+
+    書き方は違っても落ちる先は同じ。ここが抜けていると、台帳で
+    「この機器は何をしていたのか」が空のままになる。
+    """
+    from pathlib import Path
+
+    from app.services import configparse
+
+    fixtures = Path(__file__).parent / "fixtures"
+
+    def names(filename: str) -> set[str]:
+        parsed = configparse.parse((fixtures / filename).read_text())
+        return {feature.name for feature in parsed.features}
+
+    # Aruba CX は VSX で2台を1台に見せる。束ねは `lag 1`
+    assert {"VSX", "LAG"} <= names("aruba-cx-01.txt")
+    # アライドテレシスの束ねは `static-channel-group`
+    assert "LAG" in names("allied-x530-01.txt")
+    # ヤマハと NEC IX の拠点間 VPN
+    assert "IPsec" in names("rtx-osaka-01.txt")
+    assert "IPsec" in names("ix-rt-01.txt")
+
+
+def test_syslog_and_ntp_are_found_in_every_vendor_s_wording():
+    """送り先が入っているのに「入っていません」と言うのが、いちばん信用を落とす。"""
+    from app.services.configparse import features
+
+    samples = {
+        "yamaha": "syslog host 192.168.100.10\nschedule at 1 */* 06:00 * ntpdate ntp.nict.jp\n",
+        "junos": "set system syslog host 10.0.0.5 any any\nset system ntp server 10.0.0.6\n",
+        "asa": "logging host inside 10.0.0.5\nntp server 10.0.0.6 source inside\n",
+        "allied": "log host 10.0.0.5\nntp server 10.0.0.6\n",
+        "fortios": "config log syslogd setting\n    set status enable\nend\n"
+        "config system ntp\n    set ntpsync enable\nend\n",
+        "panos": "set shared log-settings syslog SRV server s1 server 10.0.0.5\n"
+        "set deviceconfig system ntp-servers primary-ntp-server ntp-server-address 10.0.0.6\n",
+    }
+    for vendor, text in samples.items():
+        names = {f.name for f in features.parse(text)}
+        assert {"Syslog", "NTP"} <= names, (vendor, names)

@@ -41,6 +41,8 @@ function ResultCard({ result }: { result: IngestResult }) {
         {result.neighbor_count}
         {result.links_created > 0 &&
           ` ／ 結線 ${result.links_created} 本を作成`}
+        {result.aps_registered > 0 &&
+          ` ／ AP ${result.aps_registered} 台を台帳に登録`}
       </div>
 
       {result.message && <div style={{ marginTop: 6 }}>{result.message}</div>}

@@ -42,6 +42,9 @@ from app.services.configparse.base import (
 #: 1行目の見出し。`# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)`
 _HEADER = re.compile(r"^#\s*((?:RTX|NVR|FWX|SRT)\S*)\s+Rev\.([\d.]+)", re.MULTILINE)
 _SERIAL = re.compile(r"serial=(\S+)", re.IGNORECASE)
+#: ヤマハには hostname にあたる命令が無い。現場では `console prompt` に
+#: 機器名を入れて見分けている。他に名前の手掛かりが無いので、ここから取る
+_PROMPT = re.compile(r"^console\s+prompt\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _LAN_ADDRESS = re.compile(r"^ip\s+(lan\d+)\s+address\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _LAN_SECURE = re.compile(r"^ip\s+(lan\d+)\s+secure\s+filter\s+(in|out)\s+(.+)$", re.IGNORECASE)
 _PP_SELECT = re.compile(r"^pp\s+select\s+(\S+)", re.IGNORECASE)
@@ -94,6 +97,9 @@ def parse(text: str) -> ParsedConfig:
     serial = _SERIAL.search(text)
     if serial:
         parsed.serial_number = serial.group(1)
+    prompt = _PROMPT.search(text)
+    if prompt:
+        parsed.hostname = prompt.group(1).strip('"')
 
     _parse_interfaces(text, parsed)
     _parse_routes(text, parsed)

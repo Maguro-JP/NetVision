@@ -51,7 +51,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
     findings.extend(_acls(parsed))
-    findings.extend(_nat(parsed))
+    findings.extend(_nat(parsed, text))
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
@@ -313,6 +313,7 @@ def _acls(parsed: ParsedConfig) -> list[Finding]:
             )
         findings.extend(_shadowed(acl, rules))
         findings.extend(_lets_everything_through(acl, rules))
+        findings.extend(_open_from_outside(parsed, acl, rules))
         findings.extend(_drops_without_a_trace(acl, rules))
     return findings
 
@@ -394,6 +395,91 @@ def _lets_everything_through(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> lis
             [wide.raw],
         )
     ]
+
+
+#: 外向きと読めるゾーン・口の名前。現場でこの名前を使うときは、外に面している
+_OUTSIDE_WORDS = ("outside", "wan", "internet", "untrust", "外部")
+
+
+def _outside_names(parsed: ParsedConfig) -> set[str]:
+    """外に面した口の名前。名前で分かるものと、役割（FortiGate の role wan）で分かるもの。"""
+    names: set[str] = set()
+    for interface in parsed.interfaces:
+        description = (interface.description or "").lower()
+        if "role wan" in description:
+            names.add(interface.name.lower())
+        for word in _OUTSIDE_WORDS:
+            if word in description.replace("role ", "") and "zone " in description:
+                names.add(interface.name.lower())
+    return names
+
+
+def _open_from_outside(
+    parsed: ParsedConfig, acl: ParsedAcl, rules: list[ParsedAclEntry]
+) -> list[Finding]:
+    """外に面したゾーン・口から、中へ何でも通している行。
+
+    ゾーンで許否が決まる機種（PAN-OS / SRX / FortiGate）向け。出る側を広く
+    開けるのは普通の書き方だが、入る側を広く開けるのは、外から中の全部に
+    届くということになる。1行で済むので、試験のつもりで入れたまま残る。
+    """
+    if acl.kind != "policy":
+        return []
+    outside_ports = _outside_names(parsed)
+    out: list[Finding] = []
+    for entry in rules:
+        if entry.action != "permit":
+            continue
+        zone, address = aclcheck.split_zone(entry.source)
+        if zone is None or (address or "any") != "any":
+            continue
+        lowered = zone.lower()
+        outward = lowered in outside_ports or any(word in lowered for word in _OUTSIDE_WORDS)
+        if not outward:
+            continue
+        _, target = aclcheck.split_zone(entry.destination)
+        if (target or "any") != "any" or entry.destination_port is not None:
+            continue
+        out.append(
+            _note(
+                HIGH,
+                f"{acl.name} の {entry.raw} は、外から中へすべて通しています",
+                f"{zone} から来た通信を、宛先もサービスも限定せずに通しています。"
+                "外に面した側を広く開けると、中の全部に外から届きます。"
+                "宛先かサービスを絞ってください。",
+                [entry.raw],
+            )
+        )
+    return out
+
+
+def _unreferenced_vips(parsed: ParsedConfig, text: str | None) -> list[Finding]:
+    """外から中の1台へ通す変換（FortiGate の VIP）を作ってあるのに、どのポリシーも指していない。
+
+    VIP は作っただけでは通らない。ポリシーの宛先に置いてはじめて外から届く。
+    作りかけか、消し忘れかのどちらか。元の Config が無いとき（名前がグループ
+    越しに指されているかを確かめられない）は言わない。
+    """
+    if text is None or parsed.nat is None:
+        return []
+    out: list[Finding] = []
+    for rule in parsed.nat.rules:
+        if not rule.raw.startswith("firewall vip "):
+            continue
+        name = rule.raw[len("firewall vip ") :].strip()
+        # 定義の edit 行の他に、その名前が出てこなければ、どこからも指されていない
+        if text.count(f'"{name}"') > 1:
+            continue
+        out.append(
+            _note(
+                LOW,
+                f"VIP {name} は、どのポリシーからも指されていません",
+                "外から中へ通す変換は、ポリシーの宛先に置いてはじめて届きます。"
+                "作りかけか、消し忘れのどちらかです。",
+                [rule.raw],
+            )
+        )
+    return out
 
 
 def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:
@@ -490,11 +576,12 @@ def _blocks(text: str, head: re.Pattern[str]) -> list[tuple[re.Match[str], list[
 # ---------------------------------------------------------------------------
 
 
-def _nat(parsed: ParsedConfig) -> list[Finding]:
+def _nat(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     nat = parsed.nat
     if nat is None:
         return []
     findings: list[Finding] = []
+    findings.extend(_unreferenced_vips(parsed, text))
     acl_names = {acl.name for acl in parsed.acls}
     route_maps = _names(parsed, "route-map")
 
@@ -724,7 +811,11 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
         head = f"crypto isakmp policy {policy.number}"
         for value in (policy.encryption, policy.hash):
             findings.extend(_weak(value, head, "鍵の交換"))
-        if policy.group and policy.group.split()[0] in _WEAK_GROUPS:
+        # 複数の群を並べて書く機種（FortiGate の `dhgrp 14 5`）は、1つでも古ければ言う。
+        # Junos の `group2` のように頭に group が付く書き方は番号だけにそろえる
+        if policy.group and any(
+            token.lower().removeprefix("group") in _WEAK_GROUPS for token in policy.group.split()
+        ):
             findings.append(
                 _note(
                     MEDIUM,
@@ -758,7 +849,7 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
     for entry in crypto.maps:
         # 番号を付けない機種（NEC IX の autokey-map など）がある。
         # 「None 番」と出すくらいなら、名前だけで呼ぶ
-        label = f"{entry.name} の {entry.seq} 番" if entry.seq else entry.name
+        label = f"{entry.name} の {entry.seq} 番" if entry.seq else f"{entry.name} "
         head = f"crypto map {entry.name} {entry.seq}" if entry.seq else f"crypto map {entry.name}"
         missing = []
         if not entry.peers:

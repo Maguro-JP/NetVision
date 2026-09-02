@@ -322,7 +322,20 @@ export default function DeviceDetailPage() {
                 {interfaces.map((port) => (
                   <tr key={port.id}>
                     <td className="nowrap">
-                      {port.enabled ? (
+                      {port.enabled && port.link_state === "up" ? (
+                        <span className="badge ok" title="show の出力で線が上がっています">
+                          up
+                        </span>
+                      ) : port.enabled &&
+                        port.link_state &&
+                        port.link_state !== "disabled" ? (
+                        <span
+                          className="badge warning"
+                          title="Config では止めていないのに、show の出力では線が上がっていません"
+                        >
+                          {port.link_state}
+                        </span>
+                      ) : port.enabled ? (
                         <span
                           className="badge ok"
                           title="Config で shutdown されていません"

@@ -30,7 +30,8 @@ _CHASSIS = re.compile(r"^\s*cisco\s+(\S+)\s*\(", re.MULTILINE)
 _SERIAL = re.compile(r"^\s*System [Ss]erial [Nn]umber\s*:\s*(\S+)", re.MULTILINE)
 _PID_SN = re.compile(r"PID:\s*(\S+)\s*,.*?SN:\s*(\S+)")
 
-_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+#: 末尾に何も続かない形だけ。show の見出し（Interface  IP-Address …）を取り違えない
+_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 #: `interface range Gi1/0/1 - 24` や `interface range Gi1/0/1 - 3, Gi1/0/8`
 _INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
 _RANGE_PART = re.compile(

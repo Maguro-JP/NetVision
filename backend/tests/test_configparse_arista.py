@@ -83,3 +83,10 @@ def test_a_clean_config_gets_no_findings():
 def test_an_ios_config_is_not_mistaken_for_eos():
     ios = "hostname sw-01\ninterface GigabitEthernet1/0/1\n switchport access vlan 10\n"
     assert configparse.parse(ios).vendor is Vendor.CISCO_IOS
+
+
+def test_the_lldp_table_gives_the_lines_for_the_diagram():
+    """`show lldp neighbors` の表。図の線はここから引く。略された Et1 は正式名に伸ばす。"""
+    pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed().neighbors]
+    assert ("Ethernet1", "core-sw-01", "Ethernet1/0/1") in pairs
+    assert ("Ethernet2", "server-01", "Ethernet0") in pairs

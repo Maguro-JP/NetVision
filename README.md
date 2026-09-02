@@ -282,18 +282,22 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | ベンダー | 系統 | 備考 |
 |---|---|---|
 | Cisco | IOS / IOS-XE / NX-OS | Catalyst 2960 / 2960-X / 3850 / 9300 / 9500 などを確認済み |
-| Juniper | Junos | |
+| Juniper | Junos / SRX | ルーターとファイアウォール。`firewall filter` に加え、SRX の `security policies`（ゾーンごとの許否）・アドレス帳・source NAT を読みます |
 | Fortinet | FortiOS | |
 | NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式、拠点間 IPsec（`ike proposal` / `ipsec autokey-map`）を読みます |
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
-| Palo Alto | PAN-OS | ファイアウォール。`set` 形式。ゾーン・セキュリティポリシー・NAT を読みます（XML 形式は未対応） |
+| Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
-| アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路を読みます |
+| アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路、ハードウェア ACL（3000 番台と `access-list hardware`）を読みます |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
+`show interfaces status` / `show ip interface brief`（Cisco / Arista / NEC IX）、`show interfaces terse`（Junos）、
+`show interface brief`（Aruba CX）、`display interface brief`（QX）、`show interface all`（PAN-OS）、
+`get system interface physical`（FortiGate）が入っていれば、線が実際に上がっているかまで読み、
+図に線があるのに実機では上がっていないものを指摘します。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
 
 ### 抽出するもの
@@ -630,6 +634,10 @@ STP のモード、そして「どの機器にも入っている行」です。1
 条件が要求しないものは置きません。挟むほど止まる場所が増え、設定を合わせる箇所も
 増えるためです。何も条件が無ければ、スイッチどうしを直結して終わりです。
 
+Config の書式は Cisco IOS 系・NEC QX（Comware）・Aruba CX（AOS-CX）・Arista EOS・
+アライドテレシス AlliedWare Plus から選べます。書き出したものは、この道具の読み手で
+そのまま読み戻せることを試験で確かめています。
+
 決めるのは、機器・結線（どのポートとどのポート）・セグメント・アドレス・
 機器どうしの経路・各機器の Config です。ポートは1つずつ配るので、同じポートが
 2つの線に割り当たることはありません。相手が L3 のポートなら、スイッチ側は
@@ -787,9 +795,35 @@ Config は「どう設定してあるか」で、SNMP は「いまどうなっ�
 | MTU が違う | 小さい荷物は通り、大きい荷物だけ落ちる |
 | 片側だけ速度・二重を固定 | 話し合いが成立せず、遅い側に落ちるかエラーが出続ける |
 | 片側だけ束ねている | 束にならず、線が輪になって回り続けることがある |
+| 片側だけポートが落ちている | 図の上ではつながって見えるのに通らない。両端とも落ちているなら未使用の線として黙る |
+| 図には線があるのに、実機では上がっていない | show の表を読めたときだけ。抜けているか、別のポートに挿さっているか、相手が落ちている |
+| OSPF の決めごとが両端で違う | エリア・hello / dead・線の見立て・合言葉の掛け方。1つでも違うと隣にならない |
 
 何本のうち何本の両端を見たのかも出します。ポートの設定が読めていない線を、
 そろっていると言ってしまわないためです。
+
+### 木の根（STP のルート）がどこに立つか
+
+優先度は相手と比べてはじめて意味を持つので、1台の設定を見ても根の場所は
+分かりません。書いていなければ、根は MAC アドレスの若い機器に立ちます。
+たいていは古い機器か末端のスイッチです。機器をまたいで次を見ます。
+
+| 見つけるもの | どう困るか |
+|---|---|
+| 誰も優先度を決めていない | 根が運任せになり、1台足すたびに木の形が変わる |
+| VLAN によって根が違う | 番号によって上流が変わり、「この VLAN だけ遅い」という切り分けの難しい形になる |
+| 予備の根が無い | 根が落ちたとき、次にどこへ移るかが読めない |
+| 末端の機器が根になっている | 機器どうしの通信がそこへ集まる |
+| モードがそろっていない | 収束の速さも木の作られ方も揃わず、境目で思ったとおりに止まらない |
+
+Aruba CX は優先度を 0〜15 の段で書くので、4096 を掛けた実際の値にそろえて比べます。
+
+### 2台で1台に見せる組がそろっているか
+
+FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG、QX の IRF を
+同じ形で読み、機器をまたいで組として成り立っているかを見ます。片方にしか
+入っていない、両方とも primary、優先度が同じ。どれも1台の中では正しく、
+普段は片方だけで動いてしまうので、切り替わる日まで気づきません。
 
 ### 経路（L3）と、その粗
 
@@ -1523,6 +1557,8 @@ NETVISION_ENV_FILE=config/aomori.env python -m uvicorn app.main:app
 | PUT / DELETE | `/topology/vlans/catalog/{vlan_id}` | VLAN 台帳の更新・削除 |
 | POST | `/topology/vlans/catalog/adopt` | 実機の VLAN 名を台帳の下書きとして取り込む |
 | POST / PATCH / DELETE | `/topology/links` | 手動での結線の追加・更新・削除 |
+| GET | `/topology/stp-check` | ループを止める木の根がどこに立つか（機器をまたいで判定） |
+| GET | `/topology/ha-check` | HA / failover / VSX / MLAG が組として成り立っているか（機器をまたいで判定） |
 | GET / POST | `/reference/products` | 型番リファレンスの一覧・登録 |
 | PATCH / DELETE | `/reference/products/{id}` | 型番リファレンスの更新・削除 |
 | POST | `/reference/products/import` | 型番リファレンスの CSV / Excel 取り込み |
