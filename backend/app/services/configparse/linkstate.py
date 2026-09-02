@@ -10,6 +10,8 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Cisco / Arista / NEC IX `show ip interface brief`
   （Interface / IP-Address / ... / Status / Protocol）
 - Junos `show interfaces terse`（Interface / Admin / Link / Proto ...）
+- Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
+- Comware（NEC QX）`display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -22,8 +24,17 @@ import re
 from app.services.configparse.base import ParsedConfig, ParsedInterface
 from app.services.configparse.ifname import normalize
 
+#: Arista は末尾に Flags が付く。それ以外は同じ並び
 _STATUS_HEADER = re.compile(
-    r"^\s*Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type\s*$", re.IGNORECASE
+    r"^\s*Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type\b", re.IGNORECASE
+)
+#: Aruba CX `show interface brief`（Port / Native VLAN / Mode / Type / Enabled / Status / ...）
+#: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）
+_ARUBA_HEADER = re.compile(r"^\s*Port\s+Native\s+Mode\s+Type\s+Enabled\s+Status\b", re.IGNORECASE)
+_ARUBA_ROW = re.compile(r"^\s*(\S+)\s+.*?\b(yes|no)\s+(up|down)\b", re.IGNORECASE)
+#: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
+_COMWARE_HEADER = re.compile(
+    r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
 )
 _BRIEF_HEADER = re.compile(r"^\s*Interface\s+IP-Address\s+.*\bStatus\s+Protocol\s*$", re.I)
 _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
@@ -49,6 +60,10 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_brief(lines[index + 1 :], parsed)
         elif _TERSE_HEADER.match(line):
             _read_terse(lines[index + 1 :], parsed)
+        elif _ARUBA_HEADER.match(line):
+            _read_aruba(lines[index + 1 :], parsed)
+        elif _COMWARE_HEADER.match(line):
+            _read_comware(lines[index + 1 :], parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -118,3 +133,41 @@ def _read_terse(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "disabled"
         elif port.link_state is None or link == "up":
             port.link_state = "up" if link == "up" else "down"
+
+
+def _read_aruba(rows: list[str], parsed: ParsedConfig) -> None:
+    started = False
+    for row in rows:
+        if not row.strip():
+            break
+        if row.strip().startswith("-"):
+            continue
+        found = _ARUBA_ROW.match(row)
+        if not found:
+            # 見出しの2行目（VLAN / (Mb/s)）は読めない行として飛ばす。
+            # 表が始まったあとに読めない行が来たら、そこで表は終わり
+            if started:
+                break
+            continue
+        started = True
+        port = _port(parsed, found.group(1))
+        if port is None:
+            continue
+        if found.group(2).lower() == "no":
+            port.link_state = "disabled"
+        else:
+            port.link_state = found.group(3).lower()
+
+
+def _read_comware(rows: list[str], parsed: ParsedConfig) -> None:
+    for row in rows:
+        columns = row.split()
+        if len(columns) < 2:
+            break
+        link = columns[1].upper()
+        if link not in ("UP", "DOWN", "ADM", "STBY"):
+            break
+        port = _port(parsed, columns[0])
+        if port is None:
+            continue
+        port.link_state = {"UP": "up", "DOWN": "down", "ADM": "disabled", "STBY": "down"}[link]

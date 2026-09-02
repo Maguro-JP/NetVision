@@ -82,7 +82,7 @@ def _blocks(text: str, head: re.Pattern[str]) -> list[tuple[re.Match[str], list[
     return out
 
 
-_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 
 
 # ---------------------------------------------------------------------------

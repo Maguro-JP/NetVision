@@ -37,7 +37,7 @@ _VERSION = re.compile(r"^ASA Version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _MODEL = re.compile(r"^Hardware:\s+(\S+?),", re.IGNORECASE | re.MULTILINE)
 _SERIAL = re.compile(r"^Serial Number:\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 
-_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _ACCESS_LIST = re.compile(r"^access-list\s+(\S+)\s+(.+)$", re.IGNORECASE)
 _ACCESS_GROUP = re.compile(
     r"^access-group\s+(\S+)\s+(in|out)\s+interface\s+(\S+)",

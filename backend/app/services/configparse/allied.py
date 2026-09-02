@@ -30,7 +30,7 @@ _MODEL = re.compile(r"^!?\s*(?:Base|Product)\s+model\s*:\s*(\S+)", re.IGNORECASE
 _SERIAL = re.compile(r"^!?\s*Serial number\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_LINE = re.compile(r"^vlan\s+(\d+)\s+name\s+(\S+)", re.IGNORECASE)
 _IP_ADDRESS = re.compile(r"^ip address\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
-_INTERFACE = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE)
 _ACCESS_GROUP = re.compile(r"^access-group\s+(\S+)\s*$", re.IGNORECASE)
 #: `show lldp neighbors` の見出し

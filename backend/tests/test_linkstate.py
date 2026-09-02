@@ -114,3 +114,61 @@ def test_no_show_output_means_no_claim_about_the_line(db_session):
     _pair(db_session, None, None)
     titles = [item.finding.title for item in linkcheck.review(db_session).findings]
     assert "図には線があるのに、実機では上がっていません" not in titles
+
+
+ARUBA_BRIEF = """
+show interface brief
+------------------------------------------------------------
+Port       Native  Mode    Type   Enabled Status  Reason   Speed  Description
+           VLAN                                        (Mb/s)
+------------------------------------------------------------
+1/1/1      1       trunk   1GbT        yes     up               1000     to-core-01-a
+1/1/10     20      access  1GbT        yes     down    Waiting for link  --   server-01
+1/1/11     20      access  1GbT        no      down    Administratively down  --   yobi-port
+"""
+
+COMWARE_BRIEF = """
+display interface brief
+Brief information on interfaces in bridge mode:
+Link: ADM - administratively down; Stby - standby
+Interface            Link Speed   Duplex Type PVID Description
+GE1/0/1              UP   1G(a)   F(a)   T    1    to-core
+GE1/0/8              ADM  auto    A      A    10
+"""
+
+ARISTA_STATUS = """
+show interfaces status
+Port       Name          Status       Vlan     Duplex Speed  Type        Flags Encapsulation
+Et1        to-core-01         connected    trunk    full   10G    10GBASE-SR
+Et2        to-server-01       notconnect   20       full   10G    10GBASE-SR
+"""
+
+
+def test_aruba_cx_brief_is_read_even_though_the_header_spans_two_lines():
+    text = (FIXTURES / "aruba-cx-01.txt").read_text() + ARUBA_BRIEF
+    states = _states(configparse.parse(text))
+    assert states["1/1/1"] == "up"
+    assert states["1/1/10"] == "down"
+    assert states["1/1/11"] == "disabled"
+
+
+def test_comware_brief_is_read_with_the_abbreviated_names():
+    text = (FIXTURES / "qx-sw-01.txt").read_text() + COMWARE_BRIEF
+    states = _states(configparse.parse(text))
+    assert states["GigabitEthernet1/0/1"] == "up"
+    assert states["GigabitEthernet1/0/8"] == "disabled"
+
+
+def test_arista_status_with_the_extra_flags_column_is_read():
+    text = (FIXTURES / "arista-dc-01.txt").read_text() + ARISTA_STATUS
+    states = _states(configparse.parse(text))
+    assert states["Ethernet1"] == "up"
+    assert states["Ethernet2"] == "notconnect"
+
+
+def test_a_show_header_is_not_mistaken_for_a_port():
+    """`Interface  IP-Address ...` の見出しを、interface の行と取り違えない。"""
+    for name, extra in (("core-sw-01.txt", BRIEF), ("qx-sw-01.txt", COMWARE_BRIEF)):
+        parsed = configparse.parse((FIXTURES / name).read_text() + extra)
+        names = {i.name for i in parsed.interfaces}
+        assert not names & {"IP-Address", "Link", "Interface"}, name
