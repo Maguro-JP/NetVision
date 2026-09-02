@@ -14,6 +14,8 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
 - Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
+- Cisco NX-OS `show interface brief`
+  （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port）
 - Comware（NEC QX）`display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
@@ -45,6 +47,8 @@ _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
 _PARAGRAPH = re.compile(
     r"^(\S+) is (up|down|administratively down),\s*line protocol is (up|down)\b", re.IGNORECASE
 )
+#: NX-OS `show interface brief`。Ethernet の行は 5 列目が up / down
+_NXOS_HEADER = re.compile(r"^\s*Ethernet\s+VLAN\s+Type\s+Mode\s+Status\s+Reason\b", re.IGNORECASE)
 #: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
 _COMWARE_HEADER = re.compile(
     r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
@@ -79,6 +83,8 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_comware(lines[index + 1 :], parsed)
         elif _PANOS_HEADER.match(line):
             _read_panos(lines[index + 1 :], parsed)
+        elif _NXOS_HEADER.match(line):
+            _read_nxos(lines[index + 1 :], parsed)
     _read_forti_physical(lines, parsed)
     _read_paragraphs(lines, parsed)
 
@@ -235,3 +241,24 @@ def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "disabled"
         else:
             port.link_state = "up" if admin == "up" and protocol == "up" else "down"
+
+
+def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
+    for row in rows:
+        stripped = row.strip()
+        if stripped.startswith("-") or stripped.startswith("Interface"):
+            continue  # 見出しの2行目と罫線
+        columns = stripped.split()
+        if len(columns) < 5:
+            break
+        if not columns[0].lower().startswith("eth"):
+            break
+        status = columns[4].lower()
+        if status not in ("up", "down"):
+            break
+        port = _port(parsed, columns[0])
+        if port is None:
+            continue
+        # Reason 列に Administratively down と出るものは止めてある口
+        reason = " ".join(columns[5:]).lower()
+        port.link_state = "disabled" if "administratively" in reason else status

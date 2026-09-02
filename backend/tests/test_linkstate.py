@@ -229,3 +229,26 @@ def test_show_interfaces_paragraphs_are_read_from_their_first_line():
     states = _states(configparse.parse(text))
     assert states["GigabitEthernet1/0/1"] == "up"
     assert states["GigabitEthernet1/0/2"] == "down"
+
+
+NXOS_BRIEF = """
+show interface brief
+--------------------------------------------------------------------------------
+Ethernet      VLAN    Type Mode   Status  Reason                 Speed     Port
+Interface                                                                  Ch #
+--------------------------------------------------------------------------------
+Eth1/1        1       eth  trunk  up      none                    10G(D) --
+Eth1/2        1       eth  access down    Link not connected      auto(D) --
+Eth1/3        1       eth  access down    Administratively down   auto(D) --
+"""
+
+
+def test_nxos_brief_is_read_with_the_reason_column():
+    text = (
+        "hostname nx-01\nfeature lldp\n"
+        "interface Ethernet1/1\ninterface Ethernet1/2\ninterface Ethernet1/3\n"
+    )
+    states = _states(configparse.parse(text + NXOS_BRIEF))
+    assert states["Ethernet1/1"] == "up"
+    assert states["Ethernet1/2"] == "down"
+    assert states["Ethernet1/3"] == "disabled"
