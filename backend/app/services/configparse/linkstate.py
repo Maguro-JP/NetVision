@@ -11,6 +11,8 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
   （Interface / IP-Address / ... / Status / Protocol）
 - Junos `show interfaces terse`（Interface / Admin / Link / Proto ...）
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
+- PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
+- FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
 - Comware（NEC QX）`display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
@@ -32,6 +34,12 @@ _STATUS_HEADER = re.compile(
 #: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）
 _ARUBA_HEADER = re.compile(r"^\s*Port\s+Native\s+Mode\s+Type\s+Enabled\s+Status\b", re.IGNORECASE)
 _ARUBA_ROW = re.compile(r"^\s*(\S+)\s+.*?\b(yes|no)\s+(up|down)\b", re.IGNORECASE)
+#: PAN-OS `show interface all`。行の3列目が `1000/full/up` の形
+_PANOS_HEADER = re.compile(r"^\s*name\s+id\s+speed/duplex/state\b", re.IGNORECASE)
+_PANOS_STATE = re.compile(r"^[^/\s]+/[^/\s]+/(up|down)$", re.IGNORECASE)
+#: FortiGate `get system interface physical`。`==[port1]` の見出しの下に `status: up`
+_FORTI_PHYSICAL = re.compile(r"^\s*==\s*\[\s*(\S+?)\s*\]", re.IGNORECASE)
+_FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
 #: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
 _COMWARE_HEADER = re.compile(
     r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
@@ -64,6 +72,9 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_aruba(lines[index + 1 :], parsed)
         elif _COMWARE_HEADER.match(line):
             _read_comware(lines[index + 1 :], parsed)
+        elif _PANOS_HEADER.match(line):
+            _read_panos(lines[index + 1 :], parsed)
+    _read_forti_physical(lines, parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -171,3 +182,34 @@ def _read_comware(rows: list[str], parsed: ParsedConfig) -> None:
         if port is None:
             continue
         port.link_state = {"UP": "up", "DOWN": "down", "ADM": "disabled", "STBY": "down"}[link]
+
+
+def _read_panos(rows: list[str], parsed: ParsedConfig) -> None:
+    for row in rows:
+        if row.strip().startswith("-"):
+            continue
+        columns = row.split()
+        if len(columns) < 3:
+            break
+        found = _PANOS_STATE.match(columns[2])
+        if not found:
+            break
+        port = _port(parsed, columns[0])
+        if port is not None:
+            port.link_state = found.group(1).lower()
+
+
+def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
+    """`==[port1]` の見出しごとに、その下の `status:` を読む。表ではなく段落の形。"""
+    current: ParsedInterface | None = None
+    for raw in lines:
+        head = _FORTI_PHYSICAL.match(raw)
+        if head:
+            current = _port(parsed, head.group(1))
+            continue
+        if current is None:
+            continue
+        found = _FORTI_STATUS.match(raw)
+        if found:
+            current.link_state = found.group(1).lower()
+            current = None

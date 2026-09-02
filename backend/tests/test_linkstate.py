@@ -172,3 +172,43 @@ def test_a_show_header_is_not_mistaken_for_a_port():
         parsed = configparse.parse((FIXTURES / name).read_text() + extra)
         names = {i.name for i in parsed.interfaces}
         assert not names & {"IP-Address", "Link", "Interface"}, name
+
+
+PANOS_ALL = """
+show interface all
+total configured hardware interfaces: 3
+name                    id    speed/duplex/state    mac address
+--------------------------------------------------------------------------------
+ethernet1/1             16    1000/full/up          00:1b:17:00:01:10
+ethernet1/2             17    1000/full/up          00:1b:17:00:01:11
+ethernet1/3             18    ukn/ukn/down          00:1b:17:00:01:12
+"""
+
+FORTI_PHYSICAL = """
+get system interface physical
+==[port1]
+        mode: static
+        ip: 203.0.113.2 255.255.255.252
+        ipv6: ::/0
+        status: up
+        speed: 1000Mbps (Duplex: full)
+==[port2]
+        mode: static
+        ip: 10.1.0.1 255.255.255.0
+        status: down
+        speed: n/a
+"""
+
+
+def test_panos_show_interface_all_is_read():
+    text = (FIXTURES / "panos-hq-01.txt").read_text() + PANOS_ALL
+    states = _states(configparse.parse(text))
+    assert states["Ethernet1/1"] == "up"
+    assert states["Ethernet1/3"] == "down"
+
+
+def test_fortigate_physical_status_is_read_per_paragraph():
+    text = (FIXTURES / "fw-01.txt").read_text() + FORTI_PHYSICAL
+    states = _states(configparse.parse(text))
+    assert states["port1"] == "up"
+    assert states["port2"] == "down"
