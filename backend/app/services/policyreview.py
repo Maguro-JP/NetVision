@@ -51,7 +51,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
     findings.extend(_acls(parsed))
-    findings.extend(_nat(parsed))
+    findings.extend(_nat(parsed, text))
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
@@ -453,6 +453,35 @@ def _open_from_outside(
     return out
 
 
+def _unreferenced_vips(parsed: ParsedConfig, text: str | None) -> list[Finding]:
+    """外から中の1台へ通す変換（FortiGate の VIP）を作ってあるのに、どのポリシーも指していない。
+
+    VIP は作っただけでは通らない。ポリシーの宛先に置いてはじめて外から届く。
+    作りかけか、消し忘れかのどちらか。元の Config が無いとき（名前がグループ
+    越しに指されているかを確かめられない）は言わない。
+    """
+    if text is None or parsed.nat is None:
+        return []
+    out: list[Finding] = []
+    for rule in parsed.nat.rules:
+        if not rule.raw.startswith("firewall vip "):
+            continue
+        name = rule.raw[len("firewall vip ") :].strip()
+        # 定義の edit 行の他に、その名前が出てこなければ、どこからも指されていない
+        if text.count(f'"{name}"') > 1:
+            continue
+        out.append(
+            _note(
+                LOW,
+                f"VIP {name} は、どのポリシーからも指されていません",
+                "外から中へ通す変換は、ポリシーの宛先に置いてはじめて届きます。"
+                "作りかけか、消し忘れのどちらかです。",
+                [rule.raw],
+            )
+        )
+    return out
+
+
 def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[Finding]:
     """落としているのに、記録が残らない ACL。
 
@@ -547,11 +576,12 @@ def _blocks(text: str, head: re.Pattern[str]) -> list[tuple[re.Match[str], list[
 # ---------------------------------------------------------------------------
 
 
-def _nat(parsed: ParsedConfig) -> list[Finding]:
+def _nat(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     nat = parsed.nat
     if nat is None:
         return []
     findings: list[Finding] = []
+    findings.extend(_unreferenced_vips(parsed, text))
     acl_names = {acl.name for acl in parsed.acls}
     route_maps = _names(parsed, "route-map")
 

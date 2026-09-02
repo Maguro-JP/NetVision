@@ -270,3 +270,16 @@ def test_fortigate_reports_an_old_group_even_when_it_is_not_the_first():
     text = FORTIGATE.replace("set dhgrp 14", "set dhgrp 14 5")
     assert any("鍵の作り方が古い" in t for t in titles(text))
     assert not any("鍵の作り方が古い" in t for t in titles(FORTIGATE))
+
+
+def test_a_vip_nobody_points_at_is_mentioned_when_the_text_is_available():
+    """VIP は作っただけでは通らない。ポリシーの宛先に置いてはじめて外から届く。"""
+    parsed = configparse.parse(FORTIGATE)
+    found = [f.title for f in policyreview.review(parsed, FORTIGATE)]
+    assert "VIP web-in は、どのポリシーからも指されていません" in found
+
+    used = FORTIGATE.replace('set dstaddr "all"', 'set dstaddr "web-in"', 1)
+    found = [f.title for f in policyreview.review(configparse.parse(used), used)]
+    assert not [t for t in found if "VIP web-in" in t]
+    # 元の Config が無いときは、グループ越しの参照を確かめられないので言わない
+    assert not [t for t in titles(FORTIGATE) if "VIP web-in" in t]
