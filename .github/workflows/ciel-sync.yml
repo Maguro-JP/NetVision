@@ -1,0 +1,131 @@
+# Ciel のスキルを、このリポジトリに取り込む。
+#
+# 置き場所: .github/workflows/ciel-sync.yml
+#
+# 毎週土曜 09:00（日本時間）に Ciel を見に行き、.claude/skills/ に差分が
+# あるときだけ、ブランチ ciel-sync に入れて PR を出す。同じなら何もしない。
+# 差分があるたびに新しい PR を作るのではなく、ciel-sync ブランチと PR を
+# 使い回すので、開いている同期 PR は常に最大1本。
+#
+# 鍵は持たない。Ciel は public なので認証なしで読め、自分への書き込みは
+# GitHub が自動で用意する GITHUB_TOKEN で足りる。この token はこの
+# リポジトリの外に届かないので、漏れても他のリポジトリには影響しない。
+#
+# 消費: 差分が無い週は 30 秒ほどで終わる。GitHub は分単位に切り上げるので
+# 週1分、月4〜5分。
+#
+# 止まる条件: 既定ブランチの最終コミットが 180 日より古ければ何もしない。
+# 触っていないリポジトリにスキルだけ更新され続けるのを避けるため。
+# 日数は INACTIVE_DAYS で変えられる。
+#
+# 共同開発者がいるリポジトリには置かないこと。突然 PR が飛んでくると
+# 相手が驚く。この workflow は自分ひとりのリポジトリ向け。
+
+name: Ciel sync
+
+on:
+  schedule:
+    - cron: '0 0 * * 6'    # 土曜 00:00 UTC = 土曜 09:00 JST
+  workflow_dispatch:        # 手動でも実行できる
+
+# 同時に2つ走らない。前の週のものが残っていたら、新しい方だけ動かす
+concurrency:
+  group: ciel-sync
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+  pull-requests: write
+
+env:
+  CIEL_REPO: https://github.com/Maguro-JP/Ciel.git
+  SYNC_BRANCH: ciel-sync
+  INACTIVE_DAYS: 180
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: 最近触っているリポジトリか
+        id: active
+        run: |
+          last=$(git log -1 --format=%ct)
+          now=$(date +%s)
+          days=$(( (now - last) / 86400 ))
+          if [ "$days" -gt "$INACTIVE_DAYS" ]; then
+            echo "最終コミットから ${days} 日。対象外。"
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Ciel を取る
+        if: steps.active.outputs.skip == 'false'
+        run: git clone --depth 1 -q "$CIEL_REPO" /tmp/ciel
+
+      - name: 差分を見る
+        if: steps.active.outputs.skip == 'false'
+        id: diff
+        run: |
+          out=$(python3 /tmp/ciel/.claude/skills/skill-sync/scripts/sync.py . --json)
+          echo "$out"
+          add=$(echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(d["add"]))')
+          upd=$(echo "$out" | python3 -c 'import json,sys; d=json.load(sys.stdin); print(" ".join(d["update"]))')
+          if [ -z "$add" ] && [ -z "$upd" ]; then
+            echo "差分なし。"
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "add=$add" >> "$GITHUB_OUTPUT"
+            echo "upd=$upd" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 反映してブランチに載せる
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          git config user.name  "ciel-sync"
+          git config user.email "ciel-sync@users.noreply.github.com"
+          # 既にブランチがあればそこから、無ければ既定ブランチから
+          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
+            git checkout -B "$SYNC_BRANCH" "origin/$SYNC_BRANCH"
+            git merge -q --no-edit "origin/${GITHUB_REF_NAME}" || true
+          else
+            git checkout -B "$SYNC_BRANCH"
+          fi
+          python3 /tmp/ciel/.claude/skills/skill-sync/scripts/sync.py . --apply
+          git add .claude/skills
+          ciel_sha=$(git -C /tmp/ciel rev-parse --short HEAD)
+          git commit -q -m "Ciel のスキルを更新 (${ciel_sha})" || { echo "コミットするものなし"; exit 0; }
+          git push -q -f origin "$SYNC_BRANCH"
+
+      - name: PR を出す、または更新する
+        if: steps.diff.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ciel_sha=$(git -C /tmp/ciel rev-parse --short HEAD)
+          add="${{ steps.diff.outputs.add }}"
+          upd="${{ steps.diff.outputs.upd }}"
+          body=$(cat <<BODY
+          Ciel のスキルを取り込みます。Ciel: ${ciel_sha}
+
+          追加: ${add:-なし}
+          更新: ${upd:-なし}
+
+          このブランチは毎週土曜に Ciel の内容で上書きされます。
+          手で直したいものがあれば、Ciel 側で直してください。
+
+          ※ この PR は GITHUB_TOKEN で作られているため、このリポジトリの CI は走りません。
+          BODY
+          )
+          n=$(gh pr list --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$n" ]; then
+            gh pr edit "$n" --body "$body"
+            echo "PR #$n を更新しました"
+          else
+            gh pr create --head "$SYNC_BRANCH" --title "Ciel のスキルを更新" --body "$body"
+          fi
