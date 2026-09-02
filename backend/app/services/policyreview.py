@@ -724,7 +724,11 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
         head = f"crypto isakmp policy {policy.number}"
         for value in (policy.encryption, policy.hash):
             findings.extend(_weak(value, head, "鍵の交換"))
-        if policy.group and policy.group.split()[0] in _WEAK_GROUPS:
+        # 複数の群を並べて書く機種（FortiGate の `dhgrp 14 5`）は、1つでも古ければ言う。
+        # Junos の `group2` のように頭に group が付く書き方は番号だけにそろえる
+        if policy.group and any(
+            token.lower().removeprefix("group") in _WEAK_GROUPS for token in policy.group.split()
+        ):
             findings.append(
                 _note(
                     MEDIUM,

@@ -263,3 +263,10 @@ def test_junos_scheduler_map_that_is_not_applied_is_reported():
 def test_junos_reports_a_weak_group():
     text = JUNOS.replace("dh-group group14", "dh-group group2")
     assert [t for t in titles(text) if "group" in t or "群" in t]
+
+
+def test_fortigate_reports_an_old_group_even_when_it_is_not_the_first():
+    """`set dhgrp 14 5` のように並べる書き方。1つでも古ければ言う。"""
+    text = FORTIGATE.replace("set dhgrp 14", "set dhgrp 14 5")
+    assert any("鍵の作り方が古い" in t for t in titles(text))
+    assert not any("鍵の作り方が古い" in t for t in titles(FORTIGATE))
