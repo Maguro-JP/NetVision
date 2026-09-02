@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "user": "",
+  "repo": "",
+  "decided_at": "",
+  "auto_merge": false,
+  "merge_method": "squash",
+  "delete_branch": true,
+  "draft_is_default": false,
+  "max_open_prs": null,
+  "branch_prefix": null,
+  "human_review_required": false,
+  "policy_checks": [],
+  "evidence": {
+    "policy_digests": {},
+    "note": ""
+  },
+  "loop_interval": null,
+  "push_policy": "batch"
+}
