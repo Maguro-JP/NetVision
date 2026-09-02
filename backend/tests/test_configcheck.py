@@ -605,3 +605,26 @@ def test_telnet_left_open_is_caught_in_every_vendor_s_wording(db_session):
     # 止めた形は言わない
     titles = _titles(configcheck.check(db_session, "hostname sw\nno service telnet\n"))
     assert "telnet で入れる状態です" not in titles
+
+
+def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_session):
+    samples = {
+        "aruba": (
+            "!Version ArubaOS-CX FL.10.09.0010\nhostname sw\n"
+            "aaa authentication port-access dot1x authenticator\n    enable\n"
+            "interface 1/1/5\n    no shutdown\n"
+            "    aaa authentication port-access dot1x authenticator\n        enable\n"
+        ),
+        "junos": (
+            "set system host-name sw\n"
+            "set protocols dot1x authenticator interface ge-0/0/5.0 supplicant multiple\n"
+        ),
+        "comware": "sysname sw\ndot1x\ninterface GigabitEthernet1/0/5\n dot1x\n",
+    }
+    for vendor, text in samples.items():
+        titles = _titles(configcheck.check(db_session, text))
+        assert "802.1X を当てていますが、問い合わせ先がありません" in titles, vendor
+    # 問い合わせ先があれば言わない
+    with_server = samples["junos"] + "set access radius-server 10.0.0.9 secret x\n"
+    titles = _titles(configcheck.check(db_session, with_server))
+    assert "802.1X を当てていますが、問い合わせ先がありません" not in titles

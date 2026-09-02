@@ -463,9 +463,27 @@ def _port_admission(text: str) -> list[Finding]:
         for name, body in ports
         if any("port-control auto" in line.lower() for line in body)
         or any(line.lower().startswith("dot1x port-control auto") for line in body)
+        # Aruba CX（口の下に aaa authentication port-access dot1x authenticator）と
+        # Comware（口の下に dot1x だけ）
+        or any(line.lower().startswith("aaa authentication port-access dot1x") for line in body)
+        or any(line.lower() == "dot1x" for line in body)
+    ]
+    # Junos は口ごとの塊が無いので、行そのものを数える
+    controlled += [
+        line.split()[4]
+        for line in lowered
+        if line.startswith("set protocols dot1x authenticator interface ") and len(line.split()) > 4
     ]
     has_server = any(
-        line.startswith(("radius-server ", "radius server", "aaa group server radius"))
+        line.startswith(
+            (
+                "radius-server ",
+                "radius server",
+                "aaa group server radius",
+                "set access radius-server",  # Junos
+                "radius scheme",  # Comware
+            )
+        )
         for line in lowered
     )
     if controlled and not has_server:
@@ -480,7 +498,15 @@ def _port_admission(text: str) -> list[Finding]:
         )
 
     dot1x_on = any(
-        line.startswith(("dot1x system-auth-control", "aaa authentication dot1x"))
+        line.startswith(
+            (
+                "dot1x system-auth-control",
+                "aaa authentication dot1x",
+                "aaa authentication port-access dot1x",  # Aruba CX（全体）
+                "set protocols dot1x",  # Junos
+            )
+        )
+        or line == "dot1x"  # Comware（全体で有効にする行）
         for line in lowered
     )
     if dot1x_on and not controlled:

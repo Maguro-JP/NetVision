@@ -133,6 +133,9 @@ _RULES: tuple[_Rule, ...] = (
     _rule(QOS, "QoS", r"^\s*service-policy\s+"),
     # 端末の認証
     _rule(AUTHENTICATION, "802.1X", r"^\s*dot1x\s+(?:system-auth-control|pae|port-control)\b"),
+    _rule(AUTHENTICATION, "802.1X", r"^\s*aaa\s+authentication\s+port-access\s+dot1x\b"),
+    _rule(AUTHENTICATION, "802.1X", r"^\s*set\s+protocols\s+dot1x\b"),
+    _rule(AUTHENTICATION, "802.1X", r"^\s*dot1x\s*$"),
     _rule(AUTHENTICATION, "ポートセキュリティ", r"^\s*switchport\s+port-security\b"),
     _rule(AUTHENTICATION, "ポートセキュリティ", r"^\s*port-security\s+enable\b"),
     # 管理
