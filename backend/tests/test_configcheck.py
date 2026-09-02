@@ -569,3 +569,17 @@ def test_a_config_without_any_vlan_definition_is_not_accused(db_session):
     )
     result = configcheck.check(db_session, text)
     assert not [f for f in result.findings if "定義が無い VLAN" in f.title]
+
+
+def test_default_snmp_communities_are_caught_in_junos_and_comware_too(db_session):
+    """public のままなのは、書き方が違っても同じ穴。"""
+    junos = "set system host-name rt\nset snmp community public authorization read-write\n"
+    result = configcheck.check(db_session, junos)
+    titles = _titles(result)
+    assert "SNMP の合言葉が既定のままです" in titles
+    assert "SNMP から設定を書き換えられます" in titles
+
+    comware = "sysname sw\nsnmp-agent community write private\n"
+    titles = _titles(configcheck.check(db_session, comware))
+    assert "SNMP の合言葉が既定のままです" in titles
+    assert "SNMP から設定を書き換えられます" in titles

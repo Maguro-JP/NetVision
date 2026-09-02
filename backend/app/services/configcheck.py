@@ -60,7 +60,11 @@ _HYGIENE = (
         "ssh だけに絞ってください（transport input ssh）。",
     ),
     (
-        re.compile(r"^\s*snmp-server community\s+(public|private)\b", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:snmp-server community|set snmp community"
+            r"|snmp-agent community\s+(?:read|write))\s+(public|private)\b",
+            re.IGNORECASE,
+        ),
         HIGH,
         "SNMP の合言葉が既定のままです",
         "public / private は誰でも知っている値です。機器の中身が読めてしまいます。",
@@ -72,7 +76,12 @@ _HYGIENE = (
         "enable password は元に戻せる形で保存されます。enable secret を使ってください。",
     ),
     (
-        re.compile(r"^\s*snmp-server community\s+\S+\s+(?:RW|rw)\b"),
+        re.compile(
+            r"^\s*(?:snmp-server community\s+\S+\s+rw\b"
+            r"|set snmp community\s+\S+\s+authorization\s+read-write\b"
+            r"|snmp-agent community\s+write\b)",
+            re.IGNORECASE,
+        ),
         HIGH,
         "SNMP から設定を書き換えられます",
         "RW は読むだけでなく書き込みも許す指定です。合言葉を知られた時点で、"

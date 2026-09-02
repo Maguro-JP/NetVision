@@ -138,6 +138,9 @@ _RULES: tuple[_Rule, ...] = (
     # 管理
     _rule(MANAGEMENT, "SNMP", r"^\s*snmp-server\s+(?:community|host|group)\b"),
     _rule(MANAGEMENT, "SNMP", r"^\s*snmp-agent\s"),
+    _rule(MANAGEMENT, "SNMP", r"^\s*set\s+snmp\s+(?:community|trap-group)\b"),
+    _rule(MANAGEMENT, "SNMP", r"^\s*config\s+system\s+snmp\s+(?:community|user)\s*$"),
+    _rule(MANAGEMENT, "SNMP", r"^\s*set\s+deviceconfig\s+system\s+snmp-setting\b"),
     _rule(MANAGEMENT, "Syslog", r"^\s*logging\s+(?:host\s+)?(\d+\.\d+\.\d+\.\d+)", "送り先"),
     _rule(MANAGEMENT, "Syslog", r"^\s*info-center\s+loghost\s+(\S+)", "送り先"),
     # ASA は口の名前が間に入る（logging host inside 10.0.0.1）
