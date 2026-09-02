@@ -152,6 +152,8 @@ class TopologyEdgeView:
     vlan_mismatch: list[int] = field(default_factory=list)
     native_vlan: int | None = None
     native_mismatch: bool = False  # 両端でネイティブ VLAN が食い違っている
+    #: 図には線があるのに、実機では片側でも上がっていない（show の表を読めたときだけ）
+    link_down: bool = False
     vrf: str | None = None
     # 人が指定した引き出し位置。空なら図の側で位置関係から決める
     source_side: str | None = None
@@ -2292,6 +2294,10 @@ def _vrfs_by_device(db: Session) -> dict[int, list[str]]:
     return out
 
 
+#: show の表で「線が上がっていない」と読める言葉
+_DOWN_STATES = ("down", "notconnect", "err-disabled", "inactive")
+
+
 def _edge_view(
     link: Link, ports: dict[tuple[int, str], Interface], defined: dict[int, set[int]]
 ) -> TopologyEdgeView:
@@ -2329,6 +2335,7 @@ def _edge_view(
         vlan_mismatch=sorted(mismatch),
         native_vlan=a_native or b_native,
         native_mismatch=bool(a_native and b_native and a_native != b_native),
+        link_down=any(port is not None and port.link_state in _DOWN_STATES for port in (a, b)),
         vrf=(a.vrf if a else None) or (b.vrf if b else None),
         source_side=link.a_side,
         target_side=link.b_side,

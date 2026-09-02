@@ -352,6 +352,8 @@ export interface TopologyEdge {
   vlan_mismatch: number[];
   native_vlan: number | null;
   native_mismatch: boolean;
+  /** 図には線があるのに、実機では片側でも上がっていない（show の表を読めたときだけ） */
+  link_down: boolean;
   vrf: string | null;
   /** 人が指定した引き出し位置。null なら位置関係から自動で決める */
   source_side: LinkSide | null;

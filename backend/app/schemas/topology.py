@@ -230,6 +230,8 @@ class TopologyEdgeRead(BaseModel):
     vlan_mismatch: list[int] = []
     native_vlan: int | None = None
     native_mismatch: bool = False
+    #: 図には線があるのに、実機では片側でも上がっていない
+    link_down: bool = False
     vrf: str | None = None
     source_side: str | None = None
     target_side: str | None = None

@@ -1014,7 +1014,9 @@ function toFlow(
       // 許可漏れ・ネイティブ不一致は、図の上で目立たせないと気づけない
       (!simple && (edge.vlan_mismatch.length > 0 || edge.native_mismatch)
         ? " mismatch"
-        : ""),
+        : "") +
+      // 図には線があるのに実機では上がっていない。図だけの線をそのまま信じない
+      (!simple && edge.link_down ? " down" : ""),
     data: {
       sourceInterface: edge.source_interface,
       targetInterface: edge.target_interface,
