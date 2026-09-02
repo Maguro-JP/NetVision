@@ -51,8 +51,10 @@ _DETECTORS = (
     panos.detect,
     asa.detect,
     arista.detect,
-    aruba.detect,
+    # アライドテレシスの目印（port1.0.1 / vlan database）は Aruba CX より強い。
+    # vrrp の書き方が似ているので、先に見ないと取り違える
     allied.detect,
+    aruba.detect,
     nec.detect,
     cisco.detect,
 )

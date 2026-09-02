@@ -131,6 +131,8 @@ export default function BlueprintPage() {
             <option value="Cisco">Cisco IOS 系</option>
             <option value="NEC">NEC QX（Comware 系）</option>
             <option value="Aruba">Aruba CX（AOS-CX）</option>
+            <option value="Arista">Arista EOS</option>
+            <option value="Allied">アライドテレシス AlliedWare Plus</option>
           </select>
         </label>
       </div>

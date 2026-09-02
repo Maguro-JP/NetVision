@@ -241,3 +241,24 @@ def test_aruba_cx_configs_read_back_with_the_same_tool():
     body = plan.configs[routed[0].hostname]
     assert "vrrp" in body
     assert "routing" in body
+
+
+def test_arista_and_allied_configs_read_back_with_the_same_tool():
+    from app.services import configparse
+    from app.services.configparse import Vendor
+
+    for vendor, expected, prefix in (
+        ("Arista", Vendor.ARISTA, "Ethernet"),
+        ("Allied", Vendor.ALLIED, "port1.0."),
+    ):
+        plan = _plan(bp.SEPARATE, bp.REDUNDANT, vendor=vendor)
+        for hostname, body in plan.configs.items():
+            parsed = configparse.parse(body)
+            assert parsed.vendor is expected, (vendor, hostname)
+            assert parsed.hostname == hostname
+            assert all(i.name.startswith(prefix) for i in parsed.interfaces), (vendor, hostname)
+        router = next(p.hostname for p in plan.ports if p.routed)
+        parsed = configparse.parse(plan.configs[router])
+        # 経路は長さ付きで読めている
+        assert any("/" in r.destination for r in parsed.routes) or not plan.routes
+        assert any(i.ip_address and "/" in i.ip_address for i in parsed.interfaces)
