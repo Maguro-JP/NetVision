@@ -255,3 +255,23 @@ def test_each_vendor_fixture_is_detected_and_named():
         assert parsed.vendor is not Vendor.UNKNOWN, filename
         assert configparse.VENDOR_NAMES[parsed.vendor] == name, filename
         assert parsed.hostname, filename
+
+
+def test_two_configs_pasted_into_one_file_do_not_break_the_reader():
+    """別のベンダーの出力が1ファイルに混ざっていても、読み手は落ちない。
+
+    現場では show の出力を1ファイルに貼り足すことが多い。ある機種の見出しが
+    別の機種の読み手に引っかかって落ちる、を防ぐ。
+    """
+    from app.services import policyreview
+
+    texts = {path.name: load(path.stem) for path in FIXTURES.glob("*.txt")}
+    texts["panos-hq-02.xml"] = (FIXTURES / "panos-hq-02.xml").read_text(encoding="utf-8")
+    names = sorted(texts)
+    for first in names:
+        for second in names:
+            if first == second:
+                continue
+            text = texts[first] + "\n" + texts[second]
+            parsed = configparse.parse(text)
+            policyreview.review(parsed, text)
