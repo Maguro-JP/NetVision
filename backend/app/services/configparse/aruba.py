@@ -108,8 +108,10 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         match = _INTERFACE.match(line.strip())
         if match and not line.startswith(" "):
             name = " ".join(match.group(1).split())
-            # 書いていなければ落ちている。`no shutdown` を見たときだけ上げる
-            current = parsed.add_interface(ParsedInterface(name=name, enabled=False))
+            # 物理ポートと lag は、書いていなければ落ちている。`no shutdown` を
+            # 見たときだけ上げる。VLAN の口（interface vlan N）は作った時点で上がる
+            svi = name.lower().startswith("vlan")
+            current = parsed.add_interface(ParsedInterface(name=name, enabled=svi))
             continue
 
         if current is None:

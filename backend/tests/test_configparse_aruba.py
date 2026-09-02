@@ -32,6 +32,9 @@ def test_a_port_without_no_shutdown_is_down(parsed):
     assert ports["1/1/10"].enabled is True
     # `no shutdown` を書いていないので落ちている。IOS の目だと見落とす
     assert ports["1/1/11"].enabled is False
+    # VLAN の口は作った時点で上がる。物理ポートと同じ目で見ると
+    # 「アドレスが振ってあるのに止めてある」と誤って言うことになる
+    assert ports["Vlan10"].enabled is True
 
 
 def test_the_vlan_of_a_port_is_read(parsed):
