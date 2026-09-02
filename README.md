@@ -294,6 +294,8 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
+`show interfaces status` / `show ip interface brief` / `show interfaces terse` が入っていれば、
+線が実際に上がっているかまで読み、図に線があるのに実機では上がっていないものを指摘します。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
 
 ### 抽出するもの

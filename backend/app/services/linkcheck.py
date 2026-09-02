@@ -133,6 +133,7 @@ def _compare(a: Interface, b: Interface) -> list[Finding]:
     found.extend(_speed_duplex(a, b))
     found.extend(_lag(a, b))
     found.extend(_enabled(a, b))
+    found.extend(_link_state(a, b))
     found.extend(_addresses(a, b))
     found.extend(_ospf(a, b))
     return found
@@ -158,6 +159,30 @@ def _enabled(a: Interface, b: Interface) -> list[Finding]:
             "使う線なら落ちている側を上げ、使わない線なら両端を落として"
             "「使っていない」と分かる形にしてください。",
             evidence=[f"{down.name}: 落ちている", f"{up.name}: 上がっている"],
+        )
+    ]
+
+
+def _link_state(a: Interface, b: Interface) -> list[Finding]:
+    """図には線があるのに、実機では線が上がっていない。
+
+    show の表を取り込んだときだけ言える。片側だけでも down / notconnect なら、
+    その線は図の上だけのものになっている。
+    """
+    down = [
+        port
+        for port in (a, b)
+        if port.link_state in ("down", "notconnect", "err-disabled", "inactive")
+    ]
+    if not down:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="図には線があるのに、実機では上がっていません",
+            why="結線表か図が実機と違っています。抜けているか、別のポートに"
+            "挿さっているか、相手が落ちています。図を直すか、線を確かめてください。",
+            evidence=[f"{port.name}: {port.link_state}" for port in down],
         )
     ]
 

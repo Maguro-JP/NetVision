@@ -157,6 +157,7 @@ class InterfaceRead(BaseModel):
     lag_group: int | None = None
     lag_mode: str | None = None
     enabled: bool
+    link_state: str | None = None
 
 
 class TopologyNodeRead(BaseModel):

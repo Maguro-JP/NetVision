@@ -16,6 +16,7 @@ from app.services.configparse import (
     fortinet,
     hapair,
     juniper,
+    linkstate,
     nec,
     panos,
     wireless,
@@ -135,6 +136,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     parsed.wireless = wireless.parse(text)
     parsed.ha_pair = hapair.parse(text)
+    # 線が実際に上がっているか。show の表からだけ分かる
+    linkstate.parse(text, parsed)
     return parsed
 
 

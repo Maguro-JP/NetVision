@@ -73,6 +73,9 @@ class ParsedInterface:
     #: 合言葉の掛け方（none / text / md5）。値は持たない
     ospf_auth: str | None = None
     enabled: bool = True
+    #: 実機の線の状態（up / down / notconnect など、show の出力から）。
+    #: Config だけでは分からない。書いていなければ None のまま（推測しない）
+    link_state: str | None = None
 
     @property
     def key(self) -> str:

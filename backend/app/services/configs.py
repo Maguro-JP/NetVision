@@ -488,6 +488,7 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.ospf_network = item.ospf_network
         interface.ospf_auth = item.ospf_auth
         interface.enabled = item.enabled
+        interface.link_state = item.link_state
 
     # Config から消えたポートは実機に無いということなので削除する
     for key, interface in existing.items():

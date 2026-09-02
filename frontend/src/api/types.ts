@@ -237,6 +237,8 @@ export interface NetworkInterface {
   trunk_vlans: string | null;
   vrf: string | null;
   enabled: boolean;
+  /** 実機の線の状態（show の出力から）。Config だけの取り込みでは null */
+  link_state: string | null;
 }
 
 export type LinkOrigin = "discovered" | "manual" | "inferred";
