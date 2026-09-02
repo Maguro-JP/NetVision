@@ -44,7 +44,11 @@ async def lifespan(_app: FastAPI):
     from app.bootstrap import ensure_ready
 
     ensure_ready()
+    from app.services import exposure_schedule
+
+    exposure_schedule.start()
     yield
+    exposure_schedule.stop()
 
 
 app = FastAPI(

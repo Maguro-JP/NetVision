@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 
 import { api } from "../api/client";
 import type { ExposureRow } from "../api/types";
-import { formatDate } from "../lib/format";
+import { formatDate, formatTimestamp } from "../lib/format";
 
 const STATUS_LABEL: Record<string, string> = {
   open: "未対応",
@@ -17,10 +17,19 @@ const STATUS_LABEL: Record<string, string> = {
 };
 
 // 選べるのは人が決める状態だけ。resolved は自動でしか付かない
-const DECIDABLE = ["open", "in_progress", "mitigated", "fixed", "accepted", "not_affected"];
+const DECIDABLE = [
+  "open",
+  "in_progress",
+  "mitigated",
+  "fixed",
+  "accepted",
+  "not_affected",
+];
 
 function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
-  const [tab, setTab] = useState<"diff" | "fixed" | "current" | "rollback">("diff");
+  const [tab, setTab] = useState<"diff" | "fixed" | "current" | "rollback">(
+    "diff",
+  );
   const { data: fix, error } = useQuery({
     queryKey: ["fixConfig", row.device_id, row.remediation_id],
     queryFn: () => api.fixConfig(row.device_id, row.remediation_id!),
@@ -29,7 +38,10 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
 
   if (row.remediation_id === null) {
     return (
-      <div className="card" style={{ marginTop: 12, borderColor: "var(--sev-warning)" }}>
+      <div
+        className="card"
+        style={{ marginTop: 12, borderColor: "var(--sev-warning)" }}
+      >
         対応版 Config を出すには、適用する対処を先に指定してください。
         <div className="actions">
           <Link className="button" to="/remediation">
@@ -43,7 +55,10 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
 
   if (error) {
     return (
-      <div className="card" style={{ marginTop: 12, borderColor: "var(--sev-expired)" }}>
+      <div
+        className="card"
+        style={{ marginTop: 12, borderColor: "var(--sev-expired)" }}
+      >
         {(error as Error).message}
         <div className="actions">
           <button onClick={onClose}>閉じる</button>
@@ -71,21 +86,36 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
       <p className="muted">{fix.remediation_summary}</p>
 
       {fix.notes.map((note) => (
-        <div key={note} className="card" style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}>
+        <div
+          key={note}
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}
+        >
           {note}
         </div>
       ))}
 
       {fix.already_applied ? (
-        <div className="card" style={{ marginTop: 8, borderColor: "var(--sev-ok)" }}>
-          ✓ この対処の設定は現行 config に既に入っています（投入するものはありません）
+        <div
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-ok)" }}
+        >
+          ✓ この対処の設定は現行 config
+          に既に入っています（投入するものはありません）
         </div>
       ) : fix.diff.verified ? (
-        <div className="card" style={{ marginTop: 8, borderColor: "var(--sev-ok)" }}>
-          ✓ この投入コマンドを当てると対応版 config と同じ状態になることを確認しました
+        <div
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-ok)" }}
+        >
+          ✓ この投入コマンドを当てると対応版 config
+          と同じ状態になることを確認しました
         </div>
       ) : (
-        <div className="card" style={{ marginTop: 8, borderColor: "var(--sev-expired)" }}>
+        <div
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-expired)" }}
+        >
           <strong>収束しないためコマンドを出していません。</strong>
           <ul>
             {fix.diff.mismatches.map((m) => (
@@ -96,7 +126,10 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
       )}
 
       {fix.diff.risks.length > 0 && (
-        <div className="card" style={{ marginTop: 8, borderColor: "var(--sev-critical)" }}>
+        <div
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-critical)" }}
+        >
           <strong>通信・接続に影響します</strong>
           <ul>
             {fix.diff.risks.map((r) => (
@@ -115,7 +148,11 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
             ["rollback", "切り戻し"],
           ] as const
         ).map(([key, label]) => (
-          <button key={key} className={tab === key ? "primary" : ""} onClick={() => setTab(key)}>
+          <button
+            key={key}
+            className={tab === key ? "primary" : ""}
+            onClick={() => setTab(key)}
+          >
             {label}
           </button>
         ))}
@@ -123,10 +160,19 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
 
       <pre className="diff">{body || "（空です）"}</pre>
       <div className="actions">
-        <a className="button" href={api.fixConfigDownloadUrl(fix.device_id, fix.remediation_id, tab)}>
+        <a
+          className="button"
+          href={api.fixConfigDownloadUrl(
+            fix.device_id,
+            fix.remediation_id,
+            tab,
+          )}
+        >
           ファイルで落とす
         </a>
-        <button onClick={() => navigator.clipboard?.writeText(body)}>コピー</button>
+        <button onClick={() => navigator.clipboard?.writeText(body)}>
+          コピー
+        </button>
         <button onClick={onClose}>閉じる</button>
       </div>
       <p className="muted">
@@ -151,9 +197,15 @@ export default function ExposuresPage() {
     queryFn: () => api.exposureSummary(),
   });
 
+  const { data: schedule } = useQuery({
+    queryKey: ["exposureSchedule"],
+    queryFn: () => api.exposureSchedule(),
+  });
+
   const refresh = () => {
     queryClient.invalidateQueries({ queryKey: ["exposures"] });
     queryClient.invalidateQueries({ queryKey: ["exposureSummary"] });
+    queryClient.invalidateQueries({ queryKey: ["exposureSchedule"] });
   };
 
   const sync = useMutation({
@@ -186,12 +238,17 @@ export default function ExposuresPage() {
       <p className="subtitle">
         機器 × CVE を1件ずつ台帳にして、取りこぼさないようにします。
         <br />
-        <strong>「対処を書いた」と「その機器に入れた」は別</strong>なので分けて持ちます。
-        回避策は当てても機器の版は変わらないため、<strong>該当は残ったまま</strong>です。
+        <strong>「対処を書いた」と「その機器に入れた」は別</strong>
+        なので分けて持ちます。 回避策は当てても機器の版は変わらないため、
+        <strong>該当は残ったまま</strong>です。
       </p>
 
       <div className="toolbar">
-        <button className="primary" onClick={() => sync.mutate()} disabled={sync.isPending}>
+        <button
+          className="primary"
+          onClick={() => sync.mutate()}
+          disabled={sync.isPending}
+        >
           該当状況を洗い直す
         </button>
         <label>
@@ -203,6 +260,24 @@ export default function ExposuresPage() {
           未対応・対応中だけ表示
         </label>
       </div>
+
+      {schedule && (
+        <p className="muted">
+          最終洗い直し: {formatTimestamp(schedule.last_run_at)}
+          {schedule.last_trigger === "scheduled" && "（自動）"}
+          {schedule.last_trigger === "manual" && "（手動）"}
+          {" / "}
+          {schedule.next_run_at
+            ? `次の自動洗い直し: ${formatTimestamp(schedule.next_run_at)}（${schedule.interval_hours} 時間おき）`
+            : "自動洗い直しは止めています（設定で間隔を決められます）"}
+        </p>
+      )}
+      {schedule && schedule.grew_by > 0 && (
+        <div className="card" style={{ borderColor: "var(--sev-critical)" }}>
+          前回の洗い直しで未対応が {schedule.unhandled_before} 件から{" "}
+          {schedule.unhandled_after} 件に増えました
+        </div>
+      )}
 
       {syncNote.length > 0 && (
         <div className="card" style={{ borderColor: "var(--accent)" }}>
@@ -245,7 +320,8 @@ export default function ExposuresPage() {
 
       {(rows ?? []).length === 0 ? (
         <div className="empty">
-          該当はありません。CVE や機器を登録した後は「該当状況を洗い直す」を実行してください。
+          該当はありません。CVE
+          や機器を登録した後は「該当状況を洗い直す」を実行してください。
         </div>
       ) : (
         <table>
@@ -265,16 +341,22 @@ export default function ExposuresPage() {
                 <td>
                   <select
                     value={row.status}
-                    onChange={(e) => decide.mutate({ id: row.id, status: e.target.value })}
+                    onChange={(e) =>
+                      decide.mutate({ id: row.id, status: e.target.value })
+                    }
                   >
                     {DECIDABLE.map((value) => (
                       <option key={value} value={value}>
                         {STATUS_LABEL[value]}
                       </option>
                     ))}
-                    {row.status === "resolved" && <option value="resolved">該当しなくなった</option>}
+                    {row.status === "resolved" && (
+                      <option value="resolved">該当しなくなった</option>
+                    )}
                   </select>
-                  {row.decided_by && <div className="muted">{row.decided_by}</div>}
+                  {row.decided_by && (
+                    <div className="muted">{row.decided_by}</div>
+                  )}
                 </td>
                 <td>
                   <Link to={`/devices/${row.device_id}`}>{row.hostname}</Link>
@@ -282,13 +364,18 @@ export default function ExposuresPage() {
                 </td>
                 <td style={{ whiteSpace: "normal", maxWidth: 300 }}>
                   <strong>{row.cve_id}</strong>{" "}
-                  {row.known_exploited && <span className="badge expired">悪用確認済み</span>}
+                  {row.known_exploited && (
+                    <span className="badge expired">悪用確認済み</span>
+                  )}
                   {row.cvss_score !== null && (
                     <span className="muted"> CVSS {row.cvss_score}</span>
                   )}
                   {row.title && <div className="muted">{row.title}</div>}
                   {row.reopen_reason && (
-                    <div className="muted" style={{ color: "var(--sev-warning)" }}>
+                    <div
+                      className="muted"
+                      style={{ color: "var(--sev-warning)" }}
+                    >
                       差し戻し: {row.reopen_reason}
                     </div>
                   )}
@@ -302,7 +389,10 @@ export default function ExposuresPage() {
                     <span className="badge critical">未反映</span>
                   )}
                   <div>
-                    <button onClick={() => verify.mutate(row.id)} disabled={!row.remediation_id}>
+                    <button
+                      onClick={() => verify.mutate(row.id)}
+                      disabled={!row.remediation_id}
+                    >
                       確認
                     </button>
                   </div>

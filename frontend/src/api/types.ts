@@ -1003,6 +1003,19 @@ export interface ExposureSyncResult {
   messages: string[];
 }
 
+/** 裏で回す洗い直しの状態。 */
+export interface ExposureSyncSchedule {
+  interval_hours: number;
+  running: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_trigger: string | null;
+  unhandled_before: number | null;
+  unhandled_after: number | null;
+  grew_by: number;
+  messages: string[];
+}
+
 export interface FixConfig {
   device_id: number;
   hostname: string;
@@ -1098,6 +1111,7 @@ export interface AppSettings {
   reference_stale_days: number;
   display_timezone: string;
   model_dir: string;
+  exposure_sync_hours: number;
 }
 
 /** 資料から起こしたテンプレートの下書き。 */
@@ -1241,7 +1255,12 @@ export interface L3Report {
     name: string;
     detail: string;
     used_by: string[];
-    entries: { seq: string | null; action: string; matches: string[]; sets: string[] }[];
+    entries: {
+      seq: string | null;
+      action: string;
+      matches: string[];
+      sets: string[];
+    }[];
   }[];
   /** ACL / NAT / DHCP / QoS / IPsec。当て先が空なら、書いてあるだけで効いていない */
   controls: {

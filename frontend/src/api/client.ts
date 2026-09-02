@@ -52,6 +52,7 @@ import type {
   DeviceRemediation,
   ExposureRow,
   ExposureSummary,
+  ExposureSyncSchedule,
   ExposureSyncResult,
   FixConfig,
   ImpactReport,
@@ -1154,6 +1155,7 @@ export const api = {
       })}`,
     ),
   exposureSummary: () => request<ExposureSummary>("/exposures/summary"),
+  exposureSchedule: () => request<ExposureSyncSchedule>("/exposures/schedule"),
   decideExposure: (id: number, body: Record<string, unknown>) =>
     request<ExposureRow>(`/exposures/${id}`, {
       method: "PATCH",

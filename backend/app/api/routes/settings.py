@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services import appsettings, llm_inproc
+from app.services import appsettings, exposure_schedule, llm_inproc
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -28,6 +28,7 @@ class AppSettingsRead(BaseModel):
     reference_stale_days: int = Field(description="リファレンスが古いと見なす日数")
     display_timezone: str = Field(description="画面と書き出しに出す時刻の地域")
     model_dir: str = Field(description="アプリの中で動かすモデル（GGUF）の置き場所")
+    exposure_sync_hours: int = Field(description="該当状況を裏で洗い直す間隔（時間）。0 で止める")
 
 
 class AppSettingsUpdate(BaseModel):
@@ -36,6 +37,7 @@ class AppSettingsUpdate(BaseModel):
     reference_stale_days: int | None = None
     display_timezone: str | None = None
     model_dir: str | None = None
+    exposure_sync_hours: int | None = None
 
 
 def _current() -> AppSettingsRead:
@@ -47,6 +49,7 @@ def _current() -> AppSettingsRead:
         ),
         display_timezone=appsettings.text("display_timezone", settings.display_timezone),
         model_dir=appsettings.text("model_dir", str(llm_inproc.model_dir())),
+        exposure_sync_hours=exposure_schedule.interval_hours(),
     )
 
 
@@ -65,6 +68,13 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
             raise HTTPException(
                 status.HTTP_422_UNPROCESSABLE_ENTITY, "日数は 1〜3650 で指定してください"
             )
+    if "exposure_sync_hours" in changes and not (
+        0 <= changes["exposure_sync_hours"] <= exposure_schedule.MAX_HOURS
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"洗い直しの間隔は 0〜{exposure_schedule.MAX_HOURS} 時間で指定してください",
+        )
     if "display_timezone" in changes:
         from zoneinfo import ZoneInfo
 
@@ -89,4 +99,6 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
             appsettings.set_value(key, value)
     except RuntimeError as error:
         raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(error)) from error
+    if "exposure_sync_hours" in changes:
+        exposure_schedule.reschedule()
     return _current()

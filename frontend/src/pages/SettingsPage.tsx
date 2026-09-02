@@ -167,6 +167,27 @@ export default function SettingsPage() {
               </span>
             </div>
             <div className="field">
+              <label htmlFor="sync-hours">
+                該当状況を裏で洗い直す間隔（時間）
+              </label>
+              <input
+                id="sync-hours"
+                type="number"
+                min={0}
+                max={720}
+                defaultValue={app.exposure_sync_hours}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.exposure_sync_hours)
+                    saveApp.mutate({ exposure_sync_hours: value });
+                }}
+              />
+              <span className="muted">
+                0
+                で止めます。押し忘れても「未対応ゼロ」が古いままにならないように
+              </span>
+            </div>
+            <div className="field">
               <label htmlFor="timezone">時刻の地域</label>
               <input
                 id="timezone"

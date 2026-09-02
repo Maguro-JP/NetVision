@@ -5,6 +5,7 @@
 """
 
 import json
+from datetime import UTC, datetime
 
 from tests.conftest import API
 
@@ -341,3 +342,78 @@ def test_unhandled_only_filter(client, device_payload):
     client.patch(f"{API}/exposures/{rows[0]['id']}", json={"status": "fixed"})
 
     assert len(only(client, unhandled_only=True)) == 1
+
+
+# ---------------------------------------------------------------------------
+# 漏れ経路: 洗い直しを押し忘れて「未対応ゼロ」が古いまま
+# ---------------------------------------------------------------------------
+
+
+def test_sync_records_how_many_unhandled_grew(client, device_payload):
+    """洗い直すたびに前回との差を覚える。増えたら文で残す。"""
+    import_advisory(client)
+    add_device(client, device_payload)
+
+    result = sync(client)
+    assert "未対応が 0 件から 1 件に増えました" in result["messages"]
+
+    state = client.get(f"{API}/exposures/schedule").json()
+    assert state["last_trigger"] == "manual"
+    assert state["unhandled_before"] == 0
+    assert state["unhandled_after"] == 1
+    assert state["grew_by"] == 1
+    assert state["running"] is True
+    assert state["last_run_at"] is not None
+
+    # 変化が無ければ増えた扱いにはならない
+    result = sync(client)
+    assert not any("増えました" in m for m in result["messages"])
+    assert client.get(f"{API}/exposures/schedule").json()["grew_by"] == 0
+
+
+def test_sync_interval_is_set_from_the_screen(client, tmp_path, monkeypatch):
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "documents"))
+
+    assert client.get(f"{API}/settings").json()["exposure_sync_hours"] == 24
+    response = client.patch(f"{API}/settings", json={"exposure_sync_hours": 6})
+    assert response.status_code == 200
+    state = client.get(f"{API}/exposures/schedule").json()
+    assert state["interval_hours"] == 6
+    assert state["next_run_at"] is not None
+
+    # 0 で止める。次の予定は無くなる
+    client.patch(f"{API}/settings", json={"exposure_sync_hours": 0})
+    assert client.get(f"{API}/exposures/schedule").json()["next_run_at"] is None
+
+    assert client.patch(f"{API}/settings", json={"exposure_sync_hours": 9999}).status_code == 422
+
+
+def test_scheduled_sync_runs_in_the_background(client, device_payload, monkeypatch):
+    """裏の周回が実際に洗い直しを呼ぶ。間隔をごく短くして待つ。"""
+    import time
+    from datetime import timedelta
+
+    from app.services import exposure_schedule
+
+    import_advisory(client)
+    add_device(client, device_payload)
+
+    monkeypatch.setattr(
+        exposure_schedule,
+        "next_run_at",
+        lambda: datetime.now(UTC) + timedelta(seconds=0.05),
+    )
+    exposure_schedule.reschedule()
+    limit = time.time() + 3
+    while time.time() < limit:
+        last = exposure_schedule.last_run()
+        if last is not None and last.trigger == "scheduled":
+            break
+        time.sleep(0.02)
+    else:
+        raise AssertionError("裏の洗い直しが走りませんでした")
+    assert last.unhandled_after == 1
+    monkeypatch.undo()
+    exposure_schedule.reschedule()
