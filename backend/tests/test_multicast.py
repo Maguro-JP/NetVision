@@ -165,3 +165,59 @@ def test_nothing_written_means_nothing_read():
     )
     assert parsed.multicast is None
     assert multicastreview.review(parsed) == []
+
+
+def test_arista_writes_it_differently():
+    """`router pim sparse` の中に RP、口には `pim ipv4 sparse-mode`。"""
+    text = """! device: dc-01
+router pim sparse
+   ip rp address 10.0.0.9
+interface Ethernet1
+   ip address 10.0.0.1/30
+   pim ipv4 sparse-mode
+interface Vlan10
+   ip address 10.0.10.1/24
+   pim ipv4 sparse-mode
+"""
+    multicast = configparse.parse(text).multicast
+    assert [item.name for item in multicast.pim_interfaces] == ["Ethernet1", "Vlan10"]
+    assert multicast.rps[0].address == "10.0.0.9"
+    assert not any("決まっていません" in f.title for f in _review(text))
+
+
+def test_aoscx_writes_it_differently():
+    """口の名前が離れて書かれ、`ip pim-sparse enable` で入れる。"""
+    text = """hostname aruba-01
+router pim
+    enable
+    rp-address 10.0.0.9
+interface vlan 10
+    ip address 10.0.10.1/24
+    ip pim-sparse enable
+interface vlan 20
+    ip address 10.0.20.1/24
+    ip pim-sparse enable
+vlan 10
+    ip igmp snooping enable
+"""
+    multicast = configparse.parse(text).multicast
+    assert [item.name for item in multicast.pim_interfaces] == ["vlan 10", "vlan 20"]
+    assert multicast.rps[0].address == "10.0.0.9"
+    assert [item.vlan for item in multicast.vlans] == [10]
+
+
+def test_the_group_range_on_a_rendezvous_point_is_kept_without_the_keyword():
+    text = """hostname nx-01
+feature pim
+ip pim rp-address 10.0.0.9 group-list 239.0.0.0/8
+interface Ethernet1/1
+  ip pim sparse-mode
+"""
+    rp = configparse.parse(text).multicast.rps[0]
+    assert rp.address == "10.0.0.9"
+    assert rp.scope == "239.0.0.0/8"
+
+
+def test_override_is_not_mistaken_for_a_group_range():
+    text = CISCO + "ip pim rp-address 10.0.0.2 override\n"
+    assert configparse.parse(text).multicast.rps[0].scope is None

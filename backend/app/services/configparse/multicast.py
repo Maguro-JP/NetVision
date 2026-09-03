@@ -77,23 +77,55 @@ def has_any(text: str) -> bool:
 # Cisco IOS / NX-OS / Arista
 # ---------------------------------------------------------------------------
 
-_ROUTING = re.compile(r"^\s*(?:ip\s+)?multicast-routing\b|^\s*feature\s+pim\b", re.IGNORECASE)
-_RP = re.compile(r"^\s*ip\s+pim\s+(?:vrf\s+\S+\s+)?rp-address\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
-_RP_ARISTA = re.compile(r"^\s+rp\s+address\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+_ROUTING = re.compile(
+    r"^\s*(?:ip\s+)?multicast-routing\b|^\s*feature\s+pim\b|^\s*router\s+pim\b",
+    re.IGNORECASE,
+)
+_RP = re.compile(
+    r"^\s*ip\s+pim\s+(?:vrf\s+\S+\s+)?rp-address\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",
+    re.IGNORECASE,
+)
+#: Arista `ip rp address 10.0.0.9`、AOS-CX `rp-address 10.0.0.9`。
+#: どちらも router pim の中に書くので、字下がりの中だけで見る
+_RP_BLOCK = re.compile(
+    r"^\s+(?:ip\s+rp\s+address|rp-address)\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",
+    re.IGNORECASE,
+)
 _CANDIDATE = re.compile(
     r"^\s*ip\s+pim\s+(?:bsr-candidate|rp-candidate|send-rp-announce|autorp)\b", re.IGNORECASE
 )
-_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+#: `interface Vlan10` と、番号を離して書く流儀（AOS-CX の `interface vlan 10`）
+_INTERFACE = re.compile(r"^interface\s+(\S+(?:\s+\d+(?:/\d+)*)?)\s*$", re.IGNORECASE)
+#: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）
+_VLAN_BLOCK = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: Arista `router pim sparse`、AOS-CX `router pim`
+_PIM_BLOCK = re.compile(r"^router\s+pim\b", re.IGNORECASE)
+#: Cisco `ip pim sparse-mode`、Arista `pim ipv4 sparse-mode`、
+#: AOS-CX `ip pim-sparse enable`
 _PIM_MODE = re.compile(
-    r"^\s*ip\s+pim\s+(sparse-dense-mode|sparse-mode|dense-mode)\b", re.IGNORECASE
+    r"^\s*(?:ip\s+pim|pim\s+ipv[46])[\s-]"
+    r"(sparse-dense-mode|sparse-mode|dense-mode|sparse|dense)\b",
+    re.IGNORECASE,
 )
 _SNOOP_OFF = re.compile(r"^\s*no\s+ip\s+igmp\s+snooping\s*$", re.IGNORECASE)
-_SNOOP_ON = re.compile(r"^\s*ip\s+igmp\s+snooping\s*$", re.IGNORECASE)
+_SNOOP_ON = re.compile(r"^\s*ip\s+igmp\s+snooping(?:\s+enable)?\s*$", re.IGNORECASE)
 _SNOOP_VLAN = re.compile(
     r"^\s*(?P<no>no\s+)?ip\s+igmp\s+snooping\s+vlan\s+(?P<vlan>\d+)(?:\s+(?P<rest>.+))?$",
     re.IGNORECASE,
 )
 _QUERIER_GLOBAL = re.compile(r"^\s*ip\s+igmp\s+snooping\s+querier\b", re.IGNORECASE)
+
+
+_SCOPE_WORDS = re.compile(r"^(?:group-list|access-list|acl|prefix-list)\s+", re.IGNORECASE)
+
+
+def _scope(text: str | None) -> str | None:
+    """RP に付いている範囲の指定。語の飾りは落として、対象だけを残す。"""
+    if not text:
+        return None
+    cleaned = _SCOPE_WORDS.sub("", text.strip())
+    cleaned = re.sub(r"\boverride\b", "", cleaned, flags=re.IGNORECASE).strip()
+    return cleaned or None
 
 
 def _mode(word: str) -> str:
@@ -115,26 +147,40 @@ def _vlan(found: ParsedMulticast, number: int) -> ParsedSnoopVlan:
 def parse_cisco(text: str, found: ParsedMulticast) -> None:
     """Cisco IOS / NX-OS / Arista の書き方。"""
     interface: str | None = None
+    vlan: int | None = None
+    pim_block = False
     global_querier = False
     for raw in text.splitlines():
         line = raw.rstrip()
         head = _INTERFACE.match(line)
         if head:
-            interface = head.group(1)
+            interface, vlan, pim_block = head.group(1), None, False
+            continue
+        in_vlan = _VLAN_BLOCK.match(line)
+        if in_vlan:
+            interface, pim_block = None, False
+            vlan = int(in_vlan.group(1))
+            _vlan(found, vlan)
+            continue
+        if _PIM_BLOCK.match(line):
+            interface, vlan, pim_block = None, None, True
+            found.routing = True
             continue
         if line and not line.startswith((" ", "\t")):
-            interface = None
+            interface, vlan, pim_block = None, None, False
 
         if _ROUTING.match(line):
             found.routing = True
             continue
         rp = _RP.match(line)
         if rp:
-            found.rps.append(ParsedRp(address=rp.group(1), scope=rp.group(2)))
+            found.rps.append(ParsedRp(address=rp.group("address"), scope=_scope(rp.group("scope"))))
             continue
-        arista_rp = _RP_ARISTA.match(line) if line.startswith((" ", "\t")) else None
-        if arista_rp and "pim" in text.lower():
-            found.rps.append(ParsedRp(address=arista_rp.group(1), scope=arista_rp.group(2)))
+        in_pim = _RP_BLOCK.match(line) if line.startswith((" ", "\t")) else None
+        if in_pim and pim_block:
+            found.rps.append(
+                ParsedRp(address=in_pim.group("address"), scope=_scope(in_pim.group("scope")))
+            )
             continue
         if _CANDIDATE.match(line):
             found.dynamic_rp = True
@@ -164,7 +210,13 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
             found.snooping = False
             continue
         if _SNOOP_ON.match(line):
-            found.snooping = True
+            if vlan is None:
+                found.snooping = True
+            else:
+                _vlan(found, vlan).enabled = True
+            continue
+        if re.match(r"^\s*ip\s+igmp\s+snooping\s+querier\b", line, re.IGNORECASE) and vlan:
+            _vlan(found, vlan).querier = True
 
     if global_querier:
         for item in found.vlans:
@@ -227,6 +279,10 @@ _CW_SNOOP = re.compile(r"^\s*igmp-snooping\s+enable\s*$", re.IGNORECASE)
 _CW_QUERIER = re.compile(r"^\s*igmp-snooping\s+querier\s*$", re.IGNORECASE)
 _CW_VLAN = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _CW_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+#: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）
+_VLAN_BLOCK = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: Arista `router pim sparse`、AOS-CX `router pim`
+_PIM_BLOCK = re.compile(r"^router\s+pim\b", re.IGNORECASE)
 
 
 def parse_comware(text: str, found: ParsedMulticast) -> None:
