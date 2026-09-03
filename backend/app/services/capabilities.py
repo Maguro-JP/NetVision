@@ -116,10 +116,13 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="経路",
         name="ポリシールーティング",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="どのポートに当てているかまで。中身は読んでいません。",
+        note="当てているポートと、条件・次の相手まで読みます（Cisco IOS・NEC IX の"
+        "route-map + ip policy、FortiGate の router policy）。次の相手が直結の帯に"
+        "無い、条件の ACL が無い、条件だけで行き先が無い、を指摘します。"
+        "その振り分けが業務として正しいかは、要件が要るので言いません。",
     ),
     Capability(
         area="経路",

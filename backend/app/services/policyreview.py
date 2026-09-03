@@ -50,6 +50,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
+    findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
     findings.extend(_nat(parsed, text))
     findings.extend(_dhcp(parsed))
@@ -275,6 +276,100 @@ def _route_maps(parsed: ParsedConfig) -> list[Finding]:
                     )
                 )
                 break
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# ポリシールーティング
+# ---------------------------------------------------------------------------
+
+_NEXT_HOP = re.compile(
+    r"^set\s+(?:ip\s+(?:default\s+)?next-hop|gateway)\s+(?P<hops>[\d. ]+?)"
+    r"(?:\s+(?P<flags>[A-Za-z].*))?$",
+    re.IGNORECASE,
+)
+_MATCH_ACL = re.compile(r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>.+)$", re.IGNORECASE)
+
+
+def _connected_networks(parsed: ParsedConfig) -> list[ipaddress.IPv4Network]:
+    networks = []
+    for interface in parsed.interfaces:
+        network = _network_of(interface.ip_address)
+        if network is not None and network.prefixlen < 32:
+            networks.append(network)
+    return networks
+
+
+def _policy_routing(parsed: ParsedConfig) -> list[Finding]:
+    """ポリシールーティングの中身。
+
+    経路表より先に見られるので、ここの相手が届かないと、経路表が正しくても
+    通信は行かない。次の相手が直結の帯に居るか、条件に使っている ACL が
+    あるかを見る。Cisco IOS は recursive を付けない限り直結でないと効かない。
+    """
+    findings: list[Finding] = []
+    networks = _connected_networks(parsed)
+    acl_names = {acl.name for acl in parsed.acls}
+    for policy in parsed.policies:
+        if policy.kind != "policy-based-routing":
+            continue
+        for entry in policy.entries:
+            if entry.action != "permit":
+                continue
+            for match in entry.matches:
+                found = _MATCH_ACL.match(match)
+                if not found or not acl_names:
+                    continue
+                missing = [n for n in found.group("names").split() if n not in acl_names]
+                if missing:
+                    findings.append(
+                        _note(
+                            HIGH,
+                            f"{policy.name} が参照している ACL {' '.join(missing)} がありません",
+                            "条件の ACL が無いと、この行は何にも当たらず、"
+                            "向けたいはずの通信は普通の経路表で流れます。",
+                            [entry.raw, match],
+                        )
+                    )
+            hops: list[str] = []
+            recursive = False
+            for item in entry.sets:
+                found = _NEXT_HOP.match(item)
+                if not found:
+                    continue
+                hops.extend(found.group("hops").split())
+                if "recursive" in (found.group("flags") or "").lower():
+                    recursive = True
+            if entry.matches and not entry.sets:
+                findings.append(
+                    _note(
+                        LOW,
+                        f"{policy.name} の {entry.raw} は行き先を決めていません",
+                        "条件だけあって set がありません。当たった通信は普通の経路表で"
+                        "流れます。後ろの行から外すための行なら問題ありません。",
+                        [entry.raw, *entry.matches],
+                    )
+                )
+                continue
+            if recursive or not networks:
+                continue
+            for hop in hops:
+                try:
+                    address = ipaddress.ip_address(hop)
+                except ValueError:
+                    continue
+                if not any(address in network for network in networks):
+                    findings.append(
+                        _note(
+                            MEDIUM,
+                            f"{policy.name} の次の相手 {hop} は直結の帯にありません",
+                            "ポリシールーティングの相手は、この機器のどの口の帯にも"
+                            "入っていません。Cisco IOS では recursive を付けない限り"
+                            "直結でないと効かず、当たった通信は普通の経路表で流れます。"
+                            "相手の付け替え忘れか、口の帯の変更漏れが疑われます。",
+                            [entry.raw, *entry.sets],
+                        )
+                    )
     return findings
 
 

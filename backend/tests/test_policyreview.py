@@ -408,3 +408,101 @@ def test_not_limiting_the_management_port_is_not_called_a_mistake():
     """入る口をどこまで絞るかは現場の決めごと。間違いとは言い切れない。"""
     text = "line vty 0 15\n transport input ssh\n"
     assert policyreview.review(configparse.parse(text), text) == []
+
+
+# ---------------------------------------------------------------------------
+# ポリシールーティング
+# ---------------------------------------------------------------------------
+
+_PBR_BASE = """
+interface GigabitEthernet0/0
+ ip address 10.1.1.1 255.255.255.0
+ ip policy route-map TO-WAN2
+interface GigabitEthernet0/1
+ ip address 192.168.1.1 255.255.255.0
+ip access-list extended GUEST
+ permit ip 10.1.1.0 0.0.0.255 any
+"""
+
+
+def _pbr(*lines: str) -> str:
+    return _PBR_BASE + "route-map TO-WAN2 permit 10\n" + "".join(f" {line}\n" for line in lines)
+
+
+def test_a_policy_route_whose_next_hop_is_directly_connected_is_fine():
+    text = _pbr("match ip address GUEST", "set ip next-hop 192.168.1.254")
+    findings = _review(text)
+    assert not any("直結の帯" in f.title for f in findings)
+    policy = next(p for p in configparse.parse(text).policies if p.name == "TO-WAN2")
+    assert policy.kind == "policy-based-routing"
+    assert policy.used_by == ["interface GigabitEthernet0/0"]
+
+
+def test_a_policy_route_whose_next_hop_is_not_connected_is_called_out():
+    text = (
+        _PBR_BASE
+        + "route-map TO-WAN2 permit 10\n match ip address GUEST\n set ip next-hop 172.16.9.1\n"
+    )
+    item = _one(_review(text), "直結の帯にありません")
+    assert item.level == MEDIUM
+    assert "172.16.9.1" in item.title
+
+
+def test_a_recursive_next_hop_is_allowed_to_be_far_away():
+    text = _pbr("match ip address GUEST", "set ip next-hop recursive 172.16.9.1")
+    assert not any("直結の帯" in f.title for f in _review(text))
+
+
+def test_a_policy_route_pointing_at_a_missing_acl_is_called_out():
+    text = (
+        _PBR_BASE
+        + "route-map TO-WAN2 permit 10\n match ip address VIP\n set ip next-hop 192.168.1.254\n"
+    )
+    item = _one(_review(text), "ACL VIP がありません")
+    assert item.level == HIGH
+
+
+def test_a_policy_route_with_a_condition_but_no_destination_is_noted():
+    text = _pbr("match ip address GUEST")
+    assert _one(_review(text), "行き先を決めていません").level == LOW
+
+
+def test_fortigate_router_policy_is_read_with_its_gateway():
+    text = """
+config system global
+    set hostname fg-01
+end
+config system interface
+    edit "wan2"
+        set ip 203.0.113.2 255.255.255.248
+    next
+    edit "lan"
+        set ip 10.1.1.1 255.255.255.0
+    next
+end
+config router policy
+    edit 1
+        set input-device "lan"
+        set srcaddr "GUEST"
+        set gateway 203.0.113.1
+        set output-device "wan2"
+    next
+    edit 2
+        set input-device "lan"
+        set gateway 198.51.100.1
+        set output-device "wan2"
+    next
+    edit 3
+        set status disable
+        set gateway 1.1.1.1
+    next
+end
+"""
+    parsed = configparse.parse(text)
+    pbr = [p for p in parsed.policies if p.kind == "policy-based-routing"]
+    assert [p.name for p in pbr] == ["router policy 1", "router policy 2"]
+    assert pbr[0].used_by == ["interface lan"]
+    assert "set gateway 203.0.113.1" in pbr[0].entries[0].sets
+    findings = policyreview.review(parsed)
+    titles = [f.title for f in findings if "直結の帯" in f.title]
+    assert titles == ["router policy 2 の次の相手 198.51.100.1 は直結の帯にありません"]
