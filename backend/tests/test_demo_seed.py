@@ -74,3 +74,47 @@ def test_a_config_plan_can_be_made_for_a_demo_device(client):
     outputs = client.get(f"{API}/config-plans/{res.json()['id']}/outputs")
     assert outputs.status_code == 200, outputs.text
     assert outputs.json()["current_full"].startswith("!")
+
+
+# ---------------------------------------------------------------------------
+# 最初の画面の数え方
+# ---------------------------------------------------------------------------
+
+
+def test_every_device_is_counted_in_each_breakdown(client, device_payload):
+    """内訳は機器を数える。1台でも欠けると、最初の画面の数字が信用できない。"""
+    from datetime import date, timedelta
+
+    from app.models import MaintenanceContract
+    from app.services import device_query
+    from tests.conftest import API as _API
+
+    ids = []
+    for index in range(4):
+        res = client.post(f"{_API}/devices", json=device_payload(hostname=f"sw-{index:02d}"))
+        ids.append(res.json()["id"])
+
+    # 契約があるのは一部だけ。実際の台帳もそうなっている
+    from app.db import get_db
+    from app.main import app as fastapi_app
+
+    db = fastapi_app.dependency_overrides[get_db]()
+    db.add(
+        MaintenanceContract(
+            device_id=ids[0],
+            provider="デモ",
+            start_date=date.today() - timedelta(days=400),
+            end_date=date.today() + timedelta(days=100),
+        )
+    )
+    db.commit()
+
+    for counts in (
+        device_query.count_by_maintenance_severity(db),
+        device_query.count_by_eol_severity(db),
+        device_query.count_by_overall_severity(db),
+    ):
+        assert sum(counts.values()) == len(ids), counts
+
+    maintenance = device_query.count_by_maintenance_severity(db)
+    assert maintenance["unknown"] == len(ids) - 1, maintenance

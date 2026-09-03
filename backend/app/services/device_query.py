@@ -380,14 +380,16 @@ def count_by_overall_severity(db: Session, *, today: date | None = None) -> dict
 def count_by_maintenance_severity(db: Session, *, today: date | None = None) -> dict[str, int]:
     today = today or date.today()
     rank = _rank_of(_maintenance_end_expr(), today)
-    rows = db.execute(select(rank, func.count()).group_by(rank)).all()
+    # 機器を数えるので、機器の表から数える。ここを書かないと、契約の表だけを
+    # 見た1行に潰れる（保守の内訳が常に1台になる）
+    rows = db.execute(select(rank, func.count()).select_from(Device).group_by(rank)).all()
     return _counts_from_ranks(rows)
 
 
 def count_by_eol_severity(db: Session, *, today: date | None = None) -> dict[str, int]:
     today = today or date.today()
     rank = _rank_of(_eol_expr(), today)
-    rows = db.execute(select(rank, func.count()).group_by(rank)).all()
+    rows = db.execute(select(rank, func.count()).select_from(Device).group_by(rank)).all()
     return _counts_from_ranks(rows)
 
 
