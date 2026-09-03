@@ -355,6 +355,36 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
                 entry.virtual_ip = value
             elif keyword == "priority" and value.isdigit():
                 entry.priority = int(value)
+
+        # NX-OS は入れ子で書く。`hsrp 10` のあとに ip / priority が字下げで続く
+        nested: ParsedRedundancy | None = None
+        for line in body:
+            head_line = re.match(r"^(hsrp|vrrp)\s+(\d+)\s*$", line.strip(), re.IGNORECASE)
+            if head_line:
+                protocol = head_line.group(1).lower()
+                protocol = "hsrp" if protocol == "hsrp" else "vrrp"
+                key = (protocol, head_line.group(2))
+                nested = groups.get(key)
+                if nested is None:
+                    nested = ParsedRedundancy(
+                        interface=interface, group=head_line.group(2), protocol=protocol
+                    )
+                    groups[key] = nested
+                continue
+            if nested is None:
+                continue
+            value_line = re.match(r"^(ip|address|priority)\s+(\S+)", line.strip(), re.IGNORECASE)
+            if value_line is None:
+                # 字下げの外に出たら、その塊はおしまい
+                if line.strip() and not line.startswith((" ", "\t")):
+                    nested = None
+                continue
+            keyword, value = value_line.group(1).lower(), value_line.group(2)
+            if keyword in {"ip", "address"}:
+                nested.virtual_ip = value
+            elif value.isdigit():
+                nested.priority = int(value)
+
         parsed.redundancy.extend(groups.values())
 
 
