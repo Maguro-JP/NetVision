@@ -342,3 +342,31 @@ def test_nothing_is_said_when_the_ports_could_not_be_read():
     assert [
         f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title
     ] == []
+
+
+# ---------------------------------------------------------------------------
+# VLAN の並べ書き（Cisco）
+# ---------------------------------------------------------------------------
+
+
+def test_vlans_written_as_a_list_are_all_defined():
+    """`vlan 10,20,30` を読み落とすと、その VLAN が「台帳にしかない」ことになる。"""
+    assert sorted(configparse.parse("hostname x\nvlan 10,20,30\n").vlans) == [10, 20, 30]
+
+
+def test_vlans_written_as_a_range_are_all_defined():
+    assert sorted(configparse.parse("hostname x\nvlan 100-103\n").vlans) == [100, 101, 102, 103]
+
+
+def test_a_single_vlan_still_takes_its_name():
+    assert configparse.parse("hostname x\nvlan 10\n name USERS\n").vlans == {10: "USERS"}
+
+
+def test_a_list_of_vlans_has_no_single_name_to_take():
+    """並べ書きに name は書けない。あとの行の name を先頭に付けてはいけない。"""
+    parsed = configparse.parse("hostname x\nvlan 10,20\n!\nvlan 30\n name SERVERS\n")
+    assert parsed.vlans == {10: "", 20: "", 30: "SERVERS"}
+
+
+def test_something_that_is_not_a_vlan_list_is_left_alone():
+    assert configparse.parse("hostname x\nvlan internal allocation policy ascending\n").vlans == {}
