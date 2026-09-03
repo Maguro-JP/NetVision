@@ -150,6 +150,15 @@ def _dump_postgres(dest: Path) -> Path:
     return dump
 
 
+def create_backup(reason: str) -> dict[str, Any]:
+    """表の更新とは関係なく、いまの状態の控えを取る。
+
+    定期実行（backup.py）から呼ぶ。取れなかったときは例外を投げる。
+    黙って「取れたことにする」のが一番まずい。
+    """
+    return _create_backup_folder(None, reason)
+
+
 def _create_backup_folder(from_revision: str | None, to_revision: str) -> dict[str, Any]:
     folder = backup_dir()
     folder.mkdir(parents=True, exist_ok=True)

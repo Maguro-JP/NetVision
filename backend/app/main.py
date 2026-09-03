@@ -4,6 +4,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
+from app.api.routes import backups as backup_routes
 from app.api.routes import (
     blueprint,
     calc,
@@ -47,8 +48,12 @@ async def lifespan(_app: FastAPI):
     from app.services import exposure_schedule
 
     exposure_schedule.start()
+    from app.services import backup
+
+    backup.start()
     yield
     exposure_schedule.stop()
+    backup.stop()
 
 
 app = FastAPI(
@@ -72,6 +77,7 @@ app.add_middleware(
 
 api = "/api/v1"
 app.include_router(devices.router, prefix=api)
+app.include_router(backup_routes.router, prefix=api)
 app.include_router(maintenance.router, prefix=api)
 app.include_router(sites.router, prefix=api)
 app.include_router(dashboard.router, prefix=api)

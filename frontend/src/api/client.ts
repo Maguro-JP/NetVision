@@ -21,6 +21,7 @@ import type {
   TestSite,
   L3Report,
   AppSettings,
+  BackupStatus,
   ChangeLog,
   LinkImportResult,
   SiteImportResult,
@@ -1155,6 +1156,8 @@ export const api = {
       })}`,
     ),
   exposureSummary: () => request<ExposureSummary>("/exposures/summary"),
+  backups: () => request<BackupStatus>("/backups"),
+  createBackup: () => request<BackupStatus>("/backups", { method: "POST" }),
   exposureSchedule: () => request<ExposureSyncSchedule>("/exposures/schedule"),
   decideExposure: (id: number, body: Record<string, unknown>) =>
     request<ExposureRow>(`/exposures/${id}`, {

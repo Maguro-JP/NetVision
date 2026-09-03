@@ -57,6 +57,8 @@ EDITABLE: dict[str, type] = {
     "display_timezone": str,
     "model_dir": str,
     "exposure_sync_hours": int,
+    "backup_interval_hours": int,
+    "backup_keep": int,
 }
 
 
