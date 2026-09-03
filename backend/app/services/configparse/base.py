@@ -53,6 +53,9 @@ class ParsedInterface:
     trunk_all: bool = False
     trunk_excluded: set[int] = field(default_factory=set)  # `except` 指定の除外分
     vrf: str | None = None
+    #: 同じポートに付いている2つ目以降のアドレス（secondary、IPv6）。
+    #: 1つ目を上書きすると、その機器の本来のアドレスが台帳から消える
+    extra_addresses: list[str] = field(default_factory=list)
     #: 束ねているポートの番号（LAG / ポートチャネル）。同じ番号どうしが1本の線になる
     lag_group: int | None = None
     #: 束ね方（active / passive / on）。両端で食い違うと束にならない

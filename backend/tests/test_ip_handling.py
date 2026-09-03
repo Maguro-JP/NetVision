@@ -158,3 +158,65 @@ def test_the_netmask_and_wildcard_of_a_segment():
     assert wildcard_of("10.0.0.0/24") == "0.0.0.255"
     assert netmask_of("10.0.0.0/30") == "255.255.255.252"
     assert wildcard_of("10.0.0.0/30") == "0.0.0.3"
+
+
+# ---------------------------------------------------------------------------
+# 1つのポートに複数のアドレスが付く形
+# ---------------------------------------------------------------------------
+
+_MULTI = """hostname r1
+!
+interface GigabitEthernet0/0
+ ip address 10.0.0.1 255.255.255.0
+ ip address 10.0.1.1 255.255.255.0 secondary
+!
+interface GigabitEthernet0/1
+ ip address dhcp
+!
+interface GigabitEthernet0/2
+ ipv6 address 2001:DB8::1/64
+!
+interface GigabitEthernet0/3
+ ip address 10.0.9.1 255.255.255.0
+ ipv6 address 2001:DB8:9::1/64
+!
+interface GigabitEthernet0/4
+ ip unnumbered Loopback0
+!
+"""
+
+
+def _ports(text: str):
+    return {item.name: item for item in configparse.parse(text).interfaces}
+
+
+def test_a_secondary_address_does_not_overwrite_the_first_one():
+    """上書きすると、その機器が本来名乗っているアドレスが台帳から消える。"""
+    port = _ports(_MULTI)["GigabitEthernet0/0"]
+    assert port.ip_address == "10.0.0.1/24"
+    assert port.extra_addresses == ["10.0.1.1/24"]
+
+
+def test_dhcp_is_not_kept_as_an_address():
+    """`dhcp` は住所ではない。住所として持つと、そのまま台帳に載ってしまう。"""
+    assert _ports(_MULTI)["GigabitEthernet0/1"].ip_address is None
+
+
+def test_an_ipv6_only_port_keeps_its_address():
+    assert _ports(_MULTI)["GigabitEthernet0/2"].ip_address == "2001:DB8::1/64"
+
+
+def test_a_port_with_both_families_keeps_the_v4_one_first():
+    port = _ports(_MULTI)["GigabitEthernet0/3"]
+    assert port.ip_address == "10.0.9.1/24"
+    assert port.extra_addresses == ["2001:DB8:9::1/64"]
+
+
+def test_a_port_borrowing_another_ports_address_has_none_of_its_own():
+    assert _ports(_MULTI)["GigabitEthernet0/4"].ip_address is None
+
+
+def test_the_length_written_form_is_read_too():
+    """Arista や AOS-CX は長さで書く。"""
+    text = "hostname sw1\ninterface Vlan10\n   ip address 10.0.10.1/24\n"
+    assert _ports(text)["Vlan10"].ip_address == "10.0.10.1/24"

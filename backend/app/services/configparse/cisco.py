@@ -183,11 +183,12 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if body.startswith("description "):
             current.description = body[len("description ") :].strip()
         elif body.startswith("ip address "):
-            parts = body.split()
-            if len(parts) >= 4 and parts[2] != "dhcp":
-                current.ip_address = f"{parts[2]}/{_prefix_length(parts[3])}"
-            elif len(parts) >= 3:
-                current.ip_address = parts[2]
+            _address(current, body)
+        elif body.startswith("ipv6 address "):
+            # IPv6 は長さ付きで書く。v4 が無いポートでは、これがそのポートの住所
+            written = body.split(maxsplit=2)
+            if len(written) >= 3 and "/" in written[2]:
+                _remember(current, written[2].split()[0])
         elif body.startswith("switchport access vlan "):
             current.vlan = int(body.rsplit(maxsplit=1)[-1])
             current.mode = current.mode or "access"
@@ -337,6 +338,30 @@ def _apply_allowed_vlan(interface: ParsedInterface, body: str) -> None:
     else:
         interface.trunk_vlans = values
         interface.trunk_all = False
+
+
+def _address(interface: ParsedInterface, body: str) -> None:
+    """`ip address` の1行を読む。
+
+    2つ目以降（secondary）で1つ目を上書きしない。上書きすると、その機器が
+    本来そのセグメントで名乗っているアドレスが台帳から消え、線の突き合わせも
+    重複の検出も外れる。`dhcp` は住所ではないので、住所としては持たない。
+    """
+    parts = body.split()
+    if len(parts) < 3 or parts[2] == "dhcp":
+        return
+    if "/" in parts[2]:
+        # 長さで書く流儀（Arista / AOS-CX）
+        _remember(interface, parts[2])
+    elif len(parts) >= 4:
+        _remember(interface, f"{parts[2]}/{_prefix_length(parts[3])}")
+
+
+def _remember(interface: ParsedInterface, address: str) -> None:
+    if interface.ip_address is None:
+        interface.ip_address = address
+    elif address != interface.ip_address and address not in interface.extra_addresses:
+        interface.extra_addresses.append(address)
 
 
 def _prefix_length(netmask: str) -> int:
