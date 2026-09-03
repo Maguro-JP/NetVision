@@ -175,3 +175,66 @@ def test_nothing_written_means_nothing_read():
     )
     assert parsed.load_balance is None
     assert loadbalancereview.review(parsed) == []
+
+
+def test_a_member_written_by_name_keeps_its_real_address():
+    """F5 はノード名で書ける。名前だけ見ていると、どこへ流れるか言えない。"""
+    text = """ltm pool /Common/web_pool {
+    members {
+        /Common/web01:https {
+            address 10.1.1.11
+            state up
+        }
+        /Common/web02:https {
+            address 10.1.1.12
+            session user-disabled
+        }
+    }
+    monitor /Common/https
+}
+ltm virtual /Common/web_vs {
+    destination /Common/10.1.1.100:https
+    pool /Common/web_pool
+}
+"""
+    pool = configparse.parse(text).load_balance.pool("web_pool")
+    assert [m.address for m in pool.members] == ["10.1.1.11", "10.1.1.12"]
+    assert [m.name for m in pool.members] == ["web01", "web02"]
+    assert pool.members[0].label == "web01（10.1.1.11）"
+    assert pool.members[1].enabled is False
+    assert _one(_review(text), "1台だけです").evidence == ["web01（10.1.1.11）:https"]
+
+
+def test_the_deeper_parts_of_a_real_virtual_server_do_not_confuse_the_reader():
+    """profiles や persist の入れ子があっても、宛先とプールを取り違えない。"""
+    text = """ltm virtual /Common/web_vs {
+    destination /Common/10.1.1.100:https
+    persist {
+        /Common/cookie {
+            default yes
+        }
+    }
+    pool /Common/web_pool
+    profiles {
+        /Common/clientssl {
+            context clientside
+        }
+        /Common/http { }
+    }
+    source-address-translation {
+        type automap
+    }
+}
+ltm pool /Common/web_pool {
+    members {
+        /Common/10.1.1.11:https {
+            address 10.1.1.11
+        }
+    }
+    monitor /Common/https
+}
+"""
+    balance = configparse.parse(text).load_balance
+    virtual = balance.virtual_servers[0]
+    assert (virtual.address, virtual.port, virtual.pool) == ("10.1.1.100", "https", "web_pool")
+    assert len(balance.pools) == 1

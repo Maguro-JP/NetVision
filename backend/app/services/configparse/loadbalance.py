@@ -24,11 +24,23 @@ _HINT = re.compile(r"ltm\s+(?:virtual|pool|monitor)|server-load-balance|\bslb\b"
 
 @dataclass
 class ParsedMember:
-    """振り分け先の1台。"""
+    """振り分け先の1台。
+
+    F5 は名前（ノード名）で書けるので、名前と実際のアドレスは別に持つ。
+    名前だけ見ていると「どこへ流れているのか」が言えない。
+    """
 
     address: str
     port: str | None = None
     enabled: bool = True
+    #: 名前で書かれている場合の、その名前
+    name: str | None = None
+
+    @property
+    def label(self) -> str:
+        if self.name and self.name != self.address:
+            return f"{self.name}（{self.address}）"
+        return self.address
 
 
 @dataclass
@@ -89,6 +101,9 @@ _F5_POOL = re.compile(r"^\s*pool\s+(\S+)\s*$", re.IGNORECASE)
 _F5_MEMBER = re.compile(r"^\s*(\S+?):(\S+)\s*\{\s*$")
 _F5_MONITOR = re.compile(r"^\s*monitor\s+(.+?)\s*$", re.IGNORECASE)
 _F5_METHOD = re.compile(r"^\s*load-balancing-mode\s+(\S+)\s*$", re.IGNORECASE)
+_F5_ADDRESS = re.compile(r"^\s*address\s+(\S+)\s*$", re.IGNORECASE)
+#: 手で止めた状態。監視で落ちている状態は、保存した設定には出ない
+_F5_STOPPED = re.compile(r"^\s*(?:session\s+user-disabled|state\s+user-down)\s*$", re.IGNORECASE)
 
 
 def _f5_name(raw: str) -> str:
@@ -119,17 +134,20 @@ def parse_f5(text: str, found: ParsedLoadBalance) -> None:
             if kind == "pool" and depth >= 2:
                 entry = _F5_MEMBER.match(line)
                 if entry:
-                    member = ParsedMember(address=_f5_name(entry.group(1)), port=entry.group(2))
+                    label = _f5_name(entry.group(1))
+                    member = ParsedMember(address=label, name=label, port=entry.group(2))
                     assert pool is not None
                     pool.members.append(member)
                     member_depth = depth
-                elif member is not None and stripped.startswith("state ") and "down" in stripped:
-                    member.enabled = False
-                elif member is not None and stripped in {
-                    "session user-disabled",
-                    "state user-down",
-                }:
-                    member.enabled = False
+                elif member is not None:
+                    address = _F5_ADDRESS.match(line)
+                    if address:
+                        # 名前で書かれていても、実際の宛先はこの行にある
+                        member.address = address.group(1)
+                    elif _F5_STOPPED.match(line):
+                        # 手で止めたものだけを「止めてある」とする。監視で落ちて
+                        # いる状態は、保存した設定には残らない
+                        member.enabled = False
 
             if virtual is not None and depth == 1:
                 destination = _F5_DEST.match(line)

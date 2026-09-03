@@ -291,7 +291,7 @@ def _controls(parsed: ParsedConfig) -> list[dict]:
             )
         for pool in balance.pools:
             monitors = ", ".join(pool.monitors) or "健全性監視なし"
-            members = [f"{m.address}:{m.port}" if m.port else m.address for m in pool.members]
+            members = [f"{m.label}:{m.port}" if m.port else m.label for m in pool.members]
             add(
                 "負荷分散",
                 f"pool {pool.name}",
