@@ -813,7 +813,7 @@ def _fortios_addresses(text: str) -> dict[str, str]:
         if len(parts) == 2 and _looks_like_mask(parts[1]):
             from app.services.configparse.routing import to_prefix
 
-            prefix = to_prefix(parts[0], parts[1])
+            prefix = to_prefix(parts[0], parts[1], wildcard=False)
             if prefix:
                 values[name] = prefix
         elif "/" in subnet:
