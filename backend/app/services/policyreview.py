@@ -27,7 +27,13 @@ from app.services import (
     wirelessreview,
 )
 from app.services.configparse import ParsedConfig
-from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
+from app.services.configparse.base import (
+    ParsedAcl,
+    ParsedAclEntry,
+    ParsedBgp,
+    ParsedBgpNeighbor,
+)
+from app.services.configparse.ifname import normalize
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
 
 #: 今の目で見て、そのまま残しておけない方式。数字は鍵の短さ・衝突の作りやすさ
@@ -58,6 +64,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
+    findings.extend(_virtual_gateways(parsed))
     findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
     findings.extend(_nat(parsed, text))
@@ -384,6 +391,77 @@ def _range(text: str) -> _Range | None:
     low = int(ge) if ge is not None else length
     high = int(le) if le is not None else 32
     return _Range(network, low, high)
+
+
+def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
+    """既定ゲートウェイの冗長（HSRP / VRRP）の仮想アドレスを検算する。
+
+    端末はこの仮想アドレスを既定の出口として使う。ポートの帯から外れて
+    いると、端末から見て出口が存在しないことになる。設定は通るし、
+    機器も上がっているので、動かしてみるまで気づかない。
+    """
+    findings: list[Finding] = []
+    ports = {}
+    for interface in parsed.interfaces:
+        network = _network_of(interface.ip_address)
+        if network is not None:
+            ports[normalize(interface.name)] = (interface, network)
+
+    for entry in parsed.redundancy:
+        if not entry.virtual_ip:
+            continue
+        found = ports.get(normalize(entry.interface))
+        if found is None:
+            continue
+        interface, network = found
+        try:
+            virtual = ipaddress.ip_address(entry.virtual_ip)
+        except ValueError:
+            continue
+        name = f"{entry.protocol.upper()} グループ {entry.group}"
+        if virtual not in network:
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{name} の仮想アドレス {entry.virtual_ip} が、{interface.name} の帯の外です",
+                    f"{interface.name} は {network} を持っていますが、仮想アドレスは"
+                    "その外にあります。端末はこの仮想アドレスを既定の出口として使うので、"
+                    "そのままでは外に出られません。設定は通り、機器も上がるため、"
+                    "実際に通信するまで気づきません。",
+                    [
+                        f"interface {interface.name} ({interface.ip_address})",
+                        f"仮想: {entry.virtual_ip}",
+                    ],
+                )
+            )
+            continue
+        own = _address_of(interface.ip_address)
+        if own is not None and own == virtual:
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{name} の仮想アドレスが、この機器自身のアドレスと同じです",
+                    "仮想アドレスは、主になっている側が引き受ける別のアドレスです。"
+                    "実アドレスと同じにすると、相手側と衝突します。",
+                    [f"interface {interface.name} ({interface.ip_address})"],
+                )
+            )
+            continue
+        if network.prefixlen < 31 and virtual in (
+            network.network_address,
+            network.broadcast_address,
+        ):
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{name} の仮想アドレス {entry.virtual_ip} は、端末に配れないアドレスです",
+                    f"{network} の"
+                    + ("ネットワーク" if virtual == network.network_address else "ブロードキャスト")
+                    + "アドレスなので、出口としては使えません。",
+                    [f"仮想: {entry.virtual_ip}"],
+                )
+            )
+    return findings
 
 
 def _prefix_lists(parsed: ParsedConfig) -> list[Finding]:
@@ -994,6 +1072,16 @@ def _excluded_addresses(ranges: list[tuple[str, str]]) -> set[str]:
             out.add(str(current))
             current += 1
     return out
+
+
+def _address_of(text: str | None):  # noqa: ANN201
+    """`10.0.10.2/24` から、そのポート自身のアドレスだけを取り出す。"""
+    if not text:
+        return None
+    try:
+        return ipaddress.ip_interface(text.strip().replace(" ", "/", 1)).ip
+    except ValueError:
+        return None
 
 
 def _network_of(text: str | None) -> ipaddress.IPv4Network | None:

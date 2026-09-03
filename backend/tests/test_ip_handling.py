@@ -220,3 +220,53 @@ def test_the_length_written_form_is_read_too():
     """Arista や AOS-CX は長さで書く。"""
     text = "hostname sw1\ninterface Vlan10\n   ip address 10.0.10.1/24\n"
     assert _ports(text)["Vlan10"].ip_address == "10.0.10.1/24"
+
+
+# ---------------------------------------------------------------------------
+# 既定ゲートウェイの冗長。端末はこの仮想アドレスを出口として使う
+# ---------------------------------------------------------------------------
+
+
+def _virtual(cfg: str):
+    from app.services import policyreview
+
+    return [
+        f for f in policyreview.review(configparse.parse(cfg), cfg) if "仮想アドレス" in f.title
+    ]
+
+
+def _hsrp(virtual: str, own: str = "10.0.10.2") -> str:
+    return (
+        "hostname r1\ninterface Vlan10\n"
+        f" ip address {own} 255.255.255.0\n standby 10 ip {virtual}\n"
+    )
+
+
+def test_a_virtual_gateway_inside_the_segment_says_nothing():
+    assert _virtual(_hsrp("10.0.10.1")) == []
+
+
+def test_a_virtual_gateway_outside_the_segment_is_called_out():
+    from app.services.reviewnote import HIGH
+
+    found = _virtual(_hsrp("10.0.99.1"))
+    assert len(found) == 1
+    assert found[0].level == HIGH
+    assert "帯の外" in found[0].title
+
+
+def test_a_virtual_gateway_equal_to_the_device_address_is_called_out():
+    assert "自身のアドレスと同じ" in _virtual(_hsrp("10.0.10.2"))[0].title
+
+
+def test_a_virtual_gateway_on_the_edge_of_the_segment_is_called_out():
+    assert "配れない" in _virtual(_hsrp("10.0.10.0"))[0].title
+    assert "配れない" in _virtual(_hsrp("10.0.10.255"))[0].title
+
+
+def test_vrrp_written_the_comware_way_is_checked_too():
+    cfg = (
+        "sysname s1\ninterface Vlan-interface10\n"
+        " ip address 10.0.10.2 255.255.255.0\n vrrp vrid 10 virtual-ip 10.0.77.1\n"
+    )
+    assert "帯の外" in _virtual(cfg)[0].title
