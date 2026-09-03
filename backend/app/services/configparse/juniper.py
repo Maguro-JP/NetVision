@@ -37,7 +37,7 @@ _SERIAL = re.compile(r"^Chassis\s+([A-Za-z0-9]{6,})\b", re.MULTILINE)
 
 _SET_DESCRIPTION = re.compile(r"^set interfaces (\S+) description\s+(.+)$", re.MULTILINE)
 _SET_ADDRESS = re.compile(
-    r"^set interfaces (\S+) unit \d+ family inet address\s+(\S+)", re.MULTILINE
+    r"^set interfaces (\S+) unit (\d+) family inet(?:6)? address\s+(\S+)", re.MULTILINE
 )
 _SET_DISABLE = re.compile(r"^set interfaces (\S+) disable\s*$", re.MULTILINE)
 _SET_VLAN = re.compile(
@@ -49,6 +49,8 @@ _SET_PORT_MODE = re.compile(
     re.MULTILINE,
 )
 _SET_NATIVE = re.compile(r"^set interfaces (\S+) native-vlan-id\s+(\d+)", re.MULTILINE)
+#: 副ポート（unit）に付けたタグ。ルーター側ではここが VLAN の所在になる
+_SET_UNIT_VLAN = re.compile(r"^set interfaces (\S+) unit (\d+) vlan-id\s+(\d+)", re.MULTILINE)
 # VLAN の定義。Junos は名前で参照するので、名前→番号の対応が要る
 _SET_VLAN_ID = re.compile(r"^set vlans (\S+) vlan-id\s+(\d+)", re.MULTILINE)
 _SET_VLAN_DESC = re.compile(r"^set vlans (\S+) description\s+(.+)$", re.MULTILINE)
@@ -467,8 +469,11 @@ def _vpn_detail(entry: ParsedCryptoMapEntry, rest: str, gateways: dict[str, str]
 def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:
     for name, description in _SET_DESCRIPTION.findall(text):
         parsed.add_interface(ParsedInterface(name=name, description=description.strip().strip('"')))
-    for name, address in _SET_ADDRESS.findall(text):
-        parsed.add_interface(ParsedInterface(name=name, ip_address=address))
+    for name, unit, address in _SET_ADDRESS.findall(text):
+        # unit 0 は物理の口そのものとして呼ばれる（隣接情報もその名前で来る）。
+        # 0 以外は副ポートなので、ge-0/0/1.10 という呼び名で持つ
+        port = name if unit == "0" else f"{name}.{unit}"
+        parsed.add_interface(ParsedInterface(name=port, ip_address=address))
     for name, mode in _SET_PORT_MODE.findall(text):
         # Junos は trunk / access という語をそのまま使う
         parsed.add_interface(ParsedInterface(name=name)).mode = mode.strip()
@@ -496,6 +501,11 @@ def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:
 
     for name, native in _SET_NATIVE.findall(text):
         parsed.add_interface(ParsedInterface(name=name)).native_vlan = int(native)
+
+    # 副ポートに付けたタグ。アドレスは unit 単位で持っているので、名前も合わせる
+    for name, unit, vlan in _SET_UNIT_VLAN.findall(text):
+        port = parsed.add_interface(ParsedInterface(name=f"{name}.{unit}"))
+        port.vlan = int(vlan)
 
     for name in _SET_DISABLE.findall(text):
         parsed.add_interface(ParsedInterface(name=name)).enabled = False

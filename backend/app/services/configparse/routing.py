@@ -522,6 +522,8 @@ def parse_ix(text: str, parsed: ParsedConfig) -> None:
 
 
 def parse_junos(text: str, parsed: ParsedConfig) -> None:
+    #: まとまり（group）側に書いた相手の AS。相手の行より先に出てくる
+    group_peer_as: dict[str, str] = {}
     # set 形式（現場で貼られるのはたいていこちら）
     for line in text.splitlines():
         stripped = line.strip()
@@ -549,18 +551,23 @@ def parse_junos(text: str, parsed: ParsedConfig) -> None:
             bgp.local_as = local_as.group(1)
             parsed.bgp = bgp
             continue
+        group_as = re.match(
+            r"^set protocols bgp group (\S+) peer-as\s+(\S+)", stripped, re.IGNORECASE
+        )
+        if group_as:
+            # Junos は相手の AS をまとまり（group）側に書ける。相手の行にしか
+            # 書いていないものとして読むと、外の AS だと気づけない
+            group_peer_as[group_as.group(1)] = group_as.group(2)
+            continue
         neighbor = re.match(
-            r"^set protocols bgp group \S+ neighbor\s+(\S+)(?:\s+peer-as\s+(\S+))?",
+            r"^set protocols bgp group (\S+) neighbor\s+(\S+)(?:\s+peer-as\s+(\S+))?",
             stripped,
             re.IGNORECASE,
         )
         if neighbor:
             bgp = parsed.bgp or ParsedBgp()
-            _add_neighbor(
-                bgp,
-                neighbor.group(1),
-                f"remote-as {neighbor.group(2)}" if neighbor.group(2) else "",
-            )
+            remote = neighbor.group(3) or group_peer_as.get(neighbor.group(1))
+            _add_neighbor(bgp, neighbor.group(2), f"remote-as {remote}" if remote else "")
             parsed.bgp = bgp
 
 
