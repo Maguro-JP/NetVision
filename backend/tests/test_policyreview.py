@@ -559,3 +559,41 @@ def test_a_length_range_that_matches_nothing_is_called_out():
 def test_a_ge_shorter_than_the_written_length_is_called_out():
     text = _prefix("permit 192.168.0.0/16 ge 8")
     assert _one(_review(text), "当たる長さがありません").level == MEDIUM
+
+
+def test_a_route_map_pointing_at_a_missing_prefix_list_is_called_out():
+    text = """ip prefix-list CUST seq 5 permit 10.0.0.0/8 le 24
+route-map OUT permit 10
+ match ip address prefix-list GONE
+ set metric 100
+route-map OUT permit 20
+ match ip address prefix-list CUST
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    item = _one(_review(text), "prefix-list GONE がありません")
+    assert item.level == HIGH
+
+
+def test_a_route_map_pointing_at_a_missing_acl_is_called_out():
+    text = """ip access-list extended CUST
+ permit ip 10.0.0.0 0.255.255.255 any
+route-map OUT permit 10
+ match ip address GONE
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    assert _one(_review(text), "ACL GONE がありません").level == HIGH
+
+
+def test_a_route_map_whose_tools_all_exist_says_nothing():
+    text = """ip prefix-list CUST seq 5 permit 10.0.0.0/8 le 24
+route-map OUT permit 10
+ match ip address prefix-list CUST
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    assert not any("指している" in f.title for f in _review(text))

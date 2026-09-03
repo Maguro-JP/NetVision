@@ -254,11 +254,59 @@ def _bgp_neighbor(bgp: ParsedBgp, neighbor: ParsedBgpNeighbor, tools: set[str]) 
 # ---------------------------------------------------------------------------
 
 
+_MATCH_PREFIX = re.compile(r"^match\s+ip\s+address\s+prefix-list\s+(?P<names>.+)$", re.IGNORECASE)
+_MATCH_ACL = re.compile(
+    r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>[A-Za-z0-9_.\- ]+)$", re.IGNORECASE
+)
+
+
+def _missing_tools(parsed: ParsedConfig, policy, entry) -> list[Finding]:  # noqa: ANN001
+    """その行が指している道具が、この Config の中にあるか。
+
+    無い道具を指した行は、何にも当たらない。BGP のフィルタなら「絞ったつもりで
+    素通し」、逆に暗黙の deny で「全部落ちる」になる。どちらも書いた側の
+    意図とは違う。読み手が対応していない書き方まで疑わないよう、
+    同じ種類の道具を1つも読めていないときは黙る。
+    """
+    findings: list[Finding] = []
+    prefixes = _names(parsed, "prefix-list")
+    acls = {acl.name for acl in parsed.acls}
+    for match in entry.matches:
+        text = match.strip()
+        found = _MATCH_PREFIX.match(text)
+        if found is not None and prefixes:
+            missing = [name for name in found.group("names").split() if name not in prefixes]
+            kind = "prefix-list"
+        else:
+            found = _MATCH_ACL.match(text)
+            if found is None or not acls:
+                continue
+            missing = [name for name in found.group("names").split() if name not in acls]
+            kind = "ACL"
+        if not missing:
+            continue
+        findings.append(
+            _note(
+                HIGH,
+                f"{policy.name} が指している {kind} {' '.join(missing)} がありません",
+                "条件に書いた道具が、この Config の中に見当たりません。無い道具を"
+                "指した行は何にも当たらないので、絞ったつもりで素通しになるか、"
+                "後ろの行の扱いになります。名前の書き間違いか、"
+                "消してしまったかのどちらかです。",
+                [entry.raw, text],
+            )
+        )
+    return findings
+
+
 def _route_maps(parsed: ParsedConfig) -> list[Finding]:
     findings: list[Finding] = []
     for policy in parsed.policies:
         if not policy.entries or not policy.used_by:
             continue
+        if policy.kind == "route-map":
+            for entry in policy.entries:
+                findings.extend(_missing_tools(parsed, policy, entry))
         if not policy.has_permit:
             findings.append(
                 _note(
