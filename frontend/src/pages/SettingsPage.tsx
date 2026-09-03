@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import { TAPS_TO_OPEN, opensAt } from "./HiddenPage";
 import type { AppSettings } from "../api/types";
+import { formatTimestamp } from "../lib/format";
 import {
   DEFAULT_PREFS,
   OPEN_TARGET_LABEL,
@@ -49,6 +50,15 @@ export default function SettingsPage() {
         queryClient.invalidateQueries({ queryKey: [key] });
       }
     },
+  });
+
+  const { data: backups } = useQuery({
+    queryKey: ["backups"],
+    queryFn: () => api.backups(),
+  });
+  const takeBackup = useMutation({
+    mutationFn: () => api.createBackup(),
+    onSuccess: (next) => queryClient.setQueryData(["backups"], next),
   });
 
   const switchLlm = useMutation({
@@ -215,12 +225,93 @@ export default function SettingsPage() {
                 ここに .gguf を置くと、下書きに使います
               </span>
             </div>
+            <div className="field">
+              <label htmlFor="backup-hours">控えを自動で取る間隔（時間）</label>
+              <input
+                id="backup-hours"
+                type="number"
+                min={0}
+                max={720}
+                defaultValue={app.backup_interval_hours}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.backup_interval_hours)
+                    saveApp.mutate({ backup_interval_hours: value });
+                }}
+              />
+              <span className="muted">0 で自動では取りません</span>
+            </div>
+            <div className="field">
+              <label htmlFor="backup-keep">控えを残す世代</label>
+              <input
+                id="backup-keep"
+                type="number"
+                min={1}
+                max={100}
+                defaultValue={app.backup_keep}
+                onBlur={(e) => {
+                  const value = Number(e.target.value);
+                  if (value !== app.backup_keep)
+                    saveApp.mutate({ backup_keep: value });
+                }}
+              />
+              <span className="muted">
+                古いものから片付けます。表の更新前に取ったものは残します
+              </span>
+            </div>
           </div>
         )}
         {saveApp.error && (
           <div className="error">{(saveApp.error as Error).message}</div>
         )}
         {saveApp.isSuccess && <p className="ok">保存しました。</p>}
+      </div>
+
+      <div className="card settings-card">
+        <h2>控え（バックアップ）</h2>
+        <p className="muted">
+          取れているつもりで戻せない、が一番困ります。取ったあとに開いて
+          中身を数えるところまで確かめます。戻す操作は持ちません（人が手順で行います）。
+        </p>
+        {backups && (
+          <>
+            <p>
+              最後に取れたもの:{" "}
+              {backups.latest
+                ? `${formatTimestamp(backups.latest.created_at)}（${
+                    backups.latest.verified === true
+                      ? "開けることを確認済み"
+                      : backups.latest.verified === false
+                        ? "開けませんでした"
+                        : "確認していません"
+                  }）`
+                : "まだありません"}
+            </p>
+            <p className="muted">
+              {backups.next_run_at
+                ? `次に取るのは ${formatTimestamp(backups.next_run_at)}（${backups.interval_hours} 時間おき、${backups.keep} 世代まで）`
+                : "自動では取りません（上の間隔で決められます）"}
+            </p>
+            {backups.latest && (
+              <p className="muted">置き場所: {backups.latest.path}</p>
+            )}
+            <div className="actions">
+              <button
+                onClick={() => takeBackup.mutate()}
+                disabled={takeBackup.isPending}
+              >
+                {takeBackup.isPending ? "取っています…" : "いま控えを取る"}
+              </button>
+            </div>
+            {takeBackup.error && (
+              <div className="error">{(takeBackup.error as Error).message}</div>
+            )}
+            {backups.latest && backups.latest.verify_message && (
+              <p className="muted">{backups.latest.verify_message}</p>
+            )}
+            <p className="muted">{backups.restore_hint}</p>
+          </>
+        )}
       </div>
 
       <div className="card settings-card">

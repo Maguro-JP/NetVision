@@ -1,0 +1,835 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>手元 Config</title>
+<meta name="description" content="条件を入れると、その場で Config を作ります。通信しません。" />
+<style>
+:root {
+  color-scheme: light dark;
+  --ground: #f4f6f2;
+  --surface: #ffffff;
+  --sunken: #ecefe9;
+  --ink: #141a16;
+  --muted: #5b665f;
+  --line: #dde3dc;
+  --accent: #1d6f57;
+  --accent-ink: #ffffff;
+  --warn: #8a6206;
+  --warn-bg: #fbf3de;
+  --bad: #a63a28;
+  --bad-bg: #fbeae6;
+  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Noto Sans Mono CJK JP", monospace;
+  --sans: -apple-system, BlinkMacSystemFont, "Hiragino Kaku Gothic ProN", "Noto Sans JP",
+    "Yu Gothic UI", Meiryo, sans-serif;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --ground: #10140f;
+    --surface: #191e19;
+    --sunken: #121711;
+    --ink: #e7ece5;
+    --muted: #97a29a;
+    --line: #2a312a;
+    --accent: #57c095;
+    --accent-ink: #0c130f;
+    --warn: #e2ae4d;
+    --warn-bg: #2a2312;
+    --bad: #ef8371;
+    --bad-bg: #2d1a17;
+  }
+}
+:root[data-theme="dark"] {
+  --ground: #10140f;
+  --surface: #191e19;
+  --sunken: #121711;
+  --ink: #e7ece5;
+  --muted: #97a29a;
+  --line: #2a312a;
+  --accent: #57c095;
+  --accent-ink: #0c130f;
+  --warn: #e2ae4d;
+  --warn-bg: #2a2312;
+  --bad: #ef8371;
+  --bad-bg: #2d1a17;
+}
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font-family: var(--sans);
+  font-size: 16px;
+  line-height: 1.7;
+  padding-bottom: calc(84px + env(safe-area-inset-bottom));
+}
+.wrap { max-width: 44rem; margin: 0 auto; padding: 20px 16px 0; }
+header { display: flex; flex-direction: column; gap: 4px; margin-bottom: 20px; }
+h1 { font-size: 1.35rem; line-height: 1.3; margin: 0; letter-spacing: 0.01em; text-wrap: balance; }
+.lede { color: var(--muted); font-size: 0.92rem; margin: 0; }
+section {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 14px;
+}
+section > h2 {
+  font-size: 0.76rem;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin: 0 0 14px;
+  font-weight: 600;
+}
+.grid { display: grid; gap: 14px; }
+.two { grid-template-columns: 1fr 1fr; }
+label { display: grid; gap: 5px; font-size: 0.85rem; color: var(--muted); }
+input, select {
+  font: inherit;
+  font-size: 16px;
+  min-height: 46px;
+  padding: 9px 11px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  width: 100%;
+}
+input:focus-visible, select:focus-visible, button:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.row {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: 1fr 1fr;
+  padding: 12px;
+  background: var(--sunken);
+  border-radius: 10px;
+  margin-bottom: 10px;
+}
+.row .full { grid-column: 1 / -1; }
+.check { display: flex; align-items: center; gap: 10px; color: var(--ink); font-size: 0.95rem; }
+.check input { width: 22px; height: 22px; min-height: 0; flex: none; }
+button {
+  font: inherit;
+  min-height: 46px;
+  padding: 10px 16px;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+button.link { border: none; background: none; color: var(--accent); padding: 6px 0; min-height: 38px; }
+button.primary { background: var(--accent); color: var(--accent-ink); border-color: var(--accent); font-weight: 600; }
+.bar {
+  position: fixed;
+  left: 0; right: 0; bottom: 0;
+  background: color-mix(in srgb, var(--surface) 94%, transparent);
+  border-top: 1px solid var(--line);
+  padding: 12px 16px calc(12px + env(safe-area-inset-bottom));
+  backdrop-filter: blur(8px);
+}
+.bar .inner { max-width: 44rem; margin: 0 auto; display: flex; gap: 10px; }
+.bar button { flex: 1; }
+pre {
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--sunken);
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 14px;
+  margin: 0;
+  overflow-x: auto;
+  white-space: pre;
+}
+.note, .problem {
+  border-radius: 9px;
+  padding: 11px 13px;
+  font-size: 0.88rem;
+  margin-bottom: 8px;
+}
+.note { background: var(--warn-bg); color: var(--warn); }
+.problem { background: var(--bad-bg); color: var(--bad); }
+.meta { color: var(--muted); font-size: 0.82rem; margin: 0 0 12px; }
+.calc {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 2px 14px;
+  font-family: var(--mono);
+  font-size: 12.5px;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+  margin-top: 10px;
+}
+.calc b { color: var(--ink); font-weight: 500; }
+footer { color: var(--muted); font-size: 0.8rem; padding: 4px 0 24px; }
+@media (max-width: 420px) {
+  .two, .row { grid-template-columns: 1fr; }
+  .calc { grid-template-columns: 1fr; gap: 0 0; }
+  .calc b { margin-top: 8px; }
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+<header>
+  <h1>手元 Config</h1>
+  <p class="lede">
+    条件を入れると、その場で作ります。通信しません。入れた内容はこの端末から出ません。
+  </p>
+</header>
+
+<section>
+  <h2>機器</h2>
+  <div class="grid two">
+    <label>ベンダー<select id="vendor"></select></label>
+    <label>名前<input id="hostname" autocapitalize="off" autocorrect="off" spellcheck="false" /></label>
+  </div>
+  <div style="margin-top:14px">
+    <label class="check"><input type="checkbox" id="layer3" />VLAN のゲートウェイもこの機器が持つ</label>
+  </div>
+</section>
+
+<section>
+  <h2>VLAN</h2>
+  <div id="vlans"></div>
+  <button class="link" id="addVlan">＋ VLAN を足す</button>
+  <div class="calc" id="calc"></div>
+</section>
+
+<section>
+  <h2>ポート</h2>
+  <div class="grid two">
+    <label>上位につなぐ口<input id="uplink" autocapitalize="off" spellcheck="false" /></label>
+    <label>タグ無し VLAN<input id="nativeVlan" inputmode="numeric" /></label>
+  </div>
+  <div style="margin-top:14px" id="ports"></div>
+  <button class="link" id="addPort">＋ 端末をつなぐ口を足す</button>
+</section>
+
+<section>
+  <h2>出口と管理</h2>
+  <div class="grid two">
+    <label>既定の出口<input id="defaultGateway" inputmode="decimal" spellcheck="false" /></label>
+    <label>時刻の参照先<input id="ntp" inputmode="decimal" spellcheck="false" /></label>
+    <label class="full">ログの送り先<input id="syslog" inputmode="decimal" spellcheck="false" /></label>
+  </div>
+</section>
+
+<section>
+  <h2>できあがり</h2>
+  <p class="meta" id="meta"></p>
+  <div id="messages"></div>
+  <pre id="out">条件を入れて「作る」を押してください。</pre>
+</section>
+
+<footer>
+  合言葉・鍵・SNMP は出しません。控えの残る場所に書かないためです。
+  投入前に、機器の型と版で書き方が合っているか確かめてください。
+</footer>
+</div>
+
+<div class="bar"><div class="inner">
+  <button class="primary" id="make">作る</button>
+  <button id="copy">コピー</button>
+</div></div>
+
+<script id="core">
+/* 計算とひな形。DOM は触らない（試験できるようにするため） */
+/* NetVision 手元 Config 生成 — 計算とひな形。DOM は触らない（試験できるようにするため） */
+(function (root) {
+  "use strict";
+
+  /* ---------- IP の計算 ---------- */
+
+  function toInt(text) {
+    const parts = String(text).trim().split(".");
+    if (parts.length !== 4) return null;
+    let value = 0;
+    for (const part of parts) {
+      if (!/^\d{1,3}$/.test(part)) return null;
+      const octet = Number(part);
+      if (octet > 255) return null;
+      value = value * 256 + octet;
+    }
+    return value;
+  }
+
+  function toText(value) {
+    return [24, 16, 8, 0].map((shift) => (value >>> shift) & 255).join(".");
+  }
+
+  /** `10.0.10.1/24` を、機器のアドレスとそのセグメントに分ける。 */
+  function parseCidr(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return { ok: false, error: "アドレスを入れてください" };
+    const parts = raw.split("/");
+    const address = toInt(parts[0]);
+    if (address === null) return { ok: false, error: `${raw} はアドレスとして読めません` };
+    if (parts.length === 1) return { ok: false, error: `${raw} に長さ（/24 など）がありません` };
+    if (parts.length > 2 || !/^\d{1,2}$/.test(parts[1])) {
+      return { ok: false, error: `${raw} の長さを読めません` };
+    }
+    const length = Number(parts[1]);
+    if (length > 32) return { ok: false, error: `/${length} は長すぎます` };
+    const netmask = length === 0 ? 0 : (0xffffffff << (32 - length)) >>> 0;
+    const network = (address & netmask) >>> 0;
+    const broadcast = (network | (~netmask >>> 0)) >>> 0;
+    return {
+      ok: true,
+      length,
+      address: toText(address),
+      addressInt: address,
+      network: toText(network),
+      networkInt: network,
+      netmask: toText(netmask),
+      wildcard: toText(~netmask >>> 0),
+      broadcast: toText(broadcast),
+      broadcastInt: broadcast,
+      cidr: `${toText(network)}/${length}`,
+    };
+  }
+
+  /** 2つのセグメントが重なるか。 */
+  function overlaps(a, b) {
+    const first = Math.min(a.length, b.length);
+    const mask = first === 0 ? 0 : (0xffffffff << (32 - first)) >>> 0;
+    return ((a.networkInt & mask) >>> 0) === ((b.networkInt & mask) >>> 0);
+  }
+
+  /** そのアドレスが、このセグメントの中にあるか。 */
+  function contains(net, addressInt) {
+    return addressInt >= net.networkInt && addressInt <= net.broadcastInt;
+  }
+
+  /** 機器に付けてよいアドレスか。ネットワークとブロードキャストは付けられない。 */
+  function usableHost(net) {
+    if (net.length >= 31) return true; // /31 は2台で使い切る。/32 は1つ
+    return net.addressInt !== net.networkInt && net.addressInt !== net.broadcastInt;
+  }
+
+  /* ---------- 入力を確かめる ---------- */
+
+  const TODO = "設計から起こせないため、投入前に記入が必要";
+
+  function check(input) {
+    const problems = [];
+    const nets = [];
+    if (!String(input.hostname || "").trim()) problems.push("機器の名前を入れてください");
+
+    (input.vlans || []).forEach((vlan) => {
+      const id = Number(vlan.id);
+      if (!Number.isInteger(id) || id < 1 || id > 4094) {
+        problems.push(`VLAN ${vlan.id || "(空)"} は 1〜4094 で指定してください`);
+        return;
+      }
+      if (!vlan.address) return;
+      const net = parseCidr(vlan.address);
+      if (!net.ok) {
+        problems.push(`VLAN ${id}: ${net.error}`);
+        return;
+      }
+      if (!usableHost(net)) {
+        problems.push(
+          `VLAN ${id}: ${net.address} は ${net.cidr} の${
+            net.addressInt === net.networkInt ? "ネットワーク" : "ブロードキャスト"
+          }アドレスなので、機器には付けられません`
+        );
+      }
+      for (const seen of nets) {
+        if (overlaps(seen.net, net)) {
+          problems.push(`VLAN ${id} の ${net.cidr} は、VLAN ${seen.id} の ${seen.net.cidr} と重なっています`);
+        }
+      }
+      if (vlan.virtualIp) {
+        const virtual = toInt(vlan.virtualIp);
+        if (virtual === null) {
+          problems.push(`VLAN ${id}: 仮想アドレス ${vlan.virtualIp} を読めません`);
+        } else if (!contains(net, virtual)) {
+          problems.push(`VLAN ${id}: 仮想アドレス ${vlan.virtualIp} が ${net.cidr} の中にありません`);
+        } else if (virtual === net.addressInt) {
+          problems.push(`VLAN ${id}: 仮想アドレスが、この機器のアドレスと同じです`);
+        }
+      }
+      nets.push({ id, net });
+    });
+
+    if (input.defaultGateway) {
+      const gateway = toInt(input.defaultGateway);
+      if (gateway === null) {
+        problems.push(`既定の出口 ${input.defaultGateway} を読めません`);
+      } else if (nets.length && !nets.some((entry) => contains(entry.net, gateway))) {
+        problems.push(
+          `既定の出口 ${input.defaultGateway} が、この機器のどのセグメントにもありません`
+        );
+      }
+    }
+    return { problems, nets };
+  }
+
+  /* ---------- ベンダーごとのひな形 ---------- */
+
+  function allowed(input) {
+    const ids = (input.vlans || [])
+      .map((vlan) => Number(vlan.id))
+      .filter((id) => Number.isInteger(id) && id > 0);
+    return ids.sort((a, b) => a - b).join(",");
+  }
+
+  function cisco(input, nets, nxos) {
+    const out = [`hostname ${input.hostname}`, "!"];
+    (input.vlans || []).forEach((vlan) => {
+      out.push(`vlan ${vlan.id}`);
+      out.push(` name ${vlan.name || `VLAN${vlan.id}`}`);
+      out.push("!");
+    });
+    if (input.layer3) {
+      nets.forEach((entry) => {
+        const vlan = (input.vlans || []).find((item) => Number(item.id) === entry.id) || {};
+        out.push(`interface Vlan${entry.id}`);
+        out.push(` description ${vlan.name || `VLAN${entry.id}`}`);
+        out.push(` ip address ${entry.net.address} ${entry.net.netmask}`);
+        if (vlan.virtualIp) {
+          const group = entry.id;
+          if (nxos) {
+            out.push(` hsrp ${group}`);
+            out.push(`  ip ${vlan.virtualIp}`);
+            out.push(`  priority ${vlan.priority || 110}`);
+            out.push("  preempt");
+          } else {
+            out.push(` standby ${group} ip ${vlan.virtualIp}`);
+            out.push(` standby ${group} priority ${vlan.priority || 110}`);
+            out.push(` standby ${group} preempt`);
+          }
+        }
+        out.push(" no shutdown");
+        out.push("!");
+      });
+    }
+    if (input.uplink) {
+      out.push(`interface ${input.uplink}`);
+      out.push(" description uplink");
+      out.push(" switchport mode trunk");
+      out.push(` switchport trunk allowed vlan ${allowed(input)}`);
+      if (input.nativeVlan) out.push(` switchport trunk native vlan ${input.nativeVlan}`);
+      out.push(" no shutdown");
+      out.push("!");
+    }
+    (input.accessPorts || []).forEach((port) => {
+      out.push(`interface range ${port.range}`);
+      out.push(" switchport mode access");
+      out.push(` switchport access vlan ${port.vlan}`);
+      out.push(" spanning-tree portfast");
+      out.push(" spanning-tree bpduguard enable");
+      out.push(" no shutdown");
+      out.push("!");
+    });
+    if (input.defaultGateway) {
+      out.push(`ip route 0.0.0.0 0.0.0.0 ${input.defaultGateway}`);
+      out.push("!");
+    }
+    if (input.ntp) out.push(`ntp server ${input.ntp}`);
+    if (input.syslog) out.push(`logging host ${input.syslog}`);
+    out.push("clock timezone JST 9 0");
+    out.push("service password-encryption");
+    out.push("no ip http server");
+    out.push("no ip http secure-server");
+    out.push("line vty 0 15");
+    out.push(" transport input ssh");
+    out.push(" exec-timeout 10 0");
+    out.push("!");
+    out.push(`! 認証（ユーザー名・鍵・AAA）: ${TODO}`);
+    out.push(`! SNMP: ${TODO}`);
+    return out;
+  }
+
+  function arista(input, nets) {
+    const out = [`hostname ${input.hostname}`, "!"];
+    (input.vlans || []).forEach((vlan) => {
+      out.push(`vlan ${vlan.id}`);
+      out.push(`   name ${vlan.name || `VLAN${vlan.id}`}`);
+      out.push("!");
+    });
+    if (input.layer3) {
+      nets.forEach((entry) => {
+        const vlan = (input.vlans || []).find((item) => Number(item.id) === entry.id) || {};
+        out.push(`interface Vlan${entry.id}`);
+        out.push(`   ip address ${entry.net.address}/${entry.net.length}`);
+        if (vlan.virtualIp) {
+          out.push(`   ip virtual-router address ${vlan.virtualIp}`);
+        }
+        out.push("!");
+      });
+    }
+    if (input.uplink) {
+      out.push(`interface ${input.uplink}`);
+      out.push("   switchport mode trunk");
+      out.push(`   switchport trunk allowed vlan ${allowed(input)}`);
+      out.push("!");
+    }
+    (input.accessPorts || []).forEach((port) => {
+      out.push(`interface ${port.range}`);
+      out.push("   switchport mode access");
+      out.push(`   switchport access vlan ${port.vlan}`);
+      out.push("   spanning-tree portfast");
+      out.push("!");
+    });
+    if (input.defaultGateway) out.push(`ip route 0.0.0.0/0 ${input.defaultGateway}`);
+    if (input.ntp) out.push(`ntp server ${input.ntp}`);
+    if (input.syslog) out.push(`logging host ${input.syslog}`);
+    out.push("management ssh");
+    out.push("!");
+    out.push(`! 認証: ${TODO}`);
+    return out;
+  }
+
+  function arubacx(input, nets) {
+    const out = [`hostname ${input.hostname}`, "!"];
+    (input.vlans || []).forEach((vlan) => {
+      out.push(`vlan ${vlan.id}`);
+      out.push(`    name ${vlan.name || `VLAN${vlan.id}`}`);
+    });
+    out.push("!");
+    if (input.layer3) {
+      nets.forEach((entry) => {
+        const vlan = (input.vlans || []).find((item) => Number(item.id) === entry.id) || {};
+        out.push(`interface vlan ${entry.id}`);
+        out.push("    no shutdown");
+        out.push(`    ip address ${entry.net.address}/${entry.net.length}`);
+        if (vlan.virtualIp) {
+          out.push(`    vrrp ${entry.id} address-family ipv4`);
+          out.push(`        address ${vlan.virtualIp} primary`);
+          out.push(`        priority ${vlan.priority || 110}`);
+          out.push("        no shutdown");
+        }
+        out.push("!");
+      });
+    }
+    if (input.uplink) {
+      out.push(`interface ${input.uplink}`);
+      out.push("    no shutdown");
+      out.push(`    vlan trunk allowed ${allowed(input)}`);
+      if (input.nativeVlan) out.push(`    vlan trunk native ${input.nativeVlan}`);
+      out.push("!");
+    }
+    (input.accessPorts || []).forEach((port) => {
+      out.push(`interface ${port.range}`);
+      out.push("    no shutdown");
+      out.push(`    vlan access ${port.vlan}`);
+      out.push("!");
+    });
+    if (input.defaultGateway) out.push(`ip route 0.0.0.0/0 ${input.defaultGateway}`);
+    if (input.ntp) out.push(`ntp server ${input.ntp}`);
+    if (input.syslog) out.push(`logging ${input.syslog}`);
+    out.push("no https-server vrf mgmt");
+    out.push("!");
+    out.push(`! 認証: ${TODO}`);
+    return out;
+  }
+
+  function comware(input, nets) {
+    const out = [`sysname ${input.hostname}`, "#"];
+    (input.vlans || []).forEach((vlan) => {
+      out.push(`vlan ${vlan.id}`);
+      out.push(` name ${vlan.name || `VLAN${vlan.id}`}`);
+      out.push("#");
+    });
+    if (input.layer3) {
+      nets.forEach((entry) => {
+        const vlan = (input.vlans || []).find((item) => Number(item.id) === entry.id) || {};
+        out.push(`interface Vlan-interface${entry.id}`);
+        out.push(` ip address ${entry.net.address} ${entry.net.netmask}`);
+        if (vlan.virtualIp) {
+          out.push(` vrrp vrid ${entry.id} virtual-ip ${vlan.virtualIp}`);
+          out.push(` vrrp vrid ${entry.id} priority ${vlan.priority || 110}`);
+        }
+        out.push("#");
+      });
+    }
+    if (input.uplink) {
+      out.push(`interface ${input.uplink}`);
+      out.push(" port link-type trunk");
+      out.push(` port trunk permit vlan ${allowed(input).replace(/,/g, " ")}`);
+      if (input.nativeVlan) out.push(` port trunk pvid vlan ${input.nativeVlan}`);
+      out.push("#");
+    }
+    (input.accessPorts || []).forEach((port) => {
+      out.push(`interface ${port.range}`);
+      out.push(" port link-type access");
+      out.push(` port access vlan ${port.vlan}`);
+      out.push("#");
+    });
+    if (input.defaultGateway) {
+      out.push(`ip route-static 0.0.0.0 0 ${input.defaultGateway}`);
+      out.push("#");
+    }
+    if (input.ntp) out.push(`ntp-service unicast-server ${input.ntp}`);
+    if (input.syslog) out.push(`info-center loghost ${input.syslog}`);
+    out.push("undo telnet server enable");
+    out.push("#");
+    out.push(`! 認証: ${TODO}`);
+    return out;
+  }
+
+  function allied(input, nets) {
+    const out = [`hostname ${input.hostname}`, "!"];
+    (input.vlans || []).forEach((vlan) => {
+      out.push("vlan database");
+      out.push(` vlan ${vlan.id} name ${vlan.name || `VLAN${vlan.id}`}`);
+      out.push("!");
+    });
+    if (input.layer3) {
+      nets.forEach((entry) => {
+        const vlan = (input.vlans || []).find((item) => Number(item.id) === entry.id) || {};
+        out.push(`interface vlan${entry.id}`);
+        out.push(` ip address ${entry.net.address}/${entry.net.length}`);
+        out.push("!");
+        if (vlan.virtualIp) {
+          out.push(`router vrrp ${entry.id} vlan${entry.id}`);
+          out.push(` virtual-ip ${vlan.virtualIp} backup`);
+          out.push(` priority ${vlan.priority || 110}`);
+          out.push(" enable");
+          out.push("!");
+        }
+      });
+    }
+    if (input.uplink) {
+      out.push(`interface ${input.uplink}`);
+      out.push(" switchport mode trunk");
+      out.push(` switchport trunk allowed vlan add ${allowed(input)}`);
+      if (input.nativeVlan) out.push(` switchport trunk native vlan ${input.nativeVlan}`);
+      out.push("!");
+    }
+    (input.accessPorts || []).forEach((port) => {
+      out.push(`interface ${port.range}`);
+      out.push(" switchport mode access");
+      out.push(` switchport access vlan ${port.vlan}`);
+      out.push("!");
+    });
+    if (input.defaultGateway) out.push(`ip route 0.0.0.0/0 ${input.defaultGateway}`);
+    if (input.ntp) out.push(`ntp peer ${input.ntp}`);
+    if (input.syslog) out.push(`log host ${input.syslog}`);
+    out.push("no service http");
+    out.push("!");
+    out.push(`! 認証: ${TODO}`);
+    return out;
+  }
+
+  const VENDORS = {
+    cisco: { label: "Cisco IOS / IOS-XE", build: (i, n) => cisco(i, n, false) },
+    nxos: { label: "Cisco NX-OS", build: (i, n) => cisco(i, n, true) },
+    arista: { label: "Arista EOS", build: arista },
+    arubacx: { label: "Aruba CX（AOS-CX）", build: arubacx },
+    comware: { label: "NEC QX / Comware", build: comware },
+    allied: { label: "AlliedWare Plus", build: allied },
+  };
+
+  /** 条件から Config を作る。おかしいところがあれば、作らずに理由を返す。 */
+  function generate(input) {
+    const vendor = VENDORS[input.vendor] || VENDORS.cisco;
+    const { problems, nets } = check(input);
+    if (problems.length) return { ok: false, problems, config: "" };
+    const notes = [
+      "投入前に、機器の型と版で書き方が合っているか確かめてください。",
+      "合言葉・鍵・SNMP は入れていません。控えの残る場所に書かないためです。",
+    ];
+    if (!input.layer3 && nets.length) {
+      notes.push("この機器はゲートウェイを持たない設定なので、アドレスは出していません。");
+    }
+    return {
+      ok: true,
+      problems: [],
+      notes,
+      vendorLabel: vendor.label,
+      config: vendor.build(input, input.layer3 ? nets : []).join("\n") + "\n",
+    };
+  }
+
+  root.NV = { toInt, toText, parseCidr, overlaps, contains, usableHost, check, generate, VENDORS };
+})(typeof globalThis !== "undefined" ? globalThis : this);
+</script>
+<script>
+(function () {
+  "use strict";
+  const $ = (id) => document.getElementById(id);
+  const STORE = "netvision.phone.v1";
+
+  const SAMPLE = {
+    vendor: "cisco",
+    hostname: "acc-sw-01",
+    layer3: true,
+    vlans: [
+      { id: "10", name: "office", address: "10.0.10.2/24", virtualIp: "10.0.10.1", priority: "110" },
+      { id: "20", name: "guest", address: "10.0.20.2/24", virtualIp: "", priority: "" },
+    ],
+    uplink: "GigabitEthernet1/0/49",
+    nativeVlan: "",
+    accessPorts: [{ range: "GigabitEthernet1/0/1-24", vlan: "10" }],
+    defaultGateway: "10.0.10.254",
+    ntp: "10.0.0.10",
+    syslog: "10.0.0.11",
+  };
+
+  for (const [key, item] of Object.entries(NV.VENDORS)) {
+    const option = document.createElement("option");
+    option.value = key;
+    option.textContent = item.label;
+    $("vendor").append(option);
+  }
+
+  function vlanRow(vlan) {
+    const box = document.createElement("div");
+    box.className = "row";
+    box.innerHTML =
+      '<label>VLAN<input class="v-id" inputmode="numeric" /></label>' +
+      '<label>名前<input class="v-name" autocapitalize="off" spellcheck="false" /></label>' +
+      '<label class="full">アドレス / 長さ<input class="v-address" inputmode="decimal" spellcheck="false" placeholder="10.0.10.2/24" /></label>' +
+      '<label>仮想アドレス<input class="v-virtual" inputmode="decimal" spellcheck="false" /></label>' +
+      '<label>優先度<input class="v-priority" inputmode="numeric" /></label>' +
+      '<button class="link v-remove" type="button">この VLAN を消す</button>';
+    box.querySelector(".v-id").value = vlan.id || "";
+    box.querySelector(".v-name").value = vlan.name || "";
+    box.querySelector(".v-address").value = vlan.address || "";
+    box.querySelector(".v-virtual").value = vlan.virtualIp || "";
+    box.querySelector(".v-priority").value = vlan.priority || "";
+    box.querySelector(".v-remove").addEventListener("click", () => {
+      box.remove();
+      render();
+    });
+    return box;
+  }
+
+  function portRow(port) {
+    const box = document.createElement("div");
+    box.className = "row";
+    box.innerHTML =
+      '<label class="full">口の範囲<input class="p-range" autocapitalize="off" spellcheck="false" placeholder="GigabitEthernet1/0/1-24" /></label>' +
+      '<label>VLAN<input class="p-vlan" inputmode="numeric" /></label>' +
+      '<button class="link p-remove" type="button">この行を消す</button>';
+    box.querySelector(".p-range").value = port.range || "";
+    box.querySelector(".p-vlan").value = port.vlan || "";
+    box.querySelector(".p-remove").addEventListener("click", () => {
+      box.remove();
+      render();
+    });
+    return box;
+  }
+
+  function fill(state) {
+    $("vendor").value = state.vendor;
+    $("hostname").value = state.hostname;
+    $("layer3").checked = !!state.layer3;
+    $("uplink").value = state.uplink || "";
+    $("nativeVlan").value = state.nativeVlan || "";
+    $("defaultGateway").value = state.defaultGateway || "";
+    $("ntp").value = state.ntp || "";
+    $("syslog").value = state.syslog || "";
+    $("vlans").replaceChildren(...(state.vlans || []).map(vlanRow));
+    $("ports").replaceChildren(...(state.accessPorts || []).map(portRow));
+  }
+
+  function read() {
+    return {
+      vendor: $("vendor").value,
+      hostname: $("hostname").value.trim(),
+      layer3: $("layer3").checked,
+      uplink: $("uplink").value.trim(),
+      nativeVlan: $("nativeVlan").value.trim(),
+      defaultGateway: $("defaultGateway").value.trim(),
+      ntp: $("ntp").value.trim(),
+      syslog: $("syslog").value.trim(),
+      vlans: [...$("vlans").children].map((box) => ({
+        id: box.querySelector(".v-id").value.trim(),
+        name: box.querySelector(".v-name").value.trim(),
+        address: box.querySelector(".v-address").value.trim(),
+        virtualIp: box.querySelector(".v-virtual").value.trim(),
+        priority: box.querySelector(".v-priority").value.trim(),
+      })),
+      accessPorts: [...$("ports").children]
+        .map((box) => ({
+          range: box.querySelector(".p-range").value.trim(),
+          vlan: box.querySelector(".p-vlan").value.trim(),
+        }))
+        .filter((port) => port.range && port.vlan),
+    };
+  }
+
+  function showCalc(state) {
+    const rows = [];
+    for (const vlan of state.vlans) {
+      if (!vlan.address) continue;
+      const net = NV.parseCidr(vlan.address);
+      if (!net.ok) continue;
+      rows.push(
+        `<b>VLAN ${vlan.id || "?"}</b><span>${net.cidr}　マスク ${net.netmask}　ワイルドカード ${net.wildcard}</span>`
+      );
+    }
+    $("calc").innerHTML = rows.join("");
+  }
+
+  function render() {
+    const state = read();
+    showCalc(state);
+    try {
+      localStorage.setItem(STORE, JSON.stringify(state));
+    } catch (error) {
+      /* 保存できない設定でも、道具としては動く */
+    }
+    const result = NV.generate(state);
+    const messages = [];
+    if (!result.ok) {
+      for (const problem of result.problems) {
+        messages.push(`<div class="problem">${escape(problem)}</div>`);
+      }
+      $("out").textContent = "直すところがあります。上の赤い行を見てください。";
+      $("meta").textContent = "";
+    } else {
+      for (const note of result.notes) {
+        messages.push(`<div class="note">${escape(note)}</div>`);
+      }
+      $("out").textContent = result.config;
+      $("meta").textContent = `${result.vendorLabel}　${result.config.split("\n").length - 1} 行`;
+    }
+    $("messages").innerHTML = messages.join("");
+  }
+
+  function escape(text) {
+    return String(text).replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c]);
+  }
+
+  $("addVlan").addEventListener("click", () => {
+    $("vlans").append(vlanRow({ id: "", name: "", address: "" }));
+  });
+  $("addPort").addEventListener("click", () => {
+    $("ports").append(portRow({ range: "", vlan: "" }));
+  });
+  $("make").addEventListener("click", render);
+  $("copy").addEventListener("click", async () => {
+    const text = $("out").textContent;
+    try {
+      await navigator.clipboard.writeText(text);
+      $("copy").textContent = "コピーしました";
+      setTimeout(() => ($("copy").textContent = "コピー"), 1600);
+    } catch (error) {
+      $("copy").textContent = "コピーできません";
+      setTimeout(() => ($("copy").textContent = "コピー"), 1600);
+    }
+  });
+
+  let saved = null;
+  try {
+    saved = JSON.parse(localStorage.getItem(STORE) || "null");
+  } catch (error) {
+    saved = null;
+  }
+  fill(saved && saved.vlans ? saved : SAMPLE);
+  render();
+})();
+</script>
+</body>
+</html>

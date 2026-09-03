@@ -1,0 +1,344 @@
+"""IP アドレスの読み方を、間違えやすいところだけ集めて固定する。
+
+同じ「10.0.0.1 0.0.0.0」でも、書いてある場所で意味が正反対になる。
+ここを取り違えると、指摘も生成も静かに間違う。目で見て気づけないので、
+形の違いを1つずつ試験で押さえる。
+"""
+
+import ipaddress
+
+from app.services import calc, configparse
+from app.services.aclcheck import network_of
+from app.services.addition import netmask_of, wildcard_of
+from app.services.configparse.routing import to_prefix
+
+# ---------------------------------------------------------------------------
+# ネットマスクとワイルドカードは、書いてある場所で決まる
+# ---------------------------------------------------------------------------
+
+
+def test_a_netmask_is_read_as_a_netmask():
+    assert to_prefix("10.0.0.0", "255.255.255.0", wildcard=False) == "10.0.0.0/24"
+    assert to_prefix("172.16.0.0", "255.240.0.0", wildcard=False) == "172.16.0.0/12"
+    assert to_prefix("192.168.1.0", "255.255.255.128", wildcard=False) == "192.168.1.0/25"
+
+
+def test_a_wildcard_is_read_as_a_wildcard():
+    assert to_prefix("10.0.0.0", "0.0.0.255", wildcard=True) == "10.0.0.0/24"
+    assert to_prefix("10.0.0.0", "0.255.255.255", wildcard=True) == "10.0.0.0/8"
+
+
+def test_all_zeroes_means_the_opposite_in_the_two_places():
+    """経路の `0.0.0.0 0.0.0.0` は「全部」、OSPF の `10.1.1.1 0.0.0.0` は「1台」。"""
+    assert to_prefix("0.0.0.0", "0.0.0.0", wildcard=False) == "0.0.0.0/0"
+    assert to_prefix("10.1.1.1", "0.0.0.0", wildcard=True) == "10.1.1.1/32"
+
+
+def test_all_ones_means_the_opposite_in_the_two_places():
+    assert to_prefix("10.0.0.5", "255.255.255.255", wildcard=False) == "10.0.0.5/32"
+    assert to_prefix("0.0.0.0", "255.255.255.255", wildcard=True) == "0.0.0.0/0"
+
+
+def test_a_mask_that_is_not_a_run_of_bits_is_refused():
+    """255.0.255.0 のような飛び飛びの指定は、1つの帯にならない。"""
+    assert to_prefix("10.0.0.0", "255.0.255.0", wildcard=False) is None
+
+
+def test_the_address_and_mask_can_come_as_one_word():
+    assert to_prefix("10.0.0.1 255.255.255.0") == "10.0.0.0/24"
+
+
+def test_a_length_that_is_written_is_used_as_is():
+    assert to_prefix("10.0.0.0/24") == "10.0.0.0/24"
+    assert to_prefix("10.0.0.9", "/30") == "10.0.0.8/30"
+
+
+def test_an_address_without_a_length_is_one_address():
+    assert to_prefix("10.0.0.1") == "10.0.0.1/32"
+
+
+def test_an_ipv6_address_without_a_length_is_one_address_too():
+    """IPv6 の1つぶんは /128。ここを 32 と決め打つと、巨大な帯になる。"""
+    assert to_prefix("2001:db8::1") == "2001:db8::1/128"
+    assert to_prefix("2001:db8::/64") == "2001:db8::/64"
+    assert to_prefix("fe80::1") == "fe80::1/128"
+
+
+def test_something_that_is_not_an_address_is_not_guessed():
+    assert to_prefix("any") is None
+    assert to_prefix("host 10.0.0.5") is None
+    assert to_prefix("") is None
+
+
+# ---------------------------------------------------------------------------
+# Cisco OSPF の network 行。現場でいちばん多い2つの書き方
+# ---------------------------------------------------------------------------
+
+
+def _ospf(*rows: str):
+    text = "hostname r1\nrouter ospf 1\n" + "".join(f" {row}\n" for row in rows)
+    return configparse.parse(text).ospf
+
+
+def test_ospf_network_covering_a_single_interface():
+    areas = _ospf("network 10.1.1.1 0.0.0.0 area 0")
+    assert areas.areas[0].networks == ["10.1.1.1/32"]
+
+
+def test_ospf_network_covering_everything():
+    areas = _ospf("network 0.0.0.0 255.255.255.255 area 0")
+    assert areas.areas[0].networks == ["0.0.0.0/0"]
+
+
+def test_ospf_network_with_an_ordinary_wildcard():
+    areas = _ospf("network 192.168.0.0 0.0.255.255 area 1")
+    assert areas.areas[0].networks == ["192.168.0.0/16"]
+
+
+def test_bgp_network_uses_a_netmask_not_a_wildcard():
+    """BGP の network は mask で書く。ここをワイルドカードとして読むと逆になる。"""
+    text = """hostname r1
+router bgp 65001
+ network 10.0.0.0 mask 255.255.255.0
+ aggregate-address 10.0.0.0 255.0.0.0 summary-only
+"""
+    bgp = configparse.parse(text).bgp
+    assert bgp.networks == ["10.0.0.0/24"]
+    assert bgp.aggregates == ["10.0.0.0/8"]
+
+
+def test_a_default_route_is_read_as_everything():
+    text = "hostname r1\nip route 0.0.0.0 0.0.0.0 10.0.0.254\n"
+    route = configparse.parse(text).routes[0]
+    assert route.destination == "0.0.0.0/0"
+    assert route.next_hop == "10.0.0.254"
+
+
+def test_a_host_route_is_read_as_one_address():
+    text = "hostname r1\nip route 10.9.9.9 255.255.255.255 10.0.0.254\n"
+    assert configparse.parse(text).routes[0].destination == "10.9.9.9/32"
+
+
+# ---------------------------------------------------------------------------
+# ACL の書き方
+# ---------------------------------------------------------------------------
+
+
+def test_acl_wildcards_and_keywords():
+    assert network_of("any") == ipaddress.ip_network("0.0.0.0/0")
+    assert network_of("host 10.0.0.5") == ipaddress.ip_network("10.0.0.5/32")
+    assert network_of("10.0.0.0 0.0.0.255") == ipaddress.ip_network("10.0.0.0/24")
+    assert network_of("10.0.0.0/24") == ipaddress.ip_network("10.0.0.0/24")
+
+
+def test_an_acl_wildcard_that_skips_bits_is_not_turned_into_a_range():
+    """0.0.0.254 は飛び飛びを指せる。1つの帯として扱ってはいけない。"""
+    assert network_of("10.0.0.0 0.0.0.254") is None
+
+
+# ---------------------------------------------------------------------------
+# アドレスとセグメントの取り出し
+# ---------------------------------------------------------------------------
+
+
+def test_the_address_and_its_segment_are_kept_apart():
+    assert calc.address_and_network("10.0.0.1/24") == ("10.0.0.1", "10.0.0.0/24")
+    assert calc.address_and_network("10.0.0.1 255.255.255.0") == ("10.0.0.1", "10.0.0.0/24")
+    assert calc.address_and_network("2001:db8::1/64") == ("2001:db8::1", "2001:db8::/64")
+
+
+def test_a_point_to_point_pair_keeps_both_addresses():
+    """/31 は2台で使い切る。ネットワークに寄せると片方が消える。"""
+    assert calc.address_and_network("10.0.0.0/31") == ("10.0.0.0", "10.0.0.0/31")
+    assert calc.address_and_network("10.0.0.1/31") == ("10.0.0.1", "10.0.0.0/31")
+
+
+def test_the_netmask_and_wildcard_of_a_segment():
+    assert netmask_of("10.0.0.0/24") == "255.255.255.0"
+    assert wildcard_of("10.0.0.0/24") == "0.0.0.255"
+    assert netmask_of("10.0.0.0/30") == "255.255.255.252"
+    assert wildcard_of("10.0.0.0/30") == "0.0.0.3"
+
+
+# ---------------------------------------------------------------------------
+# 1つのポートに複数のアドレスが付く形
+# ---------------------------------------------------------------------------
+
+_MULTI = """hostname r1
+!
+interface GigabitEthernet0/0
+ ip address 10.0.0.1 255.255.255.0
+ ip address 10.0.1.1 255.255.255.0 secondary
+!
+interface GigabitEthernet0/1
+ ip address dhcp
+!
+interface GigabitEthernet0/2
+ ipv6 address 2001:DB8::1/64
+!
+interface GigabitEthernet0/3
+ ip address 10.0.9.1 255.255.255.0
+ ipv6 address 2001:DB8:9::1/64
+!
+interface GigabitEthernet0/4
+ ip unnumbered Loopback0
+!
+"""
+
+
+def _ports(text: str):
+    return {item.name: item for item in configparse.parse(text).interfaces}
+
+
+def test_a_secondary_address_does_not_overwrite_the_first_one():
+    """上書きすると、その機器が本来名乗っているアドレスが台帳から消える。"""
+    port = _ports(_MULTI)["GigabitEthernet0/0"]
+    assert port.ip_address == "10.0.0.1/24"
+    assert port.extra_addresses == ["10.0.1.1/24"]
+
+
+def test_dhcp_is_not_kept_as_an_address():
+    """`dhcp` は住所ではない。住所として持つと、そのまま台帳に載ってしまう。"""
+    assert _ports(_MULTI)["GigabitEthernet0/1"].ip_address is None
+
+
+def test_an_ipv6_only_port_keeps_its_address():
+    assert _ports(_MULTI)["GigabitEthernet0/2"].ip_address == "2001:DB8::1/64"
+
+
+def test_a_port_with_both_families_keeps_the_v4_one_first():
+    port = _ports(_MULTI)["GigabitEthernet0/3"]
+    assert port.ip_address == "10.0.9.1/24"
+    assert port.extra_addresses == ["2001:DB8:9::1/64"]
+
+
+def test_a_port_borrowing_another_ports_address_has_none_of_its_own():
+    assert _ports(_MULTI)["GigabitEthernet0/4"].ip_address is None
+
+
+def test_the_length_written_form_is_read_too():
+    """Arista や AOS-CX は長さで書く。"""
+    text = "hostname sw1\ninterface Vlan10\n   ip address 10.0.10.1/24\n"
+    assert _ports(text)["Vlan10"].ip_address == "10.0.10.1/24"
+
+
+# ---------------------------------------------------------------------------
+# 既定ゲートウェイの冗長。端末はこの仮想アドレスを出口として使う
+# ---------------------------------------------------------------------------
+
+
+def _virtual(cfg: str):
+    from app.services import policyreview
+
+    return [
+        f for f in policyreview.review(configparse.parse(cfg), cfg) if "仮想アドレス" in f.title
+    ]
+
+
+def _hsrp(virtual: str, own: str = "10.0.10.2") -> str:
+    return (
+        "hostname r1\ninterface Vlan10\n"
+        f" ip address {own} 255.255.255.0\n standby 10 ip {virtual}\n"
+    )
+
+
+def test_a_virtual_gateway_inside_the_segment_says_nothing():
+    assert _virtual(_hsrp("10.0.10.1")) == []
+
+
+def test_a_virtual_gateway_outside_the_segment_is_called_out():
+    from app.services.reviewnote import HIGH
+
+    found = _virtual(_hsrp("10.0.99.1"))
+    assert len(found) == 1
+    assert found[0].level == HIGH
+    assert "帯の外" in found[0].title
+
+
+def test_a_virtual_gateway_equal_to_the_device_address_is_called_out():
+    assert "自身のアドレスと同じ" in _virtual(_hsrp("10.0.10.2"))[0].title
+
+
+def test_a_virtual_gateway_on_the_edge_of_the_segment_is_called_out():
+    assert "配れない" in _virtual(_hsrp("10.0.10.0"))[0].title
+    assert "配れない" in _virtual(_hsrp("10.0.10.255"))[0].title
+
+
+def test_vrrp_written_the_comware_way_is_checked_too():
+    cfg = (
+        "sysname s1\ninterface Vlan-interface10\n"
+        " ip address 10.0.10.2 255.255.255.0\n vrrp vrid 10 virtual-ip 10.0.77.1\n"
+    )
+    assert "帯の外" in _virtual(cfg)[0].title
+
+
+# ---------------------------------------------------------------------------
+# 静的経路の次の相手に、そもそも行けるか
+# ---------------------------------------------------------------------------
+
+_ROUTES = """hostname r1
+interface GigabitEthernet0/0
+ ip address 203.0.113.2 255.255.255.252
+!
+interface Vlan10
+ ip address 10.0.10.1 255.255.255.0
+!
+"""
+
+
+def _routes(*rows: str):
+    from app.services import policyreview
+
+    cfg = _ROUTES + "".join(f"{row}\n" for row in rows)
+    return [f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title]
+
+
+def test_a_next_hop_on_a_connected_segment_is_fine():
+    assert _routes("ip route 0.0.0.0 0.0.0.0 203.0.113.1") == []
+    assert _routes("ip route 10.20.0.0 255.255.0.0 10.0.10.9") == []
+
+
+def test_a_next_hop_nobody_can_reach_is_called_out():
+    from app.services.reviewnote import MEDIUM
+
+    found = _routes("ip route 10.30.0.0 255.255.0.0 192.168.77.1")
+    assert len(found) == 1
+    assert found[0].level == MEDIUM
+    assert "192.168.77.1" in found[0].title
+
+
+def test_a_next_hop_reached_through_another_route_is_fine():
+    """直結でなくても、他の経路で届くなら使われる。"""
+    assert (
+        _routes(
+            "ip route 10.20.0.0 255.255.0.0 10.0.10.9",
+            "ip route 172.16.0.0 255.255.0.0 10.20.0.1",
+        )
+        == []
+    )
+
+
+def test_a_default_route_is_not_used_as_the_reason_it_is_reachable():
+    """既定経路は何でも覆う。それを根拠にすると、書き間違いを全部見逃す。"""
+    assert (
+        len(
+            _routes(
+                "ip route 0.0.0.0 0.0.0.0 203.0.113.1",
+                "ip route 10.30.0.0 255.255.0.0 192.168.77.1",
+            )
+        )
+        == 1
+    )
+
+
+def test_a_route_written_with_an_exit_port_needs_no_next_hop():
+    assert _routes("ip route 10.40.0.0 255.255.0.0 GigabitEthernet0/0") == []
+
+
+def test_nothing_is_said_when_the_ports_could_not_be_read():
+    from app.services import policyreview
+
+    cfg = "hostname r1\nip route 10.30.0.0 255.255.0.0 192.168.77.1\n"
+    assert [
+        f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title
+    ] == []

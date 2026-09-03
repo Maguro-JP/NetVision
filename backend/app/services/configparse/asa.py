@@ -154,7 +154,7 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
     for where, destination, mask, next_hop, distance in _ROUTE.findall(text):
         # 宛先の書き方は他ベンダーとそろえる（10.20.0.0/16 の形）。
         # 揃えておかないと、経路どうしの突き合わせでだけ食い違う
-        network = to_prefix(destination, mask)
+        network = to_prefix(destination, mask, wildcard=False)
         if network is None:
             continue
         parsed.routes.append(

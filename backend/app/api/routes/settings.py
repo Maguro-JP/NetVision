@@ -15,7 +15,7 @@ from fastapi import APIRouter, HTTPException, status
 from pydantic import BaseModel, Field
 
 from app.config import settings
-from app.services import appsettings, exposure_schedule, llm_inproc
+from app.services import appsettings, backup, exposure_schedule, llm_inproc
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -29,6 +29,8 @@ class AppSettingsRead(BaseModel):
     display_timezone: str = Field(description="画面と書き出しに出す時刻の地域")
     model_dir: str = Field(description="アプリの中で動かすモデル（GGUF）の置き場所")
     exposure_sync_hours: int = Field(description="該当状況を裏で洗い直す間隔（時間）。0 で止める")
+    backup_interval_hours: int = Field(description="控えを自動で取る間隔（時間）。0 で止める")
+    backup_keep: int = Field(description="控えを何世代残すか")
 
 
 class AppSettingsUpdate(BaseModel):
@@ -38,6 +40,8 @@ class AppSettingsUpdate(BaseModel):
     display_timezone: str | None = None
     model_dir: str | None = None
     exposure_sync_hours: int | None = None
+    backup_interval_hours: int | None = None
+    backup_keep: int | None = None
 
 
 def _current() -> AppSettingsRead:
@@ -50,6 +54,8 @@ def _current() -> AppSettingsRead:
         display_timezone=appsettings.text("display_timezone", settings.display_timezone),
         model_dir=appsettings.text("model_dir", str(llm_inproc.model_dir())),
         exposure_sync_hours=exposure_schedule.interval_hours(),
+        backup_interval_hours=backup.interval_hours(),
+        backup_keep=backup.keep(),
     )
 
 
@@ -74,6 +80,18 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
         raise HTTPException(
             status.HTTP_422_UNPROCESSABLE_ENTITY,
             f"洗い直しの間隔は 0〜{exposure_schedule.MAX_HOURS} 時間で指定してください",
+        )
+    if "backup_interval_hours" in changes and not (
+        0 <= changes["backup_interval_hours"] <= backup.MAX_HOURS
+    ):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"控えを取る間隔は 0〜{backup.MAX_HOURS} 時間で指定してください",
+        )
+    if "backup_keep" in changes and not (1 <= changes["backup_keep"] <= backup.MAX_KEEP):
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            f"控えは 1〜{backup.MAX_KEEP} 世代で指定してください",
         )
     if "display_timezone" in changes:
         from zoneinfo import ZoneInfo
@@ -101,4 +119,6 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
         raise HTTPException(status.HTTP_507_INSUFFICIENT_STORAGE, str(error)) from error
     if "exposure_sync_hours" in changes:
         exposure_schedule.reschedule()
+    if "backup_interval_hours" in changes or "backup_keep" in changes:
+        backup.reschedule()
     return _current()

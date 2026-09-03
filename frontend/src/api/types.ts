@@ -1112,6 +1112,32 @@ export interface AppSettings {
   display_timezone: string;
   model_dir: string;
   exposure_sync_hours: number;
+  backup_interval_hours: number;
+  backup_keep: number;
+}
+
+/** 控え1件。 */
+export interface Backup {
+  id: string;
+  path: string;
+  created_at: string;
+  reason: string | null;
+  bytes: number;
+  exists: boolean;
+  verified: boolean | null;
+  verify_message: string;
+  before_schema_change: boolean;
+}
+
+/** 控えの状態。いつのものがどこにあり、開ける状態か。 */
+export interface BackupStatus {
+  interval_hours: number;
+  keep: number;
+  running: boolean;
+  next_run_at: string | null;
+  latest: Backup | null;
+  backups: Backup[];
+  restore_hint: string;
 }
 
 /** 資料から起こしたテンプレートの下書き。 */

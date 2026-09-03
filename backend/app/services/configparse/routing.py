@@ -35,31 +35,56 @@ from app.services.configparse.ifname import expand
 # ---------------------------------------------------------------------------
 
 
-def to_prefix(address: str, mask: str | None = None) -> str | None:
+def to_prefix(address: str, mask: str | None = None, *, wildcard: bool | None = None) -> str | None:
     """`10.0.0.0 255.255.255.0` も `10.0.0.0/24` も `10.0.0.0/24` にそろえる。
 
     ベンダーごとに書き方が違うだけで意味は同じなので、比べられる形に寄せる。
     ここでそろえておかないと、「同じ経路が両側にあるか」を後で照合できない。
+
+    2つ目の値がネットマスク（255.255.255.0）かワイルドカード（0.0.0.255）かは、
+    書いてある場所で決まる。同じ `0.0.0.0` でも、経路の行では「全部」、
+    OSPF の network 行では「この1台だけ」を指す。取り違えると意味が正反対に
+    なるので、呼ぶ側が `wildcard` で伝える。伝えられないときだけ、
+    先頭の桁から推し量る。
+
+      wildcard=True   … 必ずワイルドカードとして読む（OSPF の network、ACL）
+      wildcard=False  … 必ずネットマスクとして読む（経路、BGP の network）
+      wildcard=None   … 分からないので推し量る
     """
     text = address.strip()
+    if mask is None and len(text.split()) == 2:
+        # `10.0.0.1 255.255.255.0` と1つにまとめて渡されることがある
+        text, mask = text.split()
     try:
         if mask:
             mask = mask.strip()
             if mask.startswith("/"):
                 return str(ipaddress.ip_network(f"{text}{mask}", strict=False))
-            # ワイルドカードマスク（0.0.0.255）は反転してからネットマスクにする
-            if _is_wildcard(mask):
+            if wildcard is True or (wildcard is None and _is_wildcard(mask)):
                 mask = _invert(mask)
             return str(ipaddress.ip_network(f"{text}/{mask}", strict=False))
         if "/" in text:
             return str(ipaddress.ip_network(text, strict=False))
-        return str(ipaddress.ip_network(f"{text}/32", strict=False))
+        # 長さを書いていない＝その1つを指している。長さは種類で決まる
+        return str(ipaddress.ip_network(f"{text}/{_host_length(text)}", strict=False))
     except ValueError:
         return None
 
 
+def _host_length(text: str) -> int:
+    """長さを書いていないときの、1つぶんの長さ。IPv6 は 128。"""
+    try:
+        return ipaddress.ip_address(text).max_prefixlen
+    except ValueError:
+        return 32
+
+
 def _is_wildcard(mask: str) -> bool:
-    """0.0.0.255 のような、先頭が 0 の側から立つ書き方かどうか。"""
+    """0.0.0.255 のような、先頭が 0 の側から立つ書き方かどうか。
+
+    `0.0.0.0` と `255.255.255.255` は、どちらの読み方でも形が通ってしまう。
+    ここでは推し量らない（呼ぶ側が `wildcard` で決める）。
+    """
     try:
         first = int(mask.split(".")[0])
     except (ValueError, IndexError):
@@ -128,7 +153,7 @@ def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
         match = _IOS_ROUTE.match(line.strip())
         if not match:
             continue
-        destination = to_prefix(match.group("dest"), match.group("mask"))
+        destination = to_prefix(match.group("dest"), match.group("mask"), wildcard=False)
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
@@ -153,7 +178,7 @@ def _cisco_ospf(text: str, parsed: ParsedConfig) -> None:
                 continue
             network = re.match(r"^network\s+(\S+)\s+(\S+)\s+area\s+(\S+)", line, re.IGNORECASE)
             if network:
-                prefix = to_prefix(network.group(1), network.group(2))
+                prefix = to_prefix(network.group(1), network.group(2), wildcard=True)
                 if prefix:
                     _add_area(ospf, network.group(3), prefix)
                 continue
@@ -215,7 +240,7 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
                 continue
             network = re.match(r"^network\s+(\S+)(?:\s+mask\s+(\S+))?", line, re.IGNORECASE)
             if network:
-                prefix = to_prefix(network.group(1), network.group(2))
+                prefix = to_prefix(network.group(1), network.group(2), wildcard=False)
                 if prefix and prefix not in bgp.networks:
                     bgp.networks.append(prefix)
         parsed.bgp = bgp
@@ -230,7 +255,7 @@ def _bgp_option(bgp: ParsedBgp, line: str) -> bool:
         return True
     aggregate = re.match(r"^aggregate-address\s+(\S+)(?:\s+(\d+\.\d+\.\d+\.\d+))?", line, re.I)
     if aggregate:
-        prefix = to_prefix(aggregate.group(1), aggregate.group(2))
+        prefix = to_prefix(aggregate.group(1), aggregate.group(2), wildcard=False)
         if prefix and prefix not in bgp.aggregates:
             bgp.aggregates.append(prefix)
         return True
@@ -354,7 +379,7 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
         match = _QX_ROUTE.match(line.strip())
         if not match:
             continue
-        destination = to_prefix(match.group("dest"), match.group("mask"))
+        destination = to_prefix(match.group("dest"), match.group("mask"), wildcard=False)
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
@@ -385,7 +410,7 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
                 continue
             network = re.match(r"^network\s+(\S+)\s+(\S+)", line, re.IGNORECASE)
             if network and area is not None:
-                prefix = to_prefix(network.group(1), network.group(2))
+                prefix = to_prefix(network.group(1), network.group(2), wildcard=True)
                 if prefix:
                     _add_area(ospf, area, prefix)
         for entry in ospf.areas:  # 見出しだけの空欄を落とす
@@ -574,7 +599,7 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
             continue
         destination = re.match(r'^set dst\s+"?([\d.]+)"?\s+"?([\d.]+)"?', line, re.IGNORECASE)
         if destination:
-            prefix = to_prefix(destination.group(1), destination.group(2))
+            prefix = to_prefix(destination.group(1), destination.group(2), wildcard=False)
             if prefix:
                 current.destination = prefix
             continue

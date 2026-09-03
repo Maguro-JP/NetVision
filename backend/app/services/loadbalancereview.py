@@ -15,6 +15,11 @@ def _note(level: str, title: str, why: str, evidence: list[str]) -> Finding:
     return Finding(level=level, title=title, why=why, evidence=evidence)
 
 
+def _where(member) -> str:  # noqa: ANN001
+    """名前で書かれていても、実際の宛先が分かる形にする。"""
+    return f"{member.label}:{member.port}" if member.port else member.label
+
+
 def review(parsed: ParsedConfig) -> list[Finding]:
     balance: ParsedLoadBalance | None = getattr(parsed, "load_balance", None)
     if balance is None:
@@ -70,7 +75,7 @@ def review(parsed: ParsedConfig) -> list[Finding]:
                     f"{pool.name} の振り分け先が全部止めてあります",
                     "入っている機はすべて、手で止めた状態になっています。"
                     "作業のあと戻し忘れていないか確かめてください。",
-                    [f"{m.address}:{m.port}" if m.port else m.address for m in pool.members[:8]],
+                    [_where(m) for m in pool.members[:8]],
                 )
             )
 
@@ -85,7 +90,7 @@ def review(parsed: ParsedConfig) -> list[Finding]:
                     "監視が無いと、振り分け先が落ちていても流し続けます。"
                     "利用者から見ると「たまに繋がらない」という形になり、"
                     "機器の側では異常として見えません。",
-                    [f"{m.address}:{m.port}" if m.port else m.address for m in pool.members[:8]],
+                    [_where(m) for m in pool.members[:8]],
                 )
             )
         elif len(pool.alive) == 1:
@@ -96,7 +101,7 @@ def review(parsed: ParsedConfig) -> list[Finding]:
                     "負荷分散の形にはなっていますが、実際に流れる先は1台です。"
                     "その1台が落ちるとサービスも止まります。"
                     "意図した構成か、増設の途中かを確かめてください。",
-                    [f"{m.address}:{m.port}" if m.port else m.address for m in pool.alive],
+                    [_where(m) for m in pool.alive],
                 )
             )
 
