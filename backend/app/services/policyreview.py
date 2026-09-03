@@ -18,7 +18,13 @@ from __future__ import annotations
 import ipaddress
 import re
 
-from app.services import aclcheck, asareview, multicastreview, wirelessreview
+from app.services import (
+    aclcheck,
+    asareview,
+    loadbalancereview,
+    multicastreview,
+    wirelessreview,
+)
 from app.services.configparse import ParsedConfig
 from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -58,6 +64,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_crypto(parsed))
     findings.extend(wirelessreview.review(parsed))
     findings.extend(multicastreview.review(parsed))
+    findings.extend(loadbalancereview.review(parsed))
     findings.extend(asareview.review(parsed))
     if text is not None:
         findings.extend(_management_access(text, parsed))

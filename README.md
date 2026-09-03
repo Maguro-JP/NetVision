@@ -465,6 +465,7 @@ HSRP / VRRP と、OSPF の一部です。ACL やファイアウォールのポ�
 
 Config から、その機器で使っている機能を拾います。ACL、NAT、DHCP（サーバー /
 リレー）、STP、LAG、QoS、マルチキャスト（PIM / RP / IGMP スヌーピング）、
+負荷分散（受け口・振り分け先・健全性監視）、
 802.1X / ポートセキュリティ、SNMP / Syslog / NTP /
 AAA、IPsec、マルチキャスト、負荷分散、HSRP / VRRP / スタック。機器の画面の
 「経路と機能」に出ます。

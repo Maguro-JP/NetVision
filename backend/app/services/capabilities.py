@@ -293,11 +293,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="上位",
         name="負荷分散（ロードバランサ）",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="仮想サーバーの設定が入っていることまで。"
-        "振り分け先の一覧や健全性監視は読んでいません。台帳には機器として載せられます。",
+        note="受け口・振り分け先の一覧・健全性監視・振り分け方まで読みます"
+        "（F5 BIG-IP の ltm、FortiGate の server-load-balance、A10 / ACE 系の slb）。"
+        "受け口が指すまとまりが無い、まとまりが空、全部止めてある、"
+        "健全性監視が付いていない（落ちた機に流し続ける形）、"
+        "生きている先が1台だけ、を指摘します。何台置くかという方針は"
+        "要件が要るので言いません。台帳には機器として載せられます。",
     ),
     Capability(
         area="上位",

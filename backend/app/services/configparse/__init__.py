@@ -17,6 +17,7 @@ from app.services.configparse import (
     hapair,
     juniper,
     linkstate,
+    loadbalance,
     multicast,
     nec,
     panos,
@@ -137,6 +138,7 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     parsed.wireless = wireless.parse(text)
     # マルチキャストも書き方がベンダーごとに離れている。判別の結果だけ渡して最後へ
+    parsed.load_balance = loadbalance.parse(text)
     parsed.multicast = multicast.parse(text, _MULTICAST_STYLE.get(parsed.vendor, "cisco"))
     parsed.ha_pair = hapair.parse(text)
     # 線が実際に上がっているか。show の表からだけ分かる
