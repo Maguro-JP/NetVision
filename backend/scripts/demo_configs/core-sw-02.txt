@@ -1,0 +1,110 @@
+!
+version 17.9
+hostname core-sw-02
+!
+spanning-tree mode rapid-pvst
+spanning-tree vlan 10,20,30,40 priority 16384
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name SERVERS
+!
+vlan 30
+ name MGMT
+!
+vlan 40
+ name WIRELESS
+!
+vlan 999
+ name UNUSED
+!
+interface TenGigabitEthernet1/1/1
+ description to core-sw-01
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ switchport trunk native vlan 999
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/23
+ description to fw-01 port3
+ switchport mode trunk
+ switchport trunk allowed vlan 20,30
+ switchport trunk native vlan 999
+!
+interface GigabitEthernet1/0/10
+ description to wlc-01
+ switchport mode trunk
+ switchport trunk allowed vlan 30,40
+!
+interface Vlan10
+ description USERS
+ ip address 10.10.10.3 255.255.255.0
+ standby 10 ip 10.10.10.1
+ standby 10 priority 100
+ ip helper-address 10.10.20.10
+!
+interface Vlan20
+ description SERVERS
+ ip address 10.10.20.3 255.255.255.0
+ standby 20 ip 10.10.20.1
+ standby 20 priority 100
+!
+interface Vlan30
+ description MGMT
+ ip address 10.0.0.12 255.255.255.0
+ standby 30 ip 10.0.0.10
+ standby 30 priority 100
+!
+interface Vlan40
+ description WIRELESS
+ ip address 10.10.40.3 255.255.255.0
+ standby 40 ip 10.10.40.1
+ standby 40 priority 110
+!
+router ospf 1
+ router-id 10.0.0.12
+ passive-interface default
+ no passive-interface Vlan30
+ network 10.10.10.0 0.0.0.255 area 0
+ network 10.10.20.0 0.0.0.255 area 0
+ network 10.0.0.0 0.0.0.255 area 0
+!
+ip route 0.0.0.0 0.0.0.0 10.10.20.254
+!
+snmp-server community public RO
+!
+ntp server 10.10.20.10
+clock timezone JST 9 0
+!
+line vty 0 4
+ transport input ssh
+ login local
+!
+end
+!
+show cdp neighbors detail
+-------------------------
+Device ID: core-sw-01
+Entry address(es):
+  IP address: 10.0.0.11
+Platform: cisco C9500-40X,  Capabilities: Switch IGMP
+Interface: TenGigabitEthernet1/1/1,  Port ID (outgoing port): TenGigabitEthernet1/1/1
+Holdtime : 129 sec
+
+-------------------------
+Device ID: fw-01
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: FortiGate-100F,  Capabilities: Router
+Interface: GigabitEthernet1/0/23,  Port ID (outgoing port): port3
+Holdtime : 148 sec
+
+-------------------------
+Device ID: wlc-01
+Entry address(es):
+  IP address: 10.0.0.31
+Platform: cisco C9800-L,  Capabilities: Router Switch
+Interface: GigabitEthernet1/0/10,  Port ID (outgoing port): GigabitEthernet1
+Holdtime : 140 sec

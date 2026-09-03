@@ -401,13 +401,52 @@ def _seed(force: bool) -> None:
             shut.closed_on = date(2026, 6, 30)
             shut.notes = "閉店。回線解約済み、機器の引き上げ待ち"
         db.commit()
+        snapshots = _seed_configs(db, by_host)
         print(
             f"投入完了: 拠点{1 + wan['sites']}件 / 機器{len(devices) + wan['devices']}台 / "
             f"保守契約5件 / 結線{len(wiring) + wan['links']}本 / "
-            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件"
+            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件 / "
+            f"Config{snapshots}件"
         )
     finally:
         db.close()
+
+
+def _seed_configs(db, by_host: dict) -> int:
+    """本社の機器に、実物と同じ形の Config を入れる。
+
+    台帳だけだと、点検・L3・計画の画面がどれも空のままになる。この道具の
+    値打ちはそこから先にあるので、見せる段では中身が入っている必要がある。
+
+    取り込みは画面と同じ道（configs.ingest）を通す。デモ用に別の道を作ると、
+    そこだけ動いて本番で動かない、という形になる。
+    """
+    from pathlib import Path
+
+    from app.services import configs
+
+    folder = Path(__file__).resolve().parent / "demo_configs"
+    if not folder.is_dir():
+        return 0
+
+    count = 0
+    for path in sorted(folder.glob("*.txt")):
+        device = by_host.get(path.stem)
+        if device is None:
+            continue
+        try:
+            configs.ingest(
+                db,
+                path.name,
+                path.read_text(encoding="utf-8"),
+                device_id=device.id,
+                apply_inventory=False,
+            )
+        except Exception as error:  # noqa: BLE001  デモの投入で全体を止めない
+            print(f"  Config を入れられませんでした（{path.name}）: {error}")
+            continue
+        count += 1
+    return count
 
 
 if __name__ == "__main__":
