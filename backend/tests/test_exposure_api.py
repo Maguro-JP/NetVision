@@ -417,3 +417,29 @@ def test_scheduled_sync_runs_in_the_background(client, device_payload, monkeypat
     assert last.unhandled_after == 1
     monkeypatch.undo()
     exposure_schedule.reschedule()
+
+
+def test_the_last_sync_survives_a_restart(client, device_payload, tmp_path, monkeypatch):
+    """動かし直すと画面から消えるのでは、いつのものか分からない。"""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "documents"))
+
+    import_advisory(client)
+    add_device(client, device_payload)
+    sync(client)
+
+    from app.services import exposure_schedule
+
+    saved = exposure_schedule.last_run()
+    assert saved is not None
+
+    # 動かし直した直後と同じ状態にする（覚えているものを捨てる）
+    monkeypatch.setattr(exposure_schedule, "_last", None)
+    restored = exposure_schedule.last_run()
+    assert restored is not None
+    assert restored.ran_at == saved.ran_at
+    assert restored.unhandled_after == saved.unhandled_after
+
+    body = client.get(f"{API}/exposures/schedule").json()
+    assert body["last_run_at"] is not None
