@@ -628,3 +628,12 @@ def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_sessio
     with_server = samples["junos"] + "set access radius-server 10.0.0.9 secret x\n"
     titles = _titles(configcheck.check(db_session, with_server))
     assert "802.1X を当てていますが、問い合わせ先がありません" not in titles
+
+
+def test_a_plain_password_is_caught_in_comware_too(db_session):
+    text = "sysname sw\nlocal-user admin\n password simple himitsu\n"
+    titles = _titles(configcheck.check(db_session, text))
+    assert "利用者のパスワードが、元に戻せる形で入っています" in titles
+    text = "sysname sw\nlocal-user admin\n password cipher $c$3$xxxx\n"
+    titles = _titles(configcheck.check(db_session, text))
+    assert "利用者のパスワードが、元に戻せる形で入っています" not in titles

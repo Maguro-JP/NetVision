@@ -442,6 +442,7 @@ _IX_ROUTE = re.compile(
 
 
 def parse_ix(text: str, parsed: ParsedConfig) -> None:
+    parse_policies(text, parsed)
     for line in text.splitlines():
         match = _IX_ROUTE.match(line.strip())
         if not match:
@@ -513,8 +514,46 @@ def parse_junos(text: str, parsed: ParsedConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
+_FORTIOS_PBR_SETS = ("gateway", "output-device")
+_FORTIOS_PBR_MATCHES = ("input-device", "src", "srcaddr", "dst", "dstaddr", "protocol", "action")
+
+
+def parse_fortios_policy_routes(text: str, parsed: ParsedConfig) -> None:
+    """`config router policy`（ポリシールーティング）を読む。
+
+    どの口から入った・どこ宛ての通信を、どの相手（gateway）へ向けるか。
+    普通の経路表より先に見られるので、ここに古い相手が残っていると
+    経路表を直しても通信は戻らない。1つの edit を1行として持つ。
+    """
+    from app.services.configparse.fortitext import blocks
+
+    for name, values in blocks(text, "router policy"):
+        if values.get("status", "enable").lower() == "disable":
+            continue
+        entry = ParsedPolicyEntry(seq=name, action="permit", raw=f"router policy {name}")
+        if values.get("action", "").lower() == "deny":
+            entry.action = "deny"
+        for key in _FORTIOS_PBR_MATCHES:
+            if key in values:
+                entry.matches.append(f"{key} {values[key]}")
+        for key in _FORTIOS_PBR_SETS:
+            if key in values:
+                entry.sets.append(f"set {key} {values[key]}")
+        policy = ParsedPolicy(
+            kind="policy-based-routing",
+            name=f"router policy {name}",
+            detail="1 行",
+            entries=[entry],
+        )
+        input_device = values.get("input-device")
+        if input_device:
+            policy.used_by.append(f"interface {input_device}")
+        parsed.policies.append(policy)
+
+
 def parse_fortios(text: str, parsed: ParsedConfig) -> None:
     """`config router static` の edit ブロックを読む。"""
+    parse_fortios_policy_routes(text, parsed)
     in_static = False
     current: ParsedRoute | None = None
     for raw in text.splitlines():

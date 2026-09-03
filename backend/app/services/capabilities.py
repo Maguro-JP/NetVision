@@ -107,19 +107,26 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="経路",
         name="route-map / prefix-list",
-        read=PARTIAL,
+        read=FULL,
         review=PARTIAL,
         generate=NONE,
-        note="名前と、どこで使われているかまで。中身の評価はしていません。"
-        "どこからも使われていないものは指摘します。",
+        note="名前・使われている場所に加え、並びの中身まで読みます。"
+        "prefix-list は ge / le を含めて当たる範囲を出し、手前の行に覆われて"
+        "読まれない行、当たる長さが無い行を指摘します。route-map は"
+        "通す行が無い、途中で全部通している、を指摘します。"
+        "どこからも使われていないものも挙げます。"
+        "どの経路を出すべきかという設計は、要件が要るので言いません。",
     ),
     Capability(
         area="経路",
         name="ポリシールーティング",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="どのポートに当てているかまで。中身は読んでいません。",
+        note="当てているポートと、条件・次の相手まで読みます（Cisco IOS・NEC IX の"
+        "route-map + ip policy、FortiGate の router policy）。次の相手が直結の帯に"
+        "無い、条件の ACL が無い、条件だけで行き先が無い、を指摘します。"
+        "その振り分けが業務として正しいかは、要件が要るので言いません。",
     ),
     Capability(
         area="経路",
@@ -127,7 +134,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=PARTIAL,
         generate=NONE,
-        note="名前と RD まで。経路の相互流入（route-target）は見ていません。",
+        note="名前と RD、経路の相互流入（route-target）まで読みます。同じ VRF 名なのに"
+        "機器ごとに RD が違う、import しているのにどの機器も export していない"
+        "route-target、を機器をまたいで指摘します（Cisco / Arista / Junos / Comware）。",
     ),
     Capability(
         area="冗長",
@@ -244,10 +253,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="足まわり",
         name="マルチキャスト",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="PIM / IGMP スヌーピングが入っていることまで。",
+        note="PIM を入れている口と動作、集合場所（RP）、IGMP スヌーピングを"
+        "帯ごとに読みます（Cisco IOS / NX-OS・Arista・Junos・Comware）。"
+        "sparse-mode なのに RP が決まっていない、RP への行き方が無い、"
+        "スヌーピングだけ入れて聞いて回る役（querier）が居ない、"
+        "口が1つだけ、を指摘します。どこに RP を置くべきかという設計は、"
+        "要件が要るので言いません。",
     ),
     Capability(
         area="足まわり",
@@ -283,11 +297,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="上位",
         name="負荷分散（ロードバランサ）",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="仮想サーバーの設定が入っていることまで。"
-        "振り分け先の一覧や健全性監視は読んでいません。台帳には機器として載せられます。",
+        note="受け口・振り分け先の一覧・健全性監視・振り分け方まで読みます"
+        "（F5 BIG-IP の ltm、FortiGate の server-load-balance、A10 / ACE 系の slb）。"
+        "受け口が指すまとまりが無い、まとまりが空、全部止めてある、"
+        "健全性監視が付いていない（落ちた機に流し続ける形）、"
+        "生きている先が1台だけ、を指摘します。何台置くかという方針は"
+        "要件が要るので言いません。台帳には機器として載せられます。",
     ),
     Capability(
         area="上位",

@@ -254,6 +254,51 @@ def _controls(parsed: ParsedConfig) -> list[dict]:
                 words.append("入口: " + " / ".join(ap.insecure_access))
             add("AP", ap.name, " / ".join(words), [ap.profile] if ap.profile else [])
 
+    multicast = getattr(parsed, "multicast", None)
+    if multicast is not None:
+        for rp in multicast.rps:
+            add(
+                "マルチキャスト",
+                f"集合場所（RP）{rp.address}",
+                rp.scope or "範囲の指定なし（全部）",
+                [item.name for item in multicast.pim_interfaces],
+            )
+        if multicast.dynamic_rp and not multicast.rps:
+            add("マルチキャスト", "集合場所（RP）", "候補方式（BSR / Auto-RP）で決めています", [])
+        for item in multicast.pim_interfaces:
+            add(
+                "マルチキャスト", f"PIM {item.mode}", "この口で配ります", [f"interface {item.name}"]
+            )
+        for vlan in multicast.vlans:
+            if not vlan.enabled:
+                continue
+            detail = "聞いて回る役あり" if vlan.querier else "聞いて回る役なし"
+            add("マルチキャスト", "IGMP スヌーピング", detail, [f"VLAN {vlan.vlan}"])
+
+    balance = getattr(parsed, "load_balance", None)
+    if balance is not None:
+        for virtual in balance.virtual_servers:
+            where = virtual.address or "宛先の指定なし"
+            if virtual.port:
+                where += f":{virtual.port}"
+            pool = balance.pool(virtual.pool)
+            count = f"{len(pool.alive)} / {len(pool.members)} 台" if pool else "振り分け先なし"
+            add(
+                "負荷分散",
+                virtual.name,
+                f"{where} → {virtual.pool or '（未指定）'}（生きている先 {count}）",
+                [f"pool {virtual.pool}"] if virtual.pool else [],
+            )
+        for pool in balance.pools:
+            monitors = ", ".join(pool.monitors) or "健全性監視なし"
+            members = [f"{m.address}:{m.port}" if m.port else m.address for m in pool.members]
+            add(
+                "負荷分散",
+                f"pool {pool.name}",
+                f"{pool.method or '振り分け方の指定なし'} / {monitors}",
+                members,
+            )
+
     return out
 
 

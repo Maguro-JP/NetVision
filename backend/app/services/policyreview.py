@@ -17,8 +17,15 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from dataclasses import dataclass
 
-from app.services import aclcheck, asareview, wirelessreview
+from app.services import (
+    aclcheck,
+    asareview,
+    loadbalancereview,
+    multicastreview,
+    wirelessreview,
+)
 from app.services.configparse import ParsedConfig
 from app.services.configparse.base import ParsedAcl, ParsedAclEntry, ParsedBgp, ParsedBgpNeighbor
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -50,12 +57,16 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
+    findings.extend(_prefix_lists(parsed))
+    findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
     findings.extend(_nat(parsed, text))
     findings.extend(_dhcp(parsed))
     findings.extend(_qos(parsed))
     findings.extend(_crypto(parsed))
     findings.extend(wirelessreview.review(parsed))
+    findings.extend(multicastreview.review(parsed))
+    findings.extend(loadbalancereview.review(parsed))
     findings.extend(asareview.review(parsed))
     if text is not None:
         findings.extend(_management_access(text, parsed))
@@ -243,11 +254,59 @@ def _bgp_neighbor(bgp: ParsedBgp, neighbor: ParsedBgpNeighbor, tools: set[str]) 
 # ---------------------------------------------------------------------------
 
 
+_MATCH_PREFIX = re.compile(r"^match\s+ip\s+address\s+prefix-list\s+(?P<names>.+)$", re.IGNORECASE)
+_MATCH_ACL = re.compile(
+    r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>[A-Za-z0-9_.\- ]+)$", re.IGNORECASE
+)
+
+
+def _missing_tools(parsed: ParsedConfig, policy, entry) -> list[Finding]:  # noqa: ANN001
+    """その行が指している道具が、この Config の中にあるか。
+
+    無い道具を指した行は、何にも当たらない。BGP のフィルタなら「絞ったつもりで
+    素通し」、逆に暗黙の deny で「全部落ちる」になる。どちらも書いた側の
+    意図とは違う。読み手が対応していない書き方まで疑わないよう、
+    同じ種類の道具を1つも読めていないときは黙る。
+    """
+    findings: list[Finding] = []
+    prefixes = _names(parsed, "prefix-list")
+    acls = {acl.name for acl in parsed.acls}
+    for match in entry.matches:
+        text = match.strip()
+        found = _MATCH_PREFIX.match(text)
+        if found is not None and prefixes:
+            missing = [name for name in found.group("names").split() if name not in prefixes]
+            kind = "prefix-list"
+        else:
+            found = _MATCH_ACL.match(text)
+            if found is None or not acls:
+                continue
+            missing = [name for name in found.group("names").split() if name not in acls]
+            kind = "ACL"
+        if not missing:
+            continue
+        findings.append(
+            _note(
+                HIGH,
+                f"{policy.name} が指している {kind} {' '.join(missing)} がありません",
+                "条件に書いた道具が、この Config の中に見当たりません。無い道具を"
+                "指した行は何にも当たらないので、絞ったつもりで素通しになるか、"
+                "後ろの行の扱いになります。名前の書き間違いか、"
+                "消してしまったかのどちらかです。",
+                [entry.raw, text],
+            )
+        )
+    return findings
+
+
 def _route_maps(parsed: ParsedConfig) -> list[Finding]:
     findings: list[Finding] = []
     for policy in parsed.policies:
         if not policy.entries or not policy.used_by:
             continue
+        if policy.kind == "route-map":
+            for entry in policy.entries:
+                findings.extend(_missing_tools(parsed, policy, entry))
         if not policy.has_permit:
             findings.append(
                 _note(
@@ -275,6 +334,203 @@ def _route_maps(parsed: ParsedConfig) -> list[Finding]:
                     )
                 )
                 break
+    return findings
+
+
+_PREFIX_ENTRY = re.compile(
+    r"^(?P<net>\d+\.\d+\.\d+\.\d+\s*/\s*\d+)"
+    r"(?:\s+ge\s+(?P<ge>\d+))?(?:\s+le\s+(?P<le>\d+))?\s*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class _Range:
+    """prefix-list の1行が実際に当たる範囲。
+
+    ge / le を書かなければ、その長さちょうどにしか当たらない。ge だけなら
+    そこから 32 まで、le だけなら書いた長さから le まで。ここを取り違えると
+    「書いてあるのに当たらない」の説明ができない。
+    """
+
+    network: ipaddress.IPv4Network
+    low: int
+    high: int
+
+    def covers(self, other: _Range) -> bool:
+        """この行が当たったら、相手の行には二度と回ってこないか。"""
+        return (
+            other.network.subnet_of(self.network)
+            and self.low <= other.low
+            and other.high <= self.high
+        )
+
+
+def _range(text: str) -> _Range | None:
+    found = _PREFIX_ENTRY.match(text.strip())
+    if found is None:
+        return None
+    try:
+        network = ipaddress.ip_network(found.group("net").replace(" ", ""), strict=False)
+    except ValueError:
+        return None
+    if not isinstance(network, ipaddress.IPv4Network):
+        return None
+    length = network.prefixlen
+    ge = found.group("ge")
+    le = found.group("le")
+    if ge is None and le is None:
+        return _Range(network, length, length)
+    low = int(ge) if ge is not None else length
+    high = int(le) if le is not None else 32
+    return _Range(network, low, high)
+
+
+def _prefix_lists(parsed: ParsedConfig) -> list[Finding]:
+    """prefix-list の並びを、実際に当たる範囲まで見て評価する。
+
+    上から順に見て最初に当たったところで止まるので、前の行に覆われた行は
+    永久に読まれない。「広告しているはずなのに相手に届かない」の原因が
+    ここにあることは多い。
+    """
+    findings: list[Finding] = []
+    for policy in parsed.policies:
+        if policy.kind != "prefix-list":
+            continue
+        seen: list[tuple[str, _Range, object]] = []
+        for entry in policy.entries:
+            text = entry.matches[0] if entry.matches else ""
+            found = _range(text)
+            if found is None:
+                continue
+
+            # 機器が受け付けない、または効かない書き方
+            if found.low > found.high or found.low < found.network.prefixlen:
+                findings.append(
+                    _note(
+                        MEDIUM,
+                        f"{policy.name} の {entry.raw} は、当たる長さがありません",
+                        "ge は le 以下で、どちらも書いた長さ以上でなければ、"
+                        "当たる経路が存在しません。数字の取り違えが疑われます。",
+                        [entry.raw],
+                    )
+                )
+                continue
+
+            for action, earlier, first in seen:
+                if not earlier.covers(found):
+                    continue
+                same = action == entry.action
+                findings.append(
+                    _note(
+                        LOW if same else MEDIUM,
+                        f"{policy.name} の {entry.raw} は読まれません",
+                        f"手前の {first} がこの行の範囲を覆っています。prefix-list は"
+                        "最初に当たったところで止まるので、この行まで来ません。"
+                        + (
+                            "同じ扱いなので害はありませんが、消し忘れの可能性があります。"
+                            if same
+                            else "手前と扱いが逆なので、意図した結果になりません。"
+                        ),
+                        [str(first), entry.raw],
+                    )
+                )
+                break
+            seen.append((entry.action, found, entry.raw))
+    return findings
+
+
+# ---------------------------------------------------------------------------
+# ポリシールーティング
+# ---------------------------------------------------------------------------
+
+_NEXT_HOP = re.compile(
+    r"^set\s+(?:ip\s+(?:default\s+)?next-hop|gateway)\s+(?P<hops>[\d. ]+?)"
+    r"(?:\s+(?P<flags>[A-Za-z].*))?$",
+    re.IGNORECASE,
+)
+_MATCH_ACL = re.compile(r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>.+)$", re.IGNORECASE)
+
+
+def _connected_networks(parsed: ParsedConfig) -> list[ipaddress.IPv4Network]:
+    networks = []
+    for interface in parsed.interfaces:
+        network = _network_of(interface.ip_address)
+        if network is not None and network.prefixlen < 32:
+            networks.append(network)
+    return networks
+
+
+def _policy_routing(parsed: ParsedConfig) -> list[Finding]:
+    """ポリシールーティングの中身。
+
+    経路表より先に見られるので、ここの相手が届かないと、経路表が正しくても
+    通信は行かない。次の相手が直結の帯に居るか、条件に使っている ACL が
+    あるかを見る。Cisco IOS は recursive を付けない限り直結でないと効かない。
+    """
+    findings: list[Finding] = []
+    networks = _connected_networks(parsed)
+    acl_names = {acl.name for acl in parsed.acls}
+    for policy in parsed.policies:
+        if policy.kind != "policy-based-routing":
+            continue
+        for entry in policy.entries:
+            if entry.action != "permit":
+                continue
+            for match in entry.matches:
+                found = _MATCH_ACL.match(match)
+                if not found or not acl_names:
+                    continue
+                missing = [n for n in found.group("names").split() if n not in acl_names]
+                if missing:
+                    findings.append(
+                        _note(
+                            HIGH,
+                            f"{policy.name} が参照している ACL {' '.join(missing)} がありません",
+                            "条件の ACL が無いと、この行は何にも当たらず、"
+                            "向けたいはずの通信は普通の経路表で流れます。",
+                            [entry.raw, match],
+                        )
+                    )
+            hops: list[str] = []
+            recursive = False
+            for item in entry.sets:
+                found = _NEXT_HOP.match(item)
+                if not found:
+                    continue
+                hops.extend(found.group("hops").split())
+                if "recursive" in (found.group("flags") or "").lower():
+                    recursive = True
+            if entry.matches and not entry.sets:
+                findings.append(
+                    _note(
+                        LOW,
+                        f"{policy.name} の {entry.raw} は行き先を決めていません",
+                        "条件だけあって set がありません。当たった通信は普通の経路表で"
+                        "流れます。後ろの行から外すための行なら問題ありません。",
+                        [entry.raw, *entry.matches],
+                    )
+                )
+                continue
+            if recursive or not networks:
+                continue
+            for hop in hops:
+                try:
+                    address = ipaddress.ip_address(hop)
+                except ValueError:
+                    continue
+                if not any(address in network for network in networks):
+                    findings.append(
+                        _note(
+                            MEDIUM,
+                            f"{policy.name} の次の相手 {hop} は直結の帯にありません",
+                            "ポリシールーティングの相手は、この機器のどの口の帯にも"
+                            "入っていません。Cisco IOS では recursive を付けない限り"
+                            "直結でないと効かず、当たった通信は普通の経路表で流れます。"
+                            "相手の付け替え忘れか、口の帯の変更漏れが疑われます。",
+                            [entry.raw, *entry.sets],
+                        )
+                    )
     return findings
 
 

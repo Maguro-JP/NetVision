@@ -17,6 +17,8 @@ from app.services.configparse import (
     hapair,
     juniper,
     linkstate,
+    loadbalance,
+    multicast,
     nec,
     panos,
     wireless,
@@ -135,10 +137,21 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     parsed.wireless = wireless.parse(text)
+    # マルチキャストも書き方がベンダーごとに離れている。判別の結果だけ渡して最後へ
+    parsed.load_balance = loadbalance.parse(text)
+    parsed.multicast = multicast.parse(text, _MULTICAST_STYLE.get(parsed.vendor, "cisco"))
     parsed.ha_pair = hapair.parse(text)
     # 線が実際に上がっているか。show の表からだけ分かる
     linkstate.parse(text, parsed)
     return parsed
+
+
+#: マルチキャストの書き方の系統。読み手はこの3つしか持たない
+_MULTICAST_STYLE = {
+    Vendor.JUNIPER: "juniper",
+    Vendor.NEC_QX: "comware",
+    Vendor.ARUBA_CX: "aruba",
+}
 
 
 def _collect_referenced_vrfs(parsed: ParsedConfig) -> None:

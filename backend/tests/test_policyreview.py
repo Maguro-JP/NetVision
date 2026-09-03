@@ -408,3 +408,192 @@ def test_not_limiting_the_management_port_is_not_called_a_mistake():
     """入る口をどこまで絞るかは現場の決めごと。間違いとは言い切れない。"""
     text = "line vty 0 15\n transport input ssh\n"
     assert policyreview.review(configparse.parse(text), text) == []
+
+
+# ---------------------------------------------------------------------------
+# ポリシールーティング
+# ---------------------------------------------------------------------------
+
+_PBR_BASE = """
+interface GigabitEthernet0/0
+ ip address 10.1.1.1 255.255.255.0
+ ip policy route-map TO-WAN2
+interface GigabitEthernet0/1
+ ip address 192.168.1.1 255.255.255.0
+ip access-list extended GUEST
+ permit ip 10.1.1.0 0.0.0.255 any
+"""
+
+
+def _pbr(*lines: str) -> str:
+    return _PBR_BASE + "route-map TO-WAN2 permit 10\n" + "".join(f" {line}\n" for line in lines)
+
+
+def test_a_policy_route_whose_next_hop_is_directly_connected_is_fine():
+    text = _pbr("match ip address GUEST", "set ip next-hop 192.168.1.254")
+    findings = _review(text)
+    assert not any("直結の帯" in f.title for f in findings)
+    policy = next(p for p in configparse.parse(text).policies if p.name == "TO-WAN2")
+    assert policy.kind == "policy-based-routing"
+    assert policy.used_by == ["interface GigabitEthernet0/0"]
+
+
+def test_a_policy_route_whose_next_hop_is_not_connected_is_called_out():
+    text = (
+        _PBR_BASE
+        + "route-map TO-WAN2 permit 10\n match ip address GUEST\n set ip next-hop 172.16.9.1\n"
+    )
+    item = _one(_review(text), "直結の帯にありません")
+    assert item.level == MEDIUM
+    assert "172.16.9.1" in item.title
+
+
+def test_a_recursive_next_hop_is_allowed_to_be_far_away():
+    text = _pbr("match ip address GUEST", "set ip next-hop recursive 172.16.9.1")
+    assert not any("直結の帯" in f.title for f in _review(text))
+
+
+def test_a_policy_route_pointing_at_a_missing_acl_is_called_out():
+    text = (
+        _PBR_BASE
+        + "route-map TO-WAN2 permit 10\n match ip address VIP\n set ip next-hop 192.168.1.254\n"
+    )
+    item = _one(_review(text), "ACL VIP がありません")
+    assert item.level == HIGH
+
+
+def test_a_policy_route_with_a_condition_but_no_destination_is_noted():
+    text = _pbr("match ip address GUEST")
+    assert _one(_review(text), "行き先を決めていません").level == LOW
+
+
+def test_fortigate_router_policy_is_read_with_its_gateway():
+    text = """
+config system global
+    set hostname fg-01
+end
+config system interface
+    edit "wan2"
+        set ip 203.0.113.2 255.255.255.248
+    next
+    edit "lan"
+        set ip 10.1.1.1 255.255.255.0
+    next
+end
+config router policy
+    edit 1
+        set input-device "lan"
+        set srcaddr "GUEST"
+        set gateway 203.0.113.1
+        set output-device "wan2"
+    next
+    edit 2
+        set input-device "lan"
+        set gateway 198.51.100.1
+        set output-device "wan2"
+    next
+    edit 3
+        set status disable
+        set gateway 1.1.1.1
+    next
+end
+"""
+    parsed = configparse.parse(text)
+    pbr = [p for p in parsed.policies if p.kind == "policy-based-routing"]
+    assert [p.name for p in pbr] == ["router policy 1", "router policy 2"]
+    assert pbr[0].used_by == ["interface lan"]
+    assert "set gateway 203.0.113.1" in pbr[0].entries[0].sets
+    findings = policyreview.review(parsed)
+    titles = [f.title for f in findings if "直結の帯" in f.title]
+    assert titles == ["router policy 2 の次の相手 198.51.100.1 は直結の帯にありません"]
+
+
+# ---------------------------------------------------------------------------
+# prefix-list の並び。上から順に見て、最初に当たったところで止まる
+# ---------------------------------------------------------------------------
+
+_BGP = """router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 prefix-list CUST out
+"""
+
+
+def _prefix(*rows: str) -> str:
+    lines = [f"ip prefix-list CUST seq {(i + 1) * 5} {row}" for i, row in enumerate(rows)]
+    return "\n".join(lines) + "\n" + _BGP
+
+
+def test_a_prefix_list_in_a_sensible_order_says_nothing():
+    text = _prefix("deny 10.1.0.0/16", "permit 10.0.0.0/8 le 24")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_row_already_covered_by_an_earlier_one_is_called_out():
+    text = _prefix("permit 10.0.0.0/8 le 24", "deny 10.2.0.0/16")
+    item = _one(_review(text), "読まれません")
+    assert item.level == MEDIUM
+    assert "意図した結果になりません" in item.why
+
+
+def test_a_covered_row_with_the_same_action_is_only_noted():
+    text = _prefix("permit 10.0.0.0/8 le 24", "permit 10.1.0.0/16")
+    assert _one(_review(text), "読まれません").level == LOW
+
+
+def test_an_exact_length_row_does_not_cover_longer_ones():
+    """ge も le も書かなければ、その長さちょうどにしか当たらない。"""
+    text = _prefix("permit 10.0.0.0/8", "permit 10.1.0.0/16")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_row_outside_the_earlier_range_is_not_covered():
+    text = _prefix("permit 10.0.0.0/8 le 16", "permit 10.1.1.0/24")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_length_range_that_matches_nothing_is_called_out():
+    text = _prefix("permit 192.168.0.0/16 ge 24 le 20")
+    assert _one(_review(text), "当たる長さがありません").level == MEDIUM
+
+
+def test_a_ge_shorter_than_the_written_length_is_called_out():
+    text = _prefix("permit 192.168.0.0/16 ge 8")
+    assert _one(_review(text), "当たる長さがありません").level == MEDIUM
+
+
+def test_a_route_map_pointing_at_a_missing_prefix_list_is_called_out():
+    text = """ip prefix-list CUST seq 5 permit 10.0.0.0/8 le 24
+route-map OUT permit 10
+ match ip address prefix-list GONE
+ set metric 100
+route-map OUT permit 20
+ match ip address prefix-list CUST
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    item = _one(_review(text), "prefix-list GONE がありません")
+    assert item.level == HIGH
+
+
+def test_a_route_map_pointing_at_a_missing_acl_is_called_out():
+    text = """ip access-list extended CUST
+ permit ip 10.0.0.0 0.255.255.255 any
+route-map OUT permit 10
+ match ip address GONE
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    assert _one(_review(text), "ACL GONE がありません").level == HIGH
+
+
+def test_a_route_map_whose_tools_all_exist_says_nothing():
+    text = """ip prefix-list CUST seq 5 permit 10.0.0.0/8 le 24
+route-map OUT permit 10
+ match ip address prefix-list CUST
+router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 route-map OUT out
+"""
+    assert not any("指している" in f.title for f in _review(text))

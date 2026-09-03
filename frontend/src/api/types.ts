@@ -322,6 +322,8 @@ export interface TopologyVrf {
   interface_count: number;
   /** 同じ VRF 名なのに機器ごとに RD が違う */
   rd_mismatch: boolean;
+  /** import しているのに、どの機器も export していない route-target */
+  orphan_imports: string[];
 }
 
 export interface VlanCatalogEntry {
@@ -778,6 +780,16 @@ export interface PlanOutputs {
   diff: PlanDiff;
 }
 
+/** 投入後の config を取り込んで、計画との差分がゼロか確かめた結果。 */
+export interface PlanVerifyRead {
+  plan_id: number;
+  snapshot_id: number | null;
+  converged: boolean;
+  remaining: PlanDiff;
+  status: string;
+  message: string;
+}
+
 /** 資料を根拠にした Config の下書き。 */
 export interface ConfigDraftLine {
   text: string;
@@ -991,6 +1003,19 @@ export interface ExposureSyncResult {
   messages: string[];
 }
 
+/** 裏で回す洗い直しの状態。 */
+export interface ExposureSyncSchedule {
+  interval_hours: number;
+  running: boolean;
+  next_run_at: string | null;
+  last_run_at: string | null;
+  last_trigger: string | null;
+  unhandled_before: number | null;
+  unhandled_after: number | null;
+  grew_by: number;
+  messages: string[];
+}
+
 export interface FixConfig {
   device_id: number;
   hostname: string;
@@ -1086,6 +1111,7 @@ export interface AppSettings {
   reference_stale_days: number;
   display_timezone: string;
   model_dir: string;
+  exposure_sync_hours: number;
 }
 
 /** 資料から起こしたテンプレートの下書き。 */
@@ -1229,7 +1255,12 @@ export interface L3Report {
     name: string;
     detail: string;
     used_by: string[];
-    entries: { seq: string | null; action: string; matches: string[]; sets: string[] }[];
+    entries: {
+      seq: string | null;
+      action: string;
+      matches: string[];
+      sets: string[];
+    }[];
   }[];
   /** ACL / NAT / DHCP / QoS / IPsec。当て先が空なら、書いてあるだけで効いていない */
   controls: {

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime
 
 from pydantic import BaseModel, ConfigDict
 
@@ -54,6 +54,20 @@ class SyncResultRead(BaseModel):
     reopened: int
     resolved: int
     unchanged: int
+    messages: list[str]
+
+
+class SyncScheduleRead(BaseModel):
+    """裏で回す洗い直しの状態。"""
+
+    interval_hours: int
+    running: bool
+    next_run_at: datetime | None
+    last_run_at: datetime | None
+    last_trigger: str | None
+    unhandled_before: int | None
+    unhandled_after: int | None
+    grew_by: int
     messages: list[str]
 
 

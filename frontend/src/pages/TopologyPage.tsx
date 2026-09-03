@@ -2979,6 +2979,14 @@ function TopologyEditor() {
                       RD 不一致
                     </span>
                   )}
+                  {vrf.orphan_imports.length > 0 && (
+                    <span
+                      className="badge warning"
+                      title={`import しているのに、どの機器も export していない route-target: ${vrf.orphan_imports.join(", ")}`}
+                    >
+                      RT 片側だけ
+                    </span>
+                  )}
                 </span>
               ))}
             </div>

@@ -12,9 +12,10 @@ from app.schemas.exposure import (
     ExposureSummaryRead,
     FixConfigRead,
     SyncResultRead,
+    SyncScheduleRead,
 )
 from app.services import exposure as service
-from app.services import remediation_config
+from app.services import exposure_schedule, remediation_config
 from app.services.api_helpers import diff_read
 
 router = APIRouter(tags=["exposures"])
@@ -25,7 +26,25 @@ DbSession = Annotated[Session, Depends(get_db)]
 @router.post("/exposures/sync", response_model=SyncResultRead)
 def sync_exposures(db: DbSession) -> SyncResultRead:
     """該当状況を洗い直す。CVE や機器を登録した後に実行する。"""
-    return service.sync(db)
+    return exposure_schedule.run(db, trigger="manual")
+
+
+@router.get("/exposures/schedule", response_model=SyncScheduleRead)
+def sync_schedule() -> SyncScheduleRead:
+    """裏で回している洗い直しの状態。最終実行と、前回から未対応が増えたか。"""
+    last = exposure_schedule.last_run()
+    thread = exposure_schedule._thread
+    return SyncScheduleRead(
+        interval_hours=exposure_schedule.interval_hours(),
+        running=thread is not None and thread.is_alive(),
+        next_run_at=exposure_schedule.next_run_at(),
+        last_run_at=last.ran_at if last else None,
+        last_trigger=last.trigger if last else None,
+        unhandled_before=last.unhandled_before if last else None,
+        unhandled_after=last.unhandled_after if last else None,
+        grew_by=last.grew_by if last else 0,
+        messages=list(last.messages) if last else [],
+    )
 
 
 @router.get("/exposures", response_model=list[ExposureRowRead])

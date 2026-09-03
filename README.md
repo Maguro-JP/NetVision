@@ -464,7 +464,9 @@ HSRP / VRRP と、OSPF の一部です。ACL やファイアウォールのポ�
 ### 機器が何をしているかを拾う
 
 Config から、その機器で使っている機能を拾います。ACL、NAT、DHCP（サーバー /
-リレー）、STP、LAG、QoS、802.1X / ポートセキュリティ、SNMP / Syslog / NTP /
+リレー）、STP、LAG、QoS、マルチキャスト（PIM / RP / IGMP スヌーピング）、
+負荷分散（受け口・振り分け先・健全性監視）、
+802.1X / ポートセキュリティ、SNMP / Syslog / NTP /
 AAA、IPsec、マルチキャスト、負荷分散、HSRP / VRRP / スタック。機器の画面の
 「経路と機能」に出ます。
 
@@ -1383,6 +1385,11 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 判断した時点のバージョンを覚えているのがポイントです。
 「あのとき大丈夫と判断した前提」が崩れたことを検出できます。
 
+洗い直しは裏でも回ります（既定 24 時間おき。設定画面で間隔を決め、0 で止める）。
+押し忘れても「未対応ゼロ」が古いままにならないためです。前回から未対応が
+増えていれば、対処状況の画面の上にその件数を出します。外へ通知（メール等）は
+送りません。送り先や認証が絡むので、認証が入ってから決めます。
+
 ## 対応版 Config
 
 対処から、その機器に投入するものを起こします。出るものは Config 計画と同じ4つです。
@@ -1581,6 +1588,7 @@ NETVISION_ENV_FILE=config/aomori.env python -m uvicorn app.main:app
 | GET | `/config-plans/{id}/outputs` | 現行フル・将来フル・差分・切り戻しをまとめて取得 |
 | GET | `/config-plans/{id}/download/{kind}` | `current` / `future` / `diff` / `rollback` をファイルで取得 |
 | POST | `/config-plans/preview` | 計画を作らず2つの config をその場で比較 |
+| POST | `/config-plans/{id}/verify` | 投入後の config を取り込み、計画との差分がゼロなら「投入済み」に進める |
 | GET | `/devices/{id}/config-plans` | その機器の計画一覧 |
 | GET | `/replacement/plan?years=5` | 年度別の更改計画 |
 | GET | `/replacement/impact/{device_id}` | その機器を止めたときの影響範囲 |
@@ -1590,6 +1598,7 @@ NETVISION_ENV_FILE=config/aomori.env python -m uvicorn app.main:app
 | POST | `/exposures/sync` | 該当状況を洗い直す（CVE / 機器の登録後に実行） |
 | GET | `/exposures` | 機器 × CVE の対処状況（`unhandled_only` で未対応のみ） |
 | GET | `/exposures/summary` | 未対応・期限切れ・暫定のみ・未確認の件数 |
+| GET | `/exposures/schedule` | 裏で回す洗い直しの状態（最終実行、次の予定、前回から未対応が増えたか） |
 | PATCH | `/exposures/{id}` | 対処状況を決める（受容は理由必須） |
 | POST | `/exposures/{id}/verify-config` | 現行 config に対処が入っているか裏取り |
 | GET | `/devices/{id}/remediations/{rid}/config` | 対応版 Config と投入コマンド |

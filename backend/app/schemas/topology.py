@@ -55,6 +55,8 @@ class VrfRead(BaseModel):
     device_names: list[str]
     interface_count: int
     rd_mismatch: bool
+    #: import しているのに、どの機器も export していない route-target
+    orphan_imports: list[str] = []
 
 
 class VlanCatalogRead(BaseModel):

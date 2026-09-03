@@ -180,6 +180,10 @@ class ParsedConfig:
     crypto: ParsedCrypto | None = None
     #: 無線（SSID と AP）。読めなければ None
     wireless: ParsedWireless | None = None
+    #: マルチキャストの配り方（PIM / RP / IGMP スヌーピング）。読めなければ None
+    multicast: object | None = None
+    #: 負荷分散（受け口・振り分け先・健全性監視）。読めなければ None
+    load_balance: object | None = None
     #: 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）。読めなければ None
     ha_pair: object | None = None
 
