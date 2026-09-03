@@ -370,3 +370,42 @@ def test_a_list_of_vlans_has_no_single_name_to_take():
 
 def test_something_that_is_not_a_vlan_list_is_left_alone():
     assert configparse.parse("hostname x\nvlan internal allocation policy ascending\n").vlans == {}
+
+
+def test_a_voice_vlan_counts_as_carried_by_the_port():
+    """IP 電話の VLAN を数え落とすと、その VLAN がどこにも使われていないことになる。"""
+    text = """hostname sw1
+vlan 10
+ name USERS
+!
+vlan 20
+ name VOICE
+!
+interface GigabitEthernet0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    port = configparse.parse(text).interfaces[0]
+    assert port.vlan == 10
+    assert port.voice_vlan == 20
+    assert port.carried_vlans() == {10, 20}
+
+
+def test_a_voice_vlan_without_a_definition_is_called_out():
+    from app.services import configcheck
+
+    text = """hostname sw1
+vlan 10
+ name USERS
+!
+interface GigabitEthernet0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    parsed = configparse.parse(text)
+    findings = configcheck._layer2(parsed)
+    assert any("定義が無い VLAN" in f.title for f in findings), [f.title for f in findings]

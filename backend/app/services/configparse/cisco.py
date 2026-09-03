@@ -191,6 +191,10 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             written = body.split(maxsplit=2)
             if len(written) >= 3 and "/" in written[2]:
                 _remember(current, written[2].split()[0])
+        elif body.startswith("switchport voice vlan "):
+            spoken = body.rsplit(maxsplit=1)[-1]
+            if spoken.isdigit():
+                current.voice_vlan = int(spoken)
         elif body.startswith("switchport access vlan "):
             current.vlan = int(body.rsplit(maxsplit=1)[-1])
             current.mode = current.mode or "access"
