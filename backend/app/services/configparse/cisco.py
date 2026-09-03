@@ -202,6 +202,15 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             written = body.split(maxsplit=2)
             if len(written) >= 3 and "/" in written[2]:
                 _remember(current, written[2].split()[0])
+        elif body.startswith("encapsulation dot1q ") or body.startswith("encapsulation dot1Q "):
+            # ルーターの副ポート。ここに書いた番号が、その口の運ぶ VLAN になる
+            parts = body.split()
+            if len(parts) >= 3 and parts[2].isdigit():
+                number = int(parts[2])
+                if "native" in body.lower():
+                    current.native_vlan = number
+                else:
+                    current.vlan = number
         elif body.startswith("switchport voice vlan "):
             spoken = body.rsplit(maxsplit=1)[-1]
             if spoken.isdigit():

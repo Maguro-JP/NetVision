@@ -420,3 +420,25 @@ def test_a_stack_tells_its_model_even_without_show_version():
 def test_show_version_still_wins_over_the_stack_line():
     text = "hostname sw1\nswitch 1 provision c9300-48p\n!\nModel Number : C9300-24T\n"
     assert configparse.parse(text).model == "C9300-24T"
+
+
+def test_a_router_subinterface_carries_the_vlan_it_tags():
+    """ルーターの副ポートは、この行が VLAN の所在を示す唯一の手掛かりになる。"""
+    text = """hostname rt1
+interface GigabitEthernet0/0/0.10
+ encapsulation dot1Q 10
+ ip address 10.0.10.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0.20
+ encapsulation dot1q 20
+ ip address 10.0.20.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0.99
+ encapsulation dot1Q 99 native
+!
+"""
+    ports = {item.name: item for item in configparse.parse(text).interfaces}
+    assert ports["GigabitEthernet0/0/0.10"].vlan == 10
+    assert ports["GigabitEthernet0/0/0.20"].vlan == 20
+    assert ports["GigabitEthernet0/0/0.99"].native_vlan == 99
+    assert ports["GigabitEthernet0/0/0.10"].carried_vlans() == {10}
