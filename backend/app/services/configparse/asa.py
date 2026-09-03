@@ -139,7 +139,14 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             continue
         found = re.match(r"^ip address\s+(\S+)\s+(\S+)", body, re.IGNORECASE)
         if found:
-            current.ip_address = f"{found.group(1)} {found.group(2)}"
+            # 他のベンダーと同じ形（10.0.0.2/24）で持つ。並べ方が違うだけで
+            # 同じものなので、比べられる形にそろえる
+            prefix = to_prefix(found.group(1), found.group(2), wildcard=False)
+            if prefix:
+                length = prefix.split("/")[1]
+                current.ip_address = f"{found.group(1)}/{length}"
+            else:
+                current.ip_address = f"{found.group(1)} {found.group(2)}"
             continue
         found = re.match(r"^vlan\s+(\d+)", body, re.IGNORECASE)
         if found:
@@ -337,7 +344,7 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
         line = _NAT_LINE.match(raw.strip())
         if line:
             rest = line.group(3).split()
-            matched = rest[1] if len(rest) > 1 and rest[0].lower() == "source" else None
+            matched = _twice_nat_source(rest)
             nat.rules.append(
                 _nat_rule(
                     line, matched=matched or "内側から出る通信", matched_is_name=bool(matched)
@@ -349,16 +356,33 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
         parsed.nat = nat
 
 
+def _twice_nat_source(words: list[str]) -> str | None:
+    """`source dynamic 内側 出口` の「内側」を取る。
+
+    `dynamic` / `static` は書き方の指定であって、変換するものの名前ではない。
+    ここを取り違えると、NAT の表に "dynamic" という名前の対象が並ぶ。
+    """
+    if len(words) < 3 or words[0].lower() != "source":
+        return None
+    if words[1].lower() not in {"dynamic", "static"}:
+        return None
+    return words[2]
+
+
 def _nat_rule(found: re.Match[str], *, matched: str, matched_is_name: bool) -> ParsedNatRule:
     rest = found.group(3)
     words = rest.split()
-    kind = "dynamic" if "dynamic" in [w.lower() for w in words] else "static"
+    lowered = [w.lower() for w in words]
+    kind = "dynamic" if "dynamic" in lowered else "static"
     translated = None
     for keyword in ("dynamic", "static"):
-        if keyword in [w.lower() for w in words]:
-            at = [w.lower() for w in words].index(keyword)
-            if at + 1 < len(words):
-                translated = words[at + 1]
+        if keyword in lowered:
+            at = lowered.index(keyword)
+            # `source dynamic 内側 出口` は2つ後ろ、object の中の
+            # `nat (in,out) dynamic 出口` は1つ後ろが変換先になる
+            step = 2 if lowered[0] == "source" else 1
+            if at + step < len(words):
+                translated = words[at + step]
             break
     # `interface` へ変換する形が、出口のアドレスに束ねる指定
     overload = kind == "dynamic"
