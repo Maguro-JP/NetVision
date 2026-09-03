@@ -103,10 +103,21 @@ def _parse_version(text: str, parsed: ParsedConfig) -> None:
             return
 
 
+#: スタックの構成行。`show version` を付けずに Config だけ渡されたとき、
+#: 型番が分かるのはここしかない。型番が空だと、期限もリファレンスから引けない
+_STACK_PROVISION = re.compile(r"^switch\s+\d+\s+provision\s+(\S+)\s*$", re.IGNORECASE | re.M)
+
+
 def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
     match = _MODEL_NUMBER.search(text) or _CHASSIS.search(text)
     if match:
         parsed.model = match.group(1)
+
+    if not parsed.model:
+        provisioned = _STACK_PROVISION.findall(text)
+        if provisioned:
+            # 積んである台の型番。混在も書けるが、代表として1つ目を採る
+            parsed.model = provisioned[0].upper()
 
     match = _SERIAL.search(text)
     if match:

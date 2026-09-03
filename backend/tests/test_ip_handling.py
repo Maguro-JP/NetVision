@@ -409,3 +409,14 @@ interface GigabitEthernet0/1
     parsed = configparse.parse(text)
     findings = configcheck._layer2(parsed)
     assert any("定義が無い VLAN" in f.title for f in findings), [f.title for f in findings]
+
+
+def test_a_stack_tells_its_model_even_without_show_version():
+    """型番が空だと、期限もリファレンスから引けない。"""
+    text = "hostname sw1\nswitch 1 provision c9300-48p\nswitch 2 provision c9300-48p\n"
+    assert configparse.parse(text).model == "C9300-48P"
+
+
+def test_show_version_still_wins_over_the_stack_line():
+    text = "hostname sw1\nswitch 1 provision c9300-48p\n!\nModel Number : C9300-24T\n"
+    assert configparse.parse(text).model == "C9300-24T"
