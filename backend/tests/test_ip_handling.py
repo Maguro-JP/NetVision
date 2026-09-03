@@ -270,3 +270,75 @@ def test_vrrp_written_the_comware_way_is_checked_too():
         " ip address 10.0.10.2 255.255.255.0\n vrrp vrid 10 virtual-ip 10.0.77.1\n"
     )
     assert "帯の外" in _virtual(cfg)[0].title
+
+
+# ---------------------------------------------------------------------------
+# 静的経路の次の相手に、そもそも行けるか
+# ---------------------------------------------------------------------------
+
+_ROUTES = """hostname r1
+interface GigabitEthernet0/0
+ ip address 203.0.113.2 255.255.255.252
+!
+interface Vlan10
+ ip address 10.0.10.1 255.255.255.0
+!
+"""
+
+
+def _routes(*rows: str):
+    from app.services import policyreview
+
+    cfg = _ROUTES + "".join(f"{row}\n" for row in rows)
+    return [f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title]
+
+
+def test_a_next_hop_on_a_connected_segment_is_fine():
+    assert _routes("ip route 0.0.0.0 0.0.0.0 203.0.113.1") == []
+    assert _routes("ip route 10.20.0.0 255.255.0.0 10.0.10.9") == []
+
+
+def test_a_next_hop_nobody_can_reach_is_called_out():
+    from app.services.reviewnote import MEDIUM
+
+    found = _routes("ip route 10.30.0.0 255.255.0.0 192.168.77.1")
+    assert len(found) == 1
+    assert found[0].level == MEDIUM
+    assert "192.168.77.1" in found[0].title
+
+
+def test_a_next_hop_reached_through_another_route_is_fine():
+    """直結でなくても、他の経路で届くなら使われる。"""
+    assert (
+        _routes(
+            "ip route 10.20.0.0 255.255.0.0 10.0.10.9",
+            "ip route 172.16.0.0 255.255.0.0 10.20.0.1",
+        )
+        == []
+    )
+
+
+def test_a_default_route_is_not_used_as_the_reason_it_is_reachable():
+    """既定経路は何でも覆う。それを根拠にすると、書き間違いを全部見逃す。"""
+    assert (
+        len(
+            _routes(
+                "ip route 0.0.0.0 0.0.0.0 203.0.113.1",
+                "ip route 10.30.0.0 255.255.0.0 192.168.77.1",
+            )
+        )
+        == 1
+    )
+
+
+def test_a_route_written_with_an_exit_port_needs_no_next_hop():
+    assert _routes("ip route 10.40.0.0 255.255.0.0 GigabitEthernet0/0") == []
+
+
+def test_nothing_is_said_when_the_ports_could_not_be_read():
+    from app.services import policyreview
+
+    cfg = "hostname r1\nip route 10.30.0.0 255.255.0.0 192.168.77.1\n"
+    assert [
+        f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title
+    ] == []

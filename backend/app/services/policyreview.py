@@ -65,6 +65,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_static_routes(parsed))
     findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
     findings.extend(_nat(parsed, text))
@@ -391,6 +392,52 @@ def _range(text: str) -> _Range | None:
     low = int(ge) if ge is not None else length
     high = int(le) if le is not None else 32
     return _Range(network, low, high)
+
+
+def _static_routes(parsed: ParsedConfig) -> list[Finding]:
+    """静的経路の次の相手に、この機器から行けるか。
+
+    次の相手が直結の帯にも他の経路にも無いと、その行は使われない。既定経路が
+    あると、代わりにそちらへ流れる。どちらにしても、書いた人が意図した先には
+    行かない。設定は通るので、経路表を見るまで気づけない。
+    """
+    connected = _connected_networks(parsed)
+    if not connected:
+        # ポートを読めていない Config で、届かないと言い切ることはできない
+        return []
+
+    covering = []
+    for route in parsed.routes:
+        try:
+            network = ipaddress.ip_network(route.destination, strict=False)
+        except ValueError:
+            continue
+        if network.prefixlen > 0:  # 既定経路は「何でも覆う」ので根拠にしない
+            covering.append(network)
+
+    findings: list[Finding] = []
+    for route in parsed.routes:
+        if route.interface or not route.next_hop:
+            continue  # 出口のポートを書いてある行は、次の相手が要らない
+        try:
+            hop = ipaddress.ip_address(route.next_hop)
+        except ValueError:
+            continue
+        if any(hop in network for network in connected):
+            continue
+        if any(hop in network for network in covering):
+            continue
+        findings.append(
+            _note(
+                MEDIUM,
+                f"{route.destination} の次の相手 {route.next_hop} へ行けません",
+                "次の相手が、この機器の直結の帯にも、他の経路にもありません。"
+                "この行は使われず、既定経路があればそちらへ流れます。"
+                "相手の付け替え忘れか、ポートの帯の変更漏れが疑われます。",
+                [f"ip route {route.destination} {route.next_hop}"],
+            )
+        )
+    return findings
 
 
 def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
