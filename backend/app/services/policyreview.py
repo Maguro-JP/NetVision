@@ -78,6 +78,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(asareview.review(parsed))
     if text is not None:
         findings.extend(_management_access(text, parsed))
+        findings.extend(_missing_applied_acls(text, parsed))
     return findings
 
 
@@ -905,6 +906,54 @@ def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[
 # ---------------------------------------------------------------------------
 
 _VTY = re.compile(r"^line vty\s+(\S+(?:\s+\S+)?)\s*$", re.IGNORECASE)
+
+
+_APPLY_ACL = re.compile(
+    r"^\s*ip\s+access-group\s+(?P<name>\S+)\s+(?P<way>in|out)\s*$", re.IGNORECASE
+)
+
+
+def _missing_applied_acls(text: str, parsed: ParsedConfig) -> list[Finding]:
+    """ポートに当てた ACL が、この Config の中にあるか。
+
+    無い ACL を当てると、絞ったつもりで素通しになる。書いた側は当てた
+    つもりでいるので、通信できてしまうこと自体が異常だと気づけない。
+
+    ACL を1つも読めていない Config では、読み手が対応していないだけの
+    可能性があるので黙る。
+    """
+    acl_names = {acl.name for acl in parsed.acls}
+    if not acl_names:
+        return []
+
+    findings: list[Finding] = []
+    interface: str | None = None
+    seen: set[tuple[str, str]] = set()
+    for raw in text.splitlines():
+        head = re.match(r"^interface\s+(\S+)", raw, re.IGNORECASE)
+        if head:
+            interface = head.group(1)
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            interface = None
+        applied = _APPLY_ACL.match(raw)
+        if not applied or interface is None:
+            continue
+        name = applied.group("name")
+        if name in acl_names or (name, interface) in seen:
+            continue
+        seen.add((name, interface))
+        findings.append(
+            _note(
+                HIGH,
+                f"{interface} に当てた ACL {name} が、この Config にありません",
+                "当て先の中身が無いので、この口は絞れていません。名前の打ち間違いか、"
+                "定義の入れ忘れです。書いた側は当てたつもりなので、"
+                "通信できてしまうこと自体を異常だと思わないまま残ります。",
+                [f"interface {interface}", raw.strip()],
+            )
+        )
+    return findings
 
 
 def _management_access(text: str, parsed: ParsedConfig) -> list[Finding]:

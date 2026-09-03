@@ -221,3 +221,38 @@ interface Ethernet1/1
 def test_override_is_not_mistaken_for_a_group_range():
     text = CISCO + "ip pim rp-address 10.0.0.2 override\n"
     assert configparse.parse(text).multicast.rps[0].scope is None
+
+
+def test_a_plain_vlan_definition_is_not_read_as_snooping():
+    """`vlan 10` と書いてあるだけの機器に、マルチキャストの話を持ち出さない。
+
+    show の出力に IGMP という語が混ざるだけで拾ってしまうと、設定していない
+    機器にまで指摘が出る。デモでも現場でも、これは信用をなくす。
+    """
+    text = """hostname acc-sw-01
+vlan 10
+ name USERS
+!
+vlan 30
+ name MGMT
+!
+show cdp neighbors detail
+-------------------------
+Device ID: core-sw-01
+Platform: cisco C9500-40X,  Capabilities: Switch IGMP
+Interface: GigabitEthernet0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+"""
+    parsed = configparse.parse(text)
+    assert parsed.multicast is None
+    assert multicastreview.review(parsed) == []
+
+
+def test_snooping_written_inside_a_vlan_block_is_still_read():
+    text = """hostname sw-01
+vlan 10
+ name USERS
+ ip igmp snooping enable
+!
+"""
+    parsed = configparse.parse(text)
+    assert [item.vlan for item in parsed.multicast.vlans] == [10]

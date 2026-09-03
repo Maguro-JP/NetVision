@@ -20,6 +20,7 @@ KIND_LABELS = {
     "asa-failover": "ASA failover",
     "vsx": "Aruba VSX",
     "mlag": "Arista MLAG",
+    "vpc": "Cisco vPC（NX-OS）",
     "irf": "IRF（QX / Comware）",
 }
 
@@ -46,6 +47,7 @@ _ASA_KEY = re.compile(r"^failover\s+key\b", re.IGNORECASE)
 _ASA_LINK = re.compile(r"^failover\s+lan\s+interface\s+(\S+)\s+(\S+)", re.IGNORECASE)
 _VSX = re.compile(r"^vsx\s*$", re.IGNORECASE)
 _MLAG = re.compile(r"^mlag\s+configuration\s*$", re.IGNORECASE)
+_VPC = re.compile(r"^vpc\s+domain\s+(\d+)\s*$", re.IGNORECASE)
 _IRF_DOMAIN = re.compile(r"^\s*irf\s+domain\s+(\d+)", re.IGNORECASE | re.MULTILINE)
 _IRF_PRIORITY = re.compile(
     r"^\s*irf\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
@@ -54,7 +56,7 @@ _IRF_PRIORITY = re.compile(
 
 def parse(text: str) -> ParsedHaPair | None:
     """入っていれば1つ返す。2つ以上の仕組みを同時に入れる機器は見ない。"""
-    for reader in (_fortigate, _asa, _vsx, _mlag, _irf):
+    for reader in (_fortigate, _asa, _vsx, _mlag, _vpc, _irf):
         found = reader(text)
         if found is not None:
             return found
@@ -153,6 +155,43 @@ def _mlag(text: str) -> ParsedHaPair | None:
         elif head == "peer-link" and len(words) > 1:
             pair.link = words[1]
     return pair
+
+
+def _vpc(text: str) -> ParsedHaPair | None:
+    """NX-OS の vPC。2台を1台に見せて、下位から見ると1本の束になる。
+
+    相手の生死は peer-keepalive で見る。ここが片側しか書かれていないと、
+    落ちたときにどちらも主になろうとする。
+    """
+    for line in text.splitlines():
+        head = _VPC.match(line.strip())
+        if head is None:
+            continue
+        pair = ParsedHaPair(kind="vpc", group=head.group(1))
+        for body in _block(text, _VPC):
+            words = body.split()
+            if not words:
+                continue
+            first = words[0].lower()
+            if first == "role" and len(words) > 2 and words[2].isdigit():
+                pair.priority = int(words[2])
+            elif first == "peer-keepalive":
+                found = re.search(r"destination\s+(\S+)", body, re.IGNORECASE)
+                if found:
+                    pair.peer_address = found.group(1)
+        found = re.search(r"^\s*vpc\s+peer-link\s*$", text, re.IGNORECASE | re.MULTILINE)
+        if found:
+            # peer-link を書いてある口を探す
+            current: str | None = None
+            for line2 in text.splitlines():
+                port = re.match(r"^interface\s+(\S+)", line2, re.IGNORECASE)
+                if port:
+                    current = port.group(1)
+                elif line2.strip().lower() == "vpc peer-link" and current:
+                    pair.link = current
+                    break
+        return pair
+    return None
 
 
 def _irf(text: str) -> ParsedHaPair | None:

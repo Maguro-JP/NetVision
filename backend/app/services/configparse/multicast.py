@@ -158,9 +158,10 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
             continue
         in_vlan = _VLAN_BLOCK.match(line)
         if in_vlan:
+            # どの帯の話かを覚えるだけ。ここで作ってしまうと、ただの VLAN の
+            # 定義がスヌーピングの設定に化ける
             interface, pim_block = None, False
             vlan = int(in_vlan.group(1))
-            _vlan(found, vlan)
             continue
         if _PIM_BLOCK.match(line):
             interface, vlan, pim_block = None, None, True
@@ -298,7 +299,6 @@ def parse_comware(text: str, found: ParsedMulticast) -> None:
         in_vlan = _CW_VLAN.match(line)
         if in_vlan:
             interface, vlan = None, int(in_vlan.group(1))
-            _vlan(found, vlan)
             continue
         if line and not line.startswith((" ", "\t")):
             if not _CW_ROUTING.match(line) and not line.lower().startswith("pim"):

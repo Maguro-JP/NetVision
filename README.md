@@ -61,7 +61,7 @@ backend/
       versions.py  OSバージョンの自然順比較
     api/routes/  エンドポイント
   alembic/       DB マイグレーション
-  scripts/seed.py  デモデータ投入
+  scripts/seed.py  デモデータ投入（Config も入る）
   tests/         pytest
 frontend/
   src/pages/     画面（ダッシュボード / トポロジー図 / 機器一覧 / 詳細 / 拠点 /

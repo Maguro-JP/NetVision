@@ -37,7 +37,9 @@ _INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
 _RANGE_PART = re.compile(
     r"^([A-Za-z][A-Za-z\-]*)\s*([\d/]*?)(\d+)(?:\s*-\s*(\d+))?$", re.IGNORECASE
 )
-_VLAN_DEF = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: `vlan 10` に加えて `vlan 10,20,30` `vlan 100-110` も定義になる。
+#: 並べ書きを読み落とすと、その VLAN が「台帳にしか無い」ことになってしまう
+_VLAN_DEF = re.compile(r"^vlan\s+([\d,\s-]+)$", re.IGNORECASE)
 
 
 def detect(text: str) -> Vendor | None:
@@ -101,10 +103,21 @@ def _parse_version(text: str, parsed: ParsedConfig) -> None:
             return
 
 
+#: スタックの構成行。`show version` を付けずに Config だけ渡されたとき、
+#: 型番が分かるのはここしかない。型番が空だと、期限もリファレンスから引けない
+_STACK_PROVISION = re.compile(r"^switch\s+\d+\s+provision\s+(\S+)\s*$", re.IGNORECASE | re.M)
+
+
 def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
     match = _MODEL_NUMBER.search(text) or _CHASSIS.search(text)
     if match:
         parsed.model = match.group(1)
+
+    if not parsed.model:
+        provisioned = _STACK_PROVISION.findall(text)
+        if provisioned:
+            # 積んである台の型番。混在も書けるが、代表として1つ目を採る
+            parsed.model = provisioned[0].upper()
 
     match = _SERIAL.search(text)
     if match:
@@ -189,6 +202,19 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             written = body.split(maxsplit=2)
             if len(written) >= 3 and "/" in written[2]:
                 _remember(current, written[2].split()[0])
+        elif body.startswith("encapsulation dot1q ") or body.startswith("encapsulation dot1Q "):
+            # ルーターの副ポート。ここに書いた番号が、その口の運ぶ VLAN になる
+            parts = body.split()
+            if len(parts) >= 3 and parts[2].isdigit():
+                number = int(parts[2])
+                if "native" in body.lower():
+                    current.native_vlan = number
+                else:
+                    current.vlan = number
+        elif body.startswith("switchport voice vlan "):
+            spoken = body.rsplit(maxsplit=1)[-1]
+            if spoken.isdigit():
+                current.voice_vlan = int(spoken)
         elif body.startswith("switchport access vlan "):
             current.vlan = int(body.rsplit(maxsplit=1)[-1])
             current.mode = current.mode or "access"
@@ -371,14 +397,38 @@ def _prefix_length(netmask: str) -> int:
         return 32
 
 
+def _vlan_numbers(text: str) -> list[int]:
+    """`10,20,30` や `100-110` を、番号の並びにする。"""
+    out: list[int] = []
+    for part in text.replace(" ", "").split(","):
+        if not part:
+            continue
+        if "-" in part:
+            head, _, tail = part.partition("-")
+            if not (head.isdigit() and tail.isdigit()):
+                return []
+            first, last = int(head), int(tail)
+            if first > last or last - first > 4094:
+                return []
+            out.extend(range(first, last + 1))
+        elif part.isdigit():
+            out.append(int(part))
+        else:
+            return []
+    return [number for number in out if 1 <= number <= 4094]
+
+
 def _parse_vlans(text: str, parsed: ParsedConfig) -> None:
     current: int | None = None
     for raw in text.splitlines():
         stripped = raw.strip()
         match = _VLAN_DEF.match(stripped)
         if match and not raw.startswith(" "):
-            current = int(match.group(1))
-            parsed.vlans.setdefault(current, "")
+            numbers = _vlan_numbers(match.group(1))
+            for number in numbers:
+                parsed.vlans.setdefault(number, "")
+            # 名前を付けられるのは1つだけ書いたとき（並べ書きに name は書けない）
+            current = numbers[0] if len(numbers) == 1 else None
             continue
         if current is not None and raw.startswith(" ") and stripped.startswith("name "):
             parsed.vlans[current] = stripped[len("name ") :].strip()

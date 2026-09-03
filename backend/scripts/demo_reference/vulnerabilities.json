@@ -1,0 +1,121 @@
+[
+  {
+    "cve_id": "CVE-2026-20101",
+    "title": "IOS-XE Web UI の認証回避",
+    "summary": "Web UI が有効な機器で、認証なしに管理者権限のアカウントを作成できる。",
+    "cvss_score": 10.0,
+    "cvss_severity": "CRITICAL",
+    "known_exploited": true,
+    "published_on": "2026-01-10",
+    "remediation_due": "2026-02-10",
+    "affects": [
+      {
+        "vendor": "Cisco",
+        "model": "C9500*",
+        "os_name": "IOS-XE",
+        "version_start_including": "17.9.0",
+        "version_end_including": "17.9.5",
+        "fixed_version": "17.9.6"
+      },
+      {
+        "vendor": "Cisco",
+        "model": "C9300*",
+        "os_name": "IOS-XE",
+        "version_start_including": "17.9.0",
+        "version_end_including": "17.9.5",
+        "fixed_version": "17.9.6"
+      }
+    ]
+  },
+  {
+    "cve_id": "CVE-2026-20244",
+    "title": "IOS-XE SNMP の遠隔からのサービス停止",
+    "summary": "細工した SNMP 要求で機器が再起動する。community 名が既定のままだと外からも当てられる。",
+    "cvss_score": 8.6,
+    "cvss_severity": "HIGH",
+    "known_exploited": false,
+    "published_on": "2026-02-18",
+    "affects": [
+      {
+        "vendor": "Cisco",
+        "os_name": "IOS-XE",
+        "version_start_including": "17.0.0",
+        "version_end_including": "17.12.4",
+        "fixed_version": "17.12.5"
+      }
+    ]
+  },
+  {
+    "cve_id": "CVE-2025-40018",
+    "title": "IOS 15.2 の古い SSH 実装の弱点",
+    "summary": "鍵交換の実装に欠陥があり、中間者が通信を復号できる場合がある。",
+    "cvss_score": 7.4,
+    "cvss_severity": "HIGH",
+    "known_exploited": false,
+    "published_on": "2025-11-05",
+    "affects": [
+      {
+        "vendor": "Cisco",
+        "model": "C2960X*",
+        "os_name": "IOS",
+        "version_end_including": "15.2(7)E9",
+        "fixed_version": "15.2(7)E10"
+      }
+    ]
+  },
+  {
+    "cve_id": "CVE-2026-31500",
+    "title": "FortiOS SSL-VPN の境界外書き込み",
+    "summary": "認証前の要求で任意のコードを実行できる。",
+    "cvss_score": 9.8,
+    "cvss_severity": "CRITICAL",
+    "known_exploited": true,
+    "published_on": "2026-03-02",
+    "remediation_due": "2026-03-16",
+    "affects": [
+      {
+        "vendor": "Fortinet",
+        "os_name": "FortiOS",
+        "version_start_including": "7.2.0",
+        "version_end_including": "7.2.9",
+        "fixed_version": "7.2.10"
+      }
+    ]
+  },
+  {
+    "cve_id": "CVE-2026-21077",
+    "title": "Junos の経路処理でのサービス停止",
+    "summary": "特定の BGP 更新を受け取ると経路処理が停止する。",
+    "cvss_score": 7.5,
+    "cvss_severity": "HIGH",
+    "known_exploited": false,
+    "published_on": "2026-01-28",
+    "affects": [
+      {
+        "vendor": "Juniper",
+        "os_name": "Junos",
+        "version_start_including": "21.0",
+        "version_end_including": "21.4R3-S6",
+        "fixed_version": "21.4R3-S7"
+      }
+    ]
+  },
+  {
+    "cve_id": "CVE-2026-11902",
+    "title": "NEC IX シリーズの管理画面の認証不備",
+    "summary": "管理画面が有効な機器で、設定を読み出せる。",
+    "cvss_score": 6.5,
+    "cvss_severity": "MEDIUM",
+    "known_exploited": false,
+    "published_on": "2026-02-05",
+    "affects": [
+      {
+        "vendor": "NEC",
+        "model": "IX2215",
+        "os_name": "IX",
+        "version_end_including": "10.6.22",
+        "fixed_version": "10.6.23"
+      }
+    ]
+  }
+]

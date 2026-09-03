@@ -401,13 +401,128 @@ def _seed(force: bool) -> None:
             shut.closed_on = date(2026, 6, 30)
             shut.notes = "閉店。回線解約済み、機器の引き上げ待ち"
         db.commit()
+        snapshots = _seed_configs(db, by_host)
+        reference_counts = _seed_reference(db)
+        contracts = _seed_branch_contracts(db)
         print(
             f"投入完了: 拠点{1 + wan['sites']}件 / 機器{len(devices) + wan['devices']}台 / "
-            f"保守契約5件 / 結線{len(wiring) + wan['links']}本 / "
-            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件"
+            f"保守契約{5 + contracts}件 / 結線{len(wiring) + wan['links']}本 / "
+            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件 / "
+            f"Config{snapshots}件 / "
+            f"型番{reference_counts[0]}件 / CVE{reference_counts[1]}件 / "
+            f"該当{reference_counts[2]}件"
         )
     finally:
         db.close()
+
+
+def _seed_branch_contracts(db) -> int:
+    """拠点の機器にも保守契約を入れる。
+
+    契約が1つも無いと、総合の重さが「不明」に倒れる。それ自体は正しい
+    （保守の状態が分からないため）が、実際の台帳は全部が空でも全部が
+    埋まってもいない。切れているもの・近いもの・余裕のあるものが混ざった
+    形にして、最初の画面で色の違いが見えるようにする。
+    """
+    from app.models import Device, DeviceStatus, MaintenanceContract
+
+    hosts = db.scalars(
+        select(Device).where(Device.status != DeviceStatus.RETIRED).order_by(Device.hostname)
+    ).all()
+    already = {row for row in db.scalars(select(MaintenanceContract.device_id)).all()}
+
+    # 切れている / 迫っている / 余裕がある / 契約が無い、を混ぜる
+    spread = [-120, -20, 45, 120, 400, 900, None, None]
+    added = 0
+    for index, device in enumerate(hosts):
+        if device.id in already:
+            continue
+        days = spread[index % len(spread)]
+        if days is None:
+            continue
+        db.add(
+            MaintenanceContract(
+                device_id=device.id,
+                provider="拠点一括保守",
+                contract_number=f"MC-BR-{device.id:05d}",
+                service_level="翌営業日" if days > 0 else "翌営業日（更新待ち）",
+                start_date=date(2023, 4, 1),
+                end_date=_d(days),
+                annual_cost=60000,
+            )
+        )
+        added += 1
+    db.commit()
+    return added
+
+
+def _seed_reference(db) -> tuple[int, int, int]:
+    """型番ごとの期限と、公表されている弱点を入れて、該当状況まで出す。
+
+    ここが空だと、保守期限も対処状況も「まだ何も分からない」画面になる。
+    どちらも台帳と突き合わせて初めて意味が出るところなので、見せる段では
+    両方そろっている必要がある。
+
+    取り込みは画面と同じ道（reference.import_products / import_vulnerabilities）を通す。
+    """
+    from pathlib import Path
+
+    from app.services import exposure, reference
+    from app.services.tablefile import read_table
+
+    folder = Path(__file__).resolve().parent / "demo_reference"
+    products = vulnerabilities = 0
+
+    csv_path = folder / "products.csv"
+    if csv_path.is_file():
+        table = read_table(csv_path.name, csv_path.read_bytes())
+        result = reference.import_products(db, table)
+        products = result.created + result.updated
+
+    json_path = folder / "vulnerabilities.json"
+    if json_path.is_file():
+        result = reference.import_vulnerabilities(db, json_path.read_bytes())
+        vulnerabilities = result.created + result.updated
+
+    matched = exposure.sync(db).created if (products or vulnerabilities) else 0
+    return products, vulnerabilities, matched
+
+
+def _seed_configs(db, by_host: dict) -> int:
+    """本社の機器に、実物と同じ形の Config を入れる。
+
+    台帳だけだと、点検・L3・計画の画面がどれも空のままになる。この道具の
+    値打ちはそこから先にあるので、見せる段では中身が入っている必要がある。
+
+    取り込みは画面と同じ道（configs.ingest）を通す。デモ用に別の道を作ると、
+    そこだけ動いて本番で動かない、という形になる。
+    """
+    from pathlib import Path
+
+    from app.services import configs
+
+    folder = Path(__file__).resolve().parent / "demo_configs"
+    if not folder.is_dir():
+        return 0
+
+    count = 0
+    for path in sorted(folder.glob("*.txt")):
+        device = by_host.get(path.stem)
+        if device is None:
+            continue
+        try:
+            configs.ingest(
+                db,
+                path.name,
+                path.read_text(encoding="utf-8"),
+                device_id=device.id,
+                apply_inventory=False,
+            )
+        except Exception as error:  # noqa: BLE001  デモの投入で全体を止めない
+            print(f"  Config を入れられませんでした（{path.name}）: {error}")
+            continue
+        count += 1
+    return count
 
 
 if __name__ == "__main__":

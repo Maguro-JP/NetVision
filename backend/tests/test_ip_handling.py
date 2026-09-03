@@ -342,3 +342,103 @@ def test_nothing_is_said_when_the_ports_could_not_be_read():
     assert [
         f for f in policyreview.review(configparse.parse(cfg), cfg) if "次の相手" in f.title
     ] == []
+
+
+# ---------------------------------------------------------------------------
+# VLAN の並べ書き（Cisco）
+# ---------------------------------------------------------------------------
+
+
+def test_vlans_written_as_a_list_are_all_defined():
+    """`vlan 10,20,30` を読み落とすと、その VLAN が「台帳にしかない」ことになる。"""
+    assert sorted(configparse.parse("hostname x\nvlan 10,20,30\n").vlans) == [10, 20, 30]
+
+
+def test_vlans_written_as_a_range_are_all_defined():
+    assert sorted(configparse.parse("hostname x\nvlan 100-103\n").vlans) == [100, 101, 102, 103]
+
+
+def test_a_single_vlan_still_takes_its_name():
+    assert configparse.parse("hostname x\nvlan 10\n name USERS\n").vlans == {10: "USERS"}
+
+
+def test_a_list_of_vlans_has_no_single_name_to_take():
+    """並べ書きに name は書けない。あとの行の name を先頭に付けてはいけない。"""
+    parsed = configparse.parse("hostname x\nvlan 10,20\n!\nvlan 30\n name SERVERS\n")
+    assert parsed.vlans == {10: "", 20: "", 30: "SERVERS"}
+
+
+def test_something_that_is_not_a_vlan_list_is_left_alone():
+    assert configparse.parse("hostname x\nvlan internal allocation policy ascending\n").vlans == {}
+
+
+def test_a_voice_vlan_counts_as_carried_by_the_port():
+    """IP 電話の VLAN を数え落とすと、その VLAN がどこにも使われていないことになる。"""
+    text = """hostname sw1
+vlan 10
+ name USERS
+!
+vlan 20
+ name VOICE
+!
+interface GigabitEthernet0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    port = configparse.parse(text).interfaces[0]
+    assert port.vlan == 10
+    assert port.voice_vlan == 20
+    assert port.carried_vlans() == {10, 20}
+
+
+def test_a_voice_vlan_without_a_definition_is_called_out():
+    from app.services import configcheck
+
+    text = """hostname sw1
+vlan 10
+ name USERS
+!
+interface GigabitEthernet0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    parsed = configparse.parse(text)
+    findings = configcheck._layer2(parsed)
+    assert any("定義が無い VLAN" in f.title for f in findings), [f.title for f in findings]
+
+
+def test_a_stack_tells_its_model_even_without_show_version():
+    """型番が空だと、期限もリファレンスから引けない。"""
+    text = "hostname sw1\nswitch 1 provision c9300-48p\nswitch 2 provision c9300-48p\n"
+    assert configparse.parse(text).model == "C9300-48P"
+
+
+def test_show_version_still_wins_over_the_stack_line():
+    text = "hostname sw1\nswitch 1 provision c9300-48p\n!\nModel Number : C9300-24T\n"
+    assert configparse.parse(text).model == "C9300-24T"
+
+
+def test_a_router_subinterface_carries_the_vlan_it_tags():
+    """ルーターの副ポートは、この行が VLAN の所在を示す唯一の手掛かりになる。"""
+    text = """hostname rt1
+interface GigabitEthernet0/0/0.10
+ encapsulation dot1Q 10
+ ip address 10.0.10.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0.20
+ encapsulation dot1q 20
+ ip address 10.0.20.1 255.255.255.0
+!
+interface GigabitEthernet0/0/0.99
+ encapsulation dot1Q 99 native
+!
+"""
+    ports = {item.name: item for item in configparse.parse(text).interfaces}
+    assert ports["GigabitEthernet0/0/0.10"].vlan == 10
+    assert ports["GigabitEthernet0/0/0.20"].vlan == 20
+    assert ports["GigabitEthernet0/0/0.99"].native_vlan == 99
+    assert ports["GigabitEthernet0/0/0.10"].carried_vlans() == {10}

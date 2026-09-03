@@ -47,6 +47,9 @@ class ParsedInterface:
     vlan: int | None = None
     mode: str | None = None  # access / trunk / hybrid / routed
     native_vlan: int | None = None
+    #: IP 電話用に、同じ口へタグ付きで載せる VLAN（Cisco の switchport voice vlan）。
+    #: これを読まないと、その VLAN がどこにも使われていないように見える
+    voice_vlan: int | None = None
     trunk_vlans: list[int] = field(default_factory=list)
     # 許可 VLAN を書いていないトランクは「全部通す」。番号を並べて持つと
     # 4094個になるので、意味の方を持っておき、実際の集合は機器の定義 VLAN で解決する
@@ -93,7 +96,9 @@ class ParsedInterface:
         out = set(self.trunk_vlans)
         if self.trunk_all and defined:
             out |= defined - self.trunk_excluded
-        for value in (self.vlan, self.native_vlan):
+        # IP 電話の VLAN も、その口が運ぶ VLAN。数え落とすと「どこにも
+        # 使われていない」ことになり、逆に定義が無いことにも気づけない
+        for value in (self.vlan, self.native_vlan, self.voice_vlan):
             if value is not None:
                 out.add(value)
         return out
@@ -211,6 +216,7 @@ class ParsedConfig:
                     "vlan",
                     "mode",
                     "native_vlan",
+                    "voice_vlan",
                     "vrf",
                     "lag_group",
                 ):

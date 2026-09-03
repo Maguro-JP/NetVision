@@ -1,0 +1,65 @@
+!
+version 17.6
+hostname acc-sw-01
+!
+spanning-tree mode rapid-pvst
+!
+vlan 10
+ name USERS
+!
+vlan 30
+ name MGMT
+!
+vlan 40
+ name WIRELESS
+!
+vlan 999
+ name UNUSED
+!
+interface GigabitEthernet0/1
+ description to core-sw-01
+ switchport mode trunk
+ switchport trunk allowed vlan 10,30,40
+ switchport trunk native vlan 999
+!
+interface range GigabitEthernet0/2-20
+ description 執務室
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+!
+interface GigabitEthernet0/21
+ description 会議室（設定途中）
+ switchport mode access
+ switchport access vlan 10
+!
+interface GigabitEthernet0/22
+ description 無線AP
+ switchport mode trunk
+ switchport trunk allowed vlan 30,40
+!
+interface Vlan30
+ description MGMT
+ ip address 10.0.0.21 255.255.255.0
+!
+ip default-gateway 10.0.0.10
+!
+snmp-server community public RO
+!
+ntp server 10.10.20.10
+!
+line vty 0 4
+ transport input telnet
+ password cisco
+!
+end
+!
+show cdp neighbors detail
+-------------------------
+Device ID: core-sw-01
+Entry address(es):
+  IP address: 10.0.0.11
+Platform: cisco C9500-40X,  Capabilities: Switch IGMP
+Interface: GigabitEthernet0/1,  Port ID (outgoing port): GigabitEthernet1/0/1
+Holdtime : 133 sec

@@ -597,3 +597,45 @@ router bgp 65001
  neighbor 10.0.0.2 route-map OUT out
 """
     assert not any("指している" in f.title for f in _review(text))
+
+
+# ---------------------------------------------------------------------------
+# ポートに当てた ACL が、そもそも存在するか
+# ---------------------------------------------------------------------------
+
+_WITH_ACL = """hostname sw1
+ip access-list standard MGMT
+ permit 10.0.0.0 0.0.0.255
+!
+"""
+
+
+def _review_with_text(text: str):
+    """元の Config も渡す。ポートへの当て方は、読み取った形だけでは分からない。"""
+    return policyreview.review(configparse.parse(text), text)
+
+
+def test_an_acl_applied_to_a_port_but_never_defined_is_called_out():
+    text = _WITH_ACL + "interface GigabitEthernet0/1\n ip access-group 101 in\n"
+    item = _one(_review_with_text(text), "に当てた ACL 101 が")
+    assert item.level == HIGH
+    assert "絞れていません" in item.why
+
+
+def test_an_acl_that_exists_says_nothing():
+    text = _WITH_ACL + "interface GigabitEthernet0/1\n ip access-group MGMT in\n"
+    assert not any("当てた ACL" in f.title for f in _review_with_text(text))
+
+
+def test_nothing_is_said_when_no_acl_could_be_read_at_all():
+    """読み手が対応していないだけかもしれないときは、疑わない。"""
+    text = "hostname sw1\ninterface GigabitEthernet0/1\n ip access-group 101 in\n"
+    assert not any("当てた ACL" in f.title for f in _review_with_text(text))
+
+
+def test_the_same_missing_acl_on_one_port_is_said_once():
+    text = (
+        _WITH_ACL
+        + "interface GigabitEthernet0/1\n ip access-group 101 in\n ip access-group 101 out\n"
+    )
+    assert len([f for f in _review_with_text(text) if "当てた ACL" in f.title]) == 1

@@ -1,0 +1,130 @@
+!
+! Last configuration change at 09:12:44 JST Mon Feb 16 2026
+!
+version 17.9
+hostname core-sw-01
+!
+vtp mode transparent
+!
+spanning-tree mode rapid-pvst
+spanning-tree vlan 10,20,30,40 priority 8192
+!
+vlan 10
+ name USERS
+!
+vlan 20
+ name SERVERS
+!
+vlan 30
+ name MGMT
+!
+vlan 40
+ name WIRELESS
+!
+vlan 999
+ name UNUSED
+!
+interface TenGigabitEthernet1/1/1
+ description to core-sw-02
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20,30,40
+ switchport trunk native vlan 999
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/1
+ description to acc-sw-01
+ switchport mode trunk
+ switchport trunk allowed vlan 10,30,40
+ switchport trunk native vlan 999
+!
+interface GigabitEthernet1/0/24
+ description to fw-01 port2
+ switchport mode trunk
+ switchport trunk allowed vlan 20,30
+ switchport trunk native vlan 999
+!
+interface GigabitEthernet1/0/11
+ description 会議室ハブ
+ switchport mode access
+ switchport access vlan 10
+ spanning-tree portfast
+!
+interface Vlan10
+ description USERS
+ ip address 10.10.10.2 255.255.255.0
+ standby 10 ip 10.10.10.1
+ standby 10 priority 110
+ standby 10 preempt
+ ip helper-address 10.10.20.10
+!
+interface Vlan20
+ description SERVERS
+ ip address 10.10.20.2 255.255.255.0
+ standby 20 ip 10.10.20.1
+ standby 20 priority 110
+ standby 20 preempt
+!
+interface Vlan30
+ description MGMT
+ ip address 10.0.0.11 255.255.255.0
+ standby 30 ip 10.0.0.10
+ standby 30 priority 110
+ standby 30 preempt
+!
+interface Vlan40
+ description WIRELESS
+ ip address 10.10.40.2 255.255.255.0
+ standby 40 ip 10.10.40.1
+ standby 40 priority 110
+!
+router ospf 1
+ router-id 10.0.0.11
+ passive-interface default
+ no passive-interface Vlan30
+ network 10.10.10.0 0.0.0.255 area 0
+ network 10.10.20.0 0.0.0.255 area 0
+ network 10.0.0.0 0.0.0.255 area 0
+!
+ip route 0.0.0.0 0.0.0.0 10.10.20.254
+!
+ip access-list extended MGMT-IN
+ permit tcp 10.0.0.0 0.0.0.255 any eq 22
+ permit ip host 10.0.0.201 any
+ deny   ip any any log
+!
+snmp-server community public RO
+!
+ntp server 10.10.20.10
+logging host 10.10.20.11
+clock timezone JST 9 0
+!
+line vty 0 4
+ transport input telnet ssh
+ login local
+!
+end
+!
+show cdp neighbors detail
+-------------------------
+Device ID: core-sw-02
+Entry address(es):
+  IP address: 10.0.0.12
+Platform: cisco C9500-40X,  Capabilities: Switch IGMP
+Interface: TenGigabitEthernet1/1/1,  Port ID (outgoing port): TenGigabitEthernet1/1/1
+Holdtime : 132 sec
+
+-------------------------
+Device ID: acc-sw-01
+Entry address(es):
+  IP address: 10.0.0.21
+Platform: cisco C9200L-24P,  Capabilities: Switch IGMP
+Interface: GigabitEthernet1/0/1,  Port ID (outgoing port): GigabitEthernet0/1
+Holdtime : 145 sec
+
+-------------------------
+Device ID: fw-01
+Entry address(es):
+  IP address: 10.0.0.2
+Platform: FortiGate-100F,  Capabilities: Router
+Interface: GigabitEthernet1/0/24,  Port ID (outgoing port): port2
+Holdtime : 151 sec

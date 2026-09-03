@@ -44,7 +44,8 @@ def test_ports_keep_both_the_name_and_the_number():
     assert asa.nameif_of(outside) == "outside"
     assert asa.security_level_of(outside) == 0
     assert asa.security_level_of(ports["GigabitEthernet0/1"]) == 100
-    assert outside.ip_address == "203.0.113.2 255.255.255.252"
+    # 他のベンダーと同じ形で持つ。並べ方が違うだけの同じものを、比べられる形にそろえる
+    assert outside.ip_address == "203.0.113.2/30"
 
 
 def test_an_access_list_line_is_read_with_its_object_names():
@@ -107,3 +108,35 @@ def test_a_switch_config_is_not_mistaken_for_a_firewall():
     """IOS と ASA は見分けが付きにくい。取り違えると読み方ごと変わる。"""
     ios = "hostname sw-01\ninterface GigabitEthernet1/0/1\n switchport access vlan 10\n"
     assert configparse.parse(ios).vendor is Vendor.CISCO_IOS
+
+
+def test_the_thing_being_translated_is_not_the_keyword():
+    """`source dynamic 内側 出口` の「内側」を取る。
+
+    dynamic / static は書き方の指定であって、変換するものの名前ではない。
+    取り違えると、NAT の表に "dynamic" という名前の対象が並ぶ。
+    """
+    text = """ASA Version 9.16(4)
+hostname fw1
+nat (inside,outside) source dynamic INSIDE-NET interface
+nat (inside,outside) source static SRV-IN SRV-OUT
+"""
+    rules = configparse.parse(text).nat.rules
+    assert [(r.kind, r.matched) for r in rules] == [
+        ("dynamic", "INSIDE-NET"),
+        ("static", "SRV-IN"),
+    ]
+    assert rules[1].translated == "SRV-OUT"
+    assert "出口" in rules[0].translated
+
+
+def test_the_object_form_still_reads_its_destination():
+    text = """ASA Version 9.16(4)
+hostname fw1
+object network INSIDE-NET
+ subnet 10.0.0.0 255.255.0.0
+ nat (inside,outside) dynamic interface
+"""
+    rule = configparse.parse(text).nat.rules[0]
+    assert rule.matched == "INSIDE-NET"
+    assert "出口" in rule.translated
