@@ -249,10 +249,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="足まわり",
         name="マルチキャスト",
-        read=PARTIAL,
-        review=NONE,
+        read=FULL,
+        review=PARTIAL,
         generate=NONE,
-        note="PIM / IGMP スヌーピングが入っていることまで。",
+        note="PIM を入れている口と動作、集合場所（RP）、IGMP スヌーピングを"
+        "帯ごとに読みます（Cisco IOS / NX-OS・Arista・Junos・Comware）。"
+        "sparse-mode なのに RP が決まっていない、RP への行き方が無い、"
+        "スヌーピングだけ入れて聞いて回る役（querier）が居ない、"
+        "口が1つだけ、を指摘します。どこに RP を置くべきかという設計は、"
+        "要件が要るので言いません。",
     ),
     Capability(
         area="足まわり",

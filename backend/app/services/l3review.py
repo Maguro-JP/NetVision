@@ -254,6 +254,27 @@ def _controls(parsed: ParsedConfig) -> list[dict]:
                 words.append("入口: " + " / ".join(ap.insecure_access))
             add("AP", ap.name, " / ".join(words), [ap.profile] if ap.profile else [])
 
+    multicast = getattr(parsed, "multicast", None)
+    if multicast is not None:
+        for rp in multicast.rps:
+            add(
+                "マルチキャスト",
+                f"集合場所（RP）{rp.address}",
+                rp.scope or "範囲の指定なし（全部）",
+                [item.name for item in multicast.pim_interfaces],
+            )
+        if multicast.dynamic_rp and not multicast.rps:
+            add("マルチキャスト", "集合場所（RP）", "候補方式（BSR / Auto-RP）で決めています", [])
+        for item in multicast.pim_interfaces:
+            add(
+                "マルチキャスト", f"PIM {item.mode}", "この口で配ります", [f"interface {item.name}"]
+            )
+        for vlan in multicast.vlans:
+            if not vlan.enabled:
+                continue
+            detail = "聞いて回る役あり" if vlan.querier else "聞いて回る役なし"
+            add("マルチキャスト", "IGMP スヌーピング", detail, [f"VLAN {vlan.vlan}"])
+
     return out
 
 
