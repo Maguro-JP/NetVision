@@ -637,3 +637,22 @@ def test_a_plain_password_is_caught_in_comware_too(db_session):
     text = "sysname sw\nlocal-user admin\n password cipher $c$3$xxxx\n"
     titles = _titles(configcheck.check(db_session, text))
     assert "利用者のパスワードが、元に戻せる形で入っています" not in titles
+
+
+def test_a_port_that_negotiates_its_own_mode_is_called_out(db_session):
+    """相手任せでトランクになる口は、挿した相手から全部の VLAN が見える。"""
+    text = "hostname sw1\ninterface GigabitEthernet0/2\n switchport mode dynamic desirable\n"
+    result = configcheck.check(db_session, text)
+    assert any("相手任せ" in title for title in _titles(result))
+
+
+def test_a_port_with_a_decided_mode_says_nothing_about_negotiation(db_session):
+    text = "hostname sw1\ninterface GigabitEthernet0/2\n switchport mode access\n"
+    result = configcheck.check(db_session, text)
+    assert not any("相手任せ" in title for title in _titles(result))
+
+
+def test_a_management_line_without_authentication_is_called_out(db_session):
+    text = "hostname sw1\nline vty 0 4\n transport input ssh\n no login\n"
+    result = configcheck.check(db_session, text)
+    assert any("認証を求めていません" in title for title in _titles(result))

@@ -46,6 +46,21 @@ class CheckResult:
 #: 機器に紐づかなくても言えること。どれも「入っていないと後で困る」もの
 _HYGIENE = (
     (
+        re.compile(r"^\s*switchport mode dynamic\s+(?:auto|desirable)\s*$", re.IGNORECASE),
+        HIGH,
+        "相手任せでトランクになる口があります",
+        "つないだ相手と話し合ってトランクになる設定です。相手が仕掛けた機器だと、"
+        "その口から全部の VLAN が見えます。使う形を決め打ちしてください"
+        "（switchport mode access もしくは trunk）。",
+    ),
+    (
+        re.compile(r"^\s*no login\s*$", re.IGNORECASE),
+        HIGH,
+        "機器に入る口で、認証を求めていません",
+        "line の下に no login があります。その口からは合言葉なしで入れます。"
+        "書き換えの途中で残ったものが、そのまま運用に入ることがあります。",
+    ),
+    (
         re.compile(
             r"^\s*(?:ip http server\s*$"  # Cisco IOS
             r"|set system services web-management http\b"  # Junos（https は別）
