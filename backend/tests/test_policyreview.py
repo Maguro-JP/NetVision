@@ -506,3 +506,56 @@ end
     findings = policyreview.review(parsed)
     titles = [f.title for f in findings if "直結の帯" in f.title]
     assert titles == ["router policy 2 の次の相手 198.51.100.1 は直結の帯にありません"]
+
+
+# ---------------------------------------------------------------------------
+# prefix-list の並び。上から順に見て、最初に当たったところで止まる
+# ---------------------------------------------------------------------------
+
+_BGP = """router bgp 65001
+ neighbor 10.0.0.2 remote-as 65002
+ neighbor 10.0.0.2 prefix-list CUST out
+"""
+
+
+def _prefix(*rows: str) -> str:
+    lines = [f"ip prefix-list CUST seq {(i + 1) * 5} {row}" for i, row in enumerate(rows)]
+    return "\n".join(lines) + "\n" + _BGP
+
+
+def test_a_prefix_list_in_a_sensible_order_says_nothing():
+    text = _prefix("deny 10.1.0.0/16", "permit 10.0.0.0/8 le 24")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_row_already_covered_by_an_earlier_one_is_called_out():
+    text = _prefix("permit 10.0.0.0/8 le 24", "deny 10.2.0.0/16")
+    item = _one(_review(text), "読まれません")
+    assert item.level == MEDIUM
+    assert "意図した結果になりません" in item.why
+
+
+def test_a_covered_row_with_the_same_action_is_only_noted():
+    text = _prefix("permit 10.0.0.0/8 le 24", "permit 10.1.0.0/16")
+    assert _one(_review(text), "読まれません").level == LOW
+
+
+def test_an_exact_length_row_does_not_cover_longer_ones():
+    """ge も le も書かなければ、その長さちょうどにしか当たらない。"""
+    text = _prefix("permit 10.0.0.0/8", "permit 10.1.0.0/16")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_row_outside_the_earlier_range_is_not_covered():
+    text = _prefix("permit 10.0.0.0/8 le 16", "permit 10.1.1.0/24")
+    assert not any("読まれません" in f.title for f in _review(text))
+
+
+def test_a_length_range_that_matches_nothing_is_called_out():
+    text = _prefix("permit 192.168.0.0/16 ge 24 le 20")
+    assert _one(_review(text), "当たる長さがありません").level == MEDIUM
+
+
+def test_a_ge_shorter_than_the_written_length_is_called_out():
+    text = _prefix("permit 192.168.0.0/16 ge 8")
+    assert _one(_review(text), "当たる長さがありません").level == MEDIUM

@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import ipaddress
 import re
+from dataclasses import dataclass
 
 from app.services import (
     aclcheck,
@@ -56,6 +57,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings: list[Finding] = []
     findings.extend(_bgp(parsed))
     findings.extend(_route_maps(parsed))
+    findings.extend(_prefix_lists(parsed))
     findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
     findings.extend(_nat(parsed, text))
@@ -284,6 +286,109 @@ def _route_maps(parsed: ParsedConfig) -> list[Finding]:
                     )
                 )
                 break
+    return findings
+
+
+_PREFIX_ENTRY = re.compile(
+    r"^(?P<net>\d+\.\d+\.\d+\.\d+\s*/\s*\d+)"
+    r"(?:\s+ge\s+(?P<ge>\d+))?(?:\s+le\s+(?P<le>\d+))?\s*$",
+    re.IGNORECASE,
+)
+
+
+@dataclass
+class _Range:
+    """prefix-list の1行が実際に当たる範囲。
+
+    ge / le を書かなければ、その長さちょうどにしか当たらない。ge だけなら
+    そこから 32 まで、le だけなら書いた長さから le まで。ここを取り違えると
+    「書いてあるのに当たらない」の説明ができない。
+    """
+
+    network: ipaddress.IPv4Network
+    low: int
+    high: int
+
+    def covers(self, other: _Range) -> bool:
+        """この行が当たったら、相手の行には二度と回ってこないか。"""
+        return (
+            other.network.subnet_of(self.network)
+            and self.low <= other.low
+            and other.high <= self.high
+        )
+
+
+def _range(text: str) -> _Range | None:
+    found = _PREFIX_ENTRY.match(text.strip())
+    if found is None:
+        return None
+    try:
+        network = ipaddress.ip_network(found.group("net").replace(" ", ""), strict=False)
+    except ValueError:
+        return None
+    if not isinstance(network, ipaddress.IPv4Network):
+        return None
+    length = network.prefixlen
+    ge = found.group("ge")
+    le = found.group("le")
+    if ge is None and le is None:
+        return _Range(network, length, length)
+    low = int(ge) if ge is not None else length
+    high = int(le) if le is not None else 32
+    return _Range(network, low, high)
+
+
+def _prefix_lists(parsed: ParsedConfig) -> list[Finding]:
+    """prefix-list の並びを、実際に当たる範囲まで見て評価する。
+
+    上から順に見て最初に当たったところで止まるので、前の行に覆われた行は
+    永久に読まれない。「広告しているはずなのに相手に届かない」の原因が
+    ここにあることは多い。
+    """
+    findings: list[Finding] = []
+    for policy in parsed.policies:
+        if policy.kind != "prefix-list":
+            continue
+        seen: list[tuple[str, _Range, object]] = []
+        for entry in policy.entries:
+            text = entry.matches[0] if entry.matches else ""
+            found = _range(text)
+            if found is None:
+                continue
+
+            # 機器が受け付けない、または効かない書き方
+            if found.low > found.high or found.low < found.network.prefixlen:
+                findings.append(
+                    _note(
+                        MEDIUM,
+                        f"{policy.name} の {entry.raw} は、当たる長さがありません",
+                        "ge は le 以下で、どちらも書いた長さ以上でなければ、"
+                        "当たる経路が存在しません。数字の取り違えが疑われます。",
+                        [entry.raw],
+                    )
+                )
+                continue
+
+            for action, earlier, first in seen:
+                if not earlier.covers(found):
+                    continue
+                same = action == entry.action
+                findings.append(
+                    _note(
+                        LOW if same else MEDIUM,
+                        f"{policy.name} の {entry.raw} は読まれません",
+                        f"手前の {first} がこの行の範囲を覆っています。prefix-list は"
+                        "最初に当たったところで止まるので、この行まで来ません。"
+                        + (
+                            "同じ扱いなので害はありませんが、消し忘れの可能性があります。"
+                            if same
+                            else "手前と扱いが逆なので、意図した結果になりません。"
+                        ),
+                        [str(first), entry.raw],
+                    )
+                )
+                break
+            seen.append((entry.action, found, entry.raw))
     return findings
 
 

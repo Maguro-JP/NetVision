@@ -107,11 +107,15 @@ CAPABILITIES: tuple[Capability, ...] = (
     Capability(
         area="経路",
         name="route-map / prefix-list",
-        read=PARTIAL,
+        read=FULL,
         review=PARTIAL,
         generate=NONE,
-        note="名前と、どこで使われているかまで。中身の評価はしていません。"
-        "どこからも使われていないものは指摘します。",
+        note="名前・使われている場所に加え、並びの中身まで読みます。"
+        "prefix-list は ge / le を含めて当たる範囲を出し、手前の行に覆われて"
+        "読まれない行、当たる長さが無い行を指摘します。route-map は"
+        "通す行が無い、途中で全部通している、を指摘します。"
+        "どこからも使われていないものも挙げます。"
+        "どの経路を出すべきかという設計は、要件が要るので言いません。",
     ),
     Capability(
         area="経路",
