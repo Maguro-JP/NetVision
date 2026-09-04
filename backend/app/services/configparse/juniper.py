@@ -29,7 +29,11 @@ from app.services.configparse.base import (
 
 _SET_HOSTNAME = re.compile(r"^set system host-name\s+(\S+)", re.MULTILINE)
 _BRACE_HOSTNAME = re.compile(r"^\s*host-name\s+(\S+);", re.MULTILINE)
-_VERSION = re.compile(r"^(?:Junos:|JUNOS Software Release \[|version )\s*([\w.\-]+)", re.MULTILINE)
+#: `Junos: 21.4R3-S5.4`、`JUNOS Software Release [21.4R3]`、階層形式の `version ...`、
+#: set 形式の `set version ...`。版が読めないと弱点の照合から漏れる
+_VERSION = re.compile(
+    r"^(?:Junos:|JUNOS Software Release \[|set version |version )\s*([\w.\-]+)", re.MULTILINE
+)
 _MODEL = re.compile(r"^Model:\s*(\S+)", re.MULTILINE)
 # show chassis hardware の1行目。LLDP 表の "Chassis Id" 見出しを拾わないよう、
 # シリアルらしい英数字の並びだけを対象にする
