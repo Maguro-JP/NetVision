@@ -34,8 +34,23 @@ _MODEL_FROM_VERSION = re.compile(r"#config-version=([A-Za-z0-9]+)-")
 _SERIAL = re.compile(r"^\s*Serial[- ]Number\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 
+#: FortiOS だと言い切れる見出し。設定の一部だけを貼られることは多いので、
+#: 先頭の #config-version= が無くても、ここで拾えるようにしておく
+_FORTI_SECTIONS = re.compile(
+    r"^\s*config (?:system global|system interface|router static|firewall policy"
+    r"|firewall address|firewall addrgrp|firewall service custom|system ha"
+    r"|vpn ipsec phase1-interface|system dhcp server)\b",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: FortiOS はブロックを字下げでは閉じない。end / next で閉じる形が揃って
+#: 出てくることを、見出しと合わせて確かめる
+_FORTI_CLOSERS = re.compile(r"^\s*(?:next|end)\s*$", re.MULTILINE)
+
+
 def detect(text: str) -> Vendor | None:
-    if "#config-version=" in text or re.search(r"^config system global", text, re.MULTILINE):
+    if "#config-version=" in text:
+        return Vendor.FORTINET
+    if _FORTI_SECTIONS.search(text) and _FORTI_CLOSERS.search(text):
         return Vendor.FORTINET
     return None
 
