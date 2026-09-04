@@ -279,7 +279,44 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
                 prefix = to_prefix(network.group(1), network.group(2), wildcard=False)
                 if prefix and prefix not in bgp.networks:
                     bgp.networks.append(prefix)
+        _inherit_peer_groups(bgp)
         parsed.bgp = bgp
+
+
+#: 雛形から相手へ引き継がれる設定。相手側に書いてあれば、そちらが勝つ
+_PEER_GROUP_INHERITED = (
+    "remote_as",
+    "update_source",
+    "route_map_in",
+    "route_map_out",
+    "prefix_list_in",
+    "prefix_list_out",
+    "filter_list_in",
+    "filter_list_out",
+    "ebgp_multihop",
+    "maximum_prefix",
+)
+
+
+def _inherit_peer_groups(bgp: ParsedBgp) -> None:
+    """peer-group に書いた内容を、そこに属する相手へ写す。
+
+    IOS は雛形に1回書けば、属する相手すべてに効く。写しておかないと
+    「この相手だけ remote-as が無い」と、無いものを有ると言ってしまう。
+    """
+    templates = {n.address: n for n in bgp.neighbors if n.is_peer_group}
+    if not templates:
+        return
+    for neighbor in bgp.neighbors:
+        template = templates.get(neighbor.peer_group or "")
+        if template is None or template is neighbor:
+            continue
+        for name in _PEER_GROUP_INHERITED:
+            if getattr(neighbor, name) is None:
+                setattr(neighbor, name, getattr(template, name))
+        for name in ("next_hop_self", "password"):
+            if getattr(template, name):
+                setattr(neighbor, name, True)
 
 
 def _bgp_option(bgp: ParsedBgp, line: str) -> bool:
@@ -329,6 +366,10 @@ def _add_neighbor(bgp: ParsedBgp, address: str, rest: str, family: str | None = 
         bgp.neighbors.append(found)
     if family and family not in found.address_families:
         found.address_families.append(family)
+
+    if re.match(r"^peer-group\s*$", rest, re.IGNORECASE):
+        found.is_peer_group = True
+        return
 
     for pattern, name in _NEIGHBOR_FLAGS:
         match = re.match(pattern, rest, re.IGNORECASE)

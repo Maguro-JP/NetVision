@@ -125,15 +125,19 @@ def _bgp(parsed: ParsedConfig) -> list[Finding]:
     findings: list[Finding] = []
     tools = _names(parsed, "route-map") | _names(parsed, "prefix-list")
 
-    for neighbor in bgp.neighbors:
+    # peer-group の行は雛形であって相手ではない。中身は相手側へ写してあるので、
+    # ここで数えると同じ指摘が雛形の分だけ増える
+    neighbors = [n for n in bgp.neighbors if not n.is_peer_group]
+
+    for neighbor in neighbors:
         findings.extend(_bgp_neighbor(bgp, neighbor, tools))
 
     missing_ibgp = [
         neighbor.address
-        for neighbor in bgp.neighbors
+        for neighbor in neighbors
         if not neighbor.is_ebgp(bgp.local_as) and neighbor.remote_as and not neighbor.next_hop_self
     ]
-    has_ebgp = any(n.is_ebgp(bgp.local_as) for n in bgp.neighbors)
+    has_ebgp = any(n.is_ebgp(bgp.local_as) for n in neighbors)
     if has_ebgp and missing_ibgp:
         findings.append(
             _note(
@@ -147,7 +151,7 @@ def _bgp(parsed: ParsedConfig) -> list[Finding]:
         )
 
     logs_anyway = parsed.vendor.value in _LOGS_BGP_BY_DEFAULT
-    if not bgp.log_neighbor_changes and bgp.neighbors and not logs_anyway:
+    if not bgp.log_neighbor_changes and neighbors and not logs_anyway:
         findings.append(
             _note(
                 LOW,

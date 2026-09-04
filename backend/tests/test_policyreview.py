@@ -639,3 +639,49 @@ def test_the_same_missing_acl_on_one_port_is_said_once():
         + "interface GigabitEthernet0/1\n ip access-group 101 in\n ip access-group 101 out\n"
     )
     assert len([f for f in _review_with_text(text) if "当てた ACL" in f.title]) == 1
+
+
+def test_peer_group_settings_reach_the_neighbors_in_it() -> None:
+    """peer-group に書いた内容は、そこに属する相手にも効いている。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "router bgp 65001",
+            " neighbor PEERS peer-group",
+            " neighbor PEERS remote-as 65003",
+            " neighbor PEERS update-source Loopback0",
+            " neighbor PEERS route-map IN in",
+            " neighbor 10.0.0.6 peer-group PEERS",
+            " neighbor 10.0.0.7 peer-group PEERS",
+            " neighbor 10.0.0.7 route-map SPECIAL in",
+        ]
+    )
+    bgp = configparse.parse(text).bgp
+    assert bgp is not None
+    peers = {n.address: n for n in bgp.neighbors}
+    assert peers["PEERS"].is_peer_group is True
+    assert peers["10.0.0.6"].remote_as == "65003"
+    assert peers["10.0.0.6"].update_source == "Loopback0"
+    assert peers["10.0.0.6"].route_map_in == "IN"
+    # 相手側に書いてあるほうが勝つ
+    assert peers["10.0.0.7"].route_map_in == "SPECIAL"
+
+
+def test_the_peer_group_line_itself_is_not_counted_as_a_neighbor() -> None:
+    """雛形の行を相手として数えると、同じ指摘が余分に出る。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "router bgp 65001",
+            " neighbor PEERS peer-group",
+            " neighbor PEERS remote-as 65003",
+            " neighbor 10.0.0.6 peer-group PEERS",
+        ]
+    )
+    parsed = configparse.parse(text)
+    mentions = [
+        finding.title
+        for finding in policyreview.review(parsed)
+        if "PEERS" in finding.title or any("PEERS" in line for line in finding.evidence)
+    ]
+    assert mentions == []
