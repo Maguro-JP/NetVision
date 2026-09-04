@@ -470,3 +470,60 @@ def test_adding_a_line_to_a_numbered_acl_carries_no_such_warning():
     target = current + "access-list 99 permit 10.0.1.0 0.0.0.255\n"
     result = build(current, target, "cisco_ios")
     assert not any("まるごと消える" in risk for risk in result.risks)
+
+
+_FORTI_CURRENT = """config system global
+    set hostname fw1
+end
+config firewall address
+    edit "INSIDE"
+        set subnet 10.0.0.0 255.255.0.0
+    next
+end
+config firewall policy
+    edit 1
+        set name "out"
+        set service "ALL"
+    next
+end
+"""
+
+
+def test_fortios_commands_close_their_blocks():
+    """FortiOS は字下げでは閉じない。閉じる語が無いと、そのまま貼れない。"""
+    target = _FORTI_CURRENT.replace('        set service "ALL"\n', '        set service "HTTPS"\n')
+    result = build(_FORTI_CURRENT, target, "fortinet")
+    assert result.verified
+    lines = result.script.strip().splitlines()
+    assert lines[0].strip() == "config firewall policy"
+    assert lines[-1].strip() == "end"
+    assert any(line.strip() == "next" for line in lines)
+
+
+def test_fortios_closes_each_block_before_opening_the_next():
+    target = _FORTI_CURRENT.replace(
+        '    edit "INSIDE"\n        set subnet 10.0.0.0 255.255.0.0\n    next\n',
+        '    edit "INSIDE"\n        set subnet 10.0.0.0 255.255.0.0\n    next\n'
+        '    edit "DMZ"\n        set subnet 172.16.0.0 255.255.255.0\n    next\n',
+    ).replace('        set service "ALL"\n', '        set service "HTTPS"\n')
+    result = build(_FORTI_CURRENT, target, "fortinet")
+    assert result.verified
+    script = result.script
+    # 2つ目のブロックが始まる前に、1つ目が閉じている
+    assert script.index("end") < script.index("config firewall policy")
+
+
+def test_the_closing_words_are_not_read_back_as_settings():
+    """`next` / `end` を設定として読むと、検証がずれる。"""
+    target = _FORTI_CURRENT.replace('        set service "ALL"\n', '        set service "HTTPS"\n')
+    result = build(_FORTI_CURRENT, target, "fortinet")
+    assert result.verified
+    assert result.mismatches == []
+
+
+def test_other_vendors_are_still_rendered_by_indentation():
+    current = "hostname a\ninterface Gi0/1\n description old\n"
+    target = "hostname a\ninterface Gi0/1\n description new\n"
+    script = build(current, target, "cisco_ios").script
+    assert "end" not in script
+    assert "next" not in script

@@ -100,15 +100,22 @@ class DiffResult:
     removed: int = 0
     changed: int = 0
 
+    #: 描き出し方（機種ごとに閉じる語が要る）。build() が入れる
+    dialect: object | None = None
+
     @property
     def script(self) -> str:
-        body = "\n".join(c.rendered for c in self.commands)
-        return body + "\n" if body else ""
+        return self._render(self.commands)
 
     @property
     def rollback_script(self) -> str:
-        body = "\n".join(c.rendered for c in self.rollback)
-        return body + "\n" if body else ""
+        return self._render(self.rollback)
+
+    def _render(self, commands: list[Command]) -> str:
+        lines = [c.rendered for c in commands]
+        if self.dialect is not None:
+            return self.dialect.render_script(lines)  # type: ignore[attr-defined]
+        return "\n".join(lines) + "\n" if lines else ""
 
     @property
     def is_empty(self) -> bool:
@@ -292,7 +299,7 @@ def build(current_text: str, target_text: str, vendor: str | None = None) -> Dif
     current = normalize(tree.parse(current_text, dialect), dialect)
     target = normalize(tree.parse(target_text, dialect), dialect)
 
-    result = DiffResult()
+    result = DiffResult(dialect=dialect)
     result.commands = _diff_block(current, target, (), 0, dialect, result)
 
     # 逆向き（将来 → 現行）が切り戻し
