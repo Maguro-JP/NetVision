@@ -28,7 +28,11 @@ _SHOW_VERSION = re.compile(
 _NXOS_VERSION = re.compile(r"^\s*(?:NXOS|system):?\s*version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _MODEL_NUMBER = re.compile(r"^\s*Model [Nn]umber\s*:\s*(\S+)", re.MULTILINE)
 _CHASSIS = re.compile(r"^\s*cisco\s+(\S+)\s*\(", re.MULTILINE)
-_SERIAL = re.compile(r"^\s*System [Ss]erial [Nn]umber\s*:\s*(\S+)", re.MULTILINE)
+#: IOS は `System serial number:`、NX-OS は `Processor Board ID`。
+#: 保守契約の照合に使う値なので、どちらの書き方でも拾う
+_SERIAL = re.compile(
+    r"^\s*(?:System [Ss]erial [Nn]umber\s*:|Processor Board ID)\s*(\S+)", re.MULTILINE
+)
 _PID_SN = re.compile(r"PID:\s*(\S+)\s*,.*?SN:\s*(\S+)")
 
 #: 末尾に何も続かない形だけ。show の見出し（Interface  IP-Address …）を取り違えない

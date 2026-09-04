@@ -56,3 +56,31 @@ def test_the_version_is_read(name: str, text: str, expected: str):
 
 def test_a_config_without_a_version_says_so_instead_of_guessing():
     assert configparse.parse("hostname sw1\ninterface Vlan10\n").os_version is None
+
+
+SERIALS = [
+    ("Cisco IOS", "hostname sw1\nSystem serial number: FOC2401A001\n", "FOC2401A001"),
+    (
+        "Cisco NX-OS",
+        "hostname nx1\nversion 9.3(10)\n  Processor Board ID FDO24010ABC\n",
+        "FDO24010ABC",
+    ),
+    (
+        "FortiGate",
+        "#config-version=FGT100F-7.2.8-FW-build1639-230929:opmode=0\n"
+        "config system global\n set hostname fw1\nend\nSerial-Number: FGT100FTK12345678\n",
+        "FGT100FTK12345678",
+    ),
+    (
+        "ASA",
+        ": Saved\nASA Version 9.16(4)\nhostname fw\nSerial Number: JMX1234ABCD\n",
+        "JMX1234ABCD",
+    ),
+    ("ヤマハ", "# RTX1210 Rev.14.01.41\n# Serial=S12345678\nconsole prompt rtx1\n", "S12345678"),
+]
+
+
+@pytest.mark.parametrize(("name", "text", "expected"), SERIALS, ids=[case[0] for case in SERIALS])
+def test_the_serial_number_is_read(name: str, text: str, expected: str):
+    """保守契約や交換の照合に使う。空だと台帳の突き合わせができない。"""
+    assert configparse.parse(text).serial_number == expected, name

@@ -30,6 +30,8 @@ _HOSTNAME = re.compile(r'^\s*set hostname\s+"?([^"\n]+)"?', re.MULTILINE)
 #: 貼るときに後ろを切られていることがあるので、コロンまでを必須にしない
 _VERSION = re.compile(r"#config-version=([\w.\-]+)", re.MULTILINE)
 _MODEL_FROM_VERSION = re.compile(r"#config-version=([A-Za-z0-9]+)-")
+#: `Serial-Number: FGT100FTK12345678`。保守契約の照合に使う
+_SERIAL = re.compile(r"^\s*Serial[- ]Number\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 
 def detect(text: str) -> Vendor | None:
@@ -56,6 +58,10 @@ def parse(text: str) -> ParsedConfig:
     match = _MODEL_FROM_VERSION.search(text)
     if match:
         parsed.model = match.group(1)
+
+    serial = _SERIAL.search(text)
+    if serial:
+        parsed.serial_number = serial.group(1)
 
     _parse_interfaces(text, parsed)
     _parse_vdoms(text, parsed)
