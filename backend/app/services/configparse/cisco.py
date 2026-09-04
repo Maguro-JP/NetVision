@@ -47,9 +47,22 @@ _RANGE_PART = re.compile(
 _VLAN_DEF = re.compile(r"^vlan\s+([\d,\s-]+)$", re.IGNORECASE)
 
 
+#: NX-OS にしか出てこない書き方。`feature` を1つも使っていない設定でも、
+#: ここに当たれば NX-OS と言える。取り違えると、版数の照合先が IOS になる
+_NXOS_MARKERS = re.compile(
+    r"^\s*(?:vpc domain\s|peer-keepalive\s|ip router ospf\s+\S+\s+area\s"
+    r"|hsrp\s+version\s|boot nxos\s|system jumbomtu\s)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def detect(text: str) -> Vendor | None:
     lowered = text.lower()
-    if "nxos" in lowered or re.search(r"^feature\s", text, re.MULTILINE | re.IGNORECASE):
+    if (
+        "nxos" in lowered
+        or re.search(r"^feature\s", text, re.MULTILINE | re.IGNORECASE)
+        or _NXOS_MARKERS.search(text)
+    ):
         return Vendor.CISCO_NXOS
     if _HOSTNAME.search(text) or "ios software" in lowered or "ios-xe" in lowered:
         return Vendor.CISCO_IOS

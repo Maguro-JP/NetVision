@@ -77,3 +77,33 @@ def test_the_ports_and_vlans_are_read():
     assert ports["Ethernet1/1"].lag_group == 1
     assert ports["Port-channel1"].trunk_vlans == [10, 20]
     assert ports["Vlan10"].ip_address == "10.0.10.2/24"
+
+
+def test_nxos_is_recognised_without_the_word_feature() -> None:
+    """feature を1つも使っていない設定でも、NX-OS の書き方で見分ける。"""
+    text = "\n".join(
+        [
+            "hostname n9k",
+            "interface Vlan100",
+            "  ip address 10.100.0.2/24",
+            "  hsrp version 2",
+            "  hsrp 100",
+            "    ip 10.100.0.1",
+            "vpc domain 1",
+            "  peer-keepalive destination 10.255.0.2 source 10.255.0.1",
+        ]
+    )
+    assert configparse.parse(text).vendor is configparse.Vendor.CISCO_NXOS
+
+
+def test_a_catalyst_config_is_still_ios() -> None:
+    """standby や switchport だけの設定を NX-OS に寄せてしまわない。"""
+    text = "\n".join(
+        [
+            "hostname c3850",
+            "interface GigabitEthernet1/0/1",
+            " switchport mode access",
+            " standby 1 ip 10.0.0.1",
+        ]
+    )
+    assert configparse.parse(text).vendor is configparse.Vendor.CISCO_IOS
