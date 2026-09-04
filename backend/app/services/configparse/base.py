@@ -63,6 +63,9 @@ class ParsedInterface:
     lag_group: int | None = None
     #: 束ね方（active / passive / on）。両端で食い違うと束にならない
     lag_mode: str | None = None
+    #: 実際に束に入っているか（show etherchannel summary の印）。
+    #: 設定してあっても入っていないことがあり、そのときは帯域が出ない
+    lag_bundled: bool | None = None
     #: 1回に送れる大きさ。両端で違うと、大きい荷物だけが通らない。
     #: 「だいたい動くのに、たまに固まる」といういちばん厄介な形になる
     mtu: int | None = None

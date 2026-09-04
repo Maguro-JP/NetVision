@@ -87,6 +87,7 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_nxos(lines[index + 1 :], parsed)
     _read_forti_physical(lines, parsed)
     _read_paragraphs(lines, parsed)
+    _read_etherchannel(lines, parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -262,3 +263,55 @@ def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
         # Reason 列に Administratively down と出るものは止めてある口
         reason = " ".join(columns[5:]).lower()
         port.link_state = "disabled" if "administratively" in reason else status
+
+
+#: `show etherchannel summary` の表。設定してあっても束に入っていないことがある
+_ETHERCHANNEL_HEADER = re.compile(r"^\s*Group\s+Port-channel\s+Protocol\s+Ports\s*$", re.IGNORECASE)
+_ETHERCHANNEL_ROW = re.compile(
+    r"^\s*(?P<group>\d+)\s+(?P<channel>\S+)\s+(?P<protocol>\S+)\s+(?P<ports>.*)$"
+)
+_MEMBER = re.compile(r"^(?P<name>\S+?)\((?P<flag>[A-Za-z]+)\)$")
+
+
+def _read_etherchannel(lines: list[str], parsed: ParsedConfig) -> None:
+    """束ねた口が、実際に束に入っているかを読む。
+
+    設定だけ見ると束ねてあるように見えても、速度や相手の設定が合わないと
+    入らない。入っていない口は帯域に数えられていないので、「倍あるはず」が
+    出ていない形になる。印の意味は P / bundled が入っている、それ以外は
+    入っていない。
+    """
+    inside = False
+    group: int | None = None
+    for line in lines:
+        if _ETHERCHANNEL_HEADER.match(line):
+            inside, group = True, None
+            continue
+        if not inside:
+            continue
+        if not line.strip():
+            inside = False
+            continue
+        if set(line.strip()) <= {"-", "+", " "}:
+            continue
+
+        row = _ETHERCHANNEL_ROW.match(line)
+        members = ""
+        if row:
+            group = int(row.group("group"))
+            members = row.group("ports")
+        elif group is not None and line.startswith(" "):
+            members = line  # 口が多いと次の行へ続く
+        else:
+            continue
+
+        for word in members.split():
+            found = _MEMBER.match(word)
+            if not found:
+                continue
+            port = _port(parsed, found.group("name"))
+            if port is None:
+                continue
+            if port.lag_group is None and group is not None:
+                port.lag_group = group
+            port.lag_bundled = found.group("flag").lower() in {"p", "bndl"}

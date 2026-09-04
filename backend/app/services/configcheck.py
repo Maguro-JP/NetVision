@@ -219,6 +219,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
+    found.extend(_bundles(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
     return _sorted(found)
@@ -312,6 +313,32 @@ def _operability(parsed: ParsedConfig, covered: set[str]) -> list[Finding]:
             )
         )
     return out
+
+
+def _bundles(parsed: ParsedConfig) -> list[Finding]:
+    """束ねた口が、実際に束に入っているか。
+
+    設定だけ見ると束ねてあるように見えても、速度や相手側の設定が合わないと
+    入らない。入っていない口は帯域に数えられていないので、「倍あるはず」が
+    出ていないまま動き続ける。落ちるわけではないので、気づかれにくい。
+    """
+    outside = [
+        port
+        for port in parsed.interfaces
+        if port.lag_group is not None and port.lag_bundled is False
+    ]
+    if not outside:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="束ねた口のうち、実際には束に入っていないものがあります",
+            why="設定は束ねてありますが、機器の側では束に入っていません。"
+            "速度や相手側の設定が合っていないと、こうなります。落ちるわけでは"
+            "ないので気づかれませんが、帯域はその分だけ出ていません。",
+            evidence=[f"{port.name}（束 {port.lag_group}）" for port in outside[:5]],
+        )
+    ]
 
 
 def _layer2(parsed: ParsedConfig) -> list[Finding]:

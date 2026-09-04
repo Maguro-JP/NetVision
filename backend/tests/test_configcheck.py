@@ -656,3 +656,35 @@ def test_a_management_line_without_authentication_is_called_out(db_session):
     text = "hostname sw1\nline vty 0 4\n transport input ssh\n no login\n"
     result = configcheck.check(db_session, text)
     assert any("認証を求めていません" in title for title in _titles(result))
+
+
+_BUNDLE = """hostname sw1
+interface GigabitEthernet1/0/47
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/48
+ channel-group 1 mode active
+!
+show etherchannel summary
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/47(P)  Gi1/0/48(s)
+"""
+
+
+def test_a_bundled_port_that_never_joined_is_called_out(db_session):
+    """落ちるわけではないので気づかれないが、帯域はその分だけ出ていない。"""
+    result = configcheck.check(db_session, _BUNDLE)
+    titles = _titles(result)
+    assert any("束に入っていないもの" in title for title in titles)
+
+
+def test_a_bundle_where_everyone_joined_says_nothing(db_session):
+    result = configcheck.check(db_session, _BUNDLE.replace("Gi1/0/48(s)", "Gi1/0/48(P)"))
+    assert not any("束に入っていない" in title for title in _titles(result))
+
+
+def test_without_the_show_output_we_do_not_guess(db_session):
+    text = "hostname sw1\ninterface GigabitEthernet1/0/47\n channel-group 1 mode active\n"
+    result = configcheck.check(db_session, text)
+    assert not any("束に入っていない" in title for title in _titles(result))
