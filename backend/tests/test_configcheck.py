@@ -725,3 +725,36 @@ def test_a_port_blocked_by_stp_is_shown(db_session):
 def test_a_forwarding_port_is_not_reported_as_blocked(db_session):
     result = configcheck.check(db_session, _STP.replace("BLK", "FWD"))
     assert not any("塞いでいる口" in row.title for row in result.findings)
+
+
+_CRC = """hostname sw1
+interface GigabitEthernet0/1
+ switchport mode access
+!
+interface GigabitEthernet0/2
+ switchport mode access
+!
+show interfaces
+GigabitEthernet0/1 is up, line protocol is up (connected)
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec
+     31337 input errors, 31337 CRC, 0 frame, 0 overrun, 0 ignored
+     0 output errors, 0 collisions, 2 interface resets
+GigabitEthernet0/2 is up, line protocol is up (connected)
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored
+     0 output errors, 0 collisions, 0 interface resets
+"""
+
+
+def test_a_port_receiving_broken_frames_is_called_out(db_session):
+    """線・光・二重の食い違いでしか増えない。Config からは分からない。"""
+    result = configcheck.check(db_session, _CRC)
+    hit = next((row for row in result.findings if "壊れていた通信" in row.title), None)
+    assert hit is not None
+    assert hit.evidence == ["GigabitEthernet0/1: 31337 件"]
+
+
+def test_clean_counters_say_nothing(db_session):
+    text = _CRC.replace("31337 input errors, 31337 CRC", "0 input errors, 0 CRC")
+    result = configcheck.check(db_session, text)
+    assert not any("壊れていた通信" in row.title for row in result.findings)

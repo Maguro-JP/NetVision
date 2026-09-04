@@ -229,20 +229,30 @@ def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
             current = None
 
 
+#: `31337 input errors, 31337 CRC, ...` の行。数え始めからの累計
+_CRC_LINE = re.compile(r"^(?P<errors>\d+)\s+input errors,\s*(?P<crc>\d+)\s+CRC\b", re.IGNORECASE)
+
+
 def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
-    """`show interfaces` の段落。1行目だけで状態が分かる。"""
+    """`show interfaces` の段落。状態と、受けたときに壊れていた数を読む。"""
+    current: ParsedInterface | None = None
     for raw in lines:
         found = _PARAGRAPH.match(raw.strip())
-        if not found:
+        if found:
+            current = _port(parsed, found.group(1))
+            if current is None:
+                continue
+            admin, protocol = found.group(2).lower(), found.group(3).lower()
+            if admin == "administratively down":
+                current.link_state = "disabled"
+            else:
+                current.link_state = "up" if admin == "up" and protocol == "up" else "down"
             continue
-        port = _port(parsed, found.group(1))
-        if port is None:
+        if current is None:
             continue
-        admin, protocol = found.group(2).lower(), found.group(3).lower()
-        if admin == "administratively down":
-            port.link_state = "disabled"
-        else:
-            port.link_state = "up" if admin == "up" and protocol == "up" else "down"
+        counters = _CRC_LINE.match(raw.strip())
+        if counters:
+            current.input_crc_errors = int(counters.group("crc"))
 
 
 def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:

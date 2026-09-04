@@ -221,6 +221,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_layer2(parsed))
     found.extend(_bundles(parsed))
     found.extend(_blocked_ports(parsed))
+    found.extend(_broken_lines(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
     return _sorted(found)
@@ -362,6 +363,33 @@ def _blocked_ports(parsed: ParsedConfig) -> list[Finding]:
                 f"{port.name}: VLAN {', '.join(str(v) for v in port.stp_blocked_vlans[:6])}"
                 for port in blocked[:5]
             ],
+        )
+    ]
+
+
+def _broken_lines(parsed: ParsedConfig) -> list[Finding]:
+    """受けたときに壊れていた数（CRC）。
+
+    線・光・二重の食い違いでしか増えない。Config からは絶対に分からないので、
+    show の出力があるときだけ言える。数え始めからの累計なので、いつからかは
+    分からない。数字をそのまま出して、確かめ方を添える。
+    """
+    broken = [
+        port
+        for port in parsed.interfaces
+        if port.input_crc_errors is not None and port.input_crc_errors > 0
+    ]
+    if not broken:
+        return []
+    broken.sort(key=lambda port: port.input_crc_errors or 0, reverse=True)
+    return [
+        Finding(
+            level=MEDIUM,
+            title="受けたときに壊れていた通信がある口があります",
+            why="線・光の劣化か、両端の二重（duplex）の食い違いでしか増えません。"
+            "通信はできてしまうので、遅い・たまに切れるという形で出ます。"
+            "数え始めからの累計なので、一度 0 に戻してから増え方を見てください。",
+            evidence=[f"{port.name}: {port.input_crc_errors} 件" for port in broken[:5]],
         )
     ]
 
