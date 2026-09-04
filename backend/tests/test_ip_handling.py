@@ -497,3 +497,36 @@ def test_a_trunk_port_is_not_turned_into_an_access_port_by_the_table():
 
 def test_a_config_without_the_table_is_unchanged():
     assert configparse.parse("hostname sw1\nvlan 10\n name USERS\n").vlans == {10: "USERS"}
+
+
+def test_route_keywords_do_not_become_the_distance() -> None:
+    """name / tag / track の後ろの値を、距離やインタフェースと取り違えない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "ip route 0.0.0.0 0.0.0.0 10.0.10.254 name DEFAULT 100",
+            "ip route 10.20.0.0 255.255.0.0 GigabitEthernet0/1 10.0.10.253 track 10",
+            "ip route 10.30.0.0 255.255.0.0 10.0.10.252 210 tag 7",
+        ]
+    )
+    routes = {r.destination: r for r in configparse.parse(text).routes}
+    assert routes["0.0.0.0/0"].interface is None
+    assert routes["0.0.0.0/0"].distance == 100
+    assert routes["10.20.0.0/16"].interface == "GigabitEthernet0/1"
+    assert routes["10.20.0.0/16"].distance is None
+    assert routes["10.30.0.0/16"].distance == 210
+
+
+def test_ipv6_static_routes_are_read() -> None:
+    """IPv6 の静的経路も、IPv4 と同じように経路として残す。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "ipv6 route 2001:db8::/32 2001:db8:0:1::1",
+            "ipv6 route vrf CUST 2001:db8:1::/48 GigabitEthernet0/2 2001:db8:0:2::1 200",
+        ]
+    )
+    routes = {r.destination: r for r in configparse.parse(text).routes}
+    assert routes["2001:db8::/32"].next_hop == "2001:db8:0:1::1"
+    assert routes["2001:db8:1::/48"].vrf == "CUST"
+    assert routes["2001:db8:1::/48"].distance == 200

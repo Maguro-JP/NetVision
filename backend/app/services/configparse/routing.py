@@ -134,6 +134,11 @@ _IOS_ROUTE = re.compile(
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)\s+(?P<mask>\d+\.\d+\.\d+\.\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+_IOS_ROUTE6 = re.compile(
+    r"^ipv6 route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
+    r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
 _IOS_ROUTER_OSPF = re.compile(r"^router ospf\s+(\S+)", re.IGNORECASE)
 _IOS_ROUTER_BGP = re.compile(r"^router bgp\s+(\S+)", re.IGNORECASE)
 _IOS_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
@@ -157,14 +162,45 @@ def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
-        for token in match.group("rest").split():
-            if _is_ip(token):
-                route.next_hop = token
-            elif token.isdigit():
-                route.distance = int(token)
-            elif re.match(r"^[A-Za-z]", token) and token.lower() not in {"name", "tag", "track"}:
-                route.interface = expand(token)
+        _read_route_options(match.group("rest"), route)
         parsed.routes.append(route)
+
+    for line in text.splitlines():
+        match = _IOS_ROUTE6.match(line.strip())
+        if not match:
+            continue
+        destination = to_prefix(match.group("dest"))
+        if destination is None:
+            continue
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        _read_route_options(match.group("rest"), route)
+        parsed.routes.append(route)
+
+
+# name / tag / track は後ろに値を連れている。値まで読み飛ばさないと、
+# その数字をアドミニストレイティブディスタンスと取り違える
+_ROUTE_KEYWORDS_WITH_VALUE = {"name", "tag", "track", "metric"}
+_ROUTE_KEYWORDS = {"permanent", "global", "multicast", "unicast", "dhcp"}
+
+
+def _read_route_options(rest: str, route: ParsedRoute) -> None:
+    tokens = rest.split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        lowered = token.lower()
+        index += 1
+        if lowered in _ROUTE_KEYWORDS_WITH_VALUE:
+            index += 1
+            continue
+        if lowered in _ROUTE_KEYWORDS:
+            continue
+        if _is_ip(token):
+            route.next_hop = token
+        elif token.isdigit():
+            route.distance = int(token)
+        elif re.match(r"^[A-Za-z]", token):
+            route.interface = expand(token)
 
 
 def _cisco_ospf(text: str, parsed: ParsedConfig) -> None:
