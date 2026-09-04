@@ -88,6 +88,7 @@ def parse(text: str, parsed: ParsedConfig) -> None:
     _read_forti_physical(lines, parsed)
     _read_paragraphs(lines, parsed)
     _read_etherchannel(lines, parsed)
+    _read_spanning_tree(lines, parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -315,3 +316,45 @@ def _read_etherchannel(lines: list[str], parsed: ParsedConfig) -> None:
             if port.lag_group is None and group is not None:
                 port.lag_group = group
             port.lag_bundled = found.group("flag").lower() in {"p", "bndl"}
+
+
+#: `show spanning-tree` の口ごとの表。塞いでいる口はここでしか分からない
+_STP_VLAN = re.compile(r"^VLAN0*(\d{1,4})\s*$")
+_STP_TABLE = re.compile(r"^\s*Interface\s+Role\s+Sts\s+Cost\b", re.IGNORECASE)
+_STP_ROW = re.compile(r"^\s*(?P<name>\S+)\s+(?P<role>\S+)\s+(?P<state>[A-Z]{3})\b")
+
+
+def _read_spanning_tree(lines: list[str], parsed: ParsedConfig) -> None:
+    """STP が塞いでいる口を読む。
+
+    冗長のために塞いでいるなら正常だが、「線はつながっているのに通らない」の
+    原因はここであることが多い。設定からは分からないので、show の出力からしか
+    言えない。
+    """
+    vlan: int | None = None
+    inside = False
+    for line in lines:
+        head = _STP_VLAN.match(line.strip())
+        if head:
+            vlan, inside = int(head.group(1)), False
+            continue
+        if _STP_TABLE.match(line):
+            inside = True
+            continue
+        if not inside:
+            continue
+        if not line.strip() or set(line.strip()) <= {"-", " "}:
+            if not line.strip():
+                inside = False
+            continue
+        row = _STP_ROW.match(line)
+        if row is None:
+            inside = False
+            continue
+        if row.group("state").upper() != "BLK":
+            continue
+        port = _port(parsed, row.group("name"))
+        if port is None or vlan is None:
+            continue
+        if vlan not in port.stp_blocked_vlans:
+            port.stp_blocked_vlans.append(vlan)

@@ -66,6 +66,9 @@ class ParsedInterface:
     #: 実際に束に入っているか（show etherchannel summary の印）。
     #: 設定してあっても入っていないことがあり、そのときは帯域が出ない
     lag_bundled: bool | None = None
+    #: STP が塞いでいる VLAN（show spanning-tree の BLK）。
+    #: 冗長のために正常なこともあるが、「通らない」の原因はここが多い
+    stp_blocked_vlans: list[int] = field(default_factory=list)
     #: 1回に送れる大きさ。両端で違うと、大きい荷物だけが通らない。
     #: 「だいたい動くのに、たまに固まる」といういちばん厄介な形になる
     mtu: int | None = None

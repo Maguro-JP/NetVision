@@ -688,3 +688,40 @@ def test_without_the_show_output_we_do_not_guess(db_session):
     text = "hostname sw1\ninterface GigabitEthernet1/0/47\n channel-group 1 mode active\n"
     result = configcheck.check(db_session, text)
     assert not any("束に入っていない" in title for title in _titles(result))
+
+
+_STP = """hostname sw1
+interface GigabitEthernet0/1
+ switchport mode trunk
+!
+interface GigabitEthernet0/3
+ switchport mode trunk
+!
+show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/1               Root FWD 4         128.1    P2p
+Gi0/3               Altn BLK 19        128.3    P2p
+
+VLAN0020
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/3               Altn BLK 19        128.3    P2p
+"""
+
+
+def test_a_port_blocked_by_stp_is_shown(db_session):
+    """「つながっているのに通らない」の原因はここが多い。設定では分からない。"""
+    result = configcheck.check(db_session, _STP)
+    hit = next((row for row in result.findings if "塞いでいる口" in row.title), None)
+    assert hit is not None
+    assert hit.evidence == ["GigabitEthernet0/3: VLAN 10, 20"]
+
+
+def test_a_forwarding_port_is_not_reported_as_blocked(db_session):
+    result = configcheck.check(db_session, _STP.replace("BLK", "FWD"))
+    assert not any("塞いでいる口" in row.title for row in result.findings)

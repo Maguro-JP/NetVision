@@ -220,6 +220,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
     found.extend(_bundles(parsed))
+    found.extend(_blocked_ports(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
     return _sorted(found)
@@ -337,6 +338,30 @@ def _bundles(parsed: ParsedConfig) -> list[Finding]:
             "速度や相手側の設定が合っていないと、こうなります。落ちるわけでは"
             "ないので気づかれませんが、帯域はその分だけ出ていません。",
             evidence=[f"{port.name}（束 {port.lag_group}）" for port in outside[:5]],
+        )
+    ]
+
+
+def _blocked_ports(parsed: ParsedConfig) -> list[Finding]:
+    """STP が塞いでいる口。
+
+    冗長のために塞いでいるなら正常。ただし「線はつながっているのに通らない」の
+    原因はここであることが多く、設定を見ても分からない。分かる形で出しておく。
+    """
+    blocked = [port for port in parsed.interfaces if port.stp_blocked_vlans]
+    if not blocked:
+        return []
+    return [
+        Finding(
+            level=LOW,
+            title="STP が塞いでいる口があります",
+            why="輪になっている経路を止めるために塞いでいるので、冗長の構成なら"
+            "正常です。片方の線しか使っていないように見えるのはこのためです。"
+            "意図していない口が塞がっている場合は、優先度の設計を見直してください。",
+            evidence=[
+                f"{port.name}: VLAN {', '.join(str(v) for v in port.stp_blocked_vlans[:6])}"
+                for port in blocked[:5]
+            ],
         )
     ]
 
