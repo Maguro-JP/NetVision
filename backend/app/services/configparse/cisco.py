@@ -18,6 +18,7 @@ from app.services.configparse.base import (
     ParsedVrf,
     Vendor,
 )
+from app.services.configparse.ifname import expand
 
 _HOSTNAME = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VERSION_LINE = re.compile(r"^version\s+(\S+)", re.IGNORECASE)
@@ -397,6 +398,64 @@ def _prefix_length(netmask: str) -> int:
         return 32
 
 
+#: `show vlan brief` の表。VLAN の定義と、どの口が入っているかが一度に分かる
+_VLAN_BRIEF_ROW = re.compile(
+    r"^(?P<id>\d{1,4})\s{2,}(?P<name>\S+)\s{2,}(?P<state>\S+)\s*(?P<ports>.*)$"
+)
+_VLAN_BRIEF_HEAD = re.compile(r"^VLAN\s+Name\s+Status\s+Ports\s*$", re.IGNORECASE)
+
+
+def _parse_vlan_brief(text: str, parsed: ParsedConfig) -> None:
+    """`show vlan brief` を読む。
+
+    Config に `vlan` の定義を書かない機種・書き方でも、この表があれば
+    その機器にどの VLAN があり、どの口が入っているかが分かる。現場では
+    Config と一緒に貼られることが多い。
+    """
+    inside = False
+    current: int | None = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if _VLAN_BRIEF_HEAD.match(line.strip()):
+            inside, current = True, None
+            continue
+        if not inside:
+            continue
+        if not line.strip():
+            # 表の終わり。空行が2つ続くこともあるので、区切りで抜ける
+            inside, current = False, None
+            continue
+        if set(line.strip()) <= {"-", " "}:
+            continue
+
+        row = _VLAN_BRIEF_ROW.match(line)
+        if row:
+            current = int(row.group("id"))
+            if not 1 <= current <= 4094:
+                current = None
+                continue
+            name = row.group("name")
+            existing = parsed.vlans.get(current)
+            if not existing:
+                parsed.vlans[current] = "" if name.lower() == "default" else name
+            _brief_ports(parsed, current, row.group("ports"))
+            continue
+        if current is not None and line.startswith(" "):
+            # 口が多いと次の行へ続く
+            _brief_ports(parsed, current, line)
+
+
+def _brief_ports(parsed: ParsedConfig, vlan: int, text: str) -> None:
+    for word in text.replace(",", " ").split():
+        name = expand(word)
+        if not name or not name[0].isalpha():
+            continue
+        port = parsed.add_interface(ParsedInterface(name=name))
+        if port.vlan is None and port.mode != "trunk":
+            port.vlan = vlan
+            port.mode = port.mode or "access"
+
+
 def _vlan_numbers(text: str) -> list[int]:
     """`10,20,30` や `100-110` を、番号の並びにする。"""
     out: list[int] = []
@@ -419,6 +478,7 @@ def _vlan_numbers(text: str) -> list[int]:
 
 
 def _parse_vlans(text: str, parsed: ParsedConfig) -> None:
+    _parse_vlan_brief(text, parsed)
     current: int | None = None
     for raw in text.splitlines():
         stripped = raw.strip()
