@@ -87,6 +87,8 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_nxos(lines[index + 1 :], parsed)
     _read_forti_physical(lines, parsed)
     _read_paragraphs(lines, parsed)
+    _read_etherchannel(lines, parsed)
+    _read_spanning_tree(lines, parsed)
 
 
 def _port(parsed: ParsedConfig, name: str) -> ParsedInterface | None:
@@ -227,20 +229,30 @@ def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
             current = None
 
 
+#: `31337 input errors, 31337 CRC, ...` の行。数え始めからの累計
+_CRC_LINE = re.compile(r"^(?P<errors>\d+)\s+input errors,\s*(?P<crc>\d+)\s+CRC\b", re.IGNORECASE)
+
+
 def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
-    """`show interfaces` の段落。1行目だけで状態が分かる。"""
+    """`show interfaces` の段落。状態と、受けたときに壊れていた数を読む。"""
+    current: ParsedInterface | None = None
     for raw in lines:
         found = _PARAGRAPH.match(raw.strip())
-        if not found:
+        if found:
+            current = _port(parsed, found.group(1))
+            if current is None:
+                continue
+            admin, protocol = found.group(2).lower(), found.group(3).lower()
+            if admin == "administratively down":
+                current.link_state = "disabled"
+            else:
+                current.link_state = "up" if admin == "up" and protocol == "up" else "down"
             continue
-        port = _port(parsed, found.group(1))
-        if port is None:
+        if current is None:
             continue
-        admin, protocol = found.group(2).lower(), found.group(3).lower()
-        if admin == "administratively down":
-            port.link_state = "disabled"
-        else:
-            port.link_state = "up" if admin == "up" and protocol == "up" else "down"
+        counters = _CRC_LINE.match(raw.strip())
+        if counters:
+            current.input_crc_errors = int(counters.group("crc"))
 
 
 def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
@@ -262,3 +274,97 @@ def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
         # Reason 列に Administratively down と出るものは止めてある口
         reason = " ".join(columns[5:]).lower()
         port.link_state = "disabled" if "administratively" in reason else status
+
+
+#: `show etherchannel summary` の表。設定してあっても束に入っていないことがある
+_ETHERCHANNEL_HEADER = re.compile(r"^\s*Group\s+Port-channel\s+Protocol\s+Ports\s*$", re.IGNORECASE)
+_ETHERCHANNEL_ROW = re.compile(
+    r"^\s*(?P<group>\d+)\s+(?P<channel>\S+)\s+(?P<protocol>\S+)\s+(?P<ports>.*)$"
+)
+_MEMBER = re.compile(r"^(?P<name>\S+?)\((?P<flag>[A-Za-z]+)\)$")
+
+
+def _read_etherchannel(lines: list[str], parsed: ParsedConfig) -> None:
+    """束ねた口が、実際に束に入っているかを読む。
+
+    設定だけ見ると束ねてあるように見えても、速度や相手の設定が合わないと
+    入らない。入っていない口は帯域に数えられていないので、「倍あるはず」が
+    出ていない形になる。印の意味は P / bundled が入っている、それ以外は
+    入っていない。
+    """
+    inside = False
+    group: int | None = None
+    for line in lines:
+        if _ETHERCHANNEL_HEADER.match(line):
+            inside, group = True, None
+            continue
+        if not inside:
+            continue
+        if not line.strip():
+            inside = False
+            continue
+        if set(line.strip()) <= {"-", "+", " "}:
+            continue
+
+        row = _ETHERCHANNEL_ROW.match(line)
+        members = ""
+        if row:
+            group = int(row.group("group"))
+            members = row.group("ports")
+        elif group is not None and line.startswith(" "):
+            members = line  # 口が多いと次の行へ続く
+        else:
+            continue
+
+        for word in members.split():
+            found = _MEMBER.match(word)
+            if not found:
+                continue
+            port = _port(parsed, found.group("name"))
+            if port is None:
+                continue
+            if port.lag_group is None and group is not None:
+                port.lag_group = group
+            port.lag_bundled = found.group("flag").lower() in {"p", "bndl"}
+
+
+#: `show spanning-tree` の口ごとの表。塞いでいる口はここでしか分からない
+_STP_VLAN = re.compile(r"^VLAN0*(\d{1,4})\s*$")
+_STP_TABLE = re.compile(r"^\s*Interface\s+Role\s+Sts\s+Cost\b", re.IGNORECASE)
+_STP_ROW = re.compile(r"^\s*(?P<name>\S+)\s+(?P<role>\S+)\s+(?P<state>[A-Z]{3})\b")
+
+
+def _read_spanning_tree(lines: list[str], parsed: ParsedConfig) -> None:
+    """STP が塞いでいる口を読む。
+
+    冗長のために塞いでいるなら正常だが、「線はつながっているのに通らない」の
+    原因はここであることが多い。設定からは分からないので、show の出力からしか
+    言えない。
+    """
+    vlan: int | None = None
+    inside = False
+    for line in lines:
+        head = _STP_VLAN.match(line.strip())
+        if head:
+            vlan, inside = int(head.group(1)), False
+            continue
+        if _STP_TABLE.match(line):
+            inside = True
+            continue
+        if not inside:
+            continue
+        if not line.strip() or set(line.strip()) <= {"-", " "}:
+            if not line.strip():
+                inside = False
+            continue
+        row = _STP_ROW.match(line)
+        if row is None:
+            inside = False
+            continue
+        if row.group("state").upper() != "BLK":
+            continue
+        port = _port(parsed, row.group("name"))
+        if port is None or vlan is None:
+            continue
+        if vlan not in port.stp_blocked_vlans:
+            port.stp_blocked_vlans.append(vlan)

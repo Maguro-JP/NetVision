@@ -42,6 +42,8 @@ _HOSTNAME = re.compile(
 )
 _MODEL = re.compile(r"^model:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _VERSION = re.compile(r"^sw-version:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+#: 書き出した XML の見出し。show を付けずに設定だけ渡されたときの手掛かり
+_XML_VERSION = re.compile(r"<config[^>]*\bversion=\"([\d.]+)\"", re.IGNORECASE)
 _SERIAL = re.compile(r"^serial:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 
 
@@ -62,6 +64,7 @@ def detect(text: str) -> Vendor | None:
 
 
 def parse(text: str) -> ParsedConfig:
+    original = text
     if _looks_like_xml(text):
         text = to_set_format(text)
     parsed = ParsedConfig(vendor=Vendor.PALO_ALTO, os_name="PAN-OS")
@@ -73,6 +76,11 @@ def parse(text: str) -> ParsedConfig:
         found = pattern.search(text)
         if found:
             setattr(parsed, name, found.group(1))
+    if parsed.os_version is None:
+        # 書き出した XML の見出しにしか版が無いことがある
+        found = _XML_VERSION.search(original)
+        if found:
+            parsed.os_version = found.group(1)
 
     lines = _lines(text)
     values = _address_values(lines)

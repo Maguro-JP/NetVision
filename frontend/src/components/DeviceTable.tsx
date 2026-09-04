@@ -3,7 +3,12 @@ import { Link } from "react-router-dom";
 
 import WindowLink, { deviceWindow } from "./WindowLink";
 import type { Device } from "../api/types";
-import { DEVICE_STATUS_LABEL, DEVICE_TYPE_LABEL, formatDate, formatRemaining } from "../lib/format";
+import {
+  DEVICE_STATUS_LABEL,
+  DEVICE_TYPE_LABEL,
+  formatDate,
+  formatRemaining,
+} from "../lib/format";
 import SeverityBadge from "./SeverityBadge";
 
 /** 列。並び順は見る頻度の順で、状態を左に置く。
@@ -146,11 +151,15 @@ export default function DeviceTable({
             </td>
             <td>{DEVICE_TYPE_LABEL[d.device_type]}</td>
             <td>
-              {d.vendor || <Blank label="メーカー" />} / {d.model || <Blank label="型番" />}
+              {d.vendor || <Blank label="メーカー" />} /{" "}
+              {d.model || <Blank label="型番" />}
             </td>
             <td className="muted">
               {d.site_id ? (
-                <Link to={`/topology?site=${d.site_id}`} title="この拠点だけの構成図を開きます">
+                <Link
+                  to={`/topology?site=${d.site_id}`}
+                  title="この拠点だけの構成図を開きます"
+                >
                   {d.site_name ?? "—"}
                 </Link>
               ) : (
@@ -166,8 +175,21 @@ export default function DeviceTable({
               </span>
             </td>
             <td className="nowrap">
-              {formatDate(d.eol_date)}
-              <span className="muted"> ({formatRemaining(d.lifecycle.days_to_eol)})</span>
+              {/* 機器に日付が無ければ型番から引いた日付。残り日数と食い違わせない */}
+              {formatDate(d.lifecycle.effective_eol_date)}
+              <span className="muted">
+                {" "}
+                ({formatRemaining(d.lifecycle.days_to_eol)})
+              </span>
+              {d.lifecycle.eol_source === "product" && (
+                <span
+                  className="muted"
+                  title="機器に日付が入っていないので、型番の情報を使っています"
+                >
+                  {" "}
+                  型番から
+                </span>
+              )}
             </td>
           </tr>
         ))}

@@ -219,6 +219,9 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hygiene(parsed, text))
     found.extend(_operability(parsed, covered or set()))
     found.extend(_layer2(parsed))
+    found.extend(_bundles(parsed))
+    found.extend(_blocked_ports(parsed))
+    found.extend(_broken_lines(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
     return _sorted(found)
@@ -312,6 +315,83 @@ def _operability(parsed: ParsedConfig, covered: set[str]) -> list[Finding]:
             )
         )
     return out
+
+
+def _bundles(parsed: ParsedConfig) -> list[Finding]:
+    """束ねた口が、実際に束に入っているか。
+
+    設定だけ見ると束ねてあるように見えても、速度や相手側の設定が合わないと
+    入らない。入っていない口は帯域に数えられていないので、「倍あるはず」が
+    出ていないまま動き続ける。落ちるわけではないので、気づかれにくい。
+    """
+    outside = [
+        port
+        for port in parsed.interfaces
+        if port.lag_group is not None and port.lag_bundled is False
+    ]
+    if not outside:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="束ねた口のうち、実際には束に入っていないものがあります",
+            why="設定は束ねてありますが、機器の側では束に入っていません。"
+            "速度や相手側の設定が合っていないと、こうなります。落ちるわけでは"
+            "ないので気づかれませんが、帯域はその分だけ出ていません。",
+            evidence=[f"{port.name}（束 {port.lag_group}）" for port in outside[:5]],
+        )
+    ]
+
+
+def _blocked_ports(parsed: ParsedConfig) -> list[Finding]:
+    """STP が塞いでいる口。
+
+    冗長のために塞いでいるなら正常。ただし「線はつながっているのに通らない」の
+    原因はここであることが多く、設定を見ても分からない。分かる形で出しておく。
+    """
+    blocked = [port for port in parsed.interfaces if port.stp_blocked_vlans]
+    if not blocked:
+        return []
+    return [
+        Finding(
+            level=LOW,
+            title="STP が塞いでいる口があります",
+            why="輪になっている経路を止めるために塞いでいるので、冗長の構成なら"
+            "正常です。片方の線しか使っていないように見えるのはこのためです。"
+            "意図していない口が塞がっている場合は、優先度の設計を見直してください。",
+            evidence=[
+                f"{port.name}: VLAN {', '.join(str(v) for v in port.stp_blocked_vlans[:6])}"
+                for port in blocked[:5]
+            ],
+        )
+    ]
+
+
+def _broken_lines(parsed: ParsedConfig) -> list[Finding]:
+    """受けたときに壊れていた数（CRC）。
+
+    線・光・二重の食い違いでしか増えない。Config からは絶対に分からないので、
+    show の出力があるときだけ言える。数え始めからの累計なので、いつからかは
+    分からない。数字をそのまま出して、確かめ方を添える。
+    """
+    broken = [
+        port
+        for port in parsed.interfaces
+        if port.input_crc_errors is not None and port.input_crc_errors > 0
+    ]
+    if not broken:
+        return []
+    broken.sort(key=lambda port: port.input_crc_errors or 0, reverse=True)
+    return [
+        Finding(
+            level=MEDIUM,
+            title="受けたときに壊れていた通信がある口があります",
+            why="線・光の劣化か、両端の二重（duplex）の食い違いでしか増えません。"
+            "通信はできてしまうので、遅い・たまに切れるという形で出ます。"
+            "数え始めからの累計なので、一度 0 に戻してから増え方を見てください。",
+            evidence=[f"{port.name}: {port.input_crc_errors} 件" for port in broken[:5]],
+        )
+    ]
 
 
 def _layer2(parsed: ParsedConfig) -> list[Finding]:

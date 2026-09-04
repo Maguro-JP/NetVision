@@ -467,7 +467,7 @@ def _seed_reference(db) -> tuple[int, int, int]:
     """
     from pathlib import Path
 
-    from app.services import exposure, reference
+    from app.services import exposure_schedule, reference
     from app.services.tablefile import read_table
 
     folder = Path(__file__).resolve().parent / "demo_reference"
@@ -484,7 +484,11 @@ def _seed_reference(db) -> tuple[int, int, int]:
         result = reference.import_vulnerabilities(db, json_path.read_bytes())
         vulnerabilities = result.created + result.updated
 
-    matched = exposure.sync(db).created if (products or vulnerabilities) else 0
+    matched = (
+        exposure_schedule.run(db, trigger="取り込み").created
+        if (products or vulnerabilities)
+        else 0
+    )
     return products, vulnerabilities, matched
 
 

@@ -442,3 +442,58 @@ interface GigabitEthernet0/0/0.99
     assert ports["GigabitEthernet0/0/0.20"].vlan == 20
     assert ports["GigabitEthernet0/0/0.99"].native_vlan == 99
     assert ports["GigabitEthernet0/0/0.10"].carried_vlans() == {10}
+
+
+# ---------------------------------------------------------------------------
+# Config と一緒に貼られる show の出力
+# ---------------------------------------------------------------------------
+
+_VLAN_BRIEF = """hostname sw1
+interface GigabitEthernet0/1
+ switchport mode access
+!
+show vlan brief
+
+VLAN Name                             Status    Ports
+---- -------------------------------- --------- -------------------------------
+1    default                          active    Gi0/24
+10   USERS                            active    Gi0/1, Gi0/2, Gi0/3
+20   SERVERS                          active    Gi0/10, Gi0/11, Gi0/12, Gi0/13,
+                                                Gi0/14
+999  UNUSED                           active
+
+"""
+
+
+def test_the_vlan_table_gives_the_definitions():
+    """Config に vlan を書かない機種でも、この表があれば台帳を埋められる。"""
+    assert configparse.parse(_VLAN_BRIEF).vlans == {
+        1: "",
+        10: "USERS",
+        20: "SERVERS",
+        999: "UNUSED",
+    }
+
+
+def test_the_vlan_table_says_which_ports_are_in_each_vlan():
+    ports = {item.name: item for item in configparse.parse(_VLAN_BRIEF).interfaces}
+    assert ports["GigabitEthernet0/2"].vlan == 10
+    assert ports["GigabitEthernet0/10"].vlan == 20
+    # 口が多くて次の行へ折り返した分も拾う
+    assert ports["GigabitEthernet0/14"].vlan == 20
+
+
+def test_a_trunk_port_is_not_turned_into_an_access_port_by_the_table():
+    """表には主VLANしか出ない。Config で読んだトランクを上書きしない。"""
+    text = _VLAN_BRIEF.replace(
+        "interface GigabitEthernet0/1\n switchport mode access\n",
+        "interface GigabitEthernet0/1\n switchport mode trunk\n"
+        " switchport trunk allowed vlan 10,20\n",
+    )
+    port = {item.name: item for item in configparse.parse(text).interfaces}["GigabitEthernet0/1"]
+    assert port.mode == "trunk"
+    assert port.trunk_vlans == [10, 20]
+
+
+def test_a_config_without_the_table_is_unchanged():
+    assert configparse.parse("hostname sw1\nvlan 10\n name USERS\n").vlans == {10: "USERS"}

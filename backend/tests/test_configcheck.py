@@ -656,3 +656,105 @@ def test_a_management_line_without_authentication_is_called_out(db_session):
     text = "hostname sw1\nline vty 0 4\n transport input ssh\n no login\n"
     result = configcheck.check(db_session, text)
     assert any("認証を求めていません" in title for title in _titles(result))
+
+
+_BUNDLE = """hostname sw1
+interface GigabitEthernet1/0/47
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/48
+ channel-group 1 mode active
+!
+show etherchannel summary
+Group  Port-channel  Protocol    Ports
+------+-------------+-----------+-----------------------------------------------
+1      Po1(SU)         LACP      Gi1/0/47(P)  Gi1/0/48(s)
+"""
+
+
+def test_a_bundled_port_that_never_joined_is_called_out(db_session):
+    """落ちるわけではないので気づかれないが、帯域はその分だけ出ていない。"""
+    result = configcheck.check(db_session, _BUNDLE)
+    titles = _titles(result)
+    assert any("束に入っていないもの" in title for title in titles)
+
+
+def test_a_bundle_where_everyone_joined_says_nothing(db_session):
+    result = configcheck.check(db_session, _BUNDLE.replace("Gi1/0/48(s)", "Gi1/0/48(P)"))
+    assert not any("束に入っていない" in title for title in _titles(result))
+
+
+def test_without_the_show_output_we_do_not_guess(db_session):
+    text = "hostname sw1\ninterface GigabitEthernet1/0/47\n channel-group 1 mode active\n"
+    result = configcheck.check(db_session, text)
+    assert not any("束に入っていない" in title for title in _titles(result))
+
+
+_STP = """hostname sw1
+interface GigabitEthernet0/1
+ switchport mode trunk
+!
+interface GigabitEthernet0/3
+ switchport mode trunk
+!
+show spanning-tree
+
+VLAN0010
+  Spanning tree enabled protocol rstp
+
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/1               Root FWD 4         128.1    P2p
+Gi0/3               Altn BLK 19        128.3    P2p
+
+VLAN0020
+Interface           Role Sts Cost      Prio.Nbr Type
+------------------- ---- --- --------- -------- --------------------------------
+Gi0/3               Altn BLK 19        128.3    P2p
+"""
+
+
+def test_a_port_blocked_by_stp_is_shown(db_session):
+    """「つながっているのに通らない」の原因はここが多い。設定では分からない。"""
+    result = configcheck.check(db_session, _STP)
+    hit = next((row for row in result.findings if "塞いでいる口" in row.title), None)
+    assert hit is not None
+    assert hit.evidence == ["GigabitEthernet0/3: VLAN 10, 20"]
+
+
+def test_a_forwarding_port_is_not_reported_as_blocked(db_session):
+    result = configcheck.check(db_session, _STP.replace("BLK", "FWD"))
+    assert not any("塞いでいる口" in row.title for row in result.findings)
+
+
+_CRC = """hostname sw1
+interface GigabitEthernet0/1
+ switchport mode access
+!
+interface GigabitEthernet0/2
+ switchport mode access
+!
+show interfaces
+GigabitEthernet0/1 is up, line protocol is up (connected)
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec
+     31337 input errors, 31337 CRC, 0 frame, 0 overrun, 0 ignored
+     0 output errors, 0 collisions, 2 interface resets
+GigabitEthernet0/2 is up, line protocol is up (connected)
+  MTU 1500 bytes, BW 1000000 Kbit/sec, DLY 10 usec
+     0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored
+     0 output errors, 0 collisions, 0 interface resets
+"""
+
+
+def test_a_port_receiving_broken_frames_is_called_out(db_session):
+    """線・光・二重の食い違いでしか増えない。Config からは分からない。"""
+    result = configcheck.check(db_session, _CRC)
+    hit = next((row for row in result.findings if "壊れていた通信" in row.title), None)
+    assert hit is not None
+    assert hit.evidence == ["GigabitEthernet0/1: 31337 件"]
+
+
+def test_clean_counters_say_nothing(db_session):
+    text = _CRC.replace("31337 input errors, 31337 CRC", "0 input errors, 0 CRC")
+    result = configcheck.check(db_session, text)
+    assert not any("壊れていた通信" in row.title for row in result.findings)

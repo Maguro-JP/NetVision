@@ -67,6 +67,9 @@ _QX_MODEL = re.compile(r"\b(?:NEC\s+)?(QX-S\d+\w*)\b", re.IGNORECASE)
 _QX_COMWARE_VERSION = re.compile(
     r"Comware\s+(?:Software|Platform Software).*?Version\s+([\w.]+)", re.IGNORECASE | re.DOTALL
 )
+#: 設定の先頭に出る ` version 7.1.070, Release 3506P05`。show を付けずに
+#: 設定だけ貼られたときは、版が分かるのはこの行しかない
+_QX_CONFIG_VERSION = re.compile(r"^\s*version\s+(\d[\w.]*)(?:,|\s|$)", re.IGNORECASE | re.MULTILINE)
 _QX_SYSNAME = re.compile(r'^\s*sysname\s+"?([^"\n]+?)"?\s*$', re.IGNORECASE | re.MULTILINE)
 _HOSTNAME_CMD = re.compile(r"^\s*hostname\s+\S+", re.IGNORECASE | re.MULTILINE)
 _IX_IFACE = re.compile(r"^interface\s+GigaEthernet", re.IGNORECASE | re.MULTILINE)
@@ -551,7 +554,7 @@ def _parse_qx(text: str) -> ParsedConfig:
     if model:
         parsed.model = model.group(1)
 
-    version = _QX_COMWARE_VERSION.search(text)
+    version = _QX_COMWARE_VERSION.search(text) or _QX_CONFIG_VERSION.search(text)
     if version:
         parsed.os_version = version.group(1)
 

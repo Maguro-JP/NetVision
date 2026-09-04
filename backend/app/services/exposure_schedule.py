@@ -23,6 +23,8 @@ from app.services import exposure as service
 logger = logging.getLogger(__name__)
 
 SETTING_KEY = "exposure_sync_hours"
+#: 最後に洗い直した記録の置き場所。動かし直しても画面から消えないようにする
+LAST_RUN_KEY = "exposure_sync_last"
 DEFAULT_HOURS = 24
 MAX_HOURS = 24 * 30
 
@@ -63,27 +65,70 @@ def run(db: Session, *, trigger: str = "manual") -> service.SyncResult:
     after = service.summary(db).unhandled
     if after > before:
         result.messages.append(f"未対応が {before} 件から {after} 件に増えました")
+    record = LastRun(
+        ran_at=datetime.now(UTC),
+        trigger=trigger,
+        unhandled_before=before,
+        unhandled_after=after,
+        messages=list(result.messages),
+    )
     with _lock:
-        _last = LastRun(
-            ran_at=datetime.now(UTC),
-            trigger=trigger,
-            unhandled_before=before,
-            unhandled_after=after,
-            messages=list(result.messages),
-        )
+        _last = record
+    _remember(record)
     return result
+
+
+def _remember(record: LastRun) -> None:
+    """記録をファイルにも残す。動かし直すと消えるのでは、いつのものか分からない。"""
+    try:
+        appsettings.set_value(
+            LAST_RUN_KEY,
+            {
+                "ran_at": record.ran_at.isoformat(),
+                "trigger": record.trigger,
+                "unhandled_before": record.unhandled_before,
+                "unhandled_after": record.unhandled_after,
+                "messages": record.messages,
+            },
+        )
+    except RuntimeError:
+        # 書けなくても、洗い直しそのものは終わっている
+        logger.warning("洗い直しの記録を残せませんでした")
+
+
+def _restore() -> LastRun | None:
+    saved = appsettings.load().get(LAST_RUN_KEY)
+    if not isinstance(saved, dict):
+        return None
+    try:
+        ran_at = datetime.fromisoformat(str(saved.get("ran_at")))
+    except ValueError:
+        return None
+    if ran_at.tzinfo is None:
+        ran_at = ran_at.replace(tzinfo=UTC)
+    messages = saved.get("messages")
+    return LastRun(
+        ran_at=ran_at,
+        trigger=str(saved.get("trigger") or "manual"),
+        unhandled_before=int(saved.get("unhandled_before") or 0),
+        unhandled_after=int(saved.get("unhandled_after") or 0),
+        messages=[str(m) for m in messages] if isinstance(messages, list) else [],
+    )
 
 
 def last_run() -> LastRun | None:
     with _lock:
-        return _last
+        if _last is not None:
+            return _last
+    return _restore()
 
 
 def next_run_at() -> datetime | None:
     hours = interval_hours()
     if hours == 0 or _thread is None or not _thread.is_alive():
         return None
-    base = _last.ran_at if _last is not None else _started_at
+    found = last_run()
+    base = max(found.ran_at, _started_at) if found is not None else _started_at
     return base + timedelta(hours=hours)
 
 
