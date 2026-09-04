@@ -450,3 +450,23 @@ ip access-list extended BLOCK
 """
     lines = build(ACL_CURRENT, target).script.splitlines()
     assert lines[0] == "no ip access-list extended BLOCK"
+
+
+def test_removing_one_line_of_a_numbered_acl_carries_a_warning():
+    """番号で書いた ACL は、1行を指定しても中身がまるごと消える機種がある。"""
+    current = (
+        "hostname a\n"
+        "access-list 99 permit 10.0.0.0 0.0.0.255\n"
+        "access-list 99 permit 10.0.1.0 0.0.0.255\n"
+    )
+    target = "hostname a\naccess-list 99 permit 10.0.0.0 0.0.0.255\n"
+    result = build(current, target, "cisco_ios")
+    assert result.verified
+    assert any("まるごと消える" in risk for risk in result.risks)
+
+
+def test_adding_a_line_to_a_numbered_acl_carries_no_such_warning():
+    current = "hostname a\naccess-list 99 permit 10.0.0.0 0.0.0.255\n"
+    target = current + "access-list 99 permit 10.0.1.0 0.0.0.255\n"
+    result = build(current, target, "cisco_ios")
+    assert not any("まるごと消える" in risk for risk in result.risks)

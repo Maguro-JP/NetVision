@@ -155,6 +155,12 @@ _CISCO = Dialect(
             "ACL を作り直します。消してから入れ直すまでの間、フィルターが効きません",
         ),
         RiskRule(
+            # 番号で書く ACL は、1行だけ消すつもりでも全体が消える機種がある
+            re.compile(r"^\s*no\s+access-list\s+\d+\s+\S", re.I),
+            "番号で書いた ACL は、1行を指定しても中身がまるごと消える機種があります。"
+            "残したい行も一緒に消えるので、入れ直す手順まで用意してください",
+        ),
+        RiskRule(
             re.compile(r"^\s*no\s+(?:username|aaa|line\s+vty|snmp-server)\b", re.I),
             "管理アクセスに関わる設定を消します。締め出しに注意してください",
         ),
