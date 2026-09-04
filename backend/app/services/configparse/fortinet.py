@@ -26,7 +26,9 @@ from app.services.configparse.base import (
 )
 
 _HOSTNAME = re.compile(r'^\s*set hostname\s+"?([^"\n]+)"?', re.MULTILINE)
-_VERSION = re.compile(r"#config-version=([\w.\-]+):", re.MULTILINE)
+#: 実物は `#config-version=FGT100F-7.2.8-FW-build1639-230929:opmode=0` の形。
+#: 貼るときに後ろを切られていることがあるので、コロンまでを必須にしない
+_VERSION = re.compile(r"#config-version=([\w.\-]+)", re.MULTILINE)
 _MODEL_FROM_VERSION = re.compile(r"#config-version=([A-Za-z0-9]+)-")
 
 
@@ -45,8 +47,9 @@ def parse(text: str) -> ParsedConfig:
 
     match = _VERSION.search(text)
     if match:
-        # 例: FGT100F-7.2.8-FW-build1639-230926 → 7.2.8
-        version = re.search(r"-(\d+\.\d+\.\d+)-", match.group(1) + "-")
+        # 例: FGT100F-7.2.8-FW-build1639-230926 → 7.2.8。
+        # 版が 7.2 までしか書かれていないこともある
+        version = re.search(r"-(\d+\.\d+(?:\.\d+)?)(?:-|$)", match.group(1))
         if version:
             parsed.os_version = version.group(1)
 
