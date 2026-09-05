@@ -407,3 +407,30 @@ def test_the_range_an_ipsec_map_points_at_is_not_called_unused():
     parsed = configparse.parse(text)
     found = [f.title for f in policyreview.review(parsed, text)]
     assert not [t for t in found if "ipsec-acl" in t and "当たっていません" in t]
+
+
+def test_the_ix_default_route_is_read():
+    """IX の既定経路は宛先を書かず default と書く。
+
+    支店のルーターでいちばん大事な1本で、読めないと「既定の経路が
+    見当たりません」を書いてある機器にまで出してしまう。
+    """
+    text = """IX Series IX2215 (magellan-sec) Software, Version 10.6.21
+device-name aichi-rt-01
+!
+ip route default GigaEthernet0.0 10.1.0.254
+ip route 192.168.20.0/24 10.1.0.253
+ipv6 route default GigaEthernet0.0 2001:db8::1
+!
+interface GigaEthernet0.0
+  ip address 10.1.0.1/24
+  no shutdown
+"""
+    parsed = configparse.parse(text)
+    assert parsed.vendor is Vendor.NEC_IX
+    routes = {r.destination: r for r in parsed.routes}
+    assert routes["0.0.0.0/0"].next_hop == "10.1.0.254"
+    assert routes["0.0.0.0/0"].interface == "GigaEthernet0.0"
+    assert routes["::/0"].next_hop == "2001:db8::1"
+    # 宛先を書く形も、これまで通り読める
+    assert routes["192.168.20.0/24"].next_hop == "10.1.0.253"
