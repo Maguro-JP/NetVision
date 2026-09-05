@@ -281,3 +281,45 @@ def test_the_same_vendor_written_differently_is_counted_once(db_session):
     assert devices["vend-sw-03"] == "Cisco"
     # 知らない名前は書き換えない。こちらで決められることではない
     assert devices["vend-rt-01"] == "ｎｅｃ風の知らない名前"
+
+
+def test_japanese_era_dates_are_read():
+    """台帳、とくに官公庁や古い社内様式では和暦がふつうに出てくる。
+
+    読めないとその行がまるごと取り込めない。保守期限が和暦で書いてある
+    だけで、その機器が期限の判定から漏れる。
+    """
+    assert parse_date("令和5年4月1日") == date(2023, 4, 1)
+    assert parse_date("令和元年4月1日") == date(2019, 4, 1)
+    assert parse_date("R10.3.31") == date(2028, 3, 31)
+    assert parse_date("H31/3/31") == date(2019, 3, 31)
+    assert parse_date("平成31年3月31日") == date(2019, 3, 31)
+    assert parse_date("S60.1.1") == date(1985, 1, 1)
+    # 年月までなら月初として扱う（西暦のときと同じ）
+    assert parse_date("R5/4") == date(2023, 4, 1)
+
+
+def test_an_era_date_that_cannot_exist_is_not_guessed():
+    """読めないものを、当てずっぽうで埋めない。"""
+    for text in ("令和99年13月", "令和0年1月1日", "ただの文字"):
+        with pytest.raises(CellValueError):
+            parse_date(text)
+
+
+def test_common_ways_of_writing_the_status_are_read():
+    """台帳の書き方は現場ごとに違う。読めないと、その行が取り込めない。"""
+    for text in ("稼働", "稼動", "運用", "現用", "本番"):
+        assert parse_device_status(text) is DeviceStatus.ACTIVE, text
+    assert parse_device_status("待機中") is DeviceStatus.STANDBY
+    assert parse_device_status("保守") is DeviceStatus.MAINTENANCE
+    for text in ("廃棄済", "返却"):
+        assert parse_device_status(text) is DeviceStatus.RETIRED, text
+
+
+def test_an_ambiguous_status_is_not_guessed():
+    """「停止」は、一時的に止めているのか外したのかが読めない。
+
+    撤去として扱うと、その機器が期限の判定から静かに消える。
+    """
+    with pytest.raises(CellValueError):
+        parse_device_status("停止")

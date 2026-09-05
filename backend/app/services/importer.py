@@ -332,15 +332,22 @@ FIELD_CHOICES: dict[str, tuple[str, ...]] = {
 
 DEVICE_STATUS_ALIASES: dict[str, DeviceStatus] = {
     "active": DeviceStatus.ACTIVE,
+    "稼働": DeviceStatus.ACTIVE,
+    "稼動": DeviceStatus.ACTIVE,
     "稼働中": DeviceStatus.ACTIVE,
     "稼動中": DeviceStatus.ACTIVE,
+    "運用": DeviceStatus.ACTIVE,
     "運用中": DeviceStatus.ACTIVE,
     "使用中": DeviceStatus.ACTIVE,
+    "現用": DeviceStatus.ACTIVE,
+    "本番": DeviceStatus.ACTIVE,
     "standby": DeviceStatus.STANDBY,
     "予備": DeviceStatus.STANDBY,
     "予備機": DeviceStatus.STANDBY,
     "待機": DeviceStatus.STANDBY,
+    "待機中": DeviceStatus.STANDBY,
     "maintenance": DeviceStatus.MAINTENANCE,
+    "保守": DeviceStatus.MAINTENANCE,
     "保守中": DeviceStatus.MAINTENANCE,
     "保守作業中": DeviceStatus.MAINTENANCE,
     "retired": DeviceStatus.RETIRED,
@@ -348,7 +355,11 @@ DEVICE_STATUS_ALIASES: dict[str, DeviceStatus] = {
     "撤去済": DeviceStatus.RETIRED,
     "撤去済み": DeviceStatus.RETIRED,
     "廃棄": DeviceStatus.RETIRED,
+    "廃棄済": DeviceStatus.RETIRED,
     "廃止": DeviceStatus.RETIRED,
+    "返却": DeviceStatus.RETIRED,
+    # 「停止」は入れない。一時的に止めているのか、外したのかが読めない。
+    # 撤去として扱うと、期限の判定からその機器が消える
 }
 
 
@@ -396,6 +407,47 @@ _DATE_PATTERNS = (
 )
 
 
+#: 和暦の元号。台帳、とくに官公庁や古くからある社内様式では和暦がふつうに
+#: 出てくる。読めないと、その行がまるごと取り込めない。
+#: 値は「元年が西暦何年か」から1を引いた数（令和1年 = 2019年）
+_ERAS = {
+    "令和": 2018,
+    "令": 2018,
+    "R": 2018,
+    "平成": 1988,
+    "平": 1988,
+    "H": 1988,
+    "昭和": 1925,
+    "昭": 1925,
+    "S": 1925,
+}
+#: 令和5年4月1日 / R5.4.1 / H31/3/31 / 令和元年4月1日
+_WAREKI = re.compile(
+    r"^(?P<era>令和|令|R|平成|平|H|昭和|昭|S)\s*(?P<year>元|\d{1,2})\s*"
+    r"(?:年|[./-])\s*(?P<month>\d{1,2})\s*"
+    r"(?:(?:月|[./-])\s*(?P<day>\d{1,2})\s*日?)?$",
+    re.IGNORECASE,
+)
+
+
+def _parse_wareki(text: str) -> date | None:
+    """和暦を西暦にする。読めなければ None（読めないものを当てずっぽうで埋めない）。"""
+    match = _WAREKI.match(text)
+    if match is None:
+        return None
+    offset = _ERAS.get(match.group("era")) or _ERAS.get(match.group("era").upper())
+    if offset is None:
+        return None
+    era_year = 1 if match.group("year") == "元" else int(match.group("year"))
+    if era_year < 1:
+        return None
+    day = int(match.group("day")) if match.group("day") else 1
+    try:
+        return date(offset + era_year, int(match.group("month")), day)
+    except ValueError:
+        return None
+
+
 class CellValueError(ValueError):
     """セル値の変換に失敗したことを表す。"""
 
@@ -425,6 +477,10 @@ def parse_date(value: object) -> date | None:
             continue
         # 年月までの指定は月初として扱う
         return parsed
+
+    wareki = _parse_wareki(text)
+    if wareki is not None:
+        return wareki
     raise CellValueError(f"日付として解釈できません: '{value}'")
 
 
