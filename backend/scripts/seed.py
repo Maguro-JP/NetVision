@@ -530,4 +530,9 @@ def _seed_configs(db, by_host: dict) -> int:
 
 
 if __name__ == "__main__":
+    # 空の DB に対しても、そのまま動くようにしておく。表が無いまま INSERT すると
+    # SQLAlchemy の長い追跡が出るだけで、何をすればいいのか読み取れない
+    from app.bootstrap import apply_schema
+
+    apply_schema()
     seed(force="--force" in sys.argv)
