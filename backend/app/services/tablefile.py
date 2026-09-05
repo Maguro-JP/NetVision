@@ -11,7 +11,11 @@ import io
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-CSV_ENCODINGS = ("utf-8-sig", "cp932", "utf-8")
+from app.services import textencoding
+
+#: 判別は textencoding にまとめてある。cp932 と EUC-JP はお互いのバイト列を
+#: エラー無しに読めるので、順に試して最初に通ったものを採ると化ける
+CSV_ENCODINGS = textencoding.ENCODINGS
 
 
 class TableFileError(ValueError):
@@ -38,14 +42,14 @@ def read_table(filename: str, content: bytes) -> Table:
 
 
 def _decode(content: bytes) -> str:
-    for encoding in CSV_ENCODINGS:
-        try:
-            return content.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    raise TableFileError(
-        "文字コードを判別できませんでした（UTF-8 または Shift_JIS で保存してください）"
-    )
+    # 表は、化けた文字が1つ入るだけで台帳として使えなくなる。読めた分だけ
+    # 通すより、読めなかったと言って保存し直してもらうほうがよい
+    text = textencoding.best_effort(content)
+    if text is None:
+        raise TableFileError(
+            "文字コードを判別できませんでした（UTF-8 または Shift_JIS で保存してください）"
+        )
+    return text
 
 
 def _read_csv(content: bytes, delimiter: str | None = None) -> Table:

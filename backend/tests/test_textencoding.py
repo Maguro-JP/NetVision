@@ -31,3 +31,21 @@ def test_binary_noise_does_not_lose_the_readable_part() -> None:
     got = decode(raw)
     assert "hostname sw-01" in got
     assert "interface Gi1/0/1" in got
+
+
+def test_a_table_says_so_rather_than_passing_broken_text() -> None:
+    """表は、化けた文字が1つ入るだけで台帳として使えなくなる。
+
+    読めた分だけ通すより、読めなかったと言って保存し直してもらう。
+    """
+    import pytest
+
+    from app.services.tablefile import TableFileError, read_table
+
+    for encoding in ("utf-8", "utf-8-sig", "cp932", "euc_jp"):
+        table = read_table("ledger.csv", "ホスト名,拠点\nsw-01,本社\n".encode(encoding))
+        assert table.headers[:2] == ["ホスト名", "拠点"], encoding
+        assert table.rows[0]["拠点"] == "本社", encoding
+
+    with pytest.raises(TableFileError):
+        read_table("ledger.csv", b"host\x81 name")

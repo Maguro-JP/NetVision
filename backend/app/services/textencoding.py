@@ -31,11 +31,11 @@ def _oddness(text: str) -> int:
     return sum(1 for ch in text for low, high in _SUSPICIOUS if low <= ord(ch) <= high)
 
 
-def decode(raw: bytes) -> str:
-    """バイト列を文字にする。
+def best_effort(raw: bytes) -> str | None:
+    """読めたなら、いちばん化けていない読み方を返す。読めないなら None。
 
-    どれでも読めないときは、置き換え文字を混ぜてでも読めた分を返す。
-    show tech のように制御文字が混ざるものを、丸ごと落としたくないため。
+    表（台帳）のように、化けた文字が1つでも入ると使いものにならないもの
+    では、置き換え文字を混ぜて通すより、読めなかったと言うほうがよい。
     """
     best: tuple[int, int, str] | None = None
     for rank, encoding in enumerate(ENCODINGS):
@@ -50,6 +50,16 @@ def decode(raw: bytes) -> str:
         score = (_oddness(text), rank, text)
         if best is None or score[:2] < best[:2]:
             best = score
-    if best is not None:
-        return best[2]
+    return best[2] if best is not None else None
+
+
+def decode(raw: bytes) -> str:
+    """バイト列を文字にする。
+
+    どれでも読めないときは、置き換え文字を混ぜてでも読めた分を返す。
+    show tech のように制御文字が混ざるものを、丸ごと落としたくないため。
+    """
+    text = best_effort(raw)
+    if text is not None:
+        return text
     return raw.decode("utf-8", errors="replace")
