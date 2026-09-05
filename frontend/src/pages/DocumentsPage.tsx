@@ -276,7 +276,19 @@ export default function DocumentsPage() {
       )}
 
       {(documents ?? []).length === 0 ? (
-        <div className="empty">資料が登録されていません</div>
+        <div className="empty">
+          <p>資料が登録されていません。</p>
+          <p className="muted">
+            コマンドリファレンスやコンフィグレーションガイドを入れておくと、
+            機器を選んだときに、その型番とバージョンに合う資料だけが出ます。
+            テンプレートや弱点への対処から「どの資料を見て書いたか」を辿れる
+            ようにもなります。
+          </p>
+          <p className="muted">
+            古い版は消さずに残してください。現場では古いバージョンが現役で
+            動いていることがあり、消すとその機器の手引きが失われます。
+          </p>
+        </div>
       ) : (
         <table>
           <thead>
