@@ -15,7 +15,7 @@ from app.schemas.topology import (
     InterfaceRead,
 )
 from app.services import configs as service
-from app.services import secrets
+from app.services import secrets, textencoding
 from app.services.configparse import VENDOR_LABELS, Vendor
 
 router = APIRouter(prefix="/configs", tags=["configs"])
@@ -23,17 +23,10 @@ router = APIRouter(prefix="/configs", tags=["configs"])
 DbSession = Annotated[Session, Depends(get_db)]
 
 MAX_CONFIG_BYTES = 10 * 1024 * 1024
-CONFIG_ENCODINGS = ("utf-8-sig", "utf-8", "cp932")
-
-
-def _decode(content: bytes) -> str:
-    for encoding in CONFIG_ENCODINGS:
-        try:
-            return content.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    # 制御文字が混ざった show tech なども取りこぼさない
-    return content.decode("utf-8", errors="replace")
+#: 判別は textencoding にまとめてある。cp932 と EUC-JP はお互いのバイト列を
+#: エラー無しに読めるので、順に試して最初に通ったものを採ると化ける
+CONFIG_ENCODINGS = textencoding.ENCODINGS
+_decode = textencoding.decode
 
 
 def _to_read(result: service.IngestResult) -> IngestResultRead:

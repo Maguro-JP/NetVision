@@ -16,6 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.services import configcheck as service
+from app.services import textencoding
 
 router = APIRouter(tags=["config-check"])
 
@@ -72,14 +73,9 @@ def _read(result: service.CheckResult) -> CheckRead:
     )
 
 
-def _decode(raw: bytes) -> str:
-    """文字コードを当てる。現場の Config は Shift_JIS のこともある。"""
-    for encoding in ("utf-8-sig", "utf-8", "cp932"):
-        try:
-            return raw.decode(encoding)
-        except UnicodeDecodeError:
-            continue
-    return raw.decode("utf-8", errors="replace")
+#: 文字コードの判別は textencoding にまとめてある。cp932 と EUC-JP は
+#: お互いのバイト列をエラー無しに読めるので、順に試すだけでは化ける
+_decode = textencoding.decode
 
 
 @router.post("/config-check", response_model=CheckRead)
