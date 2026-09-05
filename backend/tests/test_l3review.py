@@ -80,7 +80,8 @@ def test_a_next_hop_nobody_can_reach_is_the_first_thing_flagged(db_session):
         "b" * 64,
     )
     report = l3review.review(db_session, device)
-    finding = next(f for f in report.findings if "届きません" in f.title)
+    finding = next(f for f in report.findings if "行けません" in f.title)
+    # 逃げ道になる既定経路が、その落ちている既定経路そのものしか無い
     assert finding.level == l3review.HIGH
     assert finding.why
     assert any("192.168.99.254" in line for line in finding.evidence)

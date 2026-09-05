@@ -24,8 +24,9 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass, field, replace
 from math import ceil
+from typing import Any
 
-from sqlalchemy import func, select
+from sqlalchemy import and_, func, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, DeviceVlan, DeviceVrf, Vlan
@@ -2810,16 +2811,21 @@ class TopologyStats:
 _ISOLATED_SAMPLE = 100
 
 
-def get_stats(db: Session, layer: str = DEFAULT_LAYER) -> TopologyStats:
+def get_stats(
+    db: Session, layer: str = DEFAULT_LAYER, *, only: set[int] | None = None
+) -> TopologyStats:
     """図の要約。数えるだけなので、図そのものは組み立てない。
 
     以前は全体のグラフを作ってから数えていた。数えるために16万台分の
     ノードとエッジを作ることになり、15秒かかっていた。数はすべて SQL の
     集計で出る。
+
+    `only` は図に描いている機器。拠点で絞って見ているのに全体の台数を
+    出すと、描いてある数と食い違う。読む側はどちらが本当なのか判断できない。
     """
     if layer != DEFAULT_LAYER:
         # 論理図など、SQL で数えられない層は今までどおり組み立てて数える
-        graph = get_graph(db, layer)
+        graph = get_graph(db, layer, only=only)
         connected = {e.source for e in graph.edges} | {e.target for e in graph.edges}
         isolated = sorted(n.hostname for n in graph.nodes if n.device_id not in connected)
         return TopologyStats(
@@ -2833,25 +2839,31 @@ def get_stats(db: Session, layer: str = DEFAULT_LAYER) -> TopologyStats:
         )
 
     alive = Device.status != DeviceStatus.RETIRED
+    if only is not None:
+        alive = and_(alive, Device.id.in_(only))
     device_count = db.scalar(select(func.count()).select_from(Device).where(alive)) or 0
 
-    link_count = db.scalar(select(func.count()).select_from(Link)) or 0
-    discovered = (
-        db.scalar(
-            select(func.count()).select_from(Link).where(Link.origin == LinkOrigin.DISCOVERED)
-        )
-        or 0
-    )
-    manual = (
-        db.scalar(select(func.count()).select_from(Link).where(Link.origin == LinkOrigin.MANUAL))
-        or 0
-    )
-    confirmed = (
-        db.scalar(select(func.count()).select_from(Link).where(Link.confirmed_both_ways.is_(True)))
-        or 0
-    )
+    # 線は両端とも図に居るものだけを数える。片端しか描いていない線は、
+    # 図の上には存在しない
+    def _links(*extra: Any) -> int:
+        query = select(func.count()).select_from(Link)
+        if only is not None:
+            query = query.where(Link.a_device_id.in_(only), Link.b_device_id.in_(only))
+        for condition in extra:
+            query = query.where(condition)
+        return db.scalar(query) or 0
 
-    linked = select(Link.a_device_id).union(select(Link.b_device_id)).subquery()
+    link_count = _links()
+    discovered = _links(Link.origin == LinkOrigin.DISCOVERED)
+    manual = _links(Link.origin == LinkOrigin.MANUAL)
+    confirmed = _links(Link.confirmed_both_ways.is_(True))
+
+    linked_a = select(Link.a_device_id)
+    linked_b = select(Link.b_device_id)
+    if only is not None:
+        linked_a = linked_a.where(Link.a_device_id.in_(only), Link.b_device_id.in_(only))
+        linked_b = linked_b.where(Link.a_device_id.in_(only), Link.b_device_id.in_(only))
+    linked = linked_a.union(linked_b).subquery()
     lonely = select(Device.hostname).where(alive, Device.id.notin_(select(linked.c[0])))
     isolated_count = db.scalar(select(func.count()).select_from(lonely.subquery())) or 0
     isolated = list(db.scalars(lonely.order_by(Device.hostname).limit(_ISOLATED_SAMPLE)))

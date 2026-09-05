@@ -144,6 +144,36 @@ def pick_vlan_id(used: set[int], *, step: int | None = None) -> int:
     return candidate
 
 
+#: 社内で自由に採番できる帯（RFC1918）。ipaddress の is_private は、
+#: リンクローカル（169.254/16）や文書用（192.0.2/24 など）まで真になる。
+#: それを土台に次の番号を出すと、使えない帯を勧めてしまう
+_SITE_LOCAL = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _is_site_local(network: ipaddress.IPv4Network | ipaddress.IPv6Network) -> bool:
+    return any(network.subnet_of(block) for block in _SITE_LOCAL)  # type: ignore[arg-type]
+
+
+def _main_run(networks: list[ipaddress.IPv4Network]) -> list[ipaddress.IPv4Network]:
+    """同じ /16 に入っている塊のうち、いちばん数の多いものを返す。
+
+    10.10.10.0/24 10.10.20.0/24 10.10.40.0/24 と 10.0.0.0/24 が混じっている
+    とき、後者1本を土台にすると 10.0.<VLAN>.0/24 を勧めてしまう。現場が
+    使っているのは 10.10.<VLAN>.0/24 のほうで、提案だけが流儀から外れる。
+
+    数が同じなら、番号の小さいほうを採る。毎回同じ答えになるようにする。
+    """
+    groups: dict[int, list[ipaddress.IPv4Network]] = {}
+    for network in networks:
+        key = int(network.network_address) & 0xFFFF0000
+        groups.setdefault(key, []).append(network)
+    return max(groups.items(), key=lambda item: (len(item[1]), -item[0]))[1]
+
+
 def pick_subnet(used: list[str], vlan_id: int) -> str | None:
     """既存の採番から、次に使えそうなセグメントを選ぶ。
 
@@ -157,21 +187,23 @@ def pick_subnet(used: list[str], vlan_id: int) -> str | None:
             networks.append(ipaddress.ip_network(text, strict=False))
         except ValueError:
             continue
-    private = [n for n in networks if n.version == 4 and n.is_private and n.prefixlen >= 16]
+    private = [n for n in networks if n.version == 4 and _is_site_local(n) and n.prefixlen >= 16]
     if not private:
         return None
 
     length = max(n.prefixlen for n in private)
-    base = min(private, key=lambda n: int(n.network_address))
+    # いちばん数の多い並びを本流と見る。番号が小さいものを土台にすると、
+    # 別の用途で1本だけ切ってある帯に引きずられ、現場の流儀から外れる
+    base = _main_run(private)
+    octets = str(base[0].network_address).split(".")
     # VLAN 番号をそのまま第3オクテットに使う流儀が広いので、まずそれを試す
-    octets = str(base.network_address).split(".")
     if length == 24 and vlan_id <= 255:
         candidate = ipaddress.ip_network(f"{octets[0]}.{octets[1]}.{vlan_id}.0/24")
         if all(not candidate.overlaps(n) for n in private):
             return str(candidate)
 
     step = 1 << (32 - length)
-    address = int(max(private, key=lambda n: int(n.network_address)).network_address) + step
+    address = int(max(base, key=lambda n: int(n.network_address)).network_address) + step
     for _ in range(256):
         candidate = ipaddress.ip_network((address, length))
         if all(not candidate.overlaps(n) for n in private):

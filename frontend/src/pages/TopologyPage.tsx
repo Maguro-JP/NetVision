@@ -1235,9 +1235,16 @@ function TopologyEditor() {
   // 最後に収めた範囲。同じ範囲で何度も収め直さないための目印
   const fittedView = useRef<string | null>(null);
 
+  // 図と同じ絞り込みで数える。拠点を選んでいるのに全体の台数を出すと、
+  // 描いてある数と食い違い、読む側はどちらが本当なのか判断できない
   const { data: stats } = useQuery({
-    queryKey: ["topologyStats", layer],
-    queryFn: () => api.getTopologyStats(layer),
+    queryKey: ["topologyStats", layer, selectedSite, search],
+    queryFn: () =>
+      api.getTopologyStats(
+        layer,
+        selectedSite === "" ? undefined : selectedSite,
+        search || undefined,
+      ),
   });
   // 全体図は台数が増えると読めないし、描くだけで重い。ただしここで止めると、
   // 台帳と結線表を入れた直後に何も出ない図を見ることになる。サーバー側が

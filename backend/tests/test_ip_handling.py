@@ -7,7 +7,7 @@
 
 import ipaddress
 
-from app.services import calc, configparse
+from app.services import calc, configparse, policyreview
 from app.services.aclcheck import network_of
 from app.services.addition import netmask_of, wildcard_of
 from app.services.configparse.routing import to_prefix
@@ -299,12 +299,20 @@ def test_a_next_hop_on_a_connected_segment_is_fine():
 
 
 def test_a_next_hop_nobody_can_reach_is_called_out():
-    from app.services.reviewnote import MEDIUM
+    from app.services.reviewnote import HIGH, MEDIUM
 
+    # 逃げ道になる既定経路が無いので、この宛先はここで落ちる
     found = _routes("ip route 10.30.0.0 255.255.0.0 192.168.77.1")
     assert len(found) == 1
-    assert found[0].level == MEDIUM
+    assert found[0].level == HIGH
     assert "192.168.77.1" in found[0].title
+
+    # 行ける既定経路があれば、落ちはせずそちらへ流れる
+    with_default = _routes(
+        "ip route 0.0.0.0 0.0.0.0 10.0.10.9",
+        "ip route 10.30.0.0 255.255.0.0 192.168.77.1",
+    )
+    assert [f.level for f in with_default] == [MEDIUM]
 
 
 def test_a_next_hop_reached_through_another_route_is_fine():
@@ -530,3 +538,39 @@ def test_ipv6_static_routes_are_read() -> None:
     assert routes["2001:db8::/32"].next_hop == "2001:db8:0:1::1"
     assert routes["2001:db8:1::/48"].vrf == "CUST"
     assert routes["2001:db8:1::/48"].distance == 200
+
+
+def test_the_default_route_itself_can_be_the_broken_one():
+    """既定経路の相手に行けないなら、逃げ道は無い。
+
+    「既定経路があるから流れます」と言ってしまうと、実際には落ちている
+    設定を軽く見せることになる。行ける既定経路だけを逃げ道と数える。
+    """
+    from app.services.reviewnote import HIGH
+
+    text = "\n".join(
+        [
+            "hostname edge-sw-01",
+            "interface Vlan10",
+            " ip address 10.10.10.1 255.255.255.0",
+            "ip route 0.0.0.0 0.0.0.0 192.168.99.254",
+        ]
+    )
+    found = [f for f in policyreview.review(configparse.parse(text), text) if "次の相手" in f.title]
+    assert [f.level for f in found] == [HIGH]
+    assert "ここで落ちます" in found[0].why
+
+
+def test_the_same_broken_route_is_only_reported_once():
+    """同じことを2か所から言わない。件数が水増しされ、重さも食い違う。"""
+    text = "\n".join(
+        [
+            "hostname edge-sw-01",
+            "interface Vlan10",
+            " ip address 10.10.10.1 255.255.255.0",
+            "ip route 10.9.0.0 255.255.0.0 10.77.77.77",
+        ]
+    )
+    parsed = configparse.parse(text)
+    titles = [f.title for f in policyreview.review(parsed, text) if "10.77.77.77" in f.title]
+    assert len(titles) == 1

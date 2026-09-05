@@ -243,3 +243,31 @@ def test_the_api_needs_a_name(client, upstream):
 def test_the_api_404s_for_an_unknown_upstream(client):
     res = client.post(f"{API}/devices/9999/addition", json={"hostname": "new-sw-01"})
     assert res.status_code == 404
+
+
+def test_link_local_and_documentation_ranges_are_not_used_as_a_basis():
+    """169.254/16 や 192.0.2/24 を土台にすると、使えない帯を勧めてしまう。
+
+    ipaddress の is_private はこれらも真になるので、社内で自由に採番できる
+    帯（RFC1918）だけを見る。土台が無いなら、当てずっぽうを出さない。
+    """
+    assert pick_subnet(["169.254.0.0/24"], 30) is None
+    assert pick_subnet(["203.0.113.0/24"], 30) is None
+    assert pick_subnet(["8.8.8.0/24"], 30) is None
+    # RFC1918 の3つは、これまで通り土台になる
+    assert pick_subnet(["192.168.1.0/24"], 10) == "192.168.10.0/24"
+    assert pick_subnet(["172.16.5.0/24"], 7) == "172.16.7.0/24"
+
+
+def test_the_main_run_of_segments_decides_the_basis():
+    """1本だけ別の帯があっても、そちらに引きずられない。
+
+    10.10.<VLAN>.0/24 で採番している現場に 10.0.0.0/24 が1本あると、
+    番号の小さいほうを土台にしていたため 10.0.<VLAN>.0/24 を勧めていた。
+    提案だけが現場の流儀から外れる。
+    """
+    used = ["10.10.10.0/24", "10.10.20.0/24", "10.0.0.0/24", "10.10.40.0/24"]
+    assert pick_subnet(used, 2) == "10.10.2.0/24"
+    assert pick_subnet(used, 30) == "10.10.30.0/24"
+    # 数が同じなら、番号の小さいほうを採る（毎回同じ答えになるように）
+    assert pick_subnet(["10.10.10.0/24", "10.20.10.0/24"], 30) == "10.10.30.0/24"

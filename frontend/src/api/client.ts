@@ -582,8 +582,10 @@ export const api = {
         target_label: PlacedPortName | null;
       }[];
     }>("/topology/routes", { method: "POST", body: JSON.stringify(body) }),
-  getTopologyStats: (layer: string) =>
-    request<TopologyStats>(`/topology/stats${query({ layer })}`),
+  getTopologyStats: (layer: string, siteId?: number, q?: string) =>
+    request<TopologyStats>(
+      `/topology/stats${query({ layer, site_id: siteId, q })}`,
+    ),
   /** 論理構成の材料。相手が特定できなかったトンネルも件数で返す。 */
   getTopologyTunnels: () =>
     request<{

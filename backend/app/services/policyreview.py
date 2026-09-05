@@ -32,6 +32,7 @@ from app.services.configparse.base import (
     ParsedAclEntry,
     ParsedBgp,
     ParsedBgpNeighbor,
+    ParsedRoute,
 )
 from app.services.configparse.ifname import normalize
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -65,6 +66,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_unusable_interface_addresses(parsed))
     findings.extend(_overlapping_bands(parsed))
     findings.extend(_static_routes(parsed))
     findings.extend(_policy_routing(parsed))
@@ -403,9 +405,10 @@ def _range(text: str) -> _Range | None:
 def _static_routes(parsed: ParsedConfig) -> list[Finding]:
     """静的経路の次の相手に、この機器から行けるか。
 
-    次の相手が直結の帯にも他の経路にも無いと、その行は使われない。既定経路が
-    あると、代わりにそちらへ流れる。どちらにしても、書いた人が意図した先には
-    行かない。設定は通るので、経路表を見るまで気づけない。
+    次の相手が直結の帯にも他の経路にも無いと、その行は使われない。使える
+    既定経路があれば代わりにそちらへ流れ、無ければその宛先はここで落ちる。
+    どちらにしても、書いた人が意図した先には行かない。設定は通るので、
+    経路表を見るまで気づけない。
     """
     connected = _connected_networks(parsed)
     if not connected:
@@ -421,28 +424,89 @@ def _static_routes(parsed: ParsedConfig) -> list[Finding]:
         if network.prefixlen > 0:  # 既定経路は「何でも覆う」ので根拠にしない
             covering.append(network)
 
-    findings: list[Finding] = []
-    for route in parsed.routes:
+    def reaches(route: ParsedRoute) -> bool:
+        """次の相手に、この機器から行けるか。"""
         if route.interface or not route.next_hop:
-            continue  # 出口のポートを書いてある行は、次の相手が要らない
+            return True  # 出口のポートを書いてある行は、次の相手が要らない
         try:
             hop = ipaddress.ip_address(route.next_hop)
         except ValueError:
-            continue
+            return True  # 読めないものを、届かないとは言わない
         if any(hop in network for network in connected):
+            return True
+        return any(hop in network for network in covering)
+
+    # 逃げ道になるのは、行ける既定経路だけ。その既定経路の相手にも行けない
+    # なら、逃げ道は無い。ここを見ないと、落ちる設定を「流れます」と言う
+    fallback = any(
+        route.destination in ("0.0.0.0/0", "::/0") and reaches(route) for route in parsed.routes
+    )
+
+    findings: list[Finding] = []
+    for route in parsed.routes:
+        if reaches(route):
             continue
-        if any(hop in network for network in covering):
-            continue
+        if fallback:
+            why = (
+                "次の相手が、この機器の直結の帯にも、他の経路にもありません。"
+                "この行は使われず、既定経路のほうへ流れます。書いた人が意図した先には"
+                "行きません。相手の付け替え忘れか、ポートの帯の変更漏れが疑われます。"
+            )
+        else:
+            why = (
+                "次の相手が、この機器の直結の帯にも、他の経路にもありません。"
+                "逃げ道になる既定経路も無いので、この宛先への通信はここで落ちます。"
+                "相手の付け替え忘れか、ポートの帯の変更漏れが疑われます。"
+            )
         findings.append(
             _note(
-                MEDIUM,
+                MEDIUM if fallback else HIGH,
                 f"{route.destination} の次の相手 {route.next_hop} へ行けません",
-                "次の相手が、この機器の直結の帯にも、他の経路にもありません。"
-                "この行は使われず、既定経路があればそちらへ流れます。"
-                "相手の付け替え忘れか、ポートの帯の変更漏れが疑われます。",
+                why,
                 [f"ip route {route.destination} {route.next_hop}"],
             )
         )
+    return findings
+
+
+def _unusable_interface_addresses(parsed: ParsedConfig) -> list[Finding]:
+    """ポートに付いているアドレスが、その帯で使える形か。
+
+    帯の先頭（ネットワークアドレス）と末尾（ブロードキャストアドレス）は、
+    端末にもポートにも付けられない。手で書いた設計書からそのまま写すと
+    起きやすい。機器は受け付けないことが多いが、受け付ける機種もあり、
+    その場合は上がっているのに通じない状態になる。
+
+    /31 と /32 は両端とも使える（点対点・ループバック）ので言わない。
+    IPv6 はブロードキャストの考え方が違うので、ここでは見ていない。
+    """
+    findings: list[Finding] = []
+    for interface in parsed.interfaces:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            address = _address_of(text)
+            if network is None or address is None or network.version != 4:
+                continue
+            if network.prefixlen > 30:
+                continue
+            if address == network.network_address:
+                where = "帯の先頭（ネットワークアドレス）"
+            elif address == network.broadcast_address:
+                where = "帯の末尾（ブロードキャストアドレス）"
+            else:
+                continue
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{interface.name} の {address} は、そのままでは使えないアドレスです",
+                    f"{network} の{where}なので、ポートにも端末にも付けられません。"
+                    "受け付けない機種では設定そのものが入らず、受け付ける機種では"
+                    "上がっているのに通じない状態になります。"
+                    f"使えるのは {network.network_address + 1} から "
+                    f"{network.broadcast_address - 1} までです。",
+                    [f"interface {interface.name} ({text})"],
+                )
+            )
     return findings
 
 
