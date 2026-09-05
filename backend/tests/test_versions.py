@@ -84,3 +84,35 @@ SERIALS = [
 def test_the_serial_number_is_read(name: str, text: str, expected: str):
     """保守契約や交換の照合に使う。空だと台帳の突き合わせができない。"""
     assert configparse.parse(text).serial_number == expected, name
+
+
+def test_show_version_alone_is_recognised_as_cisco() -> None:
+    """show version だけを貼られたときも、ベンダーを取り違えない。
+
+    ベンダーが不明のままだと、型番が読めても照合先が決まらない。
+    """
+    isr = "\n".join(
+        [
+            "Cisco IOS XE Software, Version 16.09.08",
+            "cisco ISR4331/K9 (1RU) processor with 1795979K/6147K bytes of memory.",
+        ]
+    )
+    parsed = configparse.parse(isr)
+    assert parsed.vendor is configparse.Vendor.CISCO_IOS
+    assert parsed.model == "ISR4331/K9"
+    assert parsed.os_version == "16.09.08"
+
+
+def test_the_nexus_chassis_line_gives_the_model() -> None:
+    """Nexus の show version は括弧が無い。型番が空だと EoL も弱点も引けない。"""
+    text = "\n".join(
+        [
+            "Cisco Nexus Operating System (NX-OS) Software",
+            "  system:    version 9.3(10)",
+            "  cisco Nexus9000 C93180YC-EX Chassis",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is configparse.Vendor.CISCO_NXOS
+    assert parsed.model == "C93180YC-EX"
+    assert parsed.os_version == "9.3(10)"
