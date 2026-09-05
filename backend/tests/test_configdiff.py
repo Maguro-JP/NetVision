@@ -527,3 +527,35 @@ def test_other_vendors_are_still_rendered_by_indentation():
     script = build(current, target, "cisco_ios").script
     assert "end" not in script
     assert "next" not in script
+
+
+def test_the_entry_settings_are_replaced_in_one_line() -> None:
+    """入口の設定は、新しい値がそのまま前の値を置き換える。
+
+    「消してから入れる」を2行に分けて出すと、その間だけ入口が塞がる。
+    vty ごしに貼っていると、次の行が届く前に自分が切れる。
+    """
+    current = "\n".join(
+        [
+            "hostname sw",
+            "!",
+            "line vty 0 4",
+            " transport input telnet ssh",
+            " exec-timeout 0 0",
+            "!",
+            "ip ssh version 1",
+            "",
+        ]
+    )
+    wanted = current.replace("transport input telnet ssh", "transport input ssh")
+    wanted = wanted.replace("exec-timeout 0 0", "exec-timeout 10 0")
+    wanted = wanted.replace("ip ssh version 1", "ip ssh version 2")
+
+    result = build(current, wanted)
+    assert result.verified
+    assert "no transport input" not in result.script
+    assert "no exec-timeout" not in result.script
+    assert " transport input ssh" in result.script
+    # 切り戻しは、消すのではなく元の値に戻す
+    assert " transport input telnet ssh" in result.rollback_script
+    assert "ip ssh version 1" in result.rollback_script

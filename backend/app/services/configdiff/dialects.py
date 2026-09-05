@@ -131,6 +131,17 @@ _CISCO = Dialect(
         re.compile(r"^ip\s+(?:helper-address|mtu|ospf\s+cost)\b", re.I),
         re.compile(r"^spanning-tree\s+(?:portfast|bpduguard|guard)\b", re.I),
         re.compile(r"^service-policy\s+(?:input|output)\b", re.I),
+        # 入口の設定。新しい値がそのまま前の値を置き換える。2行に分けて
+        # 「消してから入れる」を出すと、その間だけ入口が塞がる。vty ごしに
+        # 流していると、次の行が届く前に自分が切れる
+        re.compile(r"^transport\s+(?:input|output|preferred)\b", re.I),
+        re.compile(r"^exec-timeout\b", re.I),
+        re.compile(r"^ip\s+ssh\s+version\b", re.I),
+        re.compile(r"^ip\s+default-gateway\b", re.I),
+        re.compile(r"^switchport\s+voice\s+vlan\b", re.I),
+        re.compile(r"^encapsulation\s+dot1q\b", re.I),
+        re.compile(r"^ip\s+ospf\s+network\b", re.I),
+        re.compile(r"^standby\s+version\b", re.I),
     ],
     prerequisites=[
         # スイッチポート系を入れる前に、そのポートが L2 である必要がある。
