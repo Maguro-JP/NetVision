@@ -484,6 +484,7 @@ def _seed_reference(db) -> tuple[int, int, int]:
         result = reference.import_vulnerabilities(db, json_path.read_bytes())
         vulnerabilities = result.created + result.updated
 
+    _seed_templates(db, folder)
     _seed_remediations(db, folder)
 
     matched = (
@@ -492,6 +493,33 @@ def _seed_reference(db) -> tuple[int, int, int]:
         else 0
     )
     return products, vulnerabilities, matched
+
+
+def _seed_templates(db, folder) -> int:
+    """設定変更用のテンプレートを入れる。
+
+    ここが空だと、テンプレートの画面が何も無いまま開く。弱点への対処でも
+    「テンプレートが紐付いていないので、手順の本文をそのままコマンドとして
+    扱っています」という断り書きが毎回付く。
+    """
+    import json
+
+    from app.models.document import ConfigTemplate, TemplateCategory
+
+    path = folder / "config_templates.json"
+    if not path.is_file():
+        return 0
+
+    added = 0
+    for entry in json.loads(path.read_text(encoding="utf-8")):
+        name = entry["name"]
+        if db.scalars(select(ConfigTemplate).where(ConfigTemplate.name == name)).first():
+            continue
+        entry["category"] = TemplateCategory(entry.get("category", "other"))
+        db.add(ConfigTemplate(**entry))
+        added += 1
+    db.commit()
+    return added
 
 
 def _seed_remediations(db, folder) -> int:
