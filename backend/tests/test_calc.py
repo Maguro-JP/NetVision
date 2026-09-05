@@ -192,3 +192,25 @@ def test_the_api_returns_what_it_counted(db_session, client):
     assert body["subnets"][0]["subnet"] == "10.0.10.0/24"
     assert body["subnets"][0]["free"] == 253
     assert body["vlans"]["free_next"]
+
+
+def test_it_says_how_many_devices_the_count_is_based_on(db_session):
+    """残り何台入るかは、採番を決める人がそのまま使う数字である。
+
+    読めた範囲を言わないと、台帳全体を数えたものだと受け取られる。
+    """
+    _device(db_session, "counted-sw-01", {"name": "Vlan10", "ip_address": "10.0.10.1/24"})
+    # ポートが1つも読めていない機器（台帳にはある）
+    db_session.add(Device(hostname="dark-sw-01", vendor="Cisco", model="C9300-48P"))
+    db_session.commit()
+
+    report = calc.report(db_session)
+    assert any("2 台のうち Config が入っている 1 台" in note for note in report.notes)
+
+
+def test_nothing_is_said_when_every_device_was_counted(db_session):
+    _device(db_session, "all-sw-01", {"name": "Vlan10", "ip_address": "10.0.10.1/24"})
+    db_session.commit()
+
+    report = calc.report(db_session)
+    assert not any("この数に入っていません" in note for note in report.notes)
