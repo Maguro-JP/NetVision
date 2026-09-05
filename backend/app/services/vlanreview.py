@@ -13,6 +13,7 @@ VLAN は番号でつながる。名前は人のためのものだが、そこが
 
 from __future__ import annotations
 
+import ipaddress
 import re
 from dataclasses import dataclass, field
 
@@ -20,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
+from app.models.topology import Interface
 from app.models.vlan import DeviceVlan, Vlan
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
 
@@ -60,6 +62,15 @@ def review(db: Session) -> VlanReport:
     for row in rows:
         by_vlan.setdefault(row.vlan_id, []).append(row)
 
+    # SVI に振ってあるアドレス。台帳のセグメントと突き合わせるために使う
+    svi_addresses: dict[int, list[tuple[int, str]]] = {}
+    for interface in db.scalars(select(Interface).where(Interface.ip_address.isnot(None))):
+        match = re.match(r"^vlan(\d+)$", interface.normalized_name or "", re.IGNORECASE)
+        if match and interface.ip_address:
+            svi_addresses.setdefault(int(match.group(1)), []).append(
+                (interface.device_id, interface.ip_address)
+            )
+
     report.vlans_seen = len(by_vlan)
     report.devices_with_vlans = len({row.device_id for row in rows})
 
@@ -68,6 +79,7 @@ def review(db: Session) -> VlanReport:
         report.findings.extend(_names_disagree(vlan_id, entries, hostnames))
         report.findings.extend(_ledger_disagrees(vlan_id, entries, ledger, hostnames))
         report.findings.extend(_not_in_ledger(vlan_id, entries, ledger))
+        report.findings.extend(_ledger_subnet_disagrees(vlan_id, ledger, svi_addresses, hostnames))
 
     order = {HIGH: 0, MEDIUM: 1, LOW: 2}
     report.findings.sort(key=lambda item: (order.get(item.finding.level, 3), item.vlan_id))
@@ -85,6 +97,53 @@ def _label(entries: list[DeviceVlan], hostnames: dict[int, str]) -> list[str]:
     return [
         f"{hostnames.get(entry.device_id, entry.device_id)}: {entry.name or '名前なし'}"
         for entry in entries[:_SHOW]
+    ]
+
+
+def _ledger_subnet_disagrees(
+    vlan_id: int,
+    ledger: dict[int, Vlan],
+    svi_addresses: dict[int, list[tuple[int, str]]],
+    hostnames: dict[int, str],
+) -> list[VlanFinding]:
+    """台帳に書いてあるセグメントと、実機が名乗っているアドレスが違う。
+
+    名前の食い違いより重い。次に番号を決める人は台帳の区画から住所を選ぶので、
+    そこが実機と違うと、選んだ住所がそのセグメントに載らない。他所と重なる
+    こともある。設定は通るので、繋いでみるまで気づけない。
+    """
+    entry = ledger.get(vlan_id)
+    if entry is None or not entry.subnet:
+        return []
+    try:
+        network = ipaddress.ip_network(entry.subnet, strict=False)
+    except ValueError:
+        return []
+
+    outside: list[str] = []
+    for device_id, text in svi_addresses.get(vlan_id, []):
+        try:
+            address = ipaddress.ip_interface(text).ip
+        except ValueError:
+            continue
+        if address.version != network.version or address not in network:
+            outside.append(f"{hostnames.get(device_id, device_id)}: {text}")
+    if not outside:
+        return []
+
+    return [
+        VlanFinding(
+            vlan_id=vlan_id,
+            finding=Finding(
+                level=MEDIUM,
+                title=f"VLAN {vlan_id} は、台帳の区画に実機のアドレスが入っていません",
+                why="次に番号を決める人は、台帳の区画から住所を選びます。そこが実機と"
+                "違うと、選んだ住所はそのセグメントに載らず、他所と重なることもあり"
+                "ます。設定は通るので、繋いでみるまで気づけません。どちらが正しいか"
+                "は、ここでは決められません。",
+                evidence=[f"台帳: {entry.subnet}", *outside[:_SHOW]],
+            ),
+        )
     ]
 
 

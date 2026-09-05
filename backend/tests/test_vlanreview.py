@@ -109,3 +109,46 @@ def test_the_api_returns_the_same_thing(client, db_session):
     body = client.get("/api/v1/topology/vlan-check").json()
     assert body["vlans_seen"] == 1
     assert body["findings"][0]["vlan_id"] == 10
+
+
+def _svi(db, device: Device, vlan_id: int, address: str) -> None:
+    from app.models.topology import Interface
+
+    db.add(
+        Interface(
+            device_id=device.id,
+            name=f"Vlan{vlan_id}",
+            normalized_name=f"vlan{vlan_id}",
+            ip_address=address,
+        )
+    )
+    db.flush()
+
+
+def test_a_ledger_subnet_that_does_not_hold_the_real_address_is_called_out(db_session):
+    """台帳の区画と実機のアドレスが違うのは、名前の食い違いより重い。
+
+    次に番号を決める人は台帳の区画から住所を選ぶ。そこが実機と違うと、
+    選んだ住所はそのセグメントに載らない。
+    """
+    device = _device(db_session, "sw-01")
+    _vlan(db_session, device, 30, "MGMT")
+    _svi(db_session, device, 30, "10.0.0.11/24")
+    db_session.add(Vlan(vlan_id=30, name="MGMT", subnet="192.168.30.0/24"))
+    db_session.flush()
+
+    item = next(i for i in vlanreview.review(db_session).findings if "区画" in i.finding.title)
+    assert item.finding.level == MEDIUM
+    assert "台帳: 192.168.30.0/24" in item.finding.evidence
+    assert any("10.0.0.11/24" in line for line in item.finding.evidence)
+
+
+def test_a_wider_ledger_subnet_that_holds_the_address_is_quiet(db_session):
+    """台帳が上位の区画で書いてあるだけなら、食い違いではない。"""
+    device = _device(db_session, "sw-02")
+    _vlan(db_session, device, 10, "USERS")
+    _svi(db_session, device, 10, "10.10.10.1/24")
+    db_session.add(Vlan(vlan_id=10, name="USERS", subnet="10.10.0.0/16"))
+    db_session.flush()
+
+    assert not [i for i in vlanreview.review(db_session).findings if "区画" in i.finding.title]
