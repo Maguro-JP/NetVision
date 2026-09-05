@@ -1,16 +1,20 @@
 from datetime import date
 
 import pytest
+from sqlalchemy import select
 
-from app.models import DeviceStatus, DeviceType
+from app.models import Device, DeviceStatus, DeviceType
 from app.services.importer import (
     CellValueError,
+    KeyField,
     detect_mapping,
     parse_date,
     parse_decimal,
     parse_device_status,
     parse_device_type,
+    run_import,
 )
+from app.services.tablefile import read_table
 
 
 def test_detect_mapping_handles_japanese_headers():
@@ -245,3 +249,35 @@ def test_renaming_a_site_does_not_collide_with_another(db_session):
 
     renamed = db_session.query(Site).filter(Site.code == "S-001").one()
     assert renamed.name == "大手町ビル"
+
+
+def test_the_same_vendor_written_differently_is_counted_once(db_session):
+    """台帳は人が書くので Cisco / cisco / CISCO が混ざる。
+
+    分かれて数えられると、メーカー別の台数も、そこから引く保守費の
+    見積もりも割れる。書き方のゆれだけをそろえる。
+    """
+    csv = (
+        "ホスト名,メーカー,型番\n"
+        "vend-sw-01,Cisco,C9200L-24T-4G\n"
+        "vend-sw-02,cisco,C9200L-24T-4G\n"
+        "vend-sw-03,CISCO,C9200L-24T-4G\n"
+        "vend-rt-01,ｎｅｃ風の知らない名前,X\n"
+    ).encode()
+    table = read_table("ledger.csv", csv)
+    run_import(
+        db_session,
+        table.headers,
+        table.rows,
+        key_field=KeyField.HOSTNAME,
+        commit=True,
+    )
+    devices = {
+        d.hostname: d.vendor
+        for d in db_session.scalars(select(Device).where(Device.hostname.like("vend-%")))
+    }
+    assert devices["vend-sw-01"] == "Cisco"
+    assert devices["vend-sw-02"] == "Cisco"
+    assert devices["vend-sw-03"] == "Cisco"
+    # 知らない名前は書き換えない。こちらで決められることではない
+    assert devices["vend-rt-01"] == "ｎｅｃ風の知らない名前"

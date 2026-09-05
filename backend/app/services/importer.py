@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models import Device, DeviceStatus, DeviceType, MaintenanceContract, Site
 from app.models.change_log import ChangeSource
+from app.services import configparse
 from app.services.audit import audit_context
 from app.services.configparse import normalize_hostname
 
@@ -1096,6 +1097,28 @@ def _devices_by_hostnames(db: Session, names: list[str]) -> dict[str, Device]:
     return found
 
 
+#: 大文字小文字の違いだけで別のメーカーとして数えないための対応表。
+#: 台帳は人が書くので Cisco / cisco / CISCO が混ざる。分かれて数えられると、
+#: メーカー別の台数も、そこから引く保守費の見積もりも割れる
+_VENDOR_CANONICAL = {
+    name.casefold(): name for name in dict.fromkeys(configparse.VENDOR_NAMES.values())
+}
+
+
+def _canonical_vendor(text: str, db: Session) -> str:
+    """書き方のゆれだけをそろえる。知らない名前は書き換えない。"""
+    key = text.casefold()
+    known = _VENDOR_CANONICAL.get(key)
+    if known is not None:
+        return known
+    # 台帳にすでにある綴りに合わせる。どちらが正しいかはこちらでは決められない
+    # ので、先に入っているほうを残す
+    for existing in db.scalars(select(Device.vendor).distinct()):
+        if existing and existing.casefold() == key:
+            return existing
+    return text
+
+
 def _apply_values(
     device: Device, values: dict[str, object], db: Session, site_cache: dict[str, Site]
 ) -> None:
@@ -1108,6 +1131,8 @@ def _apply_values(
             if name == "code":
                 text = str(value).strip()
                 setattr(device, name, text or None)
+            elif name == "vendor":
+                setattr(device, name, _canonical_vendor(str(value).strip(), db))
             else:
                 setattr(device, name, value)
 
