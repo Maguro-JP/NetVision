@@ -588,8 +588,17 @@ def export_link_table_csv(
 
 
 @router.get("/stats", response_model=TopologyStatsRead)
-def get_stats(db: DbSession, layer: str = service.DEFAULT_LAYER) -> TopologyStatsRead:
-    return TopologyStatsRead.model_validate(service.get_stats(db, layer), from_attributes=True)
+def get_stats(
+    db: DbSession,
+    layer: str = service.DEFAULT_LAYER,
+    site_id: int | None = Query(default=None, description="この拠点に絞って数える"),
+    q: str | None = Query(default=None, description="拠点名・機器名で絞って数える"),
+) -> TopologyStatsRead:
+    # 図と同じ絞り込みで数える。描いてある数と要約が食い違わないようにする
+    only = service.scoped_device_ids(db, site_id=site_id, q=q)
+    return TopologyStatsRead.model_validate(
+        service.get_stats(db, layer, only=only), from_attributes=True
+    )
 
 
 class SpaceSiteRead(BaseModel):
