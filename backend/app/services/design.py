@@ -44,7 +44,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device, DeviceType, DeviceVlan, Vlan
 from app.models.topology import Link
-from app.services import configparse
+from app.services import configparse, conventions
 from app.services.configparse import Vendor
 
 # 図から起こせない箇所に付ける印。投入前に人が埋める前提であることを示す
@@ -93,6 +93,11 @@ class DesignInput:
     mgmt_netmask: str | None = None
     mgmt_prefixlen: int | None = None
 
+    #: この現場ですでに使っている送り先。取り込んである Config から学んだもの。
+    #: 設計の判断ではなく、そろえるだけのものなので起こしてよい
+    syslog_hosts: list[str] = field(default_factory=list)
+    ntp_hosts: list[str] = field(default_factory=list)
+
     def vlan_name(self, vlan_id: int) -> str:
         return self.vlan_names.get(vlan_id, f"VLAN{vlan_id}")
 
@@ -133,6 +138,12 @@ def collect(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -
     names = {vlan.vlan_id: _device_name(vlan, observed) for vlan in catalog}
     plan = DesignInput(device=device, links=links, vlans=catalog, vlan_names=names)
     _locate_management(plan, catalog)
+
+    # 記録の送り先は、この現場ですでに決まっている。起こさないでおくと、
+    # 出した Config を自分の点検が「入っていません」と咎めることになる
+    house = conventions.learn(db)
+    plan.syslog_hosts = list(house.syslog_hosts[:2])
+    plan.ntp_hosts = list(house.ntp_hosts[:2])
     return plan
 
 
@@ -257,6 +268,28 @@ def _trunk_vlans(plan: DesignInput) -> str:
 # ---------------------------------------------------------------------------
 
 
+def _ios_house_rules(plan: DesignInput) -> list[str]:
+    """この現場ですでに使っている送り先を、IOS 系の書き方で出す。
+
+    どこへ送るかは現場で決まっているので、設計の判断は要らない。入って
+    いないと、出した Config を自分の点検が咎めることになる。
+    """
+    lines: list[str] = []
+    for host in plan.syslog_hosts:
+        lines.append(f"logging host {host}")
+    if not plan.syslog_hosts:
+        # この現場の送り先が、取り込んである Config から読み取れなかった。
+        # 黙って省くと、記録が残らないまま「起こせた」形の Config になる
+        lines.append(f"! ログの送り先: {TODO}")
+        lines.append("!  例: logging host 10.10.20.10")
+    for host in plan.ntp_hosts:
+        lines.append(f"ntp server {host}")
+    if not plan.ntp_hosts:
+        lines.append(f"! 時刻の参照先: {TODO}")
+        lines.append("!  例: ntp server 10.10.20.10")
+    return lines
+
+
 def _cisco(plan: DesignInput) -> str:
     lines = _header(plan, Vendor.CISCO_IOS, "!")
     lines.append(f"hostname {plan.device.hostname}")
@@ -268,9 +301,10 @@ def _cisco(plan: DesignInput) -> str:
             "no ip http server",
             "no ip http secure-server",
             "no ip source-route",
-            "!",
         ]
     )
+    lines.extend(_ios_house_rules(plan))
+    lines.append("!")
 
     for vlan in plan.vlans:
         lines.append(f"vlan {vlan.vlan_id}")
