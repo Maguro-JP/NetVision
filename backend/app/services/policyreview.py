@@ -453,11 +453,20 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
     機器も上がっているので、動かしてみるまで気づかない。
     """
     findings: list[Finding] = []
-    ports = {}
+    # 1つのポートが帯を複数持つことがある（secondary・IPv6）。仮想アドレスは
+    # そのどれかに入っていればよい。1つ目だけで見ると、2つ目の帯を使った
+    # 冗長を「帯の外」と言ってしまう
+    ports: dict[str, tuple[object, list[ipaddress.IPv4Network | ipaddress.IPv6Network]]] = {}
     for interface in parsed.interfaces:
-        network = _network_of(interface.ip_address)
-        if network is not None:
-            ports[normalize(interface.name)] = (interface, network)
+        networks = [
+            network
+            for network in (
+                _network_of(text) for text in [interface.ip_address, *interface.extra_addresses]
+            )
+            if network is not None
+        ]
+        if networks:
+            ports[normalize(interface.name)] = (interface, networks)
 
     for entry in parsed.redundancy:
         if not entry.virtual_ip:
@@ -465,13 +474,17 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
         found = ports.get(normalize(entry.interface))
         if found is None:
             continue
-        interface, network = found
+        interface, networks = found
         try:
             virtual = ipaddress.ip_address(entry.virtual_ip)
         except ValueError:
             continue
         name = f"{entry.protocol.upper()} グループ {entry.group}"
-        if virtual not in network:
+        network = next((n for n in networks if virtual in n), None)
+        if network is None:
+            # どの帯にも入っていない。比べた先は、同じ種別の帯だけを挙げる
+            same_family = [n for n in networks if n.version == virtual.version] or networks
+            network = same_family[0]
             findings.append(
                 _note(
                     HIGH,
@@ -487,8 +500,10 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
                 )
             )
             continue
-        own = _address_of(interface.ip_address)
-        if own is not None and own == virtual:
+        own_addresses = [
+            _address_of(text) for text in [interface.ip_address, *interface.extra_addresses]
+        ]
+        if virtual in [a for a in own_addresses if a is not None]:
             findings.append(
                 _note(
                     HIGH,

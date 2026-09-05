@@ -704,3 +704,35 @@ def test_the_second_address_on_a_port_also_counts_as_directly_connected() -> Non
     titles = [f.title for f in policyreview.review(configparse.parse(text))]
     # どの帯にも無いのはこの1本だけ
     assert titles == ["2001:db8:2::/48 の次の相手 2001:db8:9:9::9 へ行けません"]
+
+
+def test_a_virtual_address_may_sit_on_the_second_band_of_a_port() -> None:
+    """secondary の帯を使った冗長を、帯の外だと言ってしまわない。"""
+    text = "\n".join(
+        [
+            "hostname sw1",
+            "interface Vlan20",
+            " ip address 10.0.20.2 255.255.255.0",
+            " ip address 10.0.21.2 255.255.255.0 secondary",
+            " standby 20 ip 10.0.20.254",
+            " standby 21 ip 10.0.21.254",
+        ]
+    )
+    assert policyreview.review(configparse.parse(text)) == []
+
+
+def test_the_virtual_address_checks_still_fire() -> None:
+    """帯の外・自分と同じ・配れないアドレスは、これまで通り言う。"""
+    text = "\n".join(
+        [
+            "hostname sw1",
+            "interface Vlan30",
+            " ip address 10.0.30.2 255.255.255.0",
+            " standby 30 ip 10.0.99.254",
+            " standby 31 ip 10.0.30.2",
+            " standby 32 ip 10.0.30.255",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    assert len(titles) == 3
+    assert all(f.level == HIGH for f in policyreview.review(configparse.parse(text)))
