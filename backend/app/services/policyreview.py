@@ -65,6 +65,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_unusable_interface_addresses(parsed))
     findings.extend(_overlapping_bands(parsed))
     findings.extend(_static_routes(parsed))
     findings.extend(_policy_routing(parsed))
@@ -443,6 +444,47 @@ def _static_routes(parsed: ParsedConfig) -> list[Finding]:
                 [f"ip route {route.destination} {route.next_hop}"],
             )
         )
+    return findings
+
+
+def _unusable_interface_addresses(parsed: ParsedConfig) -> list[Finding]:
+    """ポートに付いているアドレスが、その帯で使える形か。
+
+    帯の先頭（ネットワークアドレス）と末尾（ブロードキャストアドレス）は、
+    端末にもポートにも付けられない。手で書いた設計書からそのまま写すと
+    起きやすい。機器は受け付けないことが多いが、受け付ける機種もあり、
+    その場合は上がっているのに通じない状態になる。
+
+    /31 と /32 は両端とも使える（点対点・ループバック）ので言わない。
+    IPv6 はブロードキャストの考え方が違うので、ここでは見ていない。
+    """
+    findings: list[Finding] = []
+    for interface in parsed.interfaces:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            address = _address_of(text)
+            if network is None or address is None or network.version != 4:
+                continue
+            if network.prefixlen > 30:
+                continue
+            if address == network.network_address:
+                where = "帯の先頭（ネットワークアドレス）"
+            elif address == network.broadcast_address:
+                where = "帯の末尾（ブロードキャストアドレス）"
+            else:
+                continue
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{interface.name} の {address} は、そのままでは使えないアドレスです",
+                    f"{network} の{where}なので、ポートにも端末にも付けられません。"
+                    "受け付けない機種では設定そのものが入らず、受け付ける機種では"
+                    "上がっているのに通じない状態になります。"
+                    f"使えるのは {network.network_address + 1} から "
+                    f"{network.broadcast_address - 1} までです。",
+                    [f"interface {interface.name} ({text})"],
+                )
+            )
     return findings
 
 

@@ -794,3 +794,36 @@ def test_bands_split_by_vrf_or_shut_down_are_not_pointed_out() -> None:
     )
     assert _review_titles(by_vrf) == []
     assert _review_titles(shut) == []
+
+
+def test_the_first_and_last_address_of_a_band_cannot_sit_on_a_port() -> None:
+    """帯の先頭と末尾は、ポートにも端末にも付けられない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan10",
+            " ip address 10.0.10.0 255.255.255.0",
+            "interface Vlan20",
+            " ip address 10.0.20.255 255.255.255.0",
+        ]
+    )
+    findings = policyreview.review(configparse.parse(text))
+    assert [f.level for f in findings] == [HIGH, HIGH]
+    # 使える範囲まで書いて、直し方が分かるようにしている
+    assert "10.0.10.1 から 10.0.10.254" in findings[0].why
+
+
+def test_point_to_point_and_loopback_addresses_are_left_alone() -> None:
+    """/31 は両端とも使え、/32 は帯ではない。IPv6 はここでは見ていない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.1.1.0 255.255.255.254",
+            "interface Loopback0",
+            " ip address 1.1.1.1 255.255.255.255",
+            "interface GigabitEthernet0/2",
+            " ipv6 address 2001:db8::/64",
+        ]
+    )
+    assert policyreview.review(configparse.parse(text)) == []
