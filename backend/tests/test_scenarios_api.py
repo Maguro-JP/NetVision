@@ -268,3 +268,38 @@ def test_retired_devices_are_excluded_from_both_sides(client, device_payload):
     body = summary(client, scenario_id)
     assert body["current"]["device_count"] == 0
     assert body["projected"]["device_count"] == 0
+
+
+def test_a_missing_price_is_not_counted_as_zero(client, device_payload):
+    """費用を入れていない項目があると、合計は0円ではなく「まだ分からない」。
+
+    そこを混ぜると、投資額を見た人が入れ替えを無料だと受け取る。
+    """
+    device_id = add_device(client, device_payload)
+    scenario_id = make_scenario(client, name="費用の入っていない案")["id"]
+    client.post(
+        f"{API}/scenarios/{scenario_id}/items",
+        json={"action": "replace", "device_id": device_id, "planned_model": "C9300L-24T"},
+    )
+
+    result = summary(client, scenario_id)
+    assert result["investment"] == 0
+    assert any("導入費用が入っているのは" in w for w in result["warnings"])
+
+
+def test_a_fully_priced_plan_says_nothing_about_missing_prices(client, device_payload):
+    device_id = add_device(client, device_payload)
+    scenario_id = make_scenario(client, name="費用の入っている案")["id"]
+    client.post(
+        f"{API}/scenarios/{scenario_id}/items",
+        json={
+            "action": "replace",
+            "device_id": device_id,
+            "planned_model": "C9300L-24T",
+            "unit_cost": 600000,
+        },
+    )
+
+    result = summary(client, scenario_id)
+    assert result["investment"] == 600000
+    assert not any("導入費用が入っているのは" in w for w in result["warnings"])
