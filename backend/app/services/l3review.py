@@ -156,6 +156,7 @@ def _bgp_read(parsed: ParsedConfig) -> dict | None:
                 "shutdown": n.shutdown,
             }
             for n in parsed.bgp.neighbors
+            if not n.is_peer_group
         ],
     }
 

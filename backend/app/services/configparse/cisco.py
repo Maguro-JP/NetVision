@@ -28,6 +28,11 @@ _SHOW_VERSION = re.compile(
 _NXOS_VERSION = re.compile(r"^\s*(?:NXOS|system):?\s*version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _MODEL_NUMBER = re.compile(r"^\s*Model [Nn]umber\s*:\s*(\S+)", re.MULTILINE)
 _CHASSIS = re.compile(r"^\s*cisco\s+(\S+)\s*\(", re.MULTILINE)
+#: Nexus の show version は `cisco Nexus9000 C93180YC-EX Chassis` の形で、
+#: 括弧が無い。ここを読めないと型番が空になり、EoL も弱点も引けない
+_NEXUS_CHASSIS = re.compile(
+    r"^\s*cisco\s+Nexus\S*\s+(\S+)\s+(?:Chassis|chassis)", re.MULTILINE | re.IGNORECASE
+)
 #: IOS は `System serial number:`、NX-OS は `Processor Board ID`。
 #: 保守契約の照合に使う値なので、どちらの書き方でも拾う
 _SERIAL = re.compile(
@@ -47,11 +52,34 @@ _RANGE_PART = re.compile(
 _VLAN_DEF = re.compile(r"^vlan\s+([\d,\s-]+)$", re.IGNORECASE)
 
 
+#: NX-OS にしか出てこない書き方。`feature` を1つも使っていない設定でも、
+#: ここに当たれば NX-OS と言える。取り違えると、版数の照合先が IOS になる
+_NXOS_MARKERS = re.compile(
+    r"^\s*(?:vpc domain\s|peer-keepalive\s|ip router ospf\s+\S+\s+area\s"
+    r"|hsrp\s+version\s|boot nxos\s|system jumbomtu\s)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def detect(text: str) -> Vendor | None:
     lowered = text.lower()
-    if "nxos" in lowered or re.search(r"^feature\s", text, re.MULTILINE | re.IGNORECASE):
+    if "nexus operating system" in lowered or "nexus9000" in lowered or "nexus 9000" in lowered:
         return Vendor.CISCO_NXOS
-    if _HOSTNAME.search(text) or "ios software" in lowered or "ios-xe" in lowered:
+    if (
+        "nxos" in lowered
+        or re.search(r"^feature\s", text, re.MULTILINE | re.IGNORECASE)
+        or _NXOS_MARKERS.search(text)
+    ):
+        return Vendor.CISCO_NXOS
+    # show version の見出しは「Cisco IOS XE Software」「Cisco IOS Software」の
+    # ように空白区切りで、ハイフン付きの表記だけを見ていると取りこぼす
+    if (
+        _HOSTNAME.search(text)
+        or "ios software" in lowered
+        or "ios-xe" in lowered
+        or "ios xe software" in lowered
+        or re.search(r"^\s*cisco\s+\S+.*\bprocessor\b", text, re.MULTILINE | re.IGNORECASE)
+    ):
         return Vendor.CISCO_IOS
     if re.search(r"^\s*show cdp neighbors", text, re.MULTILINE | re.IGNORECASE):
         return Vendor.CISCO_IOS
@@ -114,7 +142,7 @@ _STACK_PROVISION = re.compile(r"^switch\s+\d+\s+provision\s+(\S+)\s*$", re.IGNOR
 
 
 def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
-    match = _MODEL_NUMBER.search(text) or _CHASSIS.search(text)
+    match = _MODEL_NUMBER.search(text) or _NEXUS_CHASSIS.search(text) or _CHASSIS.search(text)
     if match:
         parsed.model = match.group(1)
 

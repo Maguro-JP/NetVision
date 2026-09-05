@@ -65,6 +65,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_overlapping_bands(parsed))
     findings.extend(_static_routes(parsed))
     findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
@@ -125,15 +126,19 @@ def _bgp(parsed: ParsedConfig) -> list[Finding]:
     findings: list[Finding] = []
     tools = _names(parsed, "route-map") | _names(parsed, "prefix-list")
 
-    for neighbor in bgp.neighbors:
+    # peer-group の行は雛形であって相手ではない。中身は相手側へ写してあるので、
+    # ここで数えると同じ指摘が雛形の分だけ増える
+    neighbors = [n for n in bgp.neighbors if not n.is_peer_group]
+
+    for neighbor in neighbors:
         findings.extend(_bgp_neighbor(bgp, neighbor, tools))
 
     missing_ibgp = [
         neighbor.address
-        for neighbor in bgp.neighbors
+        for neighbor in neighbors
         if not neighbor.is_ebgp(bgp.local_as) and neighbor.remote_as and not neighbor.next_hop_self
     ]
-    has_ebgp = any(n.is_ebgp(bgp.local_as) for n in bgp.neighbors)
+    has_ebgp = any(n.is_ebgp(bgp.local_as) for n in neighbors)
     if has_ebgp and missing_ibgp:
         findings.append(
             _note(
@@ -147,7 +152,7 @@ def _bgp(parsed: ParsedConfig) -> list[Finding]:
         )
 
     logs_anyway = parsed.vendor.value in _LOGS_BGP_BY_DEFAULT
-    if not bgp.log_neighbor_changes and bgp.neighbors and not logs_anyway:
+    if not bgp.log_neighbor_changes and neighbors and not logs_anyway:
         findings.append(
             _note(
                 LOW,
@@ -441,6 +446,51 @@ def _static_routes(parsed: ParsedConfig) -> list[Finding]:
     return findings
 
 
+def _overlapping_bands(parsed: ParsedConfig) -> list[Finding]:
+    """同じ機器の別のポートが、重なる帯を持っていないか。
+
+    同じ帯を2つのポートに付けると、どちらから出すかが決まらない。機種に
+    よっては後から付けたほうが弾かれ、片方だけが生き残る。設定を流した
+    人からは通ったように見えるので、経路表を見るまで気づけない。
+
+    VRF が違えば分かれているので、重なっていても構わない。止めてある
+    ポートも、その帯を持っていない。
+    """
+    bands: list[tuple[str, str | None, ipaddress.IPv4Network | ipaddress.IPv6Network, str]] = []
+    for interface in parsed.interfaces:
+        if not interface.enabled:
+            continue
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            if network is None or network.prefixlen >= network.max_prefixlen:
+                continue
+            bands.append((interface.name, interface.vrf, network, text or ""))
+
+    findings: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for index, (name, vrf, network, text) in enumerate(bands):
+        for other_name, other_vrf, other, other_text in bands[index + 1 :]:
+            if name == other_name or vrf != other_vrf:
+                continue
+            if network.version != other.version or not network.overlaps(other):
+                continue
+            key = tuple(sorted((name, other_name)))
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{name} と {other_name} の帯が重なっています",
+                    "同じ帯を2つのポートに付けると、どちらから出すかが決まりません。"
+                    "機種によっては後から付けたほうが弾かれ、片方だけが生き残ります。"
+                    "設定は通ったように見えるので、経路表を見るまで気づけません。",
+                    [f"{name} ({text})", f"{other_name} ({other_text})"],
+                )
+            )
+    return findings
+
+
 def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
     """既定ゲートウェイの冗長（HSRP / VRRP）の仮想アドレスを検算する。
 
@@ -449,11 +499,20 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
     機器も上がっているので、動かしてみるまで気づかない。
     """
     findings: list[Finding] = []
-    ports = {}
+    # 1つのポートが帯を複数持つことがある（secondary・IPv6）。仮想アドレスは
+    # そのどれかに入っていればよい。1つ目だけで見ると、2つ目の帯を使った
+    # 冗長を「帯の外」と言ってしまう
+    ports: dict[str, tuple[object, list[ipaddress.IPv4Network | ipaddress.IPv6Network]]] = {}
     for interface in parsed.interfaces:
-        network = _network_of(interface.ip_address)
-        if network is not None:
-            ports[normalize(interface.name)] = (interface, network)
+        networks = [
+            network
+            for network in (
+                _network_of(text) for text in [interface.ip_address, *interface.extra_addresses]
+            )
+            if network is not None
+        ]
+        if networks:
+            ports[normalize(interface.name)] = (interface, networks)
 
     for entry in parsed.redundancy:
         if not entry.virtual_ip:
@@ -461,13 +520,17 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
         found = ports.get(normalize(entry.interface))
         if found is None:
             continue
-        interface, network = found
+        interface, networks = found
         try:
             virtual = ipaddress.ip_address(entry.virtual_ip)
         except ValueError:
             continue
         name = f"{entry.protocol.upper()} グループ {entry.group}"
-        if virtual not in network:
+        network = next((n for n in networks if virtual in n), None)
+        if network is None:
+            # どの帯にも入っていない。比べた先は、同じ種別の帯だけを挙げる
+            same_family = [n for n in networks if n.version == virtual.version] or networks
+            network = same_family[0]
             findings.append(
                 _note(
                     HIGH,
@@ -483,8 +546,10 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
                 )
             )
             continue
-        own = _address_of(interface.ip_address)
-        if own is not None and own == virtual:
+        own_addresses = [
+            _address_of(text) for text in [interface.ip_address, *interface.extra_addresses]
+        ]
+        if virtual in [a for a in own_addresses if a is not None]:
             findings.append(
                 _note(
                     HIGH,
@@ -578,11 +643,23 @@ _NEXT_HOP = re.compile(
 _MATCH_ACL = re.compile(r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>.+)$", re.IGNORECASE)
 
 
-def _connected_networks(parsed: ParsedConfig) -> list[ipaddress.IPv4Network]:
-    networks = []
+def _connected_networks(
+    parsed: ParsedConfig,
+) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """この機器が直に持っている帯。
+
+    2つ目以降のアドレス（secondary・IPv6）も直結の帯である。ここを落とすと、
+    そちらの帯にいる相手を「行けません」と言ってしまう。
+    """
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for interface in parsed.interfaces:
-        network = _network_of(interface.ip_address)
-        if network is not None and network.prefixlen < 32:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            if network is None:
+                continue
+            # ホスト1つ分（/32・/128）は帯ではないので、根拠にしない
+            if network.prefixlen >= network.max_prefixlen:
+                continue
             networks.append(network)
     return networks
 
@@ -1180,7 +1257,7 @@ def _address_of(text: str | None):  # noqa: ANN201
         return None
 
 
-def _network_of(text: str | None) -> ipaddress.IPv4Network | None:
+def _network_of(text: str | None) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
     if not text:
         return None
     parts = text.split()

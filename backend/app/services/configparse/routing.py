@@ -134,6 +134,11 @@ _IOS_ROUTE = re.compile(
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)\s+(?P<mask>\d+\.\d+\.\d+\.\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+_IOS_ROUTE6 = re.compile(
+    r"^ipv6 route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
+    r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
 _IOS_ROUTER_OSPF = re.compile(r"^router ospf\s+(\S+)", re.IGNORECASE)
 _IOS_ROUTER_BGP = re.compile(r"^router bgp\s+(\S+)", re.IGNORECASE)
 _IOS_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
@@ -157,14 +162,45 @@ def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
-        for token in match.group("rest").split():
-            if _is_ip(token):
-                route.next_hop = token
-            elif token.isdigit():
-                route.distance = int(token)
-            elif re.match(r"^[A-Za-z]", token) and token.lower() not in {"name", "tag", "track"}:
-                route.interface = expand(token)
+        _read_route_options(match.group("rest"), route)
         parsed.routes.append(route)
+
+    for line in text.splitlines():
+        match = _IOS_ROUTE6.match(line.strip())
+        if not match:
+            continue
+        destination = to_prefix(match.group("dest"))
+        if destination is None:
+            continue
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        _read_route_options(match.group("rest"), route)
+        parsed.routes.append(route)
+
+
+# name / tag / track は後ろに値を連れている。値まで読み飛ばさないと、
+# その数字をアドミニストレイティブディスタンスと取り違える
+_ROUTE_KEYWORDS_WITH_VALUE = {"name", "tag", "track", "metric"}
+_ROUTE_KEYWORDS = {"permanent", "global", "multicast", "unicast", "dhcp"}
+
+
+def _read_route_options(rest: str, route: ParsedRoute) -> None:
+    tokens = rest.split()
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        lowered = token.lower()
+        index += 1
+        if lowered in _ROUTE_KEYWORDS_WITH_VALUE:
+            index += 1
+            continue
+        if lowered in _ROUTE_KEYWORDS:
+            continue
+        if _is_ip(token):
+            route.next_hop = token
+        elif token.isdigit():
+            route.distance = int(token)
+        elif re.match(r"^[A-Za-z]", token):
+            route.interface = expand(token)
 
 
 def _cisco_ospf(text: str, parsed: ParsedConfig) -> None:
@@ -243,7 +279,44 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
                 prefix = to_prefix(network.group(1), network.group(2), wildcard=False)
                 if prefix and prefix not in bgp.networks:
                     bgp.networks.append(prefix)
+        _inherit_peer_groups(bgp)
         parsed.bgp = bgp
+
+
+#: 雛形から相手へ引き継がれる設定。相手側に書いてあれば、そちらが勝つ
+_PEER_GROUP_INHERITED = (
+    "remote_as",
+    "update_source",
+    "route_map_in",
+    "route_map_out",
+    "prefix_list_in",
+    "prefix_list_out",
+    "filter_list_in",
+    "filter_list_out",
+    "ebgp_multihop",
+    "maximum_prefix",
+)
+
+
+def _inherit_peer_groups(bgp: ParsedBgp) -> None:
+    """peer-group に書いた内容を、そこに属する相手へ写す。
+
+    IOS は雛形に1回書けば、属する相手すべてに効く。写しておかないと
+    「この相手だけ remote-as が無い」と、無いものを有ると言ってしまう。
+    """
+    templates = {n.address: n for n in bgp.neighbors if n.is_peer_group}
+    if not templates:
+        return
+    for neighbor in bgp.neighbors:
+        template = templates.get(neighbor.peer_group or "")
+        if template is None or template is neighbor:
+            continue
+        for name in _PEER_GROUP_INHERITED:
+            if getattr(neighbor, name) is None:
+                setattr(neighbor, name, getattr(template, name))
+        for name in ("next_hop_self", "password"):
+            if getattr(template, name):
+                setattr(neighbor, name, True)
 
 
 def _bgp_option(bgp: ParsedBgp, line: str) -> bool:
@@ -293,6 +366,10 @@ def _add_neighbor(bgp: ParsedBgp, address: str, rest: str, family: str | None = 
         bgp.neighbors.append(found)
     if family and family not in found.address_families:
         found.address_families.append(family)
+
+    if re.match(r"^peer-group\s*$", rest, re.IGNORECASE):
+        found.is_peer_group = True
+        return
 
     for pattern, name in _NEIGHBOR_FLAGS:
         match = re.match(pattern, rest, re.IGNORECASE)

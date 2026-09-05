@@ -639,3 +639,158 @@ def test_the_same_missing_acl_on_one_port_is_said_once():
         + "interface GigabitEthernet0/1\n ip access-group 101 in\n ip access-group 101 out\n"
     )
     assert len([f for f in _review_with_text(text) if "当てた ACL" in f.title]) == 1
+
+
+def test_peer_group_settings_reach_the_neighbors_in_it() -> None:
+    """peer-group に書いた内容は、そこに属する相手にも効いている。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "router bgp 65001",
+            " neighbor PEERS peer-group",
+            " neighbor PEERS remote-as 65003",
+            " neighbor PEERS update-source Loopback0",
+            " neighbor PEERS route-map IN in",
+            " neighbor 10.0.0.6 peer-group PEERS",
+            " neighbor 10.0.0.7 peer-group PEERS",
+            " neighbor 10.0.0.7 route-map SPECIAL in",
+        ]
+    )
+    bgp = configparse.parse(text).bgp
+    assert bgp is not None
+    peers = {n.address: n for n in bgp.neighbors}
+    assert peers["PEERS"].is_peer_group is True
+    assert peers["10.0.0.6"].remote_as == "65003"
+    assert peers["10.0.0.6"].update_source == "Loopback0"
+    assert peers["10.0.0.6"].route_map_in == "IN"
+    # 相手側に書いてあるほうが勝つ
+    assert peers["10.0.0.7"].route_map_in == "SPECIAL"
+
+
+def test_the_peer_group_line_itself_is_not_counted_as_a_neighbor() -> None:
+    """雛形の行を相手として数えると、同じ指摘が余分に出る。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "router bgp 65001",
+            " neighbor PEERS peer-group",
+            " neighbor PEERS remote-as 65003",
+            " neighbor 10.0.0.6 peer-group PEERS",
+        ]
+    )
+    parsed = configparse.parse(text)
+    mentions = [
+        finding.title
+        for finding in policyreview.review(parsed)
+        if "PEERS" in finding.title or any("PEERS" in line for line in finding.evidence)
+    ]
+    assert mentions == []
+
+
+def test_the_second_address_on_a_port_also_counts_as_directly_connected() -> None:
+    """secondary と IPv6 も直結の帯。落とすと「行けません」の誤りになる。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            " ip address 10.0.11.1 255.255.255.0 secondary",
+            " ipv6 address 2001:db8:0:10::1/64",
+            "ip route 10.20.0.0 255.255.0.0 10.0.11.9",
+            "ipv6 route 2001:db8:1::/48 2001:db8:0:10::9",
+            "ipv6 route 2001:db8:2::/48 2001:db8:9:9::9",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    # どの帯にも無いのはこの1本だけ
+    assert titles == ["2001:db8:2::/48 の次の相手 2001:db8:9:9::9 へ行けません"]
+
+
+def test_a_virtual_address_may_sit_on_the_second_band_of_a_port() -> None:
+    """secondary の帯を使った冗長を、帯の外だと言ってしまわない。"""
+    text = "\n".join(
+        [
+            "hostname sw1",
+            "interface Vlan20",
+            " ip address 10.0.20.2 255.255.255.0",
+            " ip address 10.0.21.2 255.255.255.0 secondary",
+            " standby 20 ip 10.0.20.254",
+            " standby 21 ip 10.0.21.254",
+        ]
+    )
+    assert policyreview.review(configparse.parse(text)) == []
+
+
+def test_the_virtual_address_checks_still_fire() -> None:
+    """帯の外・自分と同じ・配れないアドレスは、これまで通り言う。"""
+    text = "\n".join(
+        [
+            "hostname sw1",
+            "interface Vlan30",
+            " ip address 10.0.30.2 255.255.255.0",
+            " standby 30 ip 10.0.99.254",
+            " standby 31 ip 10.0.30.2",
+            " standby 32 ip 10.0.30.255",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    assert len(titles) == 3
+    assert all(f.level == HIGH for f in policyreview.review(configparse.parse(text)))
+
+
+def _review_titles(text: str) -> list[str]:
+    return [f.title for f in policyreview.review(configparse.parse(text))]
+
+
+def test_two_ports_holding_the_same_band_are_pointed_out() -> None:
+    """同じ帯を2つのポートに付けると、どちらから出すかが決まらない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.10.9 255.255.255.0",
+        ]
+    )
+    assert _review_titles(text) == ["GigabitEthernet0/1 と GigabitEthernet0/2 の帯が重なっています"]
+
+
+def test_a_band_inside_a_wider_one_also_counts_as_overlapping() -> None:
+    """片方がもう片方を覆っている形も、重なりには違いない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.0.1 255.255.0.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.5.1 255.255.255.0",
+        ]
+    )
+    assert len(_review_titles(text)) == 1
+
+
+def test_bands_split_by_vrf_or_shut_down_are_not_pointed_out() -> None:
+    """VRF が違えば分かれている。止めてあるポートは、その帯を持っていない。"""
+    by_vrf = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " vrf forwarding CUST",
+            " ip address 10.0.10.1 255.255.255.0",
+        ]
+    )
+    shut = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.10.9 255.255.255.0",
+            " shutdown",
+        ]
+    )
+    assert _review_titles(by_vrf) == []
+    assert _review_titles(shut) == []

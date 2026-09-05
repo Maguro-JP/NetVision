@@ -323,6 +323,9 @@ class ParsedBgpNeighbor:
     """
 
     address: str
+    #: 相手そのものではなく、まとめて掛けるための雛形の行（IOS の peer-group、
+    #: Junos の group）。数に入れると相手が1台多く見える
+    is_peer_group: bool = False
     remote_as: str | None = None
     description: str | None = None
     #: 受ける側・出す側に掛けている道具。in と out は別物なので分けて持つ

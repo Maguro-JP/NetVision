@@ -252,3 +252,35 @@ def test_nxos_brief_is_read_with_the_reason_column():
     assert states["Ethernet1/1"] == "up"
     assert states["Ethernet1/2"] == "down"
     assert states["Ethernet1/3"] == "disabled"
+
+
+def test_the_name_column_fills_a_missing_description() -> None:
+    """show interfaces status の Name 列は、そのポートの説明そのもの。
+
+    config に description が無いポートでも、ここに書いてあれば分かる。
+    config 側に書いてあるほうが新しいとは限らないが、書いてあれば動かさない。
+    """
+    text = "\n".join(
+        [
+            "hostname sw1",
+            "interface GigabitEthernet1/0/1",
+            " description UPLINK-CORE-A",
+            "interface GigabitEthernet1/0/3",
+            " switchport access vlan 20",
+            "interface GigabitEthernet1/0/4",
+            " switchport access vlan 20",
+            "!",
+            "show interfaces status",
+            "Port      Name               Status       Vlan       Duplex  Speed Type",
+            "Gi1/0/1   UPLINK-CORE        connected    trunk        full    1000 10/100/1000BaseTX",
+            "Gi1/0/3   PRINTER 1F         err-disabled 20           full     100 10/100/1000BaseTX",
+            "Gi1/0/4                      notconnect   20           auto    auto 10/100/1000BaseTX",
+        ]
+    )
+    ports = {i.name: i for i in configparse.parse(text).interfaces}
+    # config に書いてあるほうが勝つ
+    assert ports["GigabitEthernet1/0/1"].description == "UPLINK-CORE-A"
+    # 空白を含む説明も、Status 列の手前までを1つとして読む
+    assert ports["GigabitEthernet1/0/3"].description == "PRINTER 1F"
+    # Name 列が空なら、無いままにする
+    assert ports["GigabitEthernet1/0/4"].description is None

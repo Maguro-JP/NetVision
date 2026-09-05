@@ -89,6 +89,14 @@ class Dialect:
     def risks_for(self, command: str) -> list[str]:
         return [rule.message for rule in self.risks if rule.pattern.search(command)]
 
+    def render_script(self, lines: list[str]) -> str:
+        """投入できる形の文字列にする。
+
+        たいていの機種は字下げがそのままブロックの入れ子になるので、並べるだけ。
+        閉じる語が要る機種は、ここを差し替える。
+        """
+        return "\n".join(lines) + "\n" if lines else ""
+
 
 # ---------------------------------------------------------------------------
 # Cisco IOS / IOS-XE / NX-OS
@@ -228,11 +236,42 @@ class _FortiDialect(Dialect):
         stripped = line.strip()
         parts = stripped.split()
         lowered = parts[0].lower() if parts else ""
+        if lowered in {"next", "end"}:
+            # ブロックを閉じる語。設定そのものではないので読み飛ばす
+            return "", False
         if lowered == "unset" and len(parts) > 1:
             return f"set {parts[1]}", True
         if lowered == "delete" and len(parts) > 1:
             return f"edit {' '.join(parts[1:])}", True
         return stripped, False
+
+    def render_script(self, lines: list[str]) -> str:
+        """`next` と `end` を補って、そのまま貼れる形にする。
+
+        FortiOS は字下げでは閉じない。閉じる語が無いコマンドを貼ると、
+        次のブロックが前のブロックの中に入るか、そこで弾かれる。
+        """
+        out: list[str] = []
+        stack: list[tuple[int, str]] = []  # (字下げ, 閉じる語)
+
+        def close(until: int) -> None:
+            while stack and stack[-1][0] >= until:
+                indent, word = stack.pop()
+                out.append(" " * indent + word)
+
+        for line in lines:
+            indent = len(line) - len(line.lstrip(" "))
+            close(indent)
+            out.append(line)
+            head = line.strip().split()
+            if not head:
+                continue
+            if head[0].lower() == "config":
+                stack.append((indent, "end"))
+            elif head[0].lower() == "edit":
+                stack.append((indent, "next"))
+        close(0)
+        return "\n".join(out) + "\n" if out else ""
 
     def negate(self, line: str) -> str:
         parts = line.strip().split()
