@@ -5,7 +5,7 @@
 1台ずつ見ても分からないので、番号ごとに機器をまたいで見る。
 """
 
-from app.models import Device
+from app.models import Device, DeviceType
 from app.models.vlan import DeviceVlan, Vlan
 from app.services import vlanreview
 from app.services.reviewnote import LOW, MEDIUM
@@ -152,3 +152,36 @@ def test_a_wider_ledger_subnet_that_holds_the_address_is_quiet(db_session):
     db_session.flush()
 
     assert not [i for i in vlanreview.review(db_session).findings if "区画" in i.finding.title]
+
+
+def test_it_says_how_many_switches_it_could_not_look_at(db_session):
+    """次に番号を決める人は、この一覧を見て空いている番号を選ぶ。
+
+    読めていない機器があるのに黙ると、番号がそろっていると読まれる。
+    """
+    device = _device(db_session, "vlan-sw-01")
+    device.device_type = DeviceType.SWITCH
+    _vlan(db_session, device, 10, "USERS")
+    db_session.add(
+        Device(
+            hostname="dark-sw-01",
+            vendor="Cisco",
+            model="C9300",
+            device_type=DeviceType.SWITCH,
+        )
+    )
+    db_session.flush()
+
+    report = vlanreview.review(db_session)
+    assert report.devices_with_vlans == 1
+    assert any("2 台のうち 1 台" in note for note in report.notes)
+
+
+def test_nothing_is_said_when_every_switch_was_looked_at(db_session):
+    device = _device(db_session, "vlan-sw-02")
+    device.device_type = DeviceType.SWITCH
+    _vlan(db_session, device, 10, "USERS")
+    db_session.flush()
+
+    report = vlanreview.review(db_session)
+    assert not any("この一覧に入っていません" in note for note in report.notes)
