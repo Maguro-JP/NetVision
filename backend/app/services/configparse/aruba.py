@@ -285,7 +285,10 @@ def _parse_acls(text: str, parsed: ParsedConfig) -> None:
             applied = _APPLY.match(stripped)
             if applied:
                 acl = acls.setdefault(applied.group(1), ParsedAcl(name=applied.group(1)))
-                acl.applied_to.append(f"interface {interface} {applied.group(2).lower()}")
+                # 向きの言葉は他のベンダーとそろえる。表に並んだときに
+                # 「in」と「入り」が混ざると、別のことのように見える
+                direction = "入り" if applied.group(2).lower() == "in" else "出"
+                acl.applied_to.append(f"interface {interface} {direction}")
 
     parsed.acls.extend(acls.values())
 
