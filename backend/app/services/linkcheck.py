@@ -91,6 +91,14 @@ def review(db: Session, *, limit: int = 2000) -> LinkReport:
             "線はありますが、両端のポートの設定が読めていません。"
             "Config を取り込むと、両端の突き合わせができるようになります。"
         )
+    elif report.links_with_config < report.links_seen:
+        # 見ていない線があるのに指摘が0件だと、全部そろっていると読まれる。
+        # 「食い違いが無い」と「まだ見ていない」は違う
+        unseen = report.links_seen - report.links_with_config
+        report.notes.append(
+            f"突き合わせたのは {report.links_seen} 本のうち {report.links_with_config} 本です。"
+            f"残り {unseen} 本は、両端のどちらかの Config が無いため見ていません。"
+        )
 
     weight = {HIGH: 0, MEDIUM: 1, LOW: 2}
     report.findings.sort(key=lambda item: weight.get(item.finding.level, 3))
