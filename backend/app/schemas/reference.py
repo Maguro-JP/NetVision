@@ -131,6 +131,8 @@ class DeviceVulnerabilityRead(BaseModel):
     matched_on: str
     source: str
     fetched_at: date | None
+    #: 版数が読めていないため、当たるかどうかを言えない
+    undetermined: bool = False
 
 
 class VulnerabilitySummary(BaseModel):
@@ -142,6 +144,8 @@ class VulnerabilitySummary(BaseModel):
     critical_findings: int
     high_findings: int
     devices_without_version: int
+    #: 型番は当たるのに版数が無く、判定できなかった件数
+    undetermined_findings: int = 0
     findings: list[DeviceVulnerabilityRead]
 
 

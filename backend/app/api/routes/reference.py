@@ -312,18 +312,30 @@ def vulnerability_matches(
     affected: set[int] = set()
     for device in devices:
         matches = service.match_device(device, vulnerabilities)
-        if matches:
+        # 判定できていないものを「影響を受ける機器」に数えない。当たると
+        # 分かっている台数と混ざると、どちらの数字も意味が薄くなる
+        if any(not m.undetermined for m in matches):
             affected.add(device.id)
         findings.extend(matches)
 
-    findings.sort(key=lambda f: (not f.known_exploited, -(f.cvss_score or 0), f.hostname))
+    # 判定できていないものは後ろへ。見落とされないよう、件数は別に出す
+    findings.sort(
+        key=lambda f: (f.undetermined, not f.known_exploited, -(f.cvss_score or 0), f.hostname)
+    )
 
     return VulnerabilitySummary(
         total_vulnerabilities=len(vulnerabilities),
         devices_affected=len(affected),
-        known_exploited_findings=sum(1 for f in findings if f.known_exploited),
-        critical_findings=sum(1 for f in findings if (f.cvss_score or 0) >= 9.0),
-        high_findings=sum(1 for f in findings if 7.0 <= (f.cvss_score or 0) < 9.0),
+        known_exploited_findings=sum(
+            1 for f in findings if f.known_exploited and not f.undetermined
+        ),
+        critical_findings=sum(
+            1 for f in findings if (f.cvss_score or 0) >= 9.0 and not f.undetermined
+        ),
+        high_findings=sum(
+            1 for f in findings if 7.0 <= (f.cvss_score or 0) < 9.0 and not f.undetermined
+        ),
+        undetermined_findings=sum(1 for f in findings if f.undetermined),
         # バージョン未登録の機器は判定できない。件数を出さないと見落とす。
         devices_without_version=sum(1 for d in devices if not d.os_version),
         findings=[DeviceVulnerabilityRead(**f.__dict__) for f in findings],

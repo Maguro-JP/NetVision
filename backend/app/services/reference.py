@@ -539,6 +539,9 @@ class DeviceVulnerability:
     matched_on: str  # 何で一致したかを残す（説明できないと使えない）
     source: str
     fetched_at: date | None
+    #: 版数が読めていないため、当たるかどうかを言えない状態。
+    #: 「当たらない」と混ぜると、読めていないだけの機器が安全に見える
+    undetermined: bool = False
 
 
 def match_device(device: Device, vulnerabilities: list[Vulnerability]) -> list[DeviceVulnerability]:
@@ -548,6 +551,10 @@ def match_device(device: Device, vulnerabilities: list[Vulnerability]) -> list[D
     for vulnerability in vulnerabilities:
         for affect in vulnerability.affects:
             reason = _affect_matches(device, affect)
+            undetermined = False
+            if reason is None:
+                reason = _cannot_tell(device, affect)
+                undetermined = reason is not None
             if reason is None:
                 continue
             results.append(
@@ -563,13 +570,40 @@ def match_device(device: Device, vulnerabilities: list[Vulnerability]) -> list[D
                     matched_on=reason,
                     source=str(vulnerability.source),
                     fetched_at=vulnerability.fetched_at,
+                    undetermined=undetermined,
                 )
             )
             break  # 同じ CVE を複数回出さない
 
-    # 悪用確認済みを先頭に、次に CVSS の高い順
-    results.sort(key=lambda r: (not r.known_exploited, -(r.cvss_score or 0)))
+    # 悪用確認済みを先頭に、次に CVSS の高い順。判定できていないものは
+    # 見落とされると困るので、当たると分かっているものの次に置く
+    results.sort(key=lambda r: (r.undetermined, not r.known_exploited, -(r.cvss_score or 0)))
     return results
+
+
+def _cannot_tell(device: Device, affect: VulnerabilityAffect) -> str | None:
+    """当たるとも当たらないとも言えない場合の説明。
+
+    型番までは一致しているのに版数が読めていないと、範囲に入るかを判定
+    できない。そこを「当たらない」と扱うと、読めていないだけの機器が
+    安全な機器に混ざる。危ないほうの取り違えなので、分けて出す。
+    """
+    if device.os_version:
+        return None
+    if versions.normalize_name(device.vendor) != versions.normalize_name(affect.vendor):
+        return None
+    if not affect.model or not versions.matches_model(affect.model, device.model):
+        return None
+    if affect.exact_version or any(
+        (
+            affect.version_start_including,
+            affect.version_start_excluding,
+            affect.version_end_including,
+            affect.version_end_excluding,
+        )
+    ):
+        return "型番は一致。バージョンが未登録のため、当たるかどうかを判定できません"
+    return None
 
 
 def _affect_matches(device: Device, affect: VulnerabilityAffect) -> str | None:

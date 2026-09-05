@@ -491,6 +491,8 @@ export interface DeviceVulnerability {
   matched_on: string;
   source: string;
   fetched_at: string | null;
+  /** 版数が読めていないため、当たるかどうかを言えない */
+  undetermined: boolean;
 }
 
 export interface VulnerabilitySummary {
@@ -500,6 +502,8 @@ export interface VulnerabilitySummary {
   critical_findings: number;
   high_findings: number;
   devices_without_version: number;
+  /** 型番は当たるのに版数が無く、判定できなかった件数 */
+  undetermined_findings: number;
   findings: DeviceVulnerability[];
 }
 

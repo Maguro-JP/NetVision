@@ -74,6 +74,11 @@ export default function VulnerabilitiesPage() {
               <div className="value" style={{ color: "var(--sev-unknown)" }}>
                 {summary.devices_without_version}
               </div>
+              {summary.undetermined_findings > 0 && (
+                <div className="muted">
+                  うち型番が当たるもの {summary.undetermined_findings} 件
+                </div>
+              )}
             </div>
           </div>
 
@@ -138,7 +143,9 @@ export default function VulnerabilitiesPage() {
                         {finding.cvss_score ?? "—"}
                       </td>
                       <td>
-                        {finding.known_exploited ? (
+                        {finding.undetermined ? (
+                          <span className="badge unknown">判定できません</span>
+                        ) : finding.known_exploited ? (
                           <span className="badge expired">悪用確認済み</span>
                         ) : (
                           <span className="muted">—</span>

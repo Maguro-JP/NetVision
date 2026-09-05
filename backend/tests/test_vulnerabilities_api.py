@@ -310,3 +310,40 @@ def test_vulnerability_can_be_deleted(client):
 
     assert client.delete(f"{API}/reference/vulnerabilities/{cve['id']}").status_code == 204
     assert client.get(f"{API}/reference/vulnerabilities").json() == []
+
+
+def test_a_device_without_a_version_is_not_called_safe(client, device_payload):
+    """版数が読めていないだけの機器を、当たらない側に混ぜない。
+
+    型番まで一致しているのに版数が無いと、範囲に入るかを判定できない。
+    そこを「該当なし」と扱うと、読めていないだけの機器が安全な機器の中に
+    紛れる。危ないほうの取り違えなので、分けて出す。
+    """
+    upload_vulnerabilities(client, SIMPLE_PAYLOAD)
+    add_device(
+        client, device_payload, hostname="noversion-sw-01", model="C9500-40X", os_version=None
+    )
+
+    summary = client.get(f"{API}/reference/vulnerabilities/matches/summary").json()
+    ours = [f for f in summary["findings"] if f["hostname"] == "noversion-sw-01"]
+    assert ours, "型番が当たるのに、1件も出ていない"
+    assert all(f["undetermined"] for f in ours)
+    assert "バージョンが未登録" in ours[0]["matched_on"]
+    assert summary["undetermined_findings"] >= 1
+
+
+def test_an_undetermined_finding_is_not_counted_as_affected(client, device_payload):
+    """判定できていないものを「影響を受ける機器」に数えない。
+
+    当たると分かっている台数と混ざると、どちらの数字も意味が薄くなる。
+    """
+    upload_vulnerabilities(client, SIMPLE_PAYLOAD)
+    add_device(
+        client, device_payload, hostname="noversion-sw-02", model="C9500-40X", os_version=None
+    )
+
+    summary = client.get(f"{API}/reference/vulnerabilities/matches/summary").json()
+    assert summary["devices_affected"] == 0
+    assert summary["known_exploited_findings"] == 0
+    assert summary["critical_findings"] == 0
+    assert summary["undetermined_findings"] >= 1
