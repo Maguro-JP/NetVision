@@ -581,6 +581,29 @@ def _parse_cdp_detail(text: str, parsed: ParsedConfig) -> None:
         )
 
 
+#: ポート名らしい形（Gi1/0/1・GigabitEthernet1・Ethernet1/1・port1.0.1 など）
+_PORT_NAME = re.compile(r"^[A-Za-z][A-Za-z\-]*\d[\d/.:]*$")
+
+
+def _remote_port(port, description) -> str | None:  # noqa: ANN001
+    """相手のポート名。
+
+    LLDP の Port id は、機種によって番号だけ（`1`）や MAC のことがある。
+    そのまま図に出しても意味が分からず、相手側のポート一覧とも突き合わない。
+    Port Description のほうがポート名になっていれば、そちらを使う。
+
+    どちらもポート名に見えないときは、読み取れた Port id をそのまま残す。
+    こちらで作らない。
+    """
+    id_text = port.group(1).strip() if port else None
+    name_text = description.group(1).strip() if description else None
+    if id_text and _PORT_NAME.match(id_text):
+        return id_text
+    if name_text and _PORT_NAME.match(name_text):
+        return name_text
+    return id_text
+
+
 def _parse_lldp_detail(text: str, parsed: ParsedConfig) -> None:
     """`show lldp neighbors detail` の各ブロックを読む。"""
     for block in re.split(r"^-{5,}\s*$", text, flags=re.MULTILINE):
@@ -590,12 +613,13 @@ def _parse_lldp_detail(text: str, parsed: ParsedConfig) -> None:
             continue
 
         port = re.search(r"^Port id:\s*(\S+)", block, re.MULTILINE)
+        port_name = re.search(r"^Port Description:\s*(.+?)\s*$", block, re.MULTILINE)
         descr = re.search(r"^System Description:\s*\n?(.+)$", block, re.MULTILINE)
         parsed.add_neighbor(
             ParsedNeighbor(
                 local_interface=local.group(1),
                 remote_hostname=system.group(1),
-                remote_interface=port.group(1) if port else None,
+                remote_interface=_remote_port(port, port_name),
                 remote_platform=descr.group(1).strip() if descr else None,
                 protocol=NeighborProtocol.LLDP,
             )
