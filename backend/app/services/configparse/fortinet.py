@@ -79,6 +79,7 @@ def parse(text: str) -> ParsedConfig:
         parsed.serial_number = serial.group(1)
 
     _parse_interfaces(text, parsed)
+    _collect_vlans(parsed)
     _parse_vdoms(text, parsed)
     tunnels.parse_fortios(text, parsed)
     routing.parse_fortios(text, parsed)
@@ -353,6 +354,20 @@ def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
 
     if crypto.maps or crypto.ike_policies:
         parsed.crypto = crypto
+
+
+def _collect_vlans(parsed: ParsedConfig) -> None:
+    """VLAN の一覧を、口の定義から起こす。
+
+    FortiOS には VLAN を並べる場所が無い。`set vlanid` を持つ口が、その
+    VLAN そのものである。ここを拾わないと、VLAN 台帳との突き合わせで
+    FortiGate だけ「どの VLAN も持っていない」ことになる。
+    """
+    for interface in parsed.interfaces:
+        if interface.vlan and interface.vlan not in parsed.vlans:
+            # 名前は書いてあるときだけ。口の名前（Vlan20）を名前として持つと、
+            # 台帳と突き合わせたときに「名前が違います」の誤りになる
+            parsed.vlans[interface.vlan] = interface.description or ""
 
 
 def _parse_vdoms(text: str, parsed: ParsedConfig) -> None:
