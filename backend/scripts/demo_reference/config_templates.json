@@ -1,0 +1,90 @@
+[
+  {
+    "name": "VLAN を1つ足す（Cisco IOS / IOS-XE）",
+    "description": "VLAN の定義と、その VLAN のゲートウェイ（SVI）までを作ります。トランクの許可 VLAN への追加は、当てる相手が機器ごとに違うので別に出します。",
+    "category": "vlan",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "body": "vlan {{ vlan_id }}\n name {{ vlan_name }}\n!\ninterface Vlan{{ vlan_id }}\n description {{ vlan_name }}\n ip address {{ gateway_ip }} {{ netmask }}\n no shutdown\n!\n",
+    "variables": [
+      {"name": "vlan_id", "label": "VLAN 番号", "required": true, "help": "1〜4094。台帳で空いている番号を使ってください"},
+      {"name": "vlan_name", "label": "VLAN 名", "required": true, "help": "実機に入れる名前。英数字で書きます"},
+      {"name": "gateway_ip", "label": "ゲートウェイのアドレス", "required": true, "help": "この機器が名乗るアドレス。帯の先頭は使えません"},
+      {"name": "netmask", "label": "マスク", "required": true, "default": "255.255.255.0", "help": "点で区切った書き方（255.255.255.0）"}
+    ]
+  },
+  {
+    "name": "トランクの許可 VLAN に足す（Cisco IOS / IOS-XE）",
+    "description": "既に通っている VLAN を消さないよう add で足します。add を付け忘れると、その口の許可 VLAN が入れ替わり、他の VLAN が落ちます。",
+    "category": "interface",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "body": "interface {{ interface }}\n switchport trunk allowed vlan add {{ vlan_id }}\n!\n",
+    "variables": [
+      {"name": "interface", "label": "口の名前", "required": true, "help": "GigabitEthernet1/0/1 のように書きます"},
+      {"name": "vlan_id", "label": "足す VLAN 番号", "required": true}
+    ]
+  },
+  {
+    "name": "端末をつなぐ口の基本形（Cisco IOS / IOS-XE）",
+    "description": "アクセス VLAN と、ループを防ぐ設定まで入れます。BPDU guard を入れておかないと、島ハブを挿されたときに全体が止まります。",
+    "category": "interface",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "body": "interface {{ interface }}\n description {{ description }}\n switchport mode access\n switchport access vlan {{ vlan_id }}\n spanning-tree portfast\n spanning-tree bpduguard enable\n no shutdown\n!\n",
+    "variables": [
+      {"name": "interface", "label": "口の名前", "required": true},
+      {"name": "description", "label": "つなぐ先", "required": true, "help": "障害のときに抜いてよい線か判断できるように書きます"},
+      {"name": "vlan_id", "label": "アクセス VLAN", "required": true}
+    ]
+  },
+  {
+    "name": "管理まわりを固める（Cisco IOS / IOS-XE）",
+    "description": "telnet と Web UI を閉じ、SSH に寄せます。入口の設定は置き換えなので、消してから入れる形にはしていません。",
+    "category": "security",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "body": "no ip http server\nno ip http secure-server\nservice password-encryption\n!\nip ssh version 2\n!\nline vty 0 {{ vty_last }}\n transport input ssh\n exec-timeout {{ timeout_minutes }} 0\n!\nlogging host {{ syslog_host }}\nntp server {{ ntp_host }}\n!\n",
+    "variables": [
+      {"name": "vty_last", "label": "vty の最後の番号", "required": true, "default": "15", "help": "機種によって 4 か 15。show running-config | include line vty で確かめます"},
+      {"name": "timeout_minutes", "label": "無操作で切るまでの分", "required": true, "default": "10"},
+      {"name": "syslog_host", "label": "ログの送り先", "required": true},
+      {"name": "ntp_host", "label": "時刻の参照先", "required": true}
+    ]
+  },
+  {
+    "name": "SNMP を管理セグメントからだけに絞る（Cisco IOS / IOS-XE）",
+    "description": "合言葉はここには書きません。投入するときに手で入れてください。",
+    "category": "management",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "body": "ip access-list standard SNMP-MGMT\n permit {{ mgmt_network }} {{ mgmt_wildcard }}\n deny   any log\n!\n! 合言葉はこのテンプレートには入れていません。投入時に手で入れてください\n! snmp-server community <合言葉> RO SNMP-MGMT\n",
+    "variables": [
+      {"name": "mgmt_network", "label": "管理セグメント", "required": true, "help": "10.10.20.0 のように、帯の先頭を書きます"},
+      {"name": "mgmt_wildcard", "label": "ワイルドカードマスク", "required": true, "default": "0.0.0.255", "help": "/24 なら 0.0.0.255。点で区切ったマスクとは逆向きです"}
+    ]
+  },
+  {
+    "name": "VLAN を1つ足す（NEC QX / Comware）",
+    "description": "Comware は VLAN インタフェースの書き方が Cisco と違います。",
+    "category": "vlan",
+    "vendor": "NEC",
+    "os_name": "Comware",
+    "body": "vlan {{ vlan_id }}\n name {{ vlan_name }}\n quit\n!\ninterface Vlan-interface{{ vlan_id }}\n description {{ vlan_name }}\n ip address {{ gateway_ip }} {{ netmask }}\n undo shutdown\n quit\n",
+    "variables": [
+      {"name": "vlan_id", "label": "VLAN 番号", "required": true},
+      {"name": "vlan_name", "label": "VLAN 名", "required": true},
+      {"name": "gateway_ip", "label": "ゲートウェイのアドレス", "required": true},
+      {"name": "netmask", "label": "マスク", "required": true, "default": "255.255.255.0"}
+    ]
+  },
+  {
+    "name": "SSL-VPN を止める（FortiGate）",
+    "description": "在宅勤務で使っている場合は止められません。先に誰が使っているかを確かめてください。",
+    "category": "security",
+    "vendor": "Fortinet",
+    "os_name": "FortiOS",
+    "body": "config vpn ssl settings\n    set status disable\nend\n",
+    "variables": []
+  }
+]

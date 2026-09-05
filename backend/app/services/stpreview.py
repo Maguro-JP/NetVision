@@ -101,6 +101,15 @@ def review(db: Session) -> StpReport:
     report.findings.extend(_no_backup(states))
     report.findings.extend(_root_on_the_edge(states))
     report.findings.extend(_modes_differ(states))
+
+    # 見ていない機器があるのに指摘が0件だと、全部そろっていると読まれる。
+    # STP は輪が1つできるだけで拠点ごと止まるので、範囲を言わずに黙らない
+    switches = [d for d in devices if str(d.device_type) == "switch"]
+    if switches and len(states) < len(switches):
+        report.notes.append(
+            f"見たのは、台帳のスイッチ {len(switches)} 台のうち {len(states)} 台です。"
+            "残りは STP の設定を読み取れる Config がないため見ていません。"
+        )
     return report
 
 

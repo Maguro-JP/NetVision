@@ -127,3 +127,27 @@ def test_the_api_returns_the_report(client, db_session):
     assert body["devices_seen"] == 2
     assert body["roots"]["10"] == "core-sw-01"
     assert all(item["why"] for item in body["findings"])
+
+
+def test_it_says_how_many_switches_it_could_not_look_at(db_session):
+    """見ていない機器があるのに指摘が0件だと、全部そろっていると読まれる。
+
+    STP は輪が1つできるだけで拠点ごと止まる。範囲を言わずに黙らない。
+    """
+    _device(db_session, "root-sw-01", CORE)
+    _device(db_session, "root-sw-02", CORE.replace("core-sw-01", "root-sw-02"))
+    # STP の設定が読めないスイッチ（Config が無い）
+    db_session.add(Device(hostname="dark-sw-01", vendor="Cisco", device_type="switch"))
+    db_session.commit()
+
+    report = stpreview.review(db_session)
+    assert report.devices_seen == 2
+    assert any("3 台のうち 2 台" in note for note in report.notes)
+
+
+def test_nothing_is_said_when_every_switch_was_looked_at(db_session):
+    _device(db_session, "seen-sw-01", CORE)
+    _device(db_session, "seen-sw-02", CORE.replace("core-sw-01", "seen-sw-02"))
+
+    report = stpreview.review(db_session)
+    assert not any("見ていません" in note for note in report.notes)

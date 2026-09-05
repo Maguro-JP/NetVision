@@ -275,3 +275,38 @@ def test_two_configs_pasted_into_one_file_do_not_break_the_reader():
             text = texts[first] + "\n" + texts[second]
             parsed = configparse.parse(text)
             policyreview.review(parsed, text)
+
+
+def test_a_numeric_lldp_port_id_falls_back_to_the_description():
+    """LLDP の Port id は、機種によって番号だけや MAC のことがある。
+
+    そのまま図に出しても意味が分からず、相手側のポート一覧とも突き合わない。
+    Port Description のほうがポート名になっていれば、そちらを使う。
+    """
+    text = "\n".join(
+        [
+            "sw1#show lldp neighbors detail",
+            "------------------------------------------------",
+            "Local Intf: Gi1/0/1",
+            "Port id: Gi0/1",
+            "Port Description: to core-sw-01",
+            "System Name: acc-sw-01",
+            "------------------------------------------------",
+            "Local Intf: Gi1/0/2",
+            "Port id: 1",
+            "Port Description: GigabitEthernet1",
+            "System Name: wlc-01",
+            "------------------------------------------------",
+            "Local Intf: Gi1/0/3",
+            "Port id: aa:bb:cc:dd:ee:ff",
+            "Port Description: uplink to the core",
+            "System Name: other-01",
+        ]
+    )
+    ports = {n.remote_hostname: n.remote_interface for n in parse(text).neighbors}
+    # Port id がポート名なら、そのまま使う
+    assert ports["acc-sw-01"] == "GigabitEthernet0/1"
+    # 番号だけなら、説明側のポート名を採る
+    assert ports["wlc-01"] == "GigabitEthernet1"
+    # どちらもポート名に見えないなら、読み取れたものを残す（こちらで作らない）
+    assert ports["other-01"] == "aa:bb:cc:dd:ee:ff"

@@ -20,7 +20,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import Device
+from app.models import Device, DeviceType
 from app.models.topology import Interface
 from app.models.vlan import DeviceVlan, Vlan
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -80,6 +80,16 @@ def review(db: Session) -> VlanReport:
         report.findings.extend(_ledger_disagrees(vlan_id, entries, ledger, hostnames))
         report.findings.extend(_not_in_ledger(vlan_id, entries, ledger))
         report.findings.extend(_ledger_subnet_disagrees(vlan_id, ledger, svi_addresses, hostnames))
+
+    # 読めていない機器があるのに黙ると、番号がそろっていると読まれる。
+    # 次に番号を決める人は、この一覧を見て空いている番号を選ぶ
+    switches = db.scalars(select(Device).where(Device.device_type == DeviceType.SWITCH)).all()
+    if switches and report.devices_with_vlans < len(switches):
+        report.notes.append(
+            f"見たのは、台帳のスイッチ {len(switches)} 台のうち "
+            f"{report.devices_with_vlans} 台です。"
+            "残りの機器で使われている VLAN は、この一覧に入っていません。"
+        )
 
     order = {HIGH: 0, MEDIUM: 1, LOW: 2}
     report.findings.sort(key=lambda item: (order.get(item.finding.level, 3), item.vlan_id))

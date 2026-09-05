@@ -291,3 +291,45 @@ def test_both_sides_shut_down_is_left_alone(db_session):
         {"mode": "trunk", "enabled": False},
     )
     assert "片側だけポートが落ちています" not in _titles(db_session)
+
+
+def test_it_says_how_many_links_it_could_not_look_at(db_session):
+    """見ていない線があるのに指摘が0件だと、全部そろっていると読まれる。
+
+    「食い違いが無い」と「まだ見ていない」は違う。
+    """
+    _pair(
+        db_session,
+        {"mode": "trunk", "trunk_vlans": "10,20"},
+        {"mode": "trunk", "trunk_vlans": "10,20"},
+    )
+    # 片端の Config が無い線をもう1本足す
+    lonely = Device(hostname="sw-c", vendor="Cisco", model="C9300")
+    db_session.add(lonely)
+    db_session.flush()
+    known = db_session.query(Device).filter(Device.hostname == "sw-a").one()
+    db_session.add(
+        Link(
+            a_device_id=known.id,
+            a_interface="GigabitEthernet1/0/2",
+            b_device_id=lonely.id,
+            b_interface="GigabitEthernet1/0/2",
+        )
+    )
+    db_session.commit()
+
+    report = linkcheck.review(db_session)
+    assert report.links_seen == 2
+    assert report.links_with_config == 1
+    assert any("2 本のうち 1 本" in note for note in report.notes)
+
+
+def test_nothing_is_said_when_every_link_was_looked_at(db_session):
+    _pair(
+        db_session,
+        {"mode": "trunk", "trunk_vlans": "10,20"},
+        {"mode": "trunk", "trunk_vlans": "10,20"},
+    )
+    report = linkcheck.review(db_session)
+    assert report.links_with_config == report.links_seen
+    assert not any("見ていません" in note for note in report.notes)

@@ -18,7 +18,7 @@ import ipaddress
 import re
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Device
@@ -212,6 +212,17 @@ def report(db: Session, *, limit: int = 200) -> CalcReport:
 
     if not rows:
         out.notes.append("Config をまだ読ませていないので、数えられるものがありません")
+    else:
+        # 残り何台入るかは、採番を決める人がそのまま使う数字である。読めた
+        # 範囲を言わないと、台帳全体を数えたものだと受け取られる
+        counted = len({row.device_id for row in rows})
+        total = db.scalar(select(func.count()).select_from(Device)) or 0
+        if total and counted < total:
+            out.notes.append(
+                f"数えたのは、台帳 {total} 台のうち Config が入っている {counted} 台です。"
+                "残りの機器が使っているアドレスは、この数に入っていません"
+            )
+
     crowded = [s for s in out.subnets if s.crowded]
     if crowded:
         out.notes.append(

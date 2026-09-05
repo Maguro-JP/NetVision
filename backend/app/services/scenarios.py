@@ -156,6 +156,21 @@ def summarize(db: Session, scenario: Scenario) -> ScenarioSummary:
                 )
             )
 
+    # 費用を入れていない項目があると、合計は「0円」ではなく「まだ分からない」。
+    # そこを混ぜると、投資額を見た人が入れ替えを無料だと受け取る
+    priced = sum(
+        1
+        for item in scenario.items
+        if item.action in (ScenarioAction.REPLACE, ScenarioAction.ADD)
+        and item.unit_cost is not None
+    )
+    to_buy = counts.get(ScenarioAction.REPLACE, 0) + counts.get(ScenarioAction.ADD, 0)
+    if to_buy and priced < to_buy:
+        warnings.append(
+            f"導入費用が入っているのは {to_buy} 件中 {priced} 件です。"
+            "投資額はその分だけの合計で、全体の見積もりではありません"
+        )
+
     kept = [d for d in devices if d.id not in removed_ids]
     projected = _measure_projected(kept, planned, on)
 
