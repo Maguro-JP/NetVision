@@ -736,3 +736,61 @@ def test_the_virtual_address_checks_still_fire() -> None:
     titles = [f.title for f in policyreview.review(configparse.parse(text))]
     assert len(titles) == 3
     assert all(f.level == HIGH for f in policyreview.review(configparse.parse(text)))
+
+
+def _review_titles(text: str) -> list[str]:
+    return [f.title for f in policyreview.review(configparse.parse(text))]
+
+
+def test_two_ports_holding_the_same_band_are_pointed_out() -> None:
+    """同じ帯を2つのポートに付けると、どちらから出すかが決まらない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.10.9 255.255.255.0",
+        ]
+    )
+    assert _review_titles(text) == ["GigabitEthernet0/1 と GigabitEthernet0/2 の帯が重なっています"]
+
+
+def test_a_band_inside_a_wider_one_also_counts_as_overlapping() -> None:
+    """片方がもう片方を覆っている形も、重なりには違いない。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.0.1 255.255.0.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.5.1 255.255.255.0",
+        ]
+    )
+    assert len(_review_titles(text)) == 1
+
+
+def test_bands_split_by_vrf_or_shut_down_are_not_pointed_out() -> None:
+    """VRF が違えば分かれている。止めてあるポートは、その帯を持っていない。"""
+    by_vrf = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " vrf forwarding CUST",
+            " ip address 10.0.10.1 255.255.255.0",
+        ]
+    )
+    shut = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.10.9 255.255.255.0",
+            " shutdown",
+        ]
+    )
+    assert _review_titles(by_vrf) == []
+    assert _review_titles(shut) == []

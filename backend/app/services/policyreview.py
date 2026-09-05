@@ -65,6 +65,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_overlapping_bands(parsed))
     findings.extend(_static_routes(parsed))
     findings.extend(_policy_routing(parsed))
     findings.extend(_acls(parsed))
@@ -442,6 +443,51 @@ def _static_routes(parsed: ParsedConfig) -> list[Finding]:
                 [f"ip route {route.destination} {route.next_hop}"],
             )
         )
+    return findings
+
+
+def _overlapping_bands(parsed: ParsedConfig) -> list[Finding]:
+    """同じ機器の別のポートが、重なる帯を持っていないか。
+
+    同じ帯を2つのポートに付けると、どちらから出すかが決まらない。機種に
+    よっては後から付けたほうが弾かれ、片方だけが生き残る。設定を流した
+    人からは通ったように見えるので、経路表を見るまで気づけない。
+
+    VRF が違えば分かれているので、重なっていても構わない。止めてある
+    ポートも、その帯を持っていない。
+    """
+    bands: list[tuple[str, str | None, ipaddress.IPv4Network | ipaddress.IPv6Network, str]] = []
+    for interface in parsed.interfaces:
+        if not interface.enabled:
+            continue
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            if network is None or network.prefixlen >= network.max_prefixlen:
+                continue
+            bands.append((interface.name, interface.vrf, network, text or ""))
+
+    findings: list[Finding] = []
+    seen: set[tuple[str, str]] = set()
+    for index, (name, vrf, network, text) in enumerate(bands):
+        for other_name, other_vrf, other, other_text in bands[index + 1 :]:
+            if name == other_name or vrf != other_vrf:
+                continue
+            if network.version != other.version or not network.overlaps(other):
+                continue
+            key = tuple(sorted((name, other_name)))
+            if key in seen:
+                continue
+            seen.add(key)
+            findings.append(
+                _note(
+                    HIGH,
+                    f"{name} と {other_name} の帯が重なっています",
+                    "同じ帯を2つのポートに付けると、どちらから出すかが決まりません。"
+                    "機種によっては後から付けたほうが弾かれ、片方だけが生き残ります。"
+                    "設定は通ったように見えるので、経路表を見るまで気づけません。",
+                    [f"{name} ({text})", f"{other_name} ({other_text})"],
+                )
+            )
     return findings
 
 
