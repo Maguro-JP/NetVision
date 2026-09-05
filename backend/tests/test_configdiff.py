@@ -559,3 +559,38 @@ def test_the_entry_settings_are_replaced_in_one_line() -> None:
     # 切り戻しは、消すのではなく元の値に戻す
     assert " transport input telnet ssh" in result.rollback_script
     assert "ip ssh version 1" in result.rollback_script
+
+
+def test_the_vendor_is_read_from_the_config_when_it_is_not_given() -> None:
+    """ベンダーが渡されなかったときに、Cisco だと決めつけない。
+
+    決めつけると Junos に `no set ...`、Comware に `no ...` を出す。どちらも
+    実機では通らない。しかも検証は同じ間違った規則で当てて確かめるので、
+    「収束を確認しました」と出てしまう。貼った人は、弾かれるまで気づけない。
+    """
+    junos = build(
+        "set system host-name r1\nset interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/30\n",
+        "set system host-name r1\nset interfaces ge-0/0/0 unit 0 family inet address 10.0.0.5/30\n",
+    )
+    assert junos.verified
+    assert junos.script.startswith("delete interfaces")
+    assert "no set" not in junos.script
+
+    comware_base = "sysname qx-01\nvlan 10\n name {}\n"
+    comware_base += "interface GigabitEthernet1/0/1\n port link-type trunk\n"
+    comware = build(comware_base.format("USERS"), comware_base.format("OFFICE"))
+    assert comware.verified
+    assert "undo name USERS" in comware.script
+
+    forti = build(
+        'config system interface\n    edit "port1"\n        set ip 203.0.113.2 255.255.255.248\n'
+        "    next\nend\n",
+        'config system interface\n    edit "port1"\n        set ip 203.0.113.3 255.255.255.248\n'
+        "    next\nend\n",
+    )
+    assert forti.verified
+    assert forti.script.rstrip().endswith("end")
+
+    # 渡された値のほうが強い（取り込み時に判別した結果を上書きしない）
+    given = build("hostname sw\nvlan 10\n name USERS\n", "hostname sw\nvlan 10\n name OFFICE\n")
+    assert " name OFFICE" in given.script

@@ -293,9 +293,27 @@ def _describe_mismatch(current: ConfigNode, target: ConfigNode, path: tuple[str,
 # ---------------------------------------------------------------------------
 
 
+def _vendor_of(current_text: str, target_text: str) -> str | None:
+    """ベンダーが渡されなかったときに、Config 本文から見分ける。
+
+    分からないまま Cisco として扱うと、Junos に `no set ...`、Comware に
+    `no ...` を出す。どちらも実機では通らない。しかも検証は同じ間違った
+    規則で当てて確かめるので、「収束を確認しました」と出てしまう。
+
+    見分けが付かないときは、これまで通り既定（Cisco 系）に任せる。
+    """
+    from app.services import configparse
+
+    for text in (current_text, target_text):
+        found = configparse.detect_vendor(text)
+        if found is not configparse.Vendor.UNKNOWN:
+            return str(found)
+    return None
+
+
 def build(current_text: str, target_text: str, vendor: str | None = None) -> DiffResult:
     """現行 config と将来 config から、投入コマンドと切り戻しコマンドを作る。"""
-    dialect = for_vendor(vendor)
+    dialect = for_vendor(vendor or _vendor_of(current_text, target_text))
     current = normalize(tree.parse(current_text, dialect), dialect)
     target = normalize(tree.parse(target_text, dialect), dialect)
 
