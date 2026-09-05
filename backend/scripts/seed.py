@@ -485,6 +485,7 @@ def _seed_reference(db) -> tuple[int, int, int]:
         vulnerabilities = result.created + result.updated
 
     _seed_templates(db, folder)
+    _seed_scenario(db)
     _seed_remediations(db, folder)
 
     matched = (
@@ -493,6 +494,40 @@ def _seed_reference(db) -> tuple[int, int, int]:
         else 0
     )
     return products, vulnerabilities, matched
+
+
+def _seed_scenario(db) -> int:
+    """更改の検討案を1本、期限の近い機器から起こしておく。
+
+    ここが空だと、シナリオの画面が「まず作ってください」だけになる。台帳に
+    触らずに試算できる、というこの機能の値打ちが見えない。
+
+    たたき台は画面と同じ道（scenarios.generate_items）で作る。手で並べた
+    ものを置くと、実際の動きと違うものを見せることになる。
+    """
+    from datetime import date
+
+    from app.models.scenario import Scenario, ScenarioStatus
+    from app.services import scenarios
+
+    name = "2027年度 更改の検討"
+    if db.scalars(select(Scenario).where(Scenario.name == name)).first():
+        return 0
+
+    scenario = Scenario(
+        name=name,
+        description=(
+            "保守期限とサポート終了（EoL）が近い機器を並べたたたき台です。"
+            "台帳には触っていません。採用が決まったら台帳へ反映します。"
+        ),
+        status=ScenarioStatus.DRAFT,
+        target_date=date(TODAY.year + 1, 3, 31),
+    )
+    db.add(scenario)
+    db.flush()
+    scenarios.generate_items(db, scenario, within_days=730)
+    db.commit()
+    return len(scenario.items)
 
 
 def _seed_templates(db, folder) -> int:
