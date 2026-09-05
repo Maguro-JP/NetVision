@@ -827,3 +827,71 @@ def test_point_to_point_and_loopback_addresses_are_left_alone() -> None:
         ]
     )
     assert policyreview.review(configparse.parse(text)) == []
+
+
+def test_the_same_address_on_two_ports_is_pointed_out() -> None:
+    """帯の重なりとは別の話で、ホスト1つ分（/32）でも起きる。
+
+    片方は上がらないか、後から入れたほうが弾かれる。どちらにしても、
+    片方は意図した通りに動かない。
+    """
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface Loopback0",
+            " ip address 1.1.1.1 255.255.255.255",
+            "interface Loopback1",
+            " ip address 1.1.1.1 255.255.255.255",
+        ]
+    )
+    findings = policyreview.review(configparse.parse(text))
+    assert [f.level for f in findings] == [HIGH]
+    assert "1.1.1.1 が、Loopback0 と Loopback1 の両方に付いています" == findings[0].title
+
+
+def test_the_same_thing_is_not_said_twice() -> None:
+    """アドレスが同じなら、帯が重なっているのは当たり前である。
+
+    2つの言葉で2回言うと、読む側は問題の数を数え違える。
+    """
+    same = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan10",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface Vlan11",
+            " ip address 10.0.10.1 255.255.255.0",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(same))]
+    assert len(titles) == 1
+    assert "両方に付いています" in titles[0]
+
+    # アドレスが違って帯だけ重なるときは、これまで通り帯の話をする
+    overlapping = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan10",
+            " ip address 10.0.10.1 255.255.255.0",
+            "interface Vlan11",
+            " ip address 10.0.10.9 255.255.255.0",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(overlapping))]
+    assert titles == ["Vlan10 と Vlan11 の帯が重なっています"]
+
+
+def test_the_same_address_in_different_vrfs_is_fine() -> None:
+    """VRF が違えば分かれている。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " vrf forwarding A",
+            " ip address 10.0.0.1 255.255.255.0",
+            "interface GigabitEthernet0/2",
+            " vrf forwarding B",
+            " ip address 10.0.0.1 255.255.255.0",
+        ]
+    )
+    assert policyreview.review(configparse.parse(text)) == []

@@ -66,6 +66,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
+    findings.extend(_duplicate_addresses(parsed))
     findings.extend(_unusable_interface_addresses(parsed))
     findings.extend(_overlapping_bands(parsed))
     findings.extend(_static_routes(parsed))
@@ -510,6 +511,59 @@ def _unusable_interface_addresses(parsed: ParsedConfig) -> list[Finding]:
     return findings
 
 
+def _duplicate_addresses(parsed: ParsedConfig) -> list[Finding]:
+    """同じアドレスが、この機器の2つのポートに付いていないか。
+
+    帯の重なりとは別の話で、ループバックのようにホスト1つ分（/32）でも
+    起きる。片方は上がらないか、後から入れたほうが弾かれる。どちらに
+    しても、片方は意図した通りに動かない。
+
+    VRF が違えば分かれているので、重なっていても構わない。
+    """
+    seen: dict[tuple[str | None, str], list[str]] = {}
+    for interface in parsed.interfaces:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            address = _address_of(text)
+            if address is None:
+                continue
+            seen.setdefault((interface.vrf, str(address)), []).append(interface.name)
+
+    findings: list[Finding] = []
+    for (_vrf, address), names in seen.items():
+        unique = sorted(dict.fromkeys(names))
+        if len(unique) < 2:
+            continue
+        findings.append(
+            _note(
+                HIGH,
+                f"{address} が、{unique[0]} と {unique[1]} の両方に付いています",
+                "同じアドレスを2つのポートには付けられません。片方は上がらないか、"
+                "後から入れたほうが弾かれます。どちらにしても、片方は意図した通りに"
+                "動きません。",
+                [f"{name}: {address}" for name in unique[:5]],
+            )
+        )
+    return findings
+
+
+def _same_address_pairs(parsed: ParsedConfig) -> set[tuple[str, str]]:
+    """まったく同じアドレスを持っているポートの組。"""
+    seen: dict[tuple[str | None, str], list[str]] = {}
+    for interface in parsed.interfaces:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            address = _address_of(text)
+            if address is not None:
+                seen.setdefault((interface.vrf, str(address)), []).append(interface.name)
+
+    pairs: set[tuple[str, str]] = set()
+    for names in seen.values():
+        unique = sorted(dict.fromkeys(names))
+        for index, name in enumerate(unique):
+            for other in unique[index + 1 :]:
+                pairs.add((name, other))
+    return pairs
+
+
 def _overlapping_bands(parsed: ParsedConfig) -> list[Finding]:
     """同じ機器の別のポートが、重なる帯を持っていないか。
 
@@ -530,11 +584,17 @@ def _overlapping_bands(parsed: ParsedConfig) -> list[Finding]:
                 continue
             bands.append((interface.name, interface.vrf, network, text or ""))
 
+    # アドレスがそのまま同じ組は、「同じアドレスが両方に付いています」で
+    # すでに言っている。同じことを別の言葉で2回言わない
+    said = _same_address_pairs(parsed)
+
     findings: list[Finding] = []
     seen: set[tuple[str, str]] = set()
     for index, (name, vrf, network, text) in enumerate(bands):
         for other_name, other_vrf, other, other_text in bands[index + 1 :]:
             if name == other_name or vrf != other_vrf:
+                continue
+            if tuple(sorted((name, other_name))) in said:
                 continue
             if network.version != other.version or not network.overlaps(other):
                 continue
