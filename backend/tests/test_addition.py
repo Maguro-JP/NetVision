@@ -243,3 +243,17 @@ def test_the_api_needs_a_name(client, upstream):
 def test_the_api_404s_for_an_unknown_upstream(client):
     res = client.post(f"{API}/devices/9999/addition", json={"hostname": "new-sw-01"})
     assert res.status_code == 404
+
+
+def test_link_local_and_documentation_ranges_are_not_used_as_a_basis():
+    """169.254/16 や 192.0.2/24 を土台にすると、使えない帯を勧めてしまう。
+
+    ipaddress の is_private はこれらも真になるので、社内で自由に採番できる
+    帯（RFC1918）だけを見る。土台が無いなら、当てずっぽうを出さない。
+    """
+    assert pick_subnet(["169.254.0.0/24"], 30) is None
+    assert pick_subnet(["203.0.113.0/24"], 30) is None
+    assert pick_subnet(["8.8.8.0/24"], 30) is None
+    # RFC1918 の3つは、これまで通り土台になる
+    assert pick_subnet(["192.168.1.0/24"], 10) == "192.168.10.0/24"
+    assert pick_subnet(["172.16.5.0/24"], 7) == "172.16.7.0/24"

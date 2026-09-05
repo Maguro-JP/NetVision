@@ -144,6 +144,20 @@ def pick_vlan_id(used: set[int], *, step: int | None = None) -> int:
     return candidate
 
 
+#: 社内で自由に採番できる帯（RFC1918）。ipaddress の is_private は、
+#: リンクローカル（169.254/16）や文書用（192.0.2/24 など）まで真になる。
+#: それを土台に次の番号を出すと、使えない帯を勧めてしまう
+_SITE_LOCAL = (
+    ipaddress.ip_network("10.0.0.0/8"),
+    ipaddress.ip_network("172.16.0.0/12"),
+    ipaddress.ip_network("192.168.0.0/16"),
+)
+
+
+def _is_site_local(network: ipaddress.IPv4Network | ipaddress.IPv6Network) -> bool:
+    return any(network.subnet_of(block) for block in _SITE_LOCAL)  # type: ignore[arg-type]
+
+
 def pick_subnet(used: list[str], vlan_id: int) -> str | None:
     """既存の採番から、次に使えそうなセグメントを選ぶ。
 
@@ -157,7 +171,7 @@ def pick_subnet(used: list[str], vlan_id: int) -> str | None:
             networks.append(ipaddress.ip_network(text, strict=False))
         except ValueError:
             continue
-    private = [n for n in networks if n.version == 4 and n.is_private and n.prefixlen >= 16]
+    private = [n for n in networks if n.version == 4 and _is_site_local(n) and n.prefixlen >= 16]
     if not private:
         return None
 
