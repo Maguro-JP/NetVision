@@ -1,16 +1,20 @@
 from datetime import date
 
 import pytest
+from sqlalchemy import select
 
-from app.models import DeviceStatus, DeviceType
+from app.models import Device, DeviceStatus, DeviceType
 from app.services.importer import (
     CellValueError,
+    KeyField,
     detect_mapping,
     parse_date,
     parse_decimal,
     parse_device_status,
     parse_device_type,
+    run_import,
 )
+from app.services.tablefile import read_table
 
 
 def test_detect_mapping_handles_japanese_headers():
@@ -245,3 +249,77 @@ def test_renaming_a_site_does_not_collide_with_another(db_session):
 
     renamed = db_session.query(Site).filter(Site.code == "S-001").one()
     assert renamed.name == "大手町ビル"
+
+
+def test_the_same_vendor_written_differently_is_counted_once(db_session):
+    """台帳は人が書くので Cisco / cisco / CISCO が混ざる。
+
+    分かれて数えられると、メーカー別の台数も、そこから引く保守費の
+    見積もりも割れる。書き方のゆれだけをそろえる。
+    """
+    csv = (
+        "ホスト名,メーカー,型番\n"
+        "vend-sw-01,Cisco,C9200L-24T-4G\n"
+        "vend-sw-02,cisco,C9200L-24T-4G\n"
+        "vend-sw-03,CISCO,C9200L-24T-4G\n"
+        "vend-rt-01,ｎｅｃ風の知らない名前,X\n"
+    ).encode()
+    table = read_table("ledger.csv", csv)
+    run_import(
+        db_session,
+        table.headers,
+        table.rows,
+        key_field=KeyField.HOSTNAME,
+        commit=True,
+    )
+    devices = {
+        d.hostname: d.vendor
+        for d in db_session.scalars(select(Device).where(Device.hostname.like("vend-%")))
+    }
+    assert devices["vend-sw-01"] == "Cisco"
+    assert devices["vend-sw-02"] == "Cisco"
+    assert devices["vend-sw-03"] == "Cisco"
+    # 知らない名前は書き換えない。こちらで決められることではない
+    assert devices["vend-rt-01"] == "ｎｅｃ風の知らない名前"
+
+
+def test_japanese_era_dates_are_read():
+    """台帳、とくに官公庁や古い社内様式では和暦がふつうに出てくる。
+
+    読めないとその行がまるごと取り込めない。保守期限が和暦で書いてある
+    だけで、その機器が期限の判定から漏れる。
+    """
+    assert parse_date("令和5年4月1日") == date(2023, 4, 1)
+    assert parse_date("令和元年4月1日") == date(2019, 4, 1)
+    assert parse_date("R10.3.31") == date(2028, 3, 31)
+    assert parse_date("H31/3/31") == date(2019, 3, 31)
+    assert parse_date("平成31年3月31日") == date(2019, 3, 31)
+    assert parse_date("S60.1.1") == date(1985, 1, 1)
+    # 年月までなら月初として扱う（西暦のときと同じ）
+    assert parse_date("R5/4") == date(2023, 4, 1)
+
+
+def test_an_era_date_that_cannot_exist_is_not_guessed():
+    """読めないものを、当てずっぽうで埋めない。"""
+    for text in ("令和99年13月", "令和0年1月1日", "ただの文字"):
+        with pytest.raises(CellValueError):
+            parse_date(text)
+
+
+def test_common_ways_of_writing_the_status_are_read():
+    """台帳の書き方は現場ごとに違う。読めないと、その行が取り込めない。"""
+    for text in ("稼働", "稼動", "運用", "現用", "本番"):
+        assert parse_device_status(text) is DeviceStatus.ACTIVE, text
+    assert parse_device_status("待機中") is DeviceStatus.STANDBY
+    assert parse_device_status("保守") is DeviceStatus.MAINTENANCE
+    for text in ("廃棄済", "返却"):
+        assert parse_device_status(text) is DeviceStatus.RETIRED, text
+
+
+def test_an_ambiguous_status_is_not_guessed():
+    """「停止」は、一時的に止めているのか外したのかが読めない。
+
+    撤去として扱うと、その機器が期限の判定から静かに消える。
+    """
+    with pytest.raises(CellValueError):
+        parse_device_status("停止")

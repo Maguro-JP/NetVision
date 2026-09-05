@@ -410,7 +410,7 @@ def _add_neighbor(bgp: ParsedBgp, address: str, rest: str, family: str | None = 
 def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
     for head, body in _blocks(text, _IOS_INTERFACE):
         interface = expand(head.group(1))
-        groups: dict[tuple[str, str | None], ParsedRedundancy] = {}
+        groups: dict[tuple[str, str | None, str], ParsedRedundancy] = {}
         for line in body:
             match = re.match(
                 r"^(standby|vrrp)\s+(?:(\d+)\s+)?(ip|priority|address)\s+(\S+)",
@@ -420,7 +420,7 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
             if not match:
                 continue
             protocol = "hsrp" if match.group(1).lower() == "standby" else "vrrp"
-            key = (protocol, match.group(2))
+            key = (protocol, match.group(2), "")
             entry = groups.get(key)
             if entry is None:
                 entry = ParsedRedundancy(
@@ -433,14 +433,20 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
             elif keyword == "priority" and value.isdigit():
                 entry.priority = int(value)
 
-        # NX-OS は入れ子で書く。`hsrp 10` のあとに ip / priority が字下げで続く
+        # NX-OS は入れ子で書く。`hsrp 10` のあとに ip / priority が字下げで続く。
+        # IOS の新しい VRRP（VRRPv3）も同じ形で、頭に address-family が付く
         nested: ParsedRedundancy | None = None
         for line in body:
-            head_line = re.match(r"^(hsrp|vrrp)\s+(\d+)\s*$", line.strip(), re.IGNORECASE)
+            head_line = re.match(
+                r"^(hsrp|vrrp)\s+(\d+)(?:\s+address-family\s+(\S+))?\s*$",
+                line.strip(),
+                re.IGNORECASE,
+            )
             if head_line:
                 protocol = head_line.group(1).lower()
                 protocol = "hsrp" if protocol == "hsrp" else "vrrp"
-                key = (protocol, head_line.group(2))
+                # 同じ番号で ipv4 と ipv6 を別々に書けるので、まとめない
+                key = (protocol, head_line.group(2), head_line.group(3) or "")
                 nested = groups.get(key)
                 if nested is None:
                     nested = ParsedRedundancy(

@@ -1,0 +1,80 @@
+[
+  {
+    "cve_id": "CVE-2026-20101",
+    "kind": "workaround",
+    "vendor": "Cisco",
+    "model": "C9500*",
+    "os_name": "IOS-XE",
+    "applies_from": "17.9.0",
+    "applies_to": "17.9.5",
+    "summary": "Web UI を止めて、認証を通らない入口をふさぐ",
+    "fixed_version": "17.9.6",
+    "procedure": "no ip http server\nno ip http secure-server",
+    "verified_by": "ネットワーク運用",
+    "notes": "Web UI を業務で使っている場合は、止める前に誰が使っているかを確認する。\n止められない場合は、管理セグメントからのみ届くよう ACL で絞る。\nどちらも完全に塞がるわけではないので、修正版への更新は別途要る。"
+  },
+  {
+    "cve_id": "CVE-2026-20101",
+    "kind": "upgrade",
+    "vendor": "Cisco",
+    "model": "C9300*",
+    "os_name": "IOS-XE",
+    "applies_from": "17.9.0",
+    "applies_to": "17.9.5",
+    "summary": "17.9.6 に上げる",
+    "fixed_version": "17.9.6",
+    "procedure": "! 事前に現行 Config を保存しておく\ncopy running-config startup-config\n!\n! 版を上げたあと、boot の指定が新しい版を向いているか確かめる\nshow version | include image\nshow boot",
+    "verified_by": "ネットワーク運用",
+    "notes": "再起動が要る。拠点スイッチなので、その拠点が落ちる時間帯を押さえてから。"
+  },
+  {
+    "cve_id": "CVE-2026-20244",
+    "kind": "workaround",
+    "vendor": "Cisco",
+    "os_name": "IOS-XE",
+    "summary": "SNMP を管理セグメントからだけに絞る",
+    "procedure": "ip access-list standard SNMP-MGMT\n permit 10.10.20.0 0.0.0.255\n deny   any log\n!\nsnmp-server community <合言葉> RO SNMP-MGMT",
+    "verified_by": "ネットワーク運用",
+    "notes": "合言葉そのものはここに書かない。監視サーバーの所属セグメントを確かめてから当てる。"
+  },
+  {
+    "cve_id": "CVE-2025-40018",
+    "kind": "mitigation",
+    "vendor": "Cisco",
+    "os_name": "IOS",
+    "applies_to": "15.2",
+    "summary": "古い暗号方式をやめ、SSH を version 2 だけにする",
+    "procedure": "ip ssh version 2\nip ssh server algorithm encryption aes256-ctr aes192-ctr aes128-ctr\nip ssh server algorithm mac hmac-sha2-256 hmac-sha2-512\n!\n! telnet が残っていると、ここを固めても平文の入口が開いたままになる\nline vty 0 4\n transport input ssh",
+    "verified_by": "ネットワーク運用",
+    "notes": "15.2 系にこの弱点の修正版は出ていない。機器の更改までの当座の措置。"
+  },
+  {
+    "cve_id": "CVE-2026-31500",
+    "kind": "workaround",
+    "vendor": "Fortinet",
+    "os_name": "FortiOS",
+    "summary": "SSL-VPN を止める。使っている場合は接続元を絞る",
+    "fixed_version": "7.2.9",
+    "procedure": "config vpn ssl settings\n    set status disable\nend",
+    "verified_by": "ネットワーク運用",
+    "notes": "在宅勤務で使っている場合は止められない。その場合は接続元の国・アドレスを絞り、\n修正版への更新を最優先で計画する。"
+  },
+  {
+    "cve_id": "CVE-2026-21077",
+    "kind": "upgrade",
+    "vendor": "Juniper",
+    "os_name": "Junos",
+    "summary": "修正版に上げる。回避策は公表されていない",
+    "procedure": "request system software add <パッケージ> reboot",
+    "verified_by": "ネットワーク運用",
+    "notes": "設定での回避策は出ていない。冗長の相手側から順に上げ、切り替わりを確かめてから次へ。"
+  },
+  {
+    "cve_id": "CVE-2026-11902",
+    "kind": "workaround",
+    "vendor": "NEC",
+    "summary": "管理画面への到達を、管理セグメントからだけにする",
+    "procedure": "! 管理用の入口を絞る\nip access-list MGMT-IN permit ip src 10.10.20.0/24 dest any\n!\n! 実際の書き方は機種と版で違う。手元の版のコマンドリファレンスで確かめる",
+    "notes": "手元で実機確認をしていない。当てる前に、その版の資料で書き方を確かめること。"
+  }
+]

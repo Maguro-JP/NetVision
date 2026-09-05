@@ -255,3 +255,37 @@ def test_the_newer_vendors_get_their_own_syntax_and_it_reads_back(client):
     assert parsed.vendor is Vendor.ALLIED
     assert parsed.vlans[20] == "SERVERS"
     assert {i.name: i.trunk_vlans for i in parsed.interfaces}["port1.0.1"] == [10, 20]
+
+
+def test_the_house_time_target_is_written_in(client):
+    """記録の送り先は現場で決まっている。設計の判断は要らない。
+
+    起こさないでおくと、出した Config を自分の点検が「入っていません」と
+    咎めることになる。
+    """
+    device = make_device(client, "house-sw-01", "Cisco", "C9300-24T", mgmt_ip="10.0.0.31")
+    # 流儀は1台では決まらない。2台以上でそろっていて初めて「この現場のやり方」
+    for name in ("house-sw-02", "house-sw-03"):
+        make_device(client, name, "Cisco", "C9300-24T")
+        client.post(
+            f"{API}/configs/upload",
+            files={
+                "files": (
+                    f"{name}.txt",
+                    f"hostname {name}\n!\nntp server 10.10.20.10\nlogging host 10.10.20.20\n!\n",
+                    "text/plain",
+                )
+            },
+        )
+
+    body = design(client, device)["body"]
+    assert "ntp server 10.10.20.10" in body
+    assert "logging host 10.10.20.20" in body
+
+
+def test_an_unknown_target_is_marked_instead_of_dropped(client):
+    """読み取れないときは、黙って省かず要記入の印を残す。"""
+    device = make_device(client, "blank-sw-01", "Cisco", "C9300-24T", mgmt_ip="10.0.0.41")
+    body = design(client, device)["body"]
+    assert "ログの送り先: 設計から起こせないため" in body
+    assert "時刻の参照先: 設計から起こせないため" in body

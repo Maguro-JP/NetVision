@@ -484,12 +484,53 @@ def _seed_reference(db) -> tuple[int, int, int]:
         result = reference.import_vulnerabilities(db, json_path.read_bytes())
         vulnerabilities = result.created + result.updated
 
+    _seed_remediations(db, folder)
+
     matched = (
         exposure_schedule.run(db, trigger="取り込み").created
         if (products or vulnerabilities)
         else 0
     )
     return products, vulnerabilities, matched
+
+
+def _seed_remediations(db, folder) -> int:
+    """該当した弱点に、何をすればいいかまで入れる。
+
+    公開データには「このコマンドで回避できる」が入っていない。該当だけ
+    出して対処が空だと、見た人は結局アドバイザリを読みに行くことになり、
+    この道具を通す意味が無くなる。
+
+    人が一度調べた対処を残す、というモデルの使い方そのものを見せる。
+    """
+    import json
+
+    from app.models import Remediation, Vulnerability
+
+    path = folder / "remediations.json"
+    if not path.is_file():
+        return 0
+
+    added = 0
+    for entry in json.loads(path.read_text(encoding="utf-8")):
+        cve_id = entry.pop("cve_id")
+        vulnerability = db.scalars(
+            select(Vulnerability).where(Vulnerability.cve_id == cve_id)
+        ).first()
+        if vulnerability is None:
+            continue
+        already = db.scalars(
+            select(Remediation).where(
+                Remediation.vulnerability_id == vulnerability.id,
+                Remediation.summary == entry["summary"],
+            )
+        ).first()
+        if already is not None:
+            continue
+        db.add(Remediation(vulnerability_id=vulnerability.id, **entry))
+        added += 1
+    db.commit()
+    return added
 
 
 def _seed_configs(db, by_host: dict) -> int:
