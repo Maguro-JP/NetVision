@@ -91,7 +91,7 @@ def test_a_readable_password_is_called_out(db_session):
 
 def test_a_next_hop_nobody_can_reach_is_found_here_too(db_session):
     result = configcheck.check(db_session, MESSY)
-    assert any("届きません" in title for title in _titles(result))
+    assert any("行けません" in title for title in _titles(result))
 
 
 def test_an_address_left_on_a_shut_port_is_mentioned(db_session):
@@ -320,7 +320,7 @@ def test_the_api_takes_the_config_as_the_subject(client):
     body = res.json()
     assert body["source"] in {"model", "prompt"}
     if body["source"] == "prompt":
-        assert "届きません" in body["prompt"]
+        assert "行けません" in body["prompt"]
 
 
 # ---------------------------------------------------------------------------

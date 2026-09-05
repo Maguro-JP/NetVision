@@ -211,7 +211,6 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     local = l3review._local_networks(parsed)
     found: list[Finding] = []
     found.extend(l3review._no_default_route(parsed))
-    found.extend(l3review._unreachable_next_hops(parsed, local))
     found.extend(l3review._same_destination_twice(parsed))
     found.extend(l3review._segments_nobody_advertises(parsed, local))
     found.extend(l3review._unused_policies(parsed))

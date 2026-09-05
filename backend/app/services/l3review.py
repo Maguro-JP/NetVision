@@ -365,7 +365,6 @@ def _findings(
     local = _local_networks(parsed)
 
     findings.extend(_no_default_route(parsed))
-    findings.extend(_unreachable_next_hops(parsed, local))
     findings.extend(_next_hop_not_in_ledger(db, parsed))
     findings.extend(_same_destination_twice(parsed))
     findings.extend(_segments_nobody_advertises(parsed, local))
@@ -410,42 +409,6 @@ def _no_default_route(parsed: ParsedConfig) -> list[Finding]:
             evidence=[f"読み取れた静的経路: {len(parsed.routes)} 本、うち既定の経路は 0 本"],
         )
     ]
-
-
-def _unreachable_next_hops(
-    parsed: ParsedConfig, local: list[ipaddress.IPv4Network]
-) -> list[Finding]:
-    """ネクストホップが、この機器のどのセグメントにも居ない経路。
-
-    そのまま入れても経路として使われない（隣に居ない相手は指せない）。
-    セグメントを付け替えたときの直し忘れで、いちばんよく残る。
-    """
-    if not local:
-        return []
-    out = []
-    for route in parsed.routes:
-        if not route.next_hop:
-            continue
-        try:
-            address = ipaddress.ip_address(route.next_hop)
-        except ValueError:
-            continue
-        if any(address in network for network in local):
-            continue
-        out.append(
-            Finding(
-                level=HIGH,
-                title=f"{route.destination} のネクストホップに届きません",
-                why=f"{route.next_hop} は、この機器が持っているどのセグメントにも居ません。"
-                "隣に居ない相手はネクストホップに指せないので、この経路は使われません。"
-                "セグメントを付け替えたときの直し忘れでよく残ります。",
-                evidence=[
-                    f"経路: {route.destination} → {route.next_hop}",
-                    "この機器のセグメント: " + ", ".join(str(n) for n in local[:4]),
-                ],
-            )
-        )
-    return out
 
 
 def _next_hop_not_in_ledger(db: Session, parsed: ParsedConfig) -> list[Finding]:
