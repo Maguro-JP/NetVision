@@ -134,6 +134,13 @@ _IOS_ROUTE = re.compile(
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)\s+(?P<mask>\d+\.\d+\.\d+\.\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+#: NX-OS は長さで書く（ip route 0.0.0.0/0 10.0.0.254）。IOS はこの形を
+#: 使わないので、混ざる心配は無い。読めないと静的経路が丸ごと落ちる
+_NXOS_ROUTE = re.compile(
+    r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
+    r"(?P<dest>\d+\.\d+\.\d+\.\d+/\d+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
 _IOS_ROUTE6 = re.compile(
     r"^ipv6 route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
     r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>.+)$",
@@ -159,6 +166,17 @@ def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
         if not match:
             continue
         destination = to_prefix(match.group("dest"), match.group("mask"), wildcard=False)
+        if destination is None:
+            continue
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        _read_route_options(match.group("rest"), route)
+        parsed.routes.append(route)
+
+    for line in text.splitlines():
+        match = _NXOS_ROUTE.match(line.strip())
+        if not match:
+            continue
+        destination = to_prefix(match.group("dest"))
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
