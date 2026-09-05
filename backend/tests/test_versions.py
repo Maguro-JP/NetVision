@@ -116,3 +116,41 @@ def test_the_nexus_chassis_line_gives_the_model() -> None:
     assert parsed.vendor is configparse.Vendor.CISCO_NXOS
     assert parsed.model == "C93180YC-EX"
     assert parsed.os_version == "9.3(10)"
+
+
+def test_the_yamaha_show_output_is_read_without_the_leading_hash() -> None:
+    """設定ファイルの1行目には # が付くが、show の出力には付かない。
+
+    同じ見出しなので、# の有無で読めたり読めなかったりするのはおかしい。
+    """
+    shown = "\n".join(
+        [
+            "RTX1220 BootROM Ver. 1.00",
+            "RTX1220 Rev.15.04.03 (Fri Jun 30 11:22:33 2023)",
+            "serial=S00000000000 MAC-Address=00:a0:de:00:00:00",
+        ]
+    )
+    parsed = configparse.parse(shown)
+    assert parsed.vendor is configparse.Vendor.YAMAHA
+    assert parsed.model == "RTX1220"
+    assert parsed.os_version == "15.04.03"
+    assert parsed.serial_number == "S00000000000"
+
+    # 設定ファイルの形も、これまで通り読める
+    written = "# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)\nip lan1 address 192.168.100.1/24\n"
+    assert configparse.parse(written).model == "RTX830"
+
+
+def test_the_aruba_show_version_gives_the_version() -> None:
+    """AOS-CX の show version は `Version : FL.10.10.1060` と書く。"""
+    text = "\n".join(
+        [
+            "ArubaOS-CX",
+            "Version      : FL.10.10.1060",
+            "Build Date   : 2023-06-15",
+            "vlan trunk allowed 10",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is configparse.Vendor.ARUBA_CX
+    assert parsed.os_version == "FL.10.10.1060"

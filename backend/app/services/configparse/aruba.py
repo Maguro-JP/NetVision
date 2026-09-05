@@ -33,6 +33,8 @@ from app.services.configparse.base import (
 from app.services.configparse.routing import to_prefix
 
 _VERSION = re.compile(r"^!\s*Version\s+ArubaOS-CX\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: show version の書き方。`Version      : FL.10.10.1060`
+_SHOW_VERSION = re.compile(r"^Version\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _MODEL = re.compile(r"^!\s*Model:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _SERIAL = re.compile(r"^\s*Serial Number\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _INTERFACE = re.compile(r"^interface\s+(\S+(?:\s+\d+)?)\s*$", re.IGNORECASE)
@@ -93,7 +95,7 @@ def parse(text: str) -> ParsedConfig:
     parsed.interfaces = []
     parsed.acls = []
 
-    found = _VERSION.search(text)
+    found = _VERSION.search(text) or _SHOW_VERSION.search(text)
     if found:
         parsed.os_version = found.group(1)
     found = _MODEL.search(text)

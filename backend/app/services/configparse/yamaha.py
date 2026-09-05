@@ -40,7 +40,8 @@ from app.services.configparse.base import (
 )
 
 #: 1行目の見出し。`# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)`
-_HEADER = re.compile(r"^#\s*((?:RTX|NVR|FWX|SRT)\S*)\s+Rev\.([\d.]+)", re.MULTILINE)
+#: show environment に出るときは頭の `#` が付かないので、無くても読む
+_HEADER = re.compile(r"^#?\s*((?:RTX|NVR|FWX|SRT)\S*)\s+Rev\.([\d.]+)", re.MULTILINE)
 _SERIAL = re.compile(r"serial=(\S+)", re.IGNORECASE)
 #: ヤマハには hostname にあたる命令が無い。現場では `console prompt` に
 #: 機器名を入れて見分けている。他に名前の手掛かりが無いので、ここから取る
