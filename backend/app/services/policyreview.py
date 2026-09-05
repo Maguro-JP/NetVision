@@ -582,11 +582,23 @@ _NEXT_HOP = re.compile(
 _MATCH_ACL = re.compile(r"^match\s+ip\s+address\s+(?!prefix-list)(?P<names>.+)$", re.IGNORECASE)
 
 
-def _connected_networks(parsed: ParsedConfig) -> list[ipaddress.IPv4Network]:
-    networks = []
+def _connected_networks(
+    parsed: ParsedConfig,
+) -> list[ipaddress.IPv4Network | ipaddress.IPv6Network]:
+    """この機器が直に持っている帯。
+
+    2つ目以降のアドレス（secondary・IPv6）も直結の帯である。ここを落とすと、
+    そちらの帯にいる相手を「行けません」と言ってしまう。
+    """
+    networks: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = []
     for interface in parsed.interfaces:
-        network = _network_of(interface.ip_address)
-        if network is not None and network.prefixlen < 32:
+        for text in [interface.ip_address, *interface.extra_addresses]:
+            network = _network_of(text)
+            if network is None:
+                continue
+            # ホスト1つ分（/32・/128）は帯ではないので、根拠にしない
+            if network.prefixlen >= network.max_prefixlen:
+                continue
             networks.append(network)
     return networks
 
@@ -1184,7 +1196,7 @@ def _address_of(text: str | None):  # noqa: ANN201
         return None
 
 
-def _network_of(text: str | None) -> ipaddress.IPv4Network | None:
+def _network_of(text: str | None) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
     if not text:
         return None
     parts = text.split()

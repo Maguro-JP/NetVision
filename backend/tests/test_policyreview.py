@@ -685,3 +685,22 @@ def test_the_peer_group_line_itself_is_not_counted_as_a_neighbor() -> None:
         if "PEERS" in finding.title or any("PEERS" in line for line in finding.evidence)
     ]
     assert mentions == []
+
+
+def test_the_second_address_on_a_port_also_counts_as_directly_connected() -> None:
+    """secondary と IPv6 も直結の帯。落とすと「行けません」の誤りになる。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/1",
+            " ip address 10.0.10.1 255.255.255.0",
+            " ip address 10.0.11.1 255.255.255.0 secondary",
+            " ipv6 address 2001:db8:0:10::1/64",
+            "ip route 10.20.0.0 255.255.0.0 10.0.11.9",
+            "ipv6 route 2001:db8:1::/48 2001:db8:0:10::9",
+            "ipv6 route 2001:db8:2::/48 2001:db8:9:9::9",
+        ]
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(text))]
+    # どの帯にも無いのはこの1本だけ
+    assert titles == ["2001:db8:2::/48 の次の相手 2001:db8:9:9::9 へ行けません"]
