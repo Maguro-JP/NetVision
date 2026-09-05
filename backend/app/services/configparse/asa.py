@@ -34,6 +34,16 @@ from app.services.configparse.routing import to_prefix
 
 _HOSTNAME = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _VERSION = re.compile(r"^ASA Version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: show version の見出し。設定ファイルの `ASA Version` とは書き方が違うが、
+#: 現場で貼られるのはこちらのことも多い。読めないと型番も版数も落ちる
+_SHOW_VERSION = re.compile(
+    r"^Cisco Adaptive Security Appliance Software Version\s+(\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: FTD（Firepower Threat Defense）も同じ並びで出る
+_FTD_VERSION = re.compile(
+    r"^Cisco Firepower Threat Defense.*Version\s+(\S+)", re.IGNORECASE | re.MULTILINE
+)
 _MODEL = re.compile(r"^Hardware:\s+(\S+?),", re.IGNORECASE | re.MULTILINE)
 _SERIAL = re.compile(r"^Serial Number:\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 
@@ -61,7 +71,7 @@ def detect(text: str) -> Vendor | None:
     `hostname` はどちらにもあるので使えない。ASA にしか無い書き方
     （nameif・security-level・ASA Version）で判断する。
     """
-    if _VERSION.search(text):
+    if _VERSION.search(text) or _SHOW_VERSION.search(text) or _FTD_VERSION.search(text):
         return Vendor.CISCO_ASA
     for pattern in (
         r"^\s*nameif\s+\S+",
@@ -80,7 +90,7 @@ def parse(text: str) -> ParsedConfig:
     found = _HOSTNAME.search(text)
     if found:
         parsed.hostname = found.group(1).strip('"')
-    found = _VERSION.search(text)
+    found = _VERSION.search(text) or _SHOW_VERSION.search(text) or _FTD_VERSION.search(text)
     if found:
         parsed.os_version = found.group(1)
     found = _MODEL.search(text)

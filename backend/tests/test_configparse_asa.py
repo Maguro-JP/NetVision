@@ -140,3 +140,36 @@ object network INSIDE-NET
     rule = configparse.parse(text).nat.rules[0]
     assert rule.matched == "INSIDE-NET"
     assert "出口" in rule.translated
+
+
+def test_the_show_version_output_is_read_too():
+    """設定ファイルの `ASA Version` とは書き方が違う。
+
+    現場で貼られるのは show version のことも多い。読めないと、その機器は
+    型番も版数も空になり、弱点の照合から丸ごと漏れる。
+    """
+    text = "\n".join(
+        [
+            "Cisco Adaptive Security Appliance Software Version 9.16(4)",
+            "Hardware:   ASA5516, 8192 MB RAM",
+            "Serial Number: JAD1234ABCD",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is Vendor.CISCO_ASA
+    assert parsed.model == "ASA5516"
+    assert parsed.os_version == "9.16(4)"
+    assert parsed.serial_number == "JAD1234ABCD"
+
+
+def test_firepower_threat_defense_is_read_the_same_way():
+    text = "\n".join(
+        [
+            "Cisco Firepower Threat Defense for VMware, Version 7.2.5",
+            "Hardware:   FPR-2110, 16384 MB RAM",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is Vendor.CISCO_ASA
+    assert parsed.model == "FPR-2110"
+    assert parsed.os_version == "7.2.5"
