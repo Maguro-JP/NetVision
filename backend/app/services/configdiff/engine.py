@@ -18,6 +18,7 @@ config テキストだけからは決まらない。ここは削除として扱�
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 
 from app.services.configdiff import tree
@@ -188,6 +189,35 @@ def _diff_block(
     return out
 
 
+_SEQUENCED = re.compile(r"^(\d+)\s+\S")
+
+
+def _numbered_insertions(
+    current_keys: list[str], target_keys: list[str], dialect: Dialect
+) -> list[str] | None:
+    """足すだけで済むか。済むなら、足す行を返す。
+
+    次のすべてが揃ったときだけ。1つでも欠けると、番号の位置に収まる保証が
+    無くなるので None を返し、これまで通り作り直す。
+
+    - その機種が、行番号を書いて途中に挿し込める
+    - 今ある行と将来の行が、どちらも行番号から始まっている
+    - 今ある行が1つも消えず、並びも変わっていない（足すだけ）
+    """
+    if not dialect.numbered_insert or not current_keys:
+        return None
+    if not all(_SEQUENCED.match(key) for key in current_keys + target_keys):
+        return None
+
+    # 今ある行が、将来の並びの中に同じ順で全部あるか
+    remaining = iter(target_keys)
+    if not all(key in remaining for key in current_keys):
+        return None
+
+    added = [key for key in target_keys if key not in set(current_keys)]
+    return added or None
+
+
 def _diff_ordered_block(
     current: ConfigNode,
     target: ConfigNode,
@@ -210,6 +240,16 @@ def _diff_ordered_block(
         return out
 
     if current_keys == target_keys:
+        return out
+
+    inserted = _numbered_insertions(current_keys, target_keys, dialect)
+    if inserted is not None:
+        # 行番号が付いていて、足すだけなら、その行だけを入れれば番号の位置に
+        # 収まる。作り直さずに済むので、フィルターが切れる時間ができない
+        for key in inserted:
+            child = target.children[key]
+            out.append(Command(child.line, depth, "add", (*path, key)))
+            result.added += 1
         return out
 
     # 途中に挟む / 消す / 並べ替える場合、行単位で入れると評価順が壊れる。
@@ -259,9 +299,33 @@ def apply_script(base: ConfigNode, script: str, dialect: Dialect) -> ConfigNode:
             continue
 
         node = parent.child(key, payload)
+        _sort_by_sequence(parent, dialect, stack)
         stack.append((indent, node))
 
     return result
+
+
+def _sort_by_sequence(
+    parent: ConfigNode, dialect: Dialect, stack: list[tuple[int, ConfigNode]]
+) -> None:
+    """行番号の付いたブロックを、番号順に並べ直す。
+
+    実機は行番号を見て、その位置に収める。当てた結果を「末尾に足した」と
+    見ていると、途中に1行挿す差分が「収束しない」と判定されてしまう。
+    ここは、機器がすることをそのまま写しているだけである。
+    """
+    if not dialect.numbered_insert or len(parent.children) < 2:
+        return
+    # 親が順序ありのブロックで、かつ中身がすべて行番号から始まるときだけ
+    parent_line = next((node.line for depth, node in reversed(stack) if node is parent), None)
+    if parent_line is None or not dialect.is_ordered((parent_line,)):
+        return
+    if not all(_SEQUENCED.match(key) for key in parent.children):
+        return
+
+    ordered = sorted(parent.children.items(), key=lambda item: int(_SEQUENCED.match(item[0])[1]))
+    parent.children.clear()
+    parent.children.update(ordered)
 
 
 def _describe_mismatch(current: ConfigNode, target: ConfigNode, path: tuple[str, ...]) -> list[str]:

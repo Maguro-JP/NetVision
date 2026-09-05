@@ -594,3 +594,58 @@ def test_the_vendor_is_read_from_the_config_when_it_is_not_given() -> None:
     # 渡された値のほうが強い（取り込み時に判別した結果を上書きしない）
     given = build("hostname sw\nvlan 10\n name USERS\n", "hostname sw\nvlan 10\n name OFFICE\n")
     assert " name OFFICE" in given.script
+
+
+ACL_BASE = """hostname r1
+!
+ip access-list extended EDGE
+ 10 permit tcp any host 203.0.113.10 eq 443
+ 20 permit tcp any host 203.0.113.10 eq 80
+ 30 deny ip any any log
+"""
+
+
+def test_a_numbered_line_is_inserted_without_rebuilding_the_acl() -> None:
+    """行番号が付いていて足すだけなら、その行だけを入れれば番号の位置に収まる。
+
+    作り直すと、消してから入れ終わるまでフィルターが効かない。境界に当てて
+    いる ACL では、その間だけ通ってしまう。
+    """
+    wanted = ACL_BASE.replace(
+        " 20 permit", " 15 permit tcp any host 203.0.113.11 eq 443\n 20 permit"
+    )
+    result = build(ACL_BASE, wanted, "cisco_ios")
+
+    assert result.verified
+    assert "no ip access-list" not in result.script
+    assert " 15 permit tcp any host 203.0.113.11 eq 443" in result.script
+    # 元からある行は入れ直さない
+    assert "203.0.113.10 eq 443" not in result.script
+    assert result.warnings == []
+
+
+def test_removing_or_reordering_still_rebuilds_the_acl() -> None:
+    """消す・並べ替えるは、行番号があっても入れ直すしかない。"""
+    removed = ACL_BASE.replace(" 20 permit tcp any host 203.0.113.10 eq 80\n", "")
+    reordered = ACL_BASE.replace(
+        " 10 permit tcp any host 203.0.113.10 eq 443\n 20 permit tcp any host 203.0.113.10 eq 80\n",
+        " 10 permit tcp any host 203.0.113.10 eq 80\n 20 permit tcp any host 203.0.113.10 eq 443\n",
+    )
+    for wanted in (removed, reordered):
+        result = build(ACL_BASE, wanted, "cisco_ios")
+        assert result.verified
+        assert "no ip access-list extended EDGE" in result.script
+        assert any("順序が意味を持つ" in note for note in result.warnings)
+
+
+def test_an_acl_without_line_numbers_still_rebuilds() -> None:
+    """番号が無ければ、入れた行がどこに収まるか決まらない。"""
+    plain = (
+        "hostname r1\n!\nip access-list extended PLAIN\n"
+        " permit tcp any any eq 443\n deny ip any any\n"
+    )
+    wanted = plain.replace(" deny ip any any", " permit tcp any any eq 80\n deny ip any any")
+    result = build(plain, wanted, "cisco_ios")
+
+    assert result.verified
+    assert "no ip access-list extended PLAIN" in result.script
