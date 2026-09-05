@@ -47,6 +47,8 @@ ip default-gateway 10.0.0.10
 !
 snmp-server community public RO
 !
+logging host 10.10.20.20
+logging trap informational
 ntp server 10.10.20.10
 !
 line vty 0 4

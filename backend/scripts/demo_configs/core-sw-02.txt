@@ -75,6 +75,8 @@ ip route 0.0.0.0 0.0.0.0 10.10.20.254
 !
 snmp-server community public RO
 !
+logging host 10.10.20.20
+logging trap informational
 ntp server 10.10.20.10
 clock timezone JST 9 0
 !
