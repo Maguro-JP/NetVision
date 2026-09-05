@@ -105,12 +105,19 @@ def _read_status(rows: list[str], parsed: ParsedConfig) -> None:
         columns = row.split()
         if len(columns) < 2:
             break
-        status = next((c.lower() for c in columns[1:] if c.lower() in _STATUS_WORDS), None)
-        if status is None:
+        index = next(
+            (i for i, c in enumerate(columns) if i >= 1 and c.lower() in _STATUS_WORDS), None
+        )
+        if index is None:
             break
+        status = columns[index].lower()
         port = _port(parsed, columns[0])
         if port is None:
             continue
+        # Name 列にポートの説明が出る。config 側に description が無いときだけ使う。
+        # 空白を含むこともあるので、Status 列の手前までをまとめて1つとして読む
+        if not port.description and index > 1:
+            port.description = " ".join(columns[1:index])
         # 言葉は機種ごとに違うので、up / notconnect / disabled / err-disabled にそろえる
         if status == "connected":
             port.link_state = "up"
