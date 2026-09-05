@@ -574,3 +574,59 @@ def test_the_same_broken_route_is_only_reported_once():
     parsed = configparse.parse(text)
     titles = [f.title for f in policyreview.review(parsed, text) if "10.77.77.77" in f.title]
     assert len(titles) == 1
+
+
+def test_the_newer_vrrp_syntax_is_not_mistaken_for_another_vendor():
+    """IOS の新しい VRRP は、Aruba CX と同じ書き方をする。
+
+    これだけでベンダーを決めると、Cisco の Config がまるごと別ベンダーとして
+    読まれる。マスクが落ち、冗長も読めず、そこから先の指摘がすべて外れる。
+    点で区切ったマスクは AOS-CX には出てこないので、それで見分ける。
+    """
+    cisco = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan20",
+            " ip address 10.0.20.2 255.255.255.0",
+            " vrrp 20 address-family ipv4",
+            "  address 10.0.20.1 primary",
+            "  priority 120",
+        ]
+    )
+    parsed = configparse.parse(cisco)
+    assert parsed.vendor is configparse.Vendor.CISCO_IOS
+    assert parsed.interfaces[0].ip_address == "10.0.20.2/24"
+
+    aruba = "\n".join(
+        [
+            "hostname cx-01",
+            "interface vlan 20",
+            "    ip address 10.0.20.2/24",
+            "    vrrp 20 address-family ipv4",
+            "        address 10.0.20.1 primary",
+        ]
+    )
+    assert configparse.parse(aruba).vendor is configparse.Vendor.ARUBA_CX
+
+
+def test_the_newer_vrrp_syntax_is_read_for_both_families():
+    """同じ番号で ipv4 と ipv6 を別々に書ける。まとめると片方が消える。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan20",
+            " ip address 10.0.20.2 255.255.255.0",
+            " ipv6 address 2001:db8:0:20::2/64",
+            " vrrp 20 address-family ipv4",
+            "  address 10.0.20.1 primary",
+            "  priority 120",
+            " vrrp 20 address-family ipv6",
+            "  address 2001:db8:0:20::1 primary",
+        ]
+    )
+    parsed = configparse.parse(text)
+    virtual = {r.virtual_ip for r in parsed.redundancy}
+    assert virtual == {"10.0.20.1", "2001:db8:0:20::1"}
+    assert {r.priority for r in parsed.redundancy} == {120, None}
+    # 帯の中に収まっているので、指摘は出ない
+    assert policyreview.review(parsed, text) == []

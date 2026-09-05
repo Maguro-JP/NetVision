@@ -49,22 +49,36 @@ _LLDP_HEADER = re.compile(
 _APPLY = re.compile(r"^apply\s+access-list\s+ip\s+(\S+)\s+(in|out)\b", re.IGNORECASE)
 
 
+#: AOS-CX にしか出てこない書き方
+_STRONG_MARKERS = (
+    r"^\s*ArubaOS-CX",
+    r"^\s*vlan trunk allowed\s",
+    r"^\s*vlan access\s+\d+",
+    r"^apply\s+access-list\s+ip\s",
+    r"^vsx\s*$",
+    r"^\s+(?:no\s+)?routing\s*$",
+    r"^(?:ssh|https)-?server\s+vrf\s",
+)
+#: AOS-CX でも使うが、Cisco IOS の VRRPv3 が同じ書き方をする。これだけで
+#: 決めると、Cisco の Config がまるごと別ベンダーとして読まれる
+_VRRP_MARKER = r"^\s+vrrp\s+\d+\s+address-family\s"
+#: AOS-CX は長さで書く（10.0.0.1/24）。点で区切ったマスクは出てこないので、
+#: これがあれば Cisco 側と判断できる
+_DOTTED_MASK = re.compile(
+    r"^\s*ip\s+address\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def detect(text: str) -> Vendor | None:
     """AOS-CX かどうか。IOS と見分けが付く手掛かりだけで見る。"""
     if _VERSION.search(text):
         return Vendor.ARUBA_CX
-    for pattern in (
-        r"^\s*ArubaOS-CX",
-        r"^\s*vlan trunk allowed\s",
-        r"^\s*vlan access\s+\d+",
-        r"^apply\s+access-list\s+ip\s",
-        r"^vsx\s*$",
-        r"^\s+(?:no\s+)?routing\s*$",
-        r"^(?:ssh|https)-?server\s+vrf\s",
-        r"^\s+vrrp\s+\d+\s+address-family\s",
-    ):
+    for pattern in _STRONG_MARKERS:
         if re.search(pattern, text, re.IGNORECASE | re.MULTILINE):
             return Vendor.ARUBA_CX
+    if re.search(_VRRP_MARKER, text, re.IGNORECASE | re.MULTILINE):
+        return None if _DOTTED_MASK.search(text) else Vendor.ARUBA_CX
     return None
 
 
