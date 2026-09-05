@@ -48,6 +48,10 @@ class Dialect:
     single_valued: list[re.Pattern[str]] = field(default_factory=list)
     prerequisites: list[Prerequisite] = field(default_factory=list)
     risks: list[RiskRule] = field(default_factory=list)
+    #: 行番号を書いて、途中に1行だけ挿し込めるか。
+    #: できる機種では、順序ありのブロックでも作り直さずに済む。作り直すと、
+    #: 消してから入れ終わるまでフィルターが効かない
+    numbered_insert: bool = False
 
     # --- 行の読み書き ----------------------------------------------------
 
@@ -104,6 +108,7 @@ class Dialect:
 
 _CISCO = Dialect(
     name="cisco",
+    numbered_insert=True,
     ordered_blocks=[
         # ACL は行の順序が評価順そのもの。1行足すだけでも意味が変わる
         re.compile(r"^ip(?:v6)?\s+access-list\b", re.I),

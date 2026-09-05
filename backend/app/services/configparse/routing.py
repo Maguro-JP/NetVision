@@ -134,6 +134,13 @@ _IOS_ROUTE = re.compile(
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)\s+(?P<mask>\d+\.\d+\.\d+\.\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+#: NX-OS は長さで書く（ip route 0.0.0.0/0 10.0.0.254）。IOS はこの形を
+#: 使わないので、混ざる心配は無い。読めないと静的経路が丸ごと落ちる
+_NXOS_ROUTE = re.compile(
+    r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
+    r"(?P<dest>\d+\.\d+\.\d+\.\d+/\d+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
 _IOS_ROUTE6 = re.compile(
     r"^ipv6 route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
     r"(?P<dest>[0-9A-Fa-f:]+/\d+)\s+(?P<rest>.+)$",
@@ -159,6 +166,17 @@ def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
         if not match:
             continue
         destination = to_prefix(match.group("dest"), match.group("mask"), wildcard=False)
+        if destination is None:
+            continue
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        _read_route_options(match.group("rest"), route)
+        parsed.routes.append(route)
+
+    for line in text.splitlines():
+        match = _NXOS_ROUTE.match(line.strip())
+        if not match:
+            continue
+        destination = to_prefix(match.group("dest"))
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
@@ -577,19 +595,32 @@ _IX_ROUTE = re.compile(
     r"^ip route\s+(?P<dest>\d+\.\d+\.\d+\.\d+)/(?P<length>\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+#: IX の既定経路は宛先を書かず `default` と書く。支店のルーターでいちばん
+#: 大事な1本なので、読めないと「既定の経路が見当たりません」を全台に出す
+_IX_DEFAULT_ROUTE = re.compile(r"^ip route\s+default\s+(?P<rest>.+)$", re.IGNORECASE)
+_IX_DEFAULT_ROUTE6 = re.compile(r"^ipv6 route\s+default\s+(?P<rest>.+)$", re.IGNORECASE)
 
 
 def parse_ix(text: str, parsed: ParsedConfig) -> None:
     parse_policies(text, parsed)
     for line in text.splitlines():
-        match = _IX_ROUTE.match(line.strip())
-        if not match:
-            continue
-        destination = to_prefix(f"{match.group('dest')}/{match.group('length')}")
+        stripped = line.strip()
+        match = _IX_ROUTE.match(stripped)
+        if match:
+            destination = to_prefix(f"{match.group('dest')}/{match.group('length')}")
+            rest = match.group("rest")
+        else:
+            default = _IX_DEFAULT_ROUTE.match(stripped)
+            default6 = _IX_DEFAULT_ROUTE6.match(stripped)
+            if default is None and default6 is None:
+                continue
+            destination = "0.0.0.0/0" if default is not None else "::/0"
+            rest = (default or default6).group("rest")
         if destination is None:
             continue
+
         route = ParsedRoute(destination=destination)
-        for token in match.group("rest").split():
+        for token in rest.split():
             if _is_ip(token):
                 route.next_hop = token
             elif token.isdigit():

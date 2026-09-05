@@ -29,6 +29,9 @@ from app.services.configparse.base import (
 
 _SET_HOSTNAME = re.compile(r"^set system host-name\s+(\S+)", re.MULTILINE)
 _BRACE_HOSTNAME = re.compile(r"^\s*host-name\s+(\S+);", re.MULTILINE)
+#: show version の1行目。取り込みで機器と突き合わせるのはホスト名なので、
+#: ここを読めないと show version だけ貼られた分が結び付かない
+_SHOW_HOSTNAME = re.compile(r"^Hostname:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 #: `Junos: 21.4R3-S5.4`、`JUNOS Software Release [21.4R3]`、階層形式の `version ...`、
 #: set 形式の `set version ...`。版が読めないと弱点の照合から漏れる
 _VERSION = re.compile(
@@ -81,7 +84,9 @@ def detect(text: str) -> Vendor | None:
 def parse(text: str) -> ParsedConfig:
     parsed = ParsedConfig(vendor=Vendor.JUNIPER, os_name="Junos")
 
-    match = _SET_HOSTNAME.search(text) or _BRACE_HOSTNAME.search(text)
+    match = (
+        _SET_HOSTNAME.search(text) or _BRACE_HOSTNAME.search(text) or _SHOW_HOSTNAME.search(text)
+    )
     if match:
         parsed.hostname = match.group(1).strip('"')
 

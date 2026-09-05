@@ -35,3 +35,24 @@ set protocols bgp group INT neighbor 10.0.0.2 peer-as 65001
         ("10.0.0.2", "65001"),
         ("203.0.113.1", "65002"),
     ]
+
+
+def test_the_hostname_is_read_from_show_version():
+    """取り込みで機器と突き合わせるのはホスト名である。
+
+    show version だけを貼られたとき、ここを読めないとどの機器の情報なのか
+    決まらず、台帳に結び付かない。
+    """
+    text = "Hostname: edge-rt-01\nModel: mx204\nJunos: 21.4R3-S4.9\n"
+    parsed = configparse.parse(text)
+    assert parsed.vendor is configparse.Vendor.JUNIPER
+    assert parsed.hostname == "edge-rt-01"
+    assert parsed.model == "mx204"
+    assert parsed.os_version == "21.4R3-S4.9"
+
+
+def test_the_configuration_forms_still_give_the_hostname():
+    """set 形式と波括弧形式は、これまで通り読める。"""
+    assert configparse.parse("set system host-name edge-rt-02\n").hostname == "edge-rt-02"
+    braces = "system {\n    host-name edge-rt-03;\n}\ninterfaces {\n    ge-0/0/0 {\n    }\n}\n"
+    assert configparse.parse(braces).hostname == "edge-rt-03"

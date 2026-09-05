@@ -96,8 +96,9 @@ def test_the_acl_is_read_in_order(parsed):
 
 def test_where_an_acl_is_applied_is_read(parsed):
     acls = {a.name: a for a in parsed.acls}
-    assert acls["WEB-IN"].applied_to == ["interface vlan 20 in"]
-    assert acls["GUEST-IN"].applied_to == ["interface 1/1/24 in"]
+    # 向きの言葉は他のベンダーとそろえてある（表に並べたときに混ざらないように）
+    assert acls["WEB-IN"].applied_to == ["interface vlan 20 入り"]
+    assert acls["GUEST-IN"].applied_to == ["interface 1/1/24 入り"]
 
 
 def test_bgp_is_still_read_by_the_ios_side(parsed):

@@ -107,3 +107,44 @@ def test_a_catalyst_config_is_still_ios() -> None:
         ]
     )
     assert configparse.parse(text).vendor is configparse.Vendor.CISCO_IOS
+
+
+def test_nxos_static_routes_are_read() -> None:
+    """NX-OS は長さで書く（ip route 0.0.0.0/0 …）。
+
+    この形を読んでいないと、静的経路が丸ごと落ちる。既定経路も落ちるので、
+    書いてある機器に「既定の経路が見当たりません」を出すことになる。
+    """
+    text = "\n".join(
+        [
+            "hostname n9k",
+            "feature bgp",
+            "interface Ethernet1/1",
+            "  ip address 10.0.0.1/24",
+            "ip route 0.0.0.0/0 10.0.0.254",
+            "ip route 10.9.0.0/16 10.0.0.253 name BRANCH 200",
+            "ip route vrf CUST 192.168.5.0/24 192.168.5.254",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is configparse.Vendor.CISCO_NXOS
+    routes = {r.destination: r for r in parsed.routes}
+    assert routes["0.0.0.0/0"].next_hop == "10.0.0.254"
+    # name の後ろの語を距離と取り違えない
+    assert routes["10.9.0.0/16"].distance == 200
+    assert routes["192.168.5.0/24"].vrf == "CUST"
+
+
+def test_the_ios_way_of_writing_routes_still_works() -> None:
+    """点で区切ったマスクの形は、これまで通り読める。"""
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface Vlan10",
+            " ip address 10.0.0.1 255.255.255.0",
+            "ip route 0.0.0.0 0.0.0.0 10.0.0.254",
+            "ip route 10.20.0.0 255.255.0.0 10.0.0.253",
+        ]
+    )
+    routes = {r.destination for r in configparse.parse(text).routes}
+    assert routes == {"0.0.0.0/0", "10.20.0.0/16"}

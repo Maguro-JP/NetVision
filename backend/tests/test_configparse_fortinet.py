@@ -43,3 +43,36 @@ def test_plain_prose_is_not_mistaken_for_fortigate() -> None:
     """end や next という語が出てくるだけの文章を、設定と取り違えない。"""
     text = "\n".join(["config change memo", "next", "end"])
     assert configparse.parse(text).vendor is not configparse.Vendor.FORTINET
+
+
+def test_vlan_interfaces_count_as_the_vlans_on_the_device() -> None:
+    """FortiOS には VLAN を並べる場所が無い。
+
+    `set vlanid` を持つ口が、その VLAN そのものである。拾わないと、VLAN
+    台帳との突き合わせで FortiGate だけ「どの VLAN も持っていない」ことに
+    なる。
+    """
+    text = "\n".join(
+        [
+            "config system interface",
+            '    edit "vlan10"',
+            "        set vlanid 10",
+            '        set description "社員端末"',
+            "        set ip 10.0.10.1 255.255.255.0",
+            "    next",
+            '    edit "vlan20"',
+            "        set vlanid 20",
+            "        set ip 10.0.20.1 255.255.255.0",
+            "    next",
+            '    edit "port1"',
+            "        set ip 203.0.113.2 255.255.255.248",
+            "    next",
+            "end",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert set(parsed.vlans) == {10, 20}
+    assert parsed.vlans[10] == "社員端末"
+    # 名前が書いていないものに、口の名前を当てはめない。
+    # 当てはめると、台帳と突き合わせたときに「名前が違います」の誤りになる
+    assert parsed.vlans[20] == ""
