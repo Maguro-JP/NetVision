@@ -80,6 +80,8 @@ _HYGIENE = (
             r"|telnetd service on\b"  # ヤマハ
             r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
             r"|telnet server enable\b"  # Comware
+            r"|protocol inbound (?:all|telnet)\b"  # Comware / VRP の vty
+            r"|telnet server\s*$"  # FastIron（no telnet server は止めた形）
             r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
             re.IGNORECASE,
         ),
@@ -90,8 +92,9 @@ _HYGIENE = (
     ),
     (
         re.compile(
+            # アラクサラは値を引用符で囲う（`snmp-server community "public" ro`）
             r"^\s*(?:snmp-server community|set snmp community"
-            r"|snmp-agent community\s+(?:read|write))\s+(public|private)\b",
+            r"|snmp-agent community\s+(?:read|write))\s+\"?(public|private)\b",
             re.IGNORECASE,
         ),
         HIGH,
@@ -106,7 +109,7 @@ _HYGIENE = (
     ),
     (
         re.compile(
-            r"^\s*(?:snmp-server community\s+\S+\s+rw\b"
+            r"^\s*(?:snmp-server community\s+\"?\S+?\"?\s+rw\b"
             r"|set snmp community\s+\S+\s+authorization\s+read-write\b"
             r"|snmp-agent community\s+write\b)",
             re.IGNORECASE,

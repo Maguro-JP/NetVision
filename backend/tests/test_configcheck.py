@@ -10,7 +10,7 @@ import pytest
 
 from app.models import Device
 from app.models.topology import ConfigSnapshot
-from app.services import configcheck
+from app.services import configcheck, configparse
 from app.services.l3review import HIGH, LOW, MEDIUM
 from tests.conftest import API
 
@@ -758,3 +758,63 @@ def test_clean_counters_say_nothing(db_session):
     text = _CRC.replace("31337 input errors, 31337 CRC", "0 input errors, 0 CRC")
     result = configcheck.check(db_session, text)
     assert not any("壊れていた通信" in row.title for row in result.findings)
+
+
+def _hygiene_titles(text: str) -> list[str]:
+    parsed = configparse.parse(text)
+    return [item.title for item in configcheck._hygiene(parsed, text)]
+
+
+def test_telnet_and_default_communities_are_caught_on_every_vendor() -> None:
+    """telnet が開いている・合言葉が既定、はどのベンダーでも同じ事故。
+
+    書き方が違うだけで見逃すと、そのベンダーの機器だけ黙って通る。
+    """
+    alaxala = "\n".join(
+        [
+            "Model AX3650S-24T4XW",
+            'hostname "ax01"',
+            'snmp-server community "public" ro',
+            "line vty 0 4",
+            " transport input telnet",
+        ]
+    )
+    huawei = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "snmp-agent community read public",
+            "user-interface vty 0 4",
+            " protocol inbound telnet",
+        ]
+    )
+    fastiron = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "snmp-server community public ro",
+            "telnet server",
+        ]
+    )
+    for text in (alaxala, huawei, fastiron):
+        titles = _hygiene_titles(text)
+        assert "telnet で入れる状態です" in titles, text.splitlines()[0]
+        assert "SNMP の合言葉が既定のままです" in titles, text.splitlines()[0]
+
+
+def test_a_quoted_community_with_write_access_is_caught() -> None:
+    text = 'Model AX3650S-24T4XW\nhostname "ax01"\nsnmp-server community "netops" rw\n'
+    assert "SNMP から設定を書き換えられます" in _hygiene_titles(text)
+
+
+def test_a_tidy_config_says_nothing_here() -> None:
+    text = "\n".join(
+        [
+            "version 17.9",
+            "hostname c1",
+            "snmp-server community S3cret RO",
+            "line vty 0 4",
+            " transport input ssh",
+        ]
+    )
+    assert _hygiene_titles(text) == []
