@@ -79,7 +79,39 @@ interface port1.0.1
 vlan database
  vlan 10 name USERS
 """,
+    Vendor.ALAXALA: """Model AX3650S-24T4XW
+S/W: OS-L3A Ver. 12.1.A
+hostname "ax-sw-01"
+interface gigabitethernet 0/1
+  switchport mode trunk
+""",
+    Vendor.HUAWEI: """Huawei Versatile Routing Platform Software
+VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)
+sysname hw-sw-01
+#
+interface 10GE1/0/1
+ port link-type trunk
+""",
+    Vendor.FASTIRON: """  HW: Stackable ICX7150-48P
+  SW: Version 08.0.95cT213
+hostname icx-sw-01
+vlan 10 name USERS by port
+ tagged ethe 1/1/1
+""",
+    Vendor.CISCO_WLC: """Product Version.................................. 8.10.185.0
+System Name...................................... wlc-01
+IP Address....................................... 10.0.0.31
+""",
 }
+
+
+def test_every_vendor_has_a_sample() -> None:
+    """読み手を足したら、見本も足す。
+
+    見本が無いベンダーは、他の見本を横取りしていても気づけない。
+    """
+    missing = {vendor for vendor in Vendor if vendor is not Vendor.UNKNOWN} - set(SAMPLES)
+    assert not missing, missing
 
 
 def test_each_vendor_is_recognised_from_its_own_way_of_writing() -> None:
