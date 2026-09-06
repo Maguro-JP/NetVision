@@ -284,3 +284,54 @@ def test_the_name_column_fills_a_missing_description() -> None:
     assert ports["GigabitEthernet1/0/3"].description == "PRINTER 1F"
     # Name 列が空なら、無いままにする
     assert ports["GigabitEthernet1/0/4"].description is None
+
+
+def test_the_added_vendors_say_whether_the_link_is_up() -> None:
+    """図に線があるのに実機で上がっていない、を出せること。
+
+    3ベンダーとも表の形が違う。読めないと、そのベンダーの機器だけ黙る。
+    """
+    huawei = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "interface 10GE1/0/1",
+            " port link-type trunk",
+            "#",
+            "interface 10GE1/0/2",
+            " port link-type access",
+            "#",
+            "Interface                   PHY   Protocol InUti OutUti",
+            "10GE1/0/1                   up    up          1%     1%",
+            "10GE1/0/2                   down  down        0%     0%",
+        ]
+    )
+    fastiron = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "interface ethernet 1/1/1",
+            " port-name to-core",
+            "interface ethernet 1/1/2",
+            " port-name spare",
+            "Port    Link    State   Dupl Speed Trunk Tag Pvid Pri MAC             Name",
+            "1/1/1   Up      Forward Full 1G    None  Yes N/A  0   0000.1111.2222  to-core",
+            "1/1/2   Down    None    None None  None  No  10   0   0000.1111.2223",
+        ]
+    )
+    alaxala = "\n".join(
+        [
+            "Model AX3650S-24T4XW",
+            'hostname "ax01"',
+            "interface gigabitethernet 0/1",
+            "  switchport mode trunk",
+            "interface gigabitethernet 0/2",
+            "  switchport mode access",
+            "  Port 0/1  Link: Up    Speed: 1000BASE-T",
+            "  Port 0/2  Link: Down  Speed: -",
+        ]
+    )
+    for text in (huawei, fastiron, alaxala):
+        states = [item.link_state for item in configparse.parse(text).interfaces]
+        assert states == ["up", "down"], text.splitlines()[0]

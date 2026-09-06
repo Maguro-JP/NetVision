@@ -304,7 +304,8 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
 `show interfaces status` / `show ip interface brief`（Cisco / Arista / NEC IX）、`show interfaces terse`（Junos）、
 `show interface brief`（Aruba CX）、`display interface brief`（QX）、`show interface all`（PAN-OS）、
-`get system interface physical`（FortiGate）が入っていれば、線が実際に上がっているかまで読み、
+`get system interface physical`（FortiGate）、`display interface brief`（VRP）、
+`show interfaces brief`（FastIron）、`Port 0/1 Link:`（アラクサラ）が入っていれば、線が実際に上がっているかまで読み、
 図に線があるのに実機では上がっていないものを指摘します。
 CSV と同じく Shift_JIS / UTF-8 のどちらでも構いません。
 

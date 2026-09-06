@@ -53,6 +53,14 @@ _NXOS_HEADER = re.compile(r"^\s*Ethernet\s+VLAN\s+Type\s+Mode\s+Status\s+Reason\
 _COMWARE_HEADER = re.compile(
     r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
 )
+#: VRP の `display interface brief`。物理の状態は PHY の列に出る
+_VRP_HEADER = re.compile(r"^\s*Interface\s+PHY\s+Protocol\b", re.IGNORECASE)
+#: FastIron の `show interfaces brief`
+_FASTIRON_HEADER = re.compile(r"^\s*Port\s+Link\s+State\s+Dupl\b", re.IGNORECASE)
+#: アラクサラは1行に `Port 0/1  Link: Up` の形で並べる
+_ALAXALA_PORT = re.compile(
+    r"^\s*Port\s+(?P<name>[\d/]+)\s+Link\s*:\s*(?P<state>\S+)", re.IGNORECASE
+)
 _BRIEF_HEADER = re.compile(r"^\s*Interface\s+IP-Address\s+.*\bStatus\s+Protocol\s*$", re.I)
 _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 
@@ -85,6 +93,11 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_panos(lines[index + 1 :], parsed)
         elif _NXOS_HEADER.match(line):
             _read_nxos(lines[index + 1 :], parsed)
+        elif _VRP_HEADER.match(line):
+            _read_vrp(lines[index + 1 :], parsed)
+        elif _FASTIRON_HEADER.match(line):
+            _read_fastiron(lines[index + 1 :], parsed)
+    _read_alaxala(lines, parsed)
     _read_forti_physical(lines, parsed)
     _read_paragraphs(lines, parsed)
     _read_etherchannel(lines, parsed)
@@ -203,6 +216,63 @@ def _read_comware(rows: list[str], parsed: ParsedConfig) -> None:
         if port is None:
             continue
         port.link_state = {"UP": "up", "DOWN": "down", "ADM": "disabled", "STBY": "down"}[link]
+
+
+#: 表の中の言い回しを、こちらの3つに寄せる
+_LINK_WORDS = {
+    "up": "up",
+    "down": "down",
+    "*down": "disabled",
+    "administratively": "disabled",
+    "adm": "disabled",
+    "disabled": "disabled",
+    "forward": "up",
+    "none": "down",
+    "blocked": "up",
+}
+
+
+def _read_vrp(rows: list[str], parsed: ParsedConfig) -> None:
+    """VRP は PHY の列。`*down` は人が止めたという意味で、線の話ではない。"""
+    for row in rows:
+        columns = row.split()
+        if len(columns) < 2:
+            break
+        state = _LINK_WORDS.get(columns[1].lower())
+        if state is None:
+            break
+        port = _port(parsed, columns[0])
+        if port is not None:
+            port.link_state = state
+
+
+def _read_fastiron(rows: list[str], parsed: ParsedConfig) -> None:
+    """FastIron は Link の列。State の列は STP の状態なので混ぜない。"""
+    for row in rows:
+        columns = row.split()
+        if len(columns) < 2:
+            break
+        state = _LINK_WORDS.get(columns[1].lower())
+        if state is None:
+            break
+        # 表は `1/1/1`、config 側は `ethernet 1/1/1`。同じ口なのでどちらでも引く
+        port = _port(parsed, columns[0]) or _port(parsed, f"Ethernet{columns[0]}")
+        if port is not None:
+            port.link_state = state
+
+
+def _read_alaxala(rows: list[str], parsed: ParsedConfig) -> None:
+    """アラクサラは表ではなく `Port 0/1  Link: Up` の形で並べる。"""
+    for row in rows:
+        found = _ALAXALA_PORT.match(row)
+        if not found:
+            continue
+        state = _LINK_WORDS.get(found.group("state").lower())
+        if state is None:
+            continue
+        port = _port(parsed, f"GigabitEthernet{found.group('name')}")
+        if port is not None:
+            port.link_state = state
 
 
 def _read_panos(rows: list[str], parsed: ParsedConfig) -> None:
