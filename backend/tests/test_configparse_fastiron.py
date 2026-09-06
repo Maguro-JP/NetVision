@@ -123,3 +123,33 @@ def test_the_bundle_is_read_from_the_lag_block() -> None:
     assert ports["Ethernet1/1/2"].lag_group == 1
     # dynamic は LACP でやりとりする形
     assert ports["Ethernet1/1/1"].lag_mode == "active"
+
+
+def test_the_routing_blocks_are_read_without_a_number_on_the_heading() -> None:
+    """FastIron は見出しに番号を書かず、自分の AS は中の `local-as` に書く。
+
+    見出しだけを見ていると、経路がまるごと読めていないことになる。
+    """
+    text = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "router ospf",
+            " area 0",
+            "interface ve 10",
+            " ip address 10.0.10.1 255.255.255.0",
+            " ip ospf area 0",
+            "router bgp",
+            " local-as 65001",
+            " neighbor 10.0.0.2 remote-as 65002",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.ospf is not None
+    assert parsed.bgp is not None
+    assert parsed.bgp.local_as == "65001"
+    assert [(item.address, item.remote_as) for item in parsed.bgp.neighbors] == [
+        ("10.0.0.2", "65002")
+    ]
+    ports = {item.name: item for item in parsed.interfaces}
+    assert ports["Ve10"].ospf_area == "0"

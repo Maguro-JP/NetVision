@@ -70,8 +70,20 @@ def detect(text: str) -> Vendor | None:
     return None
 
 
+#: FastIron は経路の見出しに番号を書かない（`router ospf` / `router bgp`）。
+#: 自分の AS 番号は中の `local-as` に書く
+_ROUTER_HEAD = re.compile(r"^router\s+(ospf|bgp)\s*$", re.IGNORECASE)
+_LOCAL_AS = re.compile(r"^\s+local-as\s+(\d+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _local_as(text: str) -> str | None:
+    found = _LOCAL_AS.search(text)
+    return found.group(1) if found else None
+
+
 def _to_ios(text: str) -> str:
     """口の名前と説明を、IOS と同じ書き方に寄せる。"""
+    local_as = _local_as(text)
     rows: list[str] = []
     for raw in text.splitlines():
         found = _SPLIT_PORT.match(raw)
@@ -84,6 +96,14 @@ def _to_ios(text: str) -> str:
         if named:
             rows.append(f"{named.group('indent')}description {named.group('value')}")
             continue
+        head = _ROUTER_HEAD.match(raw)
+        if head:
+            kind = head.group(1).lower()
+            # 番号が無いと IOS の読み手が見出しとして拾えない。OSPF は1つだけ
+            number = local_as if kind == "bgp" else "1"
+            if number:
+                rows.append(f"router {kind} {number}")
+                continue
         rows.append(raw)
     return "\n".join(rows)
 
