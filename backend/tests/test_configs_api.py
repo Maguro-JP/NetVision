@@ -514,3 +514,60 @@ def test_registering_an_unrelated_device_adopts_nothing(client, device_payload):
     other = add_device(client, device_payload, hostname="unrelated-sw-99")
 
     assert client.get(f"{API}/configs", params={"device_id": other}).json() == []
+
+
+def test_the_added_vendors_go_all_the_way_to_a_drawn_link(client):
+    """後から足したベンダーでも、取り込みから線が引けるところまで通ること。
+
+    読めているだけでは足りない。機器が起き、口が入り、隣が相手の機器に
+    結び付いて、はじめて図に線が出る。途中のどこかで落ちても、画面は
+    「取り込みました」と出るので気づきにくい。
+    """
+    huawei = "\n".join(
+        [
+            "Huawei Versatile Routing Platform Software",
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw-sw-01",
+            "#",
+            "interface 10GE1/0/1",
+            " description to-core",
+            " port link-type trunk",
+            "#",
+            "interface Vlanif10",
+            " ip address 10.0.10.2 255.255.255.0",
+            "#",
+            "Local Intf         Neighbor Dev        Neighbor Intf       Exptime",
+            "10GE1/0/1          icx-sw-01           Ethernet1/1/1       95",
+        ]
+    )
+    fastiron = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "  SW: Version 08.0.95cT213",
+            "hostname icx-sw-01",
+            "interface ethernet 1/1/1",
+            " port-name to-hw",
+            "interface ve 10",
+            " ip address 10.0.10.3 255.255.255.0",
+            "Lcl Port  Chassis ID      Port ID    Port Description   System Name",
+            "1/1/1     0000.1111.2222  10GE1/0/1  to icx             hw-sw-01",
+        ]
+    )
+    response = client.post(
+        f"{API}/configs/upload",
+        files=[
+            ("files", ("hw-sw-01.txt", huawei.encode(), "text/plain")),
+            ("files", ("icx-sw-01.txt", fastiron.encode(), "text/plain")),
+        ],
+        data={"create_missing": "true"},
+    )
+    assert response.status_code == 200, response.text
+    results = {item["filename"]: item for item in response.json()}
+
+    assert results["hw-sw-01.txt"]["device_hostname"] == "hw-sw-01"
+    assert results["icx-sw-01.txt"]["device_hostname"] == "icx-sw-01"
+    for item in results.values():
+        assert item["interface_count"] >= 2, item["filename"]
+        assert item["neighbor_count"] >= 1, item["filename"]
+    # 2つめを入れた時点で、両端がそろって線になる
+    assert results["icx-sw-01.txt"]["links_created"] == 1
