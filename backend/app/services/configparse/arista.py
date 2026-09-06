@@ -90,7 +90,7 @@ def parse(text: str) -> ParsedConfig:
 
 
 def _parse_routes(text: str, parsed: ParsedConfig) -> None:
-    """`ip route 0.0.0.0/0 10.0.0.254` の形。IOS の読み手は拾えない。"""
+    """`ip route 0.0.0.0/0 10.0.0.254` の形。EOS 特有の値の並びをここで補う。"""
     for raw in text.splitlines():
         found = _ROUTE.match(raw.strip())
         if not found:
@@ -106,6 +106,15 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
                 route.distance = int(token)
             elif re.match(r"^[A-Za-z]", token) and token.lower() not in ("name", "tag", "track"):
                 route.interface = token
+        if any(
+            existing.destination == route.destination
+            and existing.next_hop == route.next_hop
+            and existing.vrf == route.vrf
+            for existing in parsed.routes
+        ):
+            # IOS の読み手も長さ付きの書き方を拾えるようになったので、
+            # ここで足すと同じ経路が2本に見えてしまう
+            continue
         parsed.routes.append(route)
 
 

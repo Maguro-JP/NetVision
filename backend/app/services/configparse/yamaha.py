@@ -47,6 +47,11 @@ _SERIAL = re.compile(r"serial=(\S+)", re.IGNORECASE)
 #: 機器名を入れて見分けている。他に名前の手掛かりが無いので、ここから取る
 _PROMPT = re.compile(r"^console\s+prompt\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _LAN_ADDRESS = re.compile(r"^ip\s+(lan\d+)\s+address\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+# ヤマハの説明は `description lan1 事務所側` のように命令の側に書く。
+# 他社のようにポート配下へぶら下がらないので、行ごと拾う
+_LAN_DESCRIPTION = re.compile(
+    r"^description\s+(lan\d+|pp\s*\d+)\s+(.+)$", re.IGNORECASE | re.MULTILINE
+)
 _LAN_SECURE = re.compile(r"^ip\s+(lan\d+)\s+secure\s+filter\s+(in|out)\s+(.+)$", re.IGNORECASE)
 _PP_SELECT = re.compile(r"^pp\s+select\s+(\S+)", re.IGNORECASE)
 _PP_SECURE = re.compile(r"^\s*ip\s+pp\s+secure\s+filter\s+(in|out)\s+(.+)$", re.IGNORECASE)
@@ -127,6 +132,10 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if address.lower() not in ("dhcp", "auto"):
             interface.ip_address = address
 
+    for name, description in _LAN_DESCRIPTION.findall(text):
+        port = name.upper().replace(" ", "")
+        parsed.add_interface(ParsedInterface(name=port)).description = description.strip()
+
     current: ParsedInterface | None = None
     for raw in text.splitlines():
         head = _PP_SELECT.match(raw.strip())
@@ -141,7 +150,9 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             continue
         used = _PPPOE_USE.match(raw)
         if used:
-            current.description = f"PPPoE {used.group(1).upper()} 経由"
+            # 人が書いた説明があるなら、そちらを残す
+            if not current.description:
+                current.description = f"PPPoE {used.group(1).upper()} 経由"
             continue
         address = _PP_ADDRESS.match(raw)
         if address and address.group(1).lower() not in ("ipcp", "dhcp"):

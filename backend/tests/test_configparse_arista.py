@@ -90,3 +90,16 @@ def test_the_lldp_table_gives_the_lines_for_the_diagram():
     pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed().neighbors]
     assert ("Ethernet1", "core-sw-01", "Ethernet1/0/1") in pairs
     assert ("Ethernet2", "server-01", "Ethernet0") in pairs
+
+
+def test_a_static_route_is_not_counted_twice() -> None:
+    # IOS の読み手と EOS の読み手が同じ行を拾うため、重複しやすい
+    text = "\n".join(
+        [
+            "! device: sw1 (DCS-7050SX3-48YC8, EOS-4.29.2F)",
+            "hostname sw1",
+            "ip route 0.0.0.0/0 10.0.10.254",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert len(parsed.routes) == 1

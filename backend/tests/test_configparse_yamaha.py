@@ -160,3 +160,17 @@ def test_the_device_name_comes_from_the_console_prompt():
     # 書いていなければ、無いものは無いままにする（推測で埋めない）
     without = load().replace("console prompt rtx-osaka-01\n", "")
     assert configparse.parse(without).hostname is None
+
+
+def test_port_description_is_read() -> None:
+    # ヤマハは説明を命令の側に書く。読めないと「説明が無い」と誤って言う
+    text = "\n".join(
+        [
+            "# RTX1220 Rev.15.04.03",
+            "ip lan1 address 192.168.100.1/24",
+            "description lan1 事務所側",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {item.name: item.description for item in parsed.interfaces}
+    assert found["LAN1"] == "事務所側"
