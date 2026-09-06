@@ -170,3 +170,37 @@ def test_the_api_says_when_there_is_not_enough_to_work_with(client, db_session):
     res = client.post(f"{API}/config-templates/from-config", json={})
     assert res.status_code == 422
     assert "2台" in res.json()["detail"]
+
+
+def test_show_output_does_not_end_up_in_the_template(client):
+    """show の出力を混ぜたファイルから起こしても、貼れる形にすること。
+
+    `show version` を頭に付けたファイルは現場では普通に来る。そのまま
+    テンプレートに入ると、貼った人がそこで止まる。
+    """
+    body = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "  SW: Version 08.0.95cT213",
+            "icx-sw-01#show running-config",
+            "hostname {name}",
+            "vlan 10 name USERS by port",
+            "interface ethernet 1/1/1",
+            " port-name uplink",
+        ]
+    )
+    files = [
+        ("files", (f"icx-{i}.txt", body.format(name=f"icx-sw-0{i}").encode(), "text/plain"))
+        for i in (1, 2, 3)
+    ]
+    client.post(f"{API}/configs/upload", files=files, data={"create_missing": "true"})
+
+    response = client.post(f"{API}/config-templates/from-config", json={"vendor": "Ruckus"})
+    assert response.status_code == 200, response.text
+    drafted = response.json()
+
+    assert "HW:" not in drafted["body"]
+    assert "show running-config" not in drafted["body"]
+    assert "hostname icx-sw-{{ number }}" in drafted["body"]
+    # 何を外したかは黙らない
+    assert [note for note in drafted["notes"] if "show の出力" in note]

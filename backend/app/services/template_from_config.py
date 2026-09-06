@@ -14,6 +14,7 @@
   （変数にすると、入れる人が毎回同じ値を打つことになる）
 - 何を根拠に起こしたかを残す。何台から、どの行が全台共通だったか
 - パスワードや鍵を含む行は入れない。見せられないものは持ち回れない
+- 設定ではない行（show の出力）も入れない。貼った人がそこで止まる
 """
 
 from __future__ import annotations
@@ -67,6 +68,8 @@ class ConfigTemplateDraft:
     #: どこをどう決めたか
     notes: list[str] = field(default_factory=list)
     skipped: list[str] = field(default_factory=list)
+    #: 設定ではない行（画面の出力）。理由が違うので、鍵の行とは分けて数える
+    dropped: list[str] = field(default_factory=list)
 
 
 def _mask(line: str) -> tuple[str, list[tuple[str, str]]]:
@@ -85,6 +88,19 @@ def _mask(line: str) -> tuple[str, list[tuple[str, str]]]:
 
         masked = pattern.sub(swap, masked)
     return masked, values
+
+
+#: 設定ではなく、画面の出力の行。テンプレートに入れても貼れない
+_SHOW_OUTPUT = re.compile(
+    r"^\s*(?:HW:|SW:\s*Version|S/W:|H/W:|Model\s|Product Version"
+    r"|Cisco IOS.*Software|Cisco Adaptive Security Appliance"
+    r"|VRP\s*\(R\)|Huawei Versatile|Comware Software|ArubaOS-CX"
+    r"|AlliedWare Plus|System Name\.|Version\s*:\s*\S+\s*$"
+    r"|Building configuration|Current configuration)"
+    r"|^[\w.\-]+[#>]\s*(?:show|display|get)\s"
+    r"|^[<\[][\w.\-]+[>\]]\s*(?:display|show)\s",
+    re.IGNORECASE,
+)
 
 
 def draft(
@@ -119,6 +135,11 @@ def draft(
                 continue
             if _SECRET.search(line):
                 result.skipped.append(line.strip())
+                continue
+            if _SHOW_OUTPUT.search(line):
+                # 貼れない行。show の出力を混ぜたファイルは現場では普通で、
+                # そのままテンプレートに入ると、貼った人がそこで止まる
+                result.dropped.append(line.strip())
                 continue
             masked, values = _mask(line)
             # 同じ形の行が何度も出てくる（区切りの `!` など）。何番目かまで
@@ -157,6 +178,11 @@ def draft(
     ]
     if result.skipped:
         result.notes.append(f"パスワードや鍵を含む {len(result.skipped)} 行は入れていません。")
+    if result.dropped:
+        result.notes.append(
+            f"設定ではない行（show の出力）{len(result.dropped)} 行は入れていません。"
+            "そのまま貼れないためです。"
+        )
     return result
 
 
