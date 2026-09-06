@@ -233,3 +233,43 @@ def test_template_is_downloadable(client):
     assert res.text.startswith("﻿")
     assert "サポート終了(EoL)" in res.text
     assert "情報取得日" in res.text
+
+
+def test_the_added_vendors_version_formats_are_compared_correctly() -> None:
+    """後から足したベンダーの版数の書き方でも、影響範囲の判定が効くこと。
+
+    型番が読めても版数の比べ方が合っていないと、当たっているものを外し、
+    直したものを当たったままにする。どちらも黙って起きる。
+    """
+    from app.models import Device
+    from app.models.reference import Vulnerability, VulnerabilityAffect
+    from app.services import reference
+
+    cases = [
+        ("Ruckus", "ICX7150-48P", "08.0.95cT213", "ICX7150*", "08.0.90", "08.0.99", True),
+        (
+            "ファーウェイ",
+            "CE6850",
+            "V200R005C10SPC800",
+            "CE6850*",
+            "V200R005C00",
+            "V200R005C10SPC900",
+            True,
+        ),
+        ("アラクサラ", "AX3650S-24T4XW", "12.1.A", "AX3650S*", "12.0", "12.1.B", True),
+        ("Cisco", "AIR-CT5520-K9", "8.10.185.0", "AIR-CT5520*", "8.5", "8.10.190.0", True),
+        # 直したあとの版。当たったままにしない
+        ("Cisco", "AIR-CT5520-K9", "8.10.200.0", "AIR-CT5520*", "8.5", "8.10.190.0", False),
+    ]
+    for vendor, model, version, pattern, start, end, hit in cases:
+        device = Device(hostname="x", vendor=vendor, model=model, os_version=version)
+        affect = VulnerabilityAffect(
+            vendor=vendor,
+            model=pattern,
+            version_start_including=start,
+            version_end_including=end,
+        )
+        vulnerability = Vulnerability(cve_id="CVE-2026-0001", cvss_severity="high")
+        vulnerability.affects = [affect]
+        found = reference.match_device(device, [vulnerability])
+        assert bool(found) is hit, (model, version)
