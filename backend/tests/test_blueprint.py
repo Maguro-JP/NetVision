@@ -278,3 +278,22 @@ def test_an_unwritten_vendor_gets_the_decisions_not_cisco_syntax():
     # 決めた中身そのものは出す。空にはしない
     for hostname in plan.configs:
         assert hostname in plan.configs[hostname]
+
+
+def test_junos_configs_read_back_with_the_same_tool():
+    """set 形式で出したものを、同じ道具の読み手で読み戻せること。"""
+    from app.services import configparse
+    from app.services.configparse import Vendor
+
+    plan = _plan(bp.SEPARATE, bp.REDUNDANT, vendor="Juniper")
+    for hostname, body in plan.configs.items():
+        parsed = configparse.parse(body)
+        assert parsed.vendor is Vendor.JUNIPER, hostname
+        assert parsed.hostname == hostname
+        assert all(item.name.startswith("ge-0/0/") for item in parsed.interfaces), hostname
+    router = next(p.hostname for p in plan.ports if p.routed)
+    body = plan.configs[router]
+    assert "family inet address" in body
+    assert "vrrp-group" in body
+    # 入り口は ssh だけにする
+    assert "delete system services telnet" in body

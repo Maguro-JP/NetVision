@@ -511,6 +511,9 @@ class _PortAllocator:
             return f"Ethernet{48 - count}" if switch else f"Ethernet{1 + count}"
         if self._style == "allied":
             return f"port1.0.{24 - count}" if switch else f"port1.0.{1 + count}"
+        if self._style == "juniper":
+            # Junos は `ge-0/0/1` の形。上流側は後ろの番号から使う
+            return f"ge-0/0/{47 - count}" if switch else f"ge-0/0/{1 + count}"
         if switch:
             return f"GigabitEthernet1/0/{24 - count}"
         return f"GigabitEthernet0/{count}"
@@ -604,6 +607,7 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
         "aruba": _aruba_cx,
         "arista": _arista,
         "allied": _allied,
+        "juniper": _junos,
         "cisco": _cisco,
     }.get(_style_of(request.vendor), _outline)
     for device in plan.devices:
@@ -760,7 +764,7 @@ def _comware(
 
 #: 書式を書いてある系統だけを名指しする。ここに無いベンダーで Cisco の
 #: 構文を出すと、そのまま貼れるように見えて入らない。空欄のほうが害が無い
-_KNOWN_STYLES = ("nec", "aruba", "arista", "allied", "cisco")
+_KNOWN_STYLES = ("nec", "aruba", "arista", "allied", "cisco", "juniper")
 
 
 def _style_of(vendor: str) -> str:
@@ -770,9 +774,71 @@ def _style_of(vendor: str) -> str:
             return key
     if "アライド" in vendor:
         return "allied"
+    if "junos" in lowered or "srx" in lowered:
+        return "juniper"
     if "catalyst" in lowered or "ios" in lowered:
         return "cisco"
     return "unknown"
+
+
+def _junos(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """Junos。set 形式で、1行が1つの決めごとになる。
+
+    他社と違って階層を字下げで表さないので、貼る順番を気にしなくてよい。
+    そのぶん、消すときは同じ行を delete で書く。
+    """
+    lines = [f"set system host-name {device.hostname}"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"set vlans {_ascii(name)} vlan-id {vlan_id}")
+
+    for port in ports:
+        name = port.interface
+        lines.append(f'set interfaces {name} description "to {port.peer}"')
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                prefixlen = ipaddress.ip_network(f"0.0.0.0/{found.netmask}").prefixlen
+                lines.append(
+                    f"set interfaces {name} unit 0 family inet address {found.address}/{prefixlen}"
+                )
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    head = (
+                        f"set interfaces {name} unit 0 family inet address "
+                        f"{found.address}/{prefixlen} vrrp-group {group}"
+                    )
+                    lines.append(f"{head} virtual-address {found.virtual_ip}")
+                    lines.append(f"{head} priority {found.priority}")
+            continue
+        family = f"set interfaces {name} unit 0 family ethernet-switching"
+        if port.vlan_id is not None and port.peer_routed:
+            lines.append(f"{family} interface-mode access")
+            lines.append(
+                f"{family} vlan members {_ascii(vlans.get(port.vlan_id, str(port.vlan_id)))}"
+            )
+        elif port.vlan_id is not None:
+            lines.append(f"{family} interface-mode trunk")
+            lines.append(
+                f"{family} vlan members {_ascii(vlans.get(port.vlan_id, str(port.vlan_id)))}"
+            )
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        lines.append(
+            f"set routing-options static route {route.destination} next-hop {route.next_hop}"
+        )
+
+    lines.append("set system services ssh")
+    lines.append("delete system services telnet")
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
 
 
 def _arista(
