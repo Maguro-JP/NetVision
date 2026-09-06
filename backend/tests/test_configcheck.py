@@ -953,3 +953,27 @@ def test_a_whole_config_without_a_log_target_is_still_called_out() -> None:
     titles = [item.title for item in configcheck._findings(parsed, text)]
     assert "ログの送り先が入っていません" in titles
     assert "時刻の参照先が入っていません" in titles
+
+
+def test_one_pasted_port_is_not_called_a_device_without_descriptions() -> None:
+    """1つの口だけを貼った抜粋を、機器の話にしない。
+
+    「ポートに説明が1つも書かれていません」は機器についての指摘に読める。
+    抜粋で言うと、書いてあるのに指摘されたように見える。
+    """
+    excerpt = "interface GigabitEthernet1/0/1\n switchport mode access\n"
+    parsed = configparse.parse(excerpt)
+    titles = [item.title for item in configcheck._findings(parsed, excerpt)]
+    assert not [title for title in titles if "説明が1つも" in title]
+
+    whole = "\n".join(
+        [
+            "version 17.9",
+            "hostname c1",
+            "interface GigabitEthernet1/0/1",
+            " switchport mode access",
+        ]
+    )
+    parsed = configparse.parse(whole)
+    titles = [item.title for item in configcheck._findings(parsed, whole)]
+    assert [title for title in titles if "説明が1つも" in title]

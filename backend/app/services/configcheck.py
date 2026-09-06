@@ -241,7 +241,9 @@ def _hygiene(parsed: ParsedConfig, text: str) -> list[Finding]:
             out.append(Finding(level=level, title=title, why=why, evidence=hits[:3]))
 
     described = [i for i in parsed.interfaces if i.description]
-    if parsed.interfaces and not described:
+    # 口だけを貼った抜粋で「1つも書かれていません」と言うと、機器の話に
+    # 聞こえる。設定ぜんぶを渡されたと言えるときに限る
+    if parsed.interfaces and not described and _has_configuration(text):
         out.append(
             Finding(
                 level=LOW,
