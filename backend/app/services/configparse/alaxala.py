@@ -15,7 +15,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import cisco
+from app.services.configparse import cisco, lldptable
 from app.services.configparse.base import ParsedConfig, Vendor
 
 #: `show version` の型番と版数。AX は S/W と H/W を分けて出す
@@ -97,6 +97,7 @@ def parse(text: str) -> ParsedConfig:
     elif _MODEL_ONLY.search(text):
         parsed.model = _MODEL_ONLY.search(text).group(0)  # type: ignore[union-attr]
 
+    lldptable.parse(text, parsed)
     for vlan_id, name in list(parsed.vlans.items()):
         if name:
             parsed.vlans[vlan_id] = name.strip('"')

@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import cisco
+from app.services.configparse import cisco, lldptable
 from app.services.configparse.base import (
     ParsedConfig,
     ParsedInterface,
@@ -104,6 +104,7 @@ def parse(text: str) -> ParsedConfig:
 
     _read_vlans(text, parsed)
     _read_redundancy(text, parsed)
+    lldptable.parse(text, parsed)
     return parsed
 
 

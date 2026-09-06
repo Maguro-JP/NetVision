@@ -297,6 +297,10 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | ファーウェイ | VRP（S / CE / AR） | `sysname`・`port link-type`・`Vlanif` を読みます。Comware（NEC QX）と書き方が重なるので、VRP の名乗りが出ているものだけをファーウェイとして扱います。メーカーを取り違えると、保守期限も脆弱性も別のメーカーのもので判定してしまうためです |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
+アラクサラ / ファーウェイ / FastIron の LLDP は、`show lldp neighbors` の見出しから
+列の並びを決めて読みます。桁を決め打ちにすると、ずれた出力で黙って別の値を拾うためです。
+見出しが無い出力は読みません（線が引けないことと、線が無いことは別です）。
+
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
 `show interfaces status` / `show ip interface brief`（Cisco / Arista / NEC IX）、`show interfaces terse`（Junos）、
 `show interface brief`（Aruba CX）、`display interface brief`（QX）、`show interface all`（PAN-OS）、

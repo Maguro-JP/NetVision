@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import nec
+from app.services.configparse import lldptable, nec
 from app.services.configparse.base import ParsedConfig, Vendor
 
 #: VRP の名乗り。Comware と見分けが付くのはここだけ
@@ -76,6 +76,7 @@ def parse(text: str) -> ParsedConfig:
     if found:
         parsed.model = found.group(1)
 
+    lldptable.parse(text, parsed)
     for vlan_id, name in _vlan_names(text).items():
         if not parsed.vlans.get(vlan_id):
             parsed.vlans[vlan_id] = name
