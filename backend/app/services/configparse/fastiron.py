@@ -51,6 +51,21 @@ _KINDS = {
     "lag": "Lag",
 }
 _PORT_NAME = re.compile(r"^(?P<indent>\s+)port-name\s+(?P<value>.+?)\s*$", re.IGNORECASE)
+#: 行の途中に出てくる口の名前（`ip nat inside source list 1 interface ethernet 1/1/1`）。
+#: 種別と番号が離れたままだと、種別だけを名前として拾ってしまう
+_INLINE_PORT = re.compile(
+    r"\b(?P<kind>ethernet|ve|loopback|management|lag)\s+(?P<number>\d+(?:/\d+)*)\b",
+    re.IGNORECASE,
+)
+
+
+def _join_ports(line: str) -> str:
+    def rewrite(found: re.Match[str]) -> str:
+        kind = _KINDS.get(found.group("kind").lower())
+        return f"{kind}{found.group('number')}" if kind else found.group(0)
+
+    return _INLINE_PORT.sub(rewrite, line)
+
 
 _VLAN_HEAD = re.compile(
     r"^\s*vlan\s+(?P<id>\d+)(?:\s+name\s+(?P<name>\S+))?(?:\s+by\s+port)?\s*$", re.IGNORECASE
@@ -104,7 +119,7 @@ def _to_ios(text: str) -> str:
             if number:
                 rows.append(f"router {kind} {number}")
                 continue
-        rows.append(raw)
+        rows.append(_join_ports(raw))
     return "\n".join(rows)
 
 

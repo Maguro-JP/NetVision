@@ -36,6 +36,14 @@ _SPLIT_PORT = re.compile(
     r"\s+(?P<number>[\d/.:]+)\s*$",
     re.IGNORECASE,
 )
+#: 行の途中に出てくる口の名前。種別と番号が離れたままだと、種別だけを
+#: 名前として拾ってしまう（`... interface gigabitethernet 0/1`）
+_INLINE_PORT = re.compile(
+    r"\b(?P<kind>gigabitethernet|tengigabitethernet|fortygigabitethernet|"
+    r"hundredgigabitethernet|fastethernet|port-channel|loopback)"
+    r"\s+(?P<number>\d+(?:[/.:]\d+)*)\b",
+    re.IGNORECASE,
+)
 _KINDS = {
     "gigabitethernet": "GigabitEthernet",
     "tengigabitethernet": "TenGigabitEthernet",
@@ -72,8 +80,16 @@ def _to_ios(text: str) -> str:
             if kind:
                 rows.append(f"{found.group('head')}{kind}{found.group('number')}")
                 continue
-        rows.append(raw)
+        rows.append(_join_ports(raw))
     return "\n".join(rows)
+
+
+def _join_ports(line: str) -> str:
+    def rewrite(found: re.Match[str]) -> str:
+        kind = _KINDS.get(found.group("kind").lower())
+        return f"{kind}{found.group('number')}" if kind else found.group(0)
+
+    return _INLINE_PORT.sub(rewrite, line)
 
 
 def parse(text: str) -> ParsedConfig:

@@ -153,3 +153,24 @@ def test_the_routing_blocks_are_read_without_a_number_on_the_heading() -> None:
     ]
     ports = {item.name: item for item in parsed.interfaces}
     assert ports["Ve10"].ospf_area == "0"
+
+
+def test_a_port_named_inside_a_command_is_read_whole() -> None:
+    """種別と番号が離れた口の名前を、行の途中でも1つの名前として読む。
+
+    種別だけを拾うと、実在しない `ethernet` という口に変換を結び付けたまま
+    黙って通る。
+    """
+    text = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "ip nat inside source list 1 interface ethernet 1/1/1 overload",
+            "interface ethernet 1/1/1",
+            " ip nat outside",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.nat is not None
+    assert parsed.nat.rules[0].translated == "Ethernet1/1/1"
+    assert parsed.nat.outside_interfaces == ["Ethernet1/1/1"]

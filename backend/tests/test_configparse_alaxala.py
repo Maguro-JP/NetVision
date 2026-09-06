@@ -78,3 +78,18 @@ def test_a_cisco_config_is_not_taken_for_alaxala() -> None:
 def test_the_config_alone_without_a_marker_is_not_claimed() -> None:
     # 型番も名乗りも無い抜粋。読めない、と言うほうが正しい
     assert configparse.detect_vendor(_CONFIG) is not Vendor.ALAXALA
+
+
+def test_a_port_named_inside_a_command_is_read_whole() -> None:
+    text = "\n".join(
+        [
+            "Model AX3650S-24T4XW",
+            'hostname "ax01"',
+            "ip nat inside source list 1 interface gigabitethernet 0/1 overload",
+            "interface gigabitethernet 0/1",
+            " ip nat outside",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.nat is not None
+    assert parsed.nat.rules[0].translated == "GigabitEthernet0/1"
