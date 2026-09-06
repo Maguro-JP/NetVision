@@ -263,7 +263,8 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             _apply_allowed_vlan(current, body)
         elif body.startswith("switchport mode "):
             current.mode = body.rsplit(maxsplit=1)[-1]
-        elif body.startswith(("vrf forwarding ", "ip vrf forwarding ")):
+        elif body.startswith(("vrf forwarding ", "ip vrf forwarding ", "vrf member ")):
+            # NX-OS は `vrf member NAME`
             current.vrf = body.rsplit(maxsplit=1)[-1]
         elif body.startswith(("mtu ", "ip mtu ", "system mtu ")):
             value = body.rsplit(maxsplit=1)[-1]
@@ -537,7 +538,9 @@ def _parse_vlans(text: str, parsed: ParsedConfig) -> None:
             current = None
 
 
-_VRF_DEF = re.compile(r"^(?:vrf definition|ip vrf)\s+(\S+)\s*$", re.IGNORECASE)
+# NX-OS は `vrf context NAME`。IOS の書き方だけを見ていると、Nexus の VRF が
+# まるごと無いことになる
+_VRF_DEF = re.compile(r"^(?:vrf definition|ip vrf|vrf context)\s+(\S+)\s*$", re.IGNORECASE)
 
 
 def _parse_vrfs(text: str, parsed: ParsedConfig) -> None:

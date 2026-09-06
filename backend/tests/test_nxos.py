@@ -148,3 +148,44 @@ def test_the_ios_way_of_writing_routes_still_works() -> None:
     )
     routes = {r.destination for r in configparse.parse(text).routes}
     assert routes == {"0.0.0.0/0", "10.20.0.0/16"}
+
+
+def test_vrf_context_and_its_routes_are_read() -> None:
+    """NX-OS の VRF は `vrf context`。IOS の書き方だけを見ていると丸ごと落ちる。
+
+    VRF の中の経路を全体の経路表に混ぜると、「既定の経路がある」と誤って
+    読むことになる。
+    """
+    text = "\n".join(
+        [
+            "version 9.3(10)",
+            "hostname n9k-01",
+            "vrf context MGMT",
+            "  ip route 0.0.0.0/0 10.99.0.1",
+            "interface mgmt0",
+            "  vrf member management",
+            "  ip address 10.99.0.5/24",
+            "interface Vlan10",
+            "  ip address 10.0.10.2/24",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert "MGMT" in {vrf.name for vrf in parsed.vrfs}
+    ports = {item.name: item for item in parsed.interfaces}
+    assert ports["Management0"].vrf == "management"
+    assert [(route.destination, route.vrf) for route in parsed.routes] == [("0.0.0.0/0", "MGMT")]
+
+
+def test_a_global_route_is_not_pulled_into_a_vrf() -> None:
+    text = "\n".join(
+        [
+            "version 9.3(10)",
+            "hostname n9k-01",
+            "vrf context MGMT",
+            "  ip route 0.0.0.0/0 10.99.0.1",
+            "ip route 10.1.0.0/16 10.0.0.2",
+        ]
+    )
+    routes = {route.destination: route.vrf for route in configparse.parse(text).routes}
+    assert routes["10.1.0.0/16"] is None
+    assert routes["0.0.0.0/0"] == "MGMT"

@@ -160,37 +160,55 @@ def parse_cisco(text: str, parsed: ParsedConfig) -> None:
     parse_policies(text, parsed)
 
 
-def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
+#: NX-OS は VRF ごとの経路を `vrf context NAME` の下にぶら下げる。行だけを
+#: 見ていると、その経路が全体の経路表にあることになってしまう
+_VRF_CONTEXT = re.compile(r"^(?:vrf context|vrf definition|ip vrf)\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def _enclosing_vrfs(text: str) -> list[str | None]:
+    """各行が、どの VRF のブロックの中にあるか。外なら None。"""
+    found: list[str | None] = []
+    current: str | None = None
     for line in text.splitlines():
+        if line[:1] not in (" ", "\t"):
+            head = _VRF_CONTEXT.match(line.strip())
+            current = head.group(1) if head else None
+        found.append(current)
+    return found
+
+
+def _cisco_routes(text: str, parsed: ParsedConfig) -> None:
+    inside = _enclosing_vrfs(text)
+    for index, line in enumerate(text.splitlines()):
         match = _IOS_ROUTE.match(line.strip())
         if not match:
             continue
         destination = to_prefix(match.group("dest"), match.group("mask"), wildcard=False)
         if destination is None:
             continue
-        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf") or inside[index])
         _read_route_options(match.group("rest"), route)
         parsed.routes.append(route)
 
-    for line in text.splitlines():
+    for index, line in enumerate(text.splitlines()):
         match = _NXOS_ROUTE.match(line.strip())
         if not match:
             continue
         destination = to_prefix(match.group("dest"))
         if destination is None:
             continue
-        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf") or inside[index])
         _read_route_options(match.group("rest"), route)
         parsed.routes.append(route)
 
-    for line in text.splitlines():
+    for index, line in enumerate(text.splitlines()):
         match = _IOS_ROUTE6.match(line.strip())
         if not match:
             continue
         destination = to_prefix(match.group("dest"))
         if destination is None:
             continue
-        route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
+        route = ParsedRoute(destination=destination, vrf=match.group("vrf") or inside[index])
         _read_route_options(match.group("rest"), route)
         parsed.routes.append(route)
 

@@ -17,7 +17,9 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-_HEAD = re.compile(r"^(?:vrf definition|ip vrf|ip vpn-instance)\s+(\S+)\s*$", re.IGNORECASE)
+_HEAD = re.compile(
+    r"^(?:vrf definition|ip vrf|vrf context|ip vpn-instance)\s+(\S+)\s*$", re.IGNORECASE
+)
 _CISCO_RT = re.compile(r"^\s+route-target\s+(import|export|both)\s+(\S+)", re.IGNORECASE)
 _COMWARE_RT = re.compile(
     r"^\s+vpn-target\s+(.+?)\s+(import-extcommunity|export-extcommunity|both)\s*$",
