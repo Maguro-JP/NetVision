@@ -335,3 +335,51 @@ def test_the_added_vendors_say_whether_the_link_is_up() -> None:
     for text in (huawei, fastiron, alaxala):
         states = [item.link_state for item in configparse.parse(text).interfaces]
         assert states == ["up", "down"], text.splitlines()[0]
+
+
+def test_broken_frames_are_counted_on_comware_and_vrp() -> None:
+    """壊れて届いた数（CRC）を、Comware / VRP の書き方でも読むこと。
+
+    線は上がっているのに通信が遅い、の手掛かりになる。Cisco の並びだけを
+    見ていると、その機器だけ「壊れていない」ことになる。
+    """
+    comware = "\n".join(
+        [
+            "sysname qx1",
+            "#",
+            "interface GigabitEthernet1/0/1",
+            " port link-type access",
+            "GigabitEthernet1/0/1 current state: UP",
+            "  Input: 0 input errors, 0 runts, 0 giants",
+            "         55 CRC, 0 frame, 0 overruns",
+        ]
+    )
+    vrp = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "interface 10GE1/0/1",
+            " port link-type trunk",
+            "10GE1/0/1 current state : UP",
+            "    CRC: 42,  Overrun: 0",
+        ]
+    )
+    for text, expected in ((comware, 55), (vrp, 42)):
+        port = configparse.parse(text).interfaces[0]
+        assert port.link_state == "up"
+        assert port.input_crc_errors == expected
+
+
+def test_a_port_shut_by_a_person_is_not_called_a_broken_link() -> None:
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "interface 10GE1/0/2",
+            " port link-type access",
+            "10GE1/0/2 current state : Administratively DOWN",
+        ]
+    )
+    assert configparse.parse(text).interfaces[0].link_state == "disabled"

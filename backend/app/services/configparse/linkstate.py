@@ -47,6 +47,10 @@ _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
 _PARAGRAPH = re.compile(
     r"^(\S+) is (up|down|administratively down),\s*line protocol is (up|down)\b", re.IGNORECASE
 )
+#: Comware / VRP の `display interface`。`GigabitEthernet1/0/1 current state: UP`
+_STATE_PARAGRAPH = re.compile(
+    r"^(\S+)\s+current state\s*:\s*(UP|DOWN|Administratively DOWN)\b", re.IGNORECASE
+)
 #: NX-OS `show interface brief`。Ethernet の行は 5 列目が up / down
 _NXOS_HEADER = re.compile(r"^\s*Ethernet\s+VLAN\s+Type\s+Mode\s+Status\s+Reason\b", re.IGNORECASE)
 #: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
@@ -307,7 +311,10 @@ def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
 
 
 #: `31337 input errors, 31337 CRC, ...` の行。数え始めからの累計
-_CRC_LINE = re.compile(r"^(?P<errors>\d+)\s+input errors,\s*(?P<crc>\d+)\s+CRC\b", re.IGNORECASE)
+# 壊れて届いた数（CRC）。書き方は3通りあるが、どれも「数字 + CRC」か
+# 「CRC: 数字」の形で、他の意味には使われない。行の頭に固定すると、
+# Comware のように途中で改行する出力を取りこぼす
+_CRC_LINE = re.compile(r"(?:(?P<crc>\d+)\s+CRC\b|CRC\s*:\s*(?P<colon>\d+))", re.IGNORECASE)
 
 
 def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
@@ -325,11 +332,20 @@ def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
             else:
                 current.link_state = "up" if admin == "up" and protocol == "up" else "down"
             continue
+        state = _STATE_PARAGRAPH.match(raw.strip())
+        if state:
+            current = _port(parsed, state.group(1))
+            if current is None:
+                continue
+            word = state.group(2).lower()
+            current.link_state = "disabled" if word.startswith("admin") else word
+            continue
         if current is None:
             continue
-        counters = _CRC_LINE.match(raw.strip())
+        counters = _CRC_LINE.search(raw.strip())
         if counters:
-            current.input_crc_errors = int(counters.group("crc"))
+            found = counters.group("crc") or counters.group("colon")
+            current.input_crc_errors = int(found)
 
 
 def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
