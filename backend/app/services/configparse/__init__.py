@@ -16,6 +16,7 @@ from app.services.configparse import (
     features,
     fortinet,
     hapair,
+    huawei,
     juniper,
     linkstate,
     loadbalance,
@@ -62,6 +63,9 @@ _DETECTORS = (
     # 目印の無い config を横取りしない
     alaxala.detect,
     aruba.detect,
+    # ファーウェイ VRP は Comware と書き方が重なる。名乗りが出ているうちに拾わないと
+    # NEC QX として読んでしまう
+    huawei.detect,
     nec.detect,
     cisco.detect,
 )
@@ -80,6 +84,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.ARUBA_CX: "Aruba CX（AOS-CX）",
     Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
     Vendor.ALAXALA: "アラクサラ AX シリーズ",
+    Vendor.HUAWEI: "ファーウェイ VRP",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -97,6 +102,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.ARUBA_CX: "Aruba",
     Vendor.ALLIED: "アライドテレシス",
     Vendor.ALAXALA: "アラクサラ",
+    Vendor.HUAWEI: "ファーウェイ",
 }
 
 
@@ -133,6 +139,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = allied.parse(text)
     elif vendor is Vendor.ALAXALA:
         parsed = alaxala.parse(text)
+    elif vendor is Vendor.HUAWEI:
+        parsed = huawei.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)
@@ -158,6 +166,7 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
 _MULTICAST_STYLE = {
     Vendor.JUNIPER: "juniper",
     Vendor.NEC_QX: "comware",
+    Vendor.HUAWEI: "comware",
     Vendor.ARUBA_CX: "aruba",
 }
 

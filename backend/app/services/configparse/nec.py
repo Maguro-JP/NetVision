@@ -527,7 +527,7 @@ def _qx_serial(text: str) -> str | None:
     return None
 
 
-def _qx_device_name_from_manuinfo(text: str) -> str:
+def _qx_device_name_from_manuinfo(text: str) -> str | None:
     section: str | None = None
     for raw in text.splitlines():
         header = _QX_MANUINFO_HEADER.match(raw.strip())
@@ -539,7 +539,8 @@ def _qx_device_name_from_manuinfo(text: str) -> str:
             name = match.group(1).strip()
             if name and name.lower() not in _INVALID_SERIALS:
                 return name
-    return ""
+    # 読めなかったのであって、空の型番があるわけではない
+    return None
 
 
 # ---------------------------------------------------------------------------

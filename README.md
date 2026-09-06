@@ -292,6 +292,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
 | アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路、ハードウェア ACL（3000 番台と `access-list hardware`）を読みます |
 | アラクサラ | AX シリーズ | AX2500S / AX3650S など。`interface gigabitethernet 0/1` のように種別と番号を分ける書き方、引用符付きのホスト名と VLAN 名を読みます。公開書式から実装したもので、実機の出力では未検証です。名乗り（`ALAXALA`）か型番（`AX3650S`）が入っていないと、IOS と見分けが付かないので判別しません |
+| ファーウェイ | VRP（S / CE / AR） | `sysname`・`port link-type`・`Vlanif` を読みます。Comware（NEC QX）と書き方が重なるので、VRP の名乗りが出ているものだけをファーウェイとして扱います。メーカーを取り違えると、保守期限も脆弱性も別のメーカーのもので判定してしまうためです |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
 `show version` `show cdp neighbors detail` などを1ファイルにまとめたものでも読めます。
