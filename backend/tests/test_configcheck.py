@@ -903,3 +903,26 @@ def test_a_guard_written_in_any_of_its_spellings_is_accepted() -> None:
     for name, body in guarded.items():
         titles = [item.title for item in configcheck._stp(body)]
         assert not [title for title in titles if "BPDU guard" in title], name
+
+
+def test_vrp_dot1x_without_a_radius_server_is_caught() -> None:
+    """VRP は口の下に `dot1x enable` と書く。
+
+    その書き方を見ていないと、本人確認を頼む相手が居ないまま「入っている」
+    ことになる。全社で使えなくなるほうへ倒れる設定なので、黙るのは困る。
+    """
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (S5720 V200R011C10SPC600)",
+            "sysname hw1",
+            "#",
+            "interface GigabitEthernet0/0/1",
+            " dot1x enable",
+        ]
+    )
+    titles = [item.title for item in configcheck._port_admission(text)]
+    assert [title for title in titles if "問い合わせ先がありません" in title]
+
+    with_server = text.replace("#\n", "#\nradius-server template rad\n#\n", 1)
+    quiet = [item.title for item in configcheck._port_admission(with_server)]
+    assert not [title for title in quiet if "問い合わせ先がありません" in title]

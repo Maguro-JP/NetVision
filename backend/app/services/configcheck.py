@@ -593,6 +593,8 @@ def _port_admission(text: str) -> list[Finding]:
         # Comware（口の下に dot1x だけ）
         or any(line.lower().startswith("aaa authentication port-access dot1x") for line in body)
         or any(line.lower() == "dot1x" for line in body)
+        # VRP は口の下に `dot1x enable` と書く
+        or any(line.lower() == "dot1x enable" for line in body)
     ]
     # Junos は口ごとの塊が無いので、行そのものを数える
     controlled += [
@@ -608,6 +610,8 @@ def _port_admission(text: str) -> list[Finding]:
                 "aaa group server radius",
                 "set access radius-server",  # Junos
                 "radius scheme",  # Comware
+                "radius-server template",  # VRP
+                "hwtacacs-server",  # VRP
             )
         )
         for line in lowered
