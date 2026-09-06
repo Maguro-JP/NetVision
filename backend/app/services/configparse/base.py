@@ -44,6 +44,10 @@ class ParsedInterface:
     name: str
     description: str | None = None
     ip_address: str | None = None
+    #: アドレスを固定で書いていないときの、その理由。DHCP で貰う・他の口から
+    #: 借りる（unnumbered）・相手と決める（negotiated）は「無い」ではない。
+    #: 空欄にしてしまうと、付け忘れと見分けが付かなくなる
+    address_source: str | None = None
     vlan: int | None = None
     mode: str | None = None  # access / trunk / hybrid / routed
     native_vlan: int | None = None

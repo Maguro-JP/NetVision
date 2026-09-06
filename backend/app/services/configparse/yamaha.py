@@ -129,7 +129,9 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     """
     for name, address in _LAN_ADDRESS.findall(text):
         interface = parsed.add_interface(ParsedInterface(name=name.upper()))
-        if address.lower() not in ("dhcp", "auto"):
+        if address.lower() in ("dhcp", "auto"):
+            interface.address_source = address.lower()
+        else:
             interface.ip_address = address
 
     for name, description in _LAN_DESCRIPTION.findall(text):
@@ -155,7 +157,10 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
                 current.description = f"PPPoE {used.group(1).upper()} 経由"
             continue
         address = _PP_ADDRESS.match(raw)
-        if address and address.group(1).lower() not in ("ipcp", "dhcp"):
+        if address and address.group(1).lower() in ("ipcp", "dhcp"):
+            current.address_source = address.group(1).lower()
+            continue
+        if address:
             current.ip_address = address.group(1)
 
 

@@ -368,7 +368,12 @@ export default function DeviceDetailPage() {
                       {port.trunk_vlans ?? "—"}
                     </td>
                     <td>{port.vrf ?? "—"}</td>
-                    <td className="muted">{port.ip_address ?? "—"}</td>
+                    <td className="muted">
+                      {port.ip_address ??
+                        (port.address_source
+                          ? `貰う形（${port.address_source}）`
+                          : "—")}
+                    </td>
                   </tr>
                 ))}
               </tbody>

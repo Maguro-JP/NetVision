@@ -630,3 +630,54 @@ def test_the_newer_vrrp_syntax_is_read_for_both_families():
     assert {r.priority for r in parsed.redundancy} == {120, None}
     # 帯の中に収まっているので、指摘は出ない
     assert policyreview.review(parsed, text) == []
+
+
+def test_a_borrowed_or_leased_address_is_not_read_as_missing() -> None:
+    """DHCP・unnumbered は「付いていない」ではない。
+
+    空欄のまま出すと、付け忘れと見分けが付かなくなる。何によって決まるかを
+    残しておき、ポート表にもその形で出す。
+    """
+    text = "\n".join(
+        [
+            "hostname r1",
+            "interface GigabitEthernet0/0",
+            " ip address dhcp",
+            "interface GigabitEthernet0/1",
+            " ip unnumbered Loopback0",
+            "interface GigabitEthernet0/2",
+            " ip address 10.0.0.1 255.255.255.0",
+            "interface Loopback0",
+            " ip address 10.255.0.1 255.255.255.255",
+        ]
+    )
+    found = {item.name: item for item in configparse.parse(text).interfaces}
+    assert found["GigabitEthernet0/0"].ip_address is None
+    assert found["GigabitEthernet0/0"].address_source == "dhcp"
+    assert found["GigabitEthernet0/1"].address_source == "unnumbered Loopback0"
+    assert found["GigabitEthernet0/2"].ip_address == "10.0.0.1/24"
+    assert found["GigabitEthernet0/2"].address_source is None
+
+
+def test_other_vendors_also_say_where_the_address_comes_from() -> None:
+    forti = "\n".join(
+        [
+            "config system interface",
+            '    edit "wan1"',
+            "        set mode dhcp",
+            "    next",
+            "end",
+        ]
+    )
+    assert configparse.parse(forti).interfaces[0].address_source == "dhcp"
+
+    junos = "\n".join(
+        [
+            "set system host-name r1",
+            "set interfaces ge-0/0/0 unit 0 family inet dhcp",
+        ]
+    )
+    assert configparse.parse(junos).interfaces[0].address_source == "dhcp"
+
+    yamaha = "\n".join(["# RTX1220 Rev.15.04.03", "ip lan2 address dhcp"])
+    assert configparse.parse(yamaha).interfaces[0].address_source == "dhcp"

@@ -232,6 +232,8 @@ export interface NetworkInterface {
   name: string;
   description: string | null;
   ip_address: string | null;
+  /** 固定で書いていないときの理由（dhcp / unnumbered Loopback0 など） */
+  address_source: string | null;
   vlan: number | null;
   mode: string | null;
   native_vlan: number | null;

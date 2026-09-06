@@ -416,6 +416,11 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             parts = line.split()
             if len(parts) >= 4:
                 current.ip_address = f"{parts[2]}/{_prefix_length(parts[3])}"
+        elif line.startswith("set mode "):
+            # dhcp / pppoe は住所を貰う形。付いていないのとは違う
+            mode = line[len("set mode ") :].strip().strip('"').lower()
+            if mode in ("dhcp", "pppoe"):
+                current.address_source = mode
         elif line.startswith("set description "):
             current.description = line[len("set description ") :].strip().strip('"')
         elif line.startswith("set alias "):

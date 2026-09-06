@@ -230,6 +230,11 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             current.description = body[len("description ") :].strip()
         elif body.startswith("ip address "):
             _address(current, body)
+        elif body.startswith("ip unnumbered "):
+            # 他の口のアドレスを借りる。付いていないのとは違う
+            borrowed = body.split(maxsplit=2)
+            if len(borrowed) >= 3:
+                current.address_source = f"unnumbered {borrowed[2].strip()}"
         elif body.startswith("ipv6 address "):
             # IPv6 は長さ付きで書く。v4 が無いポートでは、これがそのポートの住所
             written = body.split(maxsplit=2)
@@ -407,7 +412,10 @@ def _address(interface: ParsedInterface, body: str) -> None:
     重複の検出も外れる。`dhcp` は住所ではないので、住所としては持たない。
     """
     parts = body.split()
-    if len(parts) < 3 or parts[2] == "dhcp":
+    if len(parts) < 3:
+        return
+    if parts[2] in ("dhcp", "negotiated", "pppoe"):
+        interface.address_source = parts[2]
         return
     if "/" in parts[2]:
         # 長さで書く流儀（Arista / AOS-CX）

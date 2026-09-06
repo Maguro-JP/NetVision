@@ -79,6 +79,9 @@ class Interface(Base):
     normalized_name: Mapped[str] = mapped_column(String(120), index=True)
     description: Mapped[str | None] = mapped_column(String(255), default=None)
     ip_address: Mapped[str | None] = mapped_column(String(64), default=None)
+    #: 固定で書いていないときの理由（dhcp / unnumbered Loopback0 など）。
+    #: 空欄と「貰う形」を混ぜると、付け忘れに見えてしまう
+    address_source: Mapped[str | None] = mapped_column(String(64), default=None)
     # アクセス VLAN。トランクの場合はここは空で、native_vlan / trunk_vlans を見る
     vlan: Mapped[int | None] = mapped_column(Integer, default=None)
     mode: Mapped[str | None] = mapped_column(String(20), default=None)

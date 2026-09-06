@@ -51,6 +51,8 @@ _SET_UNIT_DESCRIPTION = re.compile(
 _SET_ADDRESS = re.compile(
     r"^set interfaces (\S+) unit (\d+) family inet(?:6)? address\s+(\S+)", re.MULTILINE
 )
+# `family inet dhcp` は住所を貰う形。書いていないのとは違う
+_SET_DHCP = re.compile(r"^set interfaces (\S+) unit (\d+) family inet dhcp\b", re.MULTILINE)
 _SET_DISABLE = re.compile(r"^set interfaces (\S+) disable\s*$", re.MULTILINE)
 _SET_VLAN = re.compile(
     r"^set interfaces (\S+) unit \d+ family ethernet-switching vlan members\s+(.+)$", re.MULTILINE
@@ -488,6 +490,9 @@ def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:
         entry = parsed.add_interface(ParsedInterface(name=port))
         if not entry.description:
             entry.description = description.strip().strip('"')
+    for name, unit in _SET_DHCP.findall(text):
+        port = name if unit == "0" else f"{name}.{unit}"
+        parsed.add_interface(ParsedInterface(name=port)).address_source = "dhcp"
     for name, unit, address in _SET_ADDRESS.findall(text):
         # unit 0 は物理の口そのものとして呼ばれる（隣接情報もその名前で来る）。
         # 0 以外は副ポートなので、ge-0/0/1.10 という呼び名で持つ

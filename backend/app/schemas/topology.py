@@ -150,6 +150,7 @@ class InterfaceRead(BaseModel):
     name: str
     description: str | None
     ip_address: str | None
+    address_source: str | None = None
     vlan: int | None
     mode: str | None
     native_vlan: int | None = None

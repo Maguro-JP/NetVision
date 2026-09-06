@@ -511,6 +511,7 @@ def _sync_interfaces(db: Session, device: Device, parsed: ParsedConfig) -> None:
         interface.name = item.name
         interface.description = item.description
         interface.ip_address = item.ip_address
+        interface.address_source = item.address_source
         interface.vlan = item.vlan
         interface.mode = item.mode
         interface.native_vlan = item.native_vlan
