@@ -119,6 +119,15 @@ _RULES: tuple[_Rule, ...] = (
         r"^\s*spanning-tree\s+vlan\s+\S+\s+priority\s+(\S+)",
         "優先度",
     ),
+    # Comware / VRP は `stp instance 0 priority 4096`、FastIron は VLAN の下に
+    # `spanning-tree priority 4096` と書く
+    _rule(
+        SPANNING_TREE,
+        "STP の優先度",
+        r"^\s*stp\s+(?:instance\s+\d+\s+)?priority\s+(\S+)",
+        "優先度",
+    ),
+    _rule(SPANNING_TREE, "STP の優先度", r"^\s*spanning-tree\s+priority\s+(\S+)", "優先度"),
     _rule(SPANNING_TREE, "エッジポート", r"^\s*spanning-tree\s+portfast\b"),
     _rule(SPANNING_TREE, "エッジポート", r"^\s*stp\s+edged-port\b"),
     # ポートの束ね

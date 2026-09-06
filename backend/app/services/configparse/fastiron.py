@@ -19,7 +19,12 @@ from __future__ import annotations
 import re
 
 from app.services.configparse import cisco
-from app.services.configparse.base import ParsedConfig, ParsedInterface, Vendor
+from app.services.configparse.base import (
+    ParsedConfig,
+    ParsedInterface,
+    ParsedRedundancy,
+    Vendor,
+)
 
 _HW = re.compile(r"^\s*HW:\s*(?:Stackable\s+)?(\S+)", re.IGNORECASE | re.MULTILINE)
 _SW = re.compile(r"^\s*SW:\s*Version\s+(\S+)", re.IGNORECASE | re.MULTILINE)
@@ -98,7 +103,49 @@ def parse(text: str) -> ParsedConfig:
         parsed.os_version = found.group(1)
 
     _read_vlans(text, parsed)
+    _read_redundancy(text, parsed)
     return parsed
+
+
+#: `ip vrrp-extended vrid 10` / `ip vrrp vrid 10`。中身は次の行から下げて書く
+_VRRP_HEAD = re.compile(r"^(?P<indent>\s+)ip\s+vrrp(?:-extended)?\s+vrid\s+(?P<id>\d+)", re.I)
+_VRRP_ADDRESS = re.compile(r"^\s+ip-address\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE)
+_VRRP_PRIORITY = re.compile(r"^\s+(?:backup\s+)?priority\s+(\d+)", re.IGNORECASE)
+_INTERFACE_HEAD = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def _read_redundancy(text: str, parsed: ParsedConfig) -> None:
+    """VRRP を読む。中身を口の下に一段下げて書くので、行だけでは拾えない。
+
+    読めないと、二重にしてある入口が「1台だけ」に見える。落ちる範囲を
+    数えるときに、いちばん効くところ。
+    """
+    port: str | None = None
+    entry: ParsedRedundancy | None = None
+    for raw in _to_ios(text).splitlines():
+        head = _INTERFACE_HEAD.match(raw)
+        if head:
+            port, entry = head.group(1), None
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            port, entry = None, None
+            continue
+        if port is None:
+            continue
+        found = _VRRP_HEAD.match(raw)
+        if found:
+            entry = ParsedRedundancy(interface=port, group=found.group("id"), protocol="vrrp")
+            parsed.redundancy.append(entry)
+            continue
+        if entry is None:
+            continue
+        address = _VRRP_ADDRESS.match(raw)
+        if address:
+            entry.virtual_ip = address.group(1)
+            continue
+        priority = _VRRP_PRIORITY.match(raw)
+        if priority:
+            entry.priority = int(priority.group(1))
 
 
 def _ports(text: str) -> list[str]:

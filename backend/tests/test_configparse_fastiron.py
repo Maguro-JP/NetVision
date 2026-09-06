@@ -69,3 +69,34 @@ def test_a_cisco_config_is_not_taken_for_fastiron() -> None:
         ]
     )
     assert configparse.detect_vendor(text) is Vendor.CISCO_IOS
+
+
+def test_vrrp_and_the_stp_priority_are_read() -> None:
+    """二重にしてある入口が「1台だけ」に見えないこと。
+
+    FastIron は VRRP の中身を口の下に一段下げて書く。行だけを見ていると
+    拾えず、落ちる範囲を数えるときにそのまま効く。
+    """
+    text = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "vlan 10 name USERS by port",
+            " spanning-tree priority 4096",
+            "interface ve 10",
+            " ip address 10.0.10.2 255.255.255.0",
+            " ip vrrp-extended vrid 10",
+            "  backup priority 120",
+            "  ip-address 10.0.10.1",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert len(parsed.redundancy) == 1
+    entry = parsed.redundancy[0]
+    assert entry.interface == "Ve10"
+    assert entry.group == "10"
+    assert entry.virtual_ip == "10.0.10.1"
+    assert entry.priority == 120
+    assert ("STP の優先度", "優先度: 4096") in {
+        (item.name, item.detail) for item in parsed.features
+    }
