@@ -105,3 +105,15 @@ def test_eth_trunk_membership_is_read() -> None:
     parsed = configparse.parse(text)
     assert [item.lag_group for item in parsed.interfaces] == [1, 1]
     assert "LAG" in {item.name for item in parsed.features}
+
+
+def test_the_local_users_count_as_aaa() -> None:
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "aaa",
+            " local-user admin privilege level 15",
+        ]
+    )
+    assert "AAA" in {item.name for item in configparse.parse(text).features}

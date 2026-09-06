@@ -96,9 +96,17 @@ def _local_as(text: str) -> str | None:
     return found.group(1) if found else None
 
 
+#: FastIron は参照先を `ntp` の下に一段下げて書く。行だけを見て
+#: `server 10.0.0.5` を拾うと、RADIUS の並び（`aaa group server radius`）まで
+#: 時刻の参照先として数えてしまう。囲みの中にいるかどうかで決める
+_NTP_HEAD = re.compile(r"^ntp\s*$", re.IGNORECASE)
+_NTP_SERVER = re.compile(r"^\s+server\s+(\d+\.\d+\.\d+\.\d+)\s*$", re.IGNORECASE)
+
+
 def _to_ios(text: str) -> str:
     """口の名前と説明を、IOS と同じ書き方に寄せる。"""
     local_as = _local_as(text)
+    in_ntp = False
     rows: list[str] = []
     for raw in text.splitlines():
         found = _SPLIT_PORT.match(raw)
@@ -111,6 +119,17 @@ def _to_ios(text: str) -> str:
         if named:
             rows.append(f"{named.group('indent')}description {named.group('value')}")
             continue
+        if _NTP_HEAD.match(raw):
+            in_ntp = True
+            rows.append(raw)
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            in_ntp = False
+        if in_ntp:
+            server = _NTP_SERVER.match(raw)
+            if server:
+                rows.append(f"ntp server {server.group(1)}")
+                continue
         head = _ROUTER_HEAD.match(raw)
         if head:
             kind = head.group(1).lower()
@@ -121,6 +140,15 @@ def _to_ios(text: str) -> str:
                 continue
         rows.append(_join_ports(raw))
     return "\n".join(rows)
+
+
+def feature_text(text: str) -> str:
+    """機能の拾い出しに渡す文。囲みの中でしか意味が決まらない行をほどく。
+
+    `ntp` の下の `server 10.0.0.5` がそれ。行だけを見ると、RADIUS の並びと
+    見分けが付かない。
+    """
+    return _to_ios(text)
 
 
 def parse(text: str) -> ParsedConfig:

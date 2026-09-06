@@ -178,6 +178,9 @@ _RULES: tuple[_Rule, ...] = (
         "参照先",
     ),
     _rule(MANAGEMENT, "AAA", r"^\s*aaa\s+(?:new-model|authentication|authorization)\b"),
+    # VRP は `aaa` の下に利用者を並べる
+    _rule(MANAGEMENT, "AAA", r"^\s*local-user\s+\S+\s+privilege\b"),
+    _rule(MANAGEMENT, "AAA", r"^\s*hwtacacs-server\s"),
     _rule(MANAGEMENT, "AAA", r"^\s*(?:radius|tacacs)-server\s"),
     _rule(MANAGEMENT, "SSH", r"^\s*transport\s+input\s+ssh\b"),
     _rule(MANAGEMENT, "SSH", r"^\s*protocol\s+inbound\s+ssh\b"),

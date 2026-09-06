@@ -164,7 +164,7 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
 
     _collect_referenced_vrfs(parsed)
     # 機能の拾い出しはベンダーに依らない。どの経路で来ても最後に通す
-    parsed.features = features.parse(text)
+    parsed.features = features.parse(_FEATURE_TEXT.get(parsed.vendor, lambda body: body)(text))
     # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
     # 読み手が先に無線を読んでいたら、そちらを残す（AireOS は表からしか読めない）
@@ -178,6 +178,10 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     linkstate.parse(text, parsed)
     return parsed
 
+
+#: 機能の拾い出しの前に、囲みの中でしか意味が決まらない行をほどく機種。
+#: 行だけを見ると別の設定と見分けが付かない書き方があるもの
+_FEATURE_TEXT = {Vendor.FASTIRON: fastiron.feature_text}
 
 #: マルチキャストの書き方の系統。読み手はこの3つしか持たない
 _MULTICAST_STYLE = {

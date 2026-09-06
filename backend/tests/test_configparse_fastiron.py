@@ -174,3 +174,25 @@ def test_a_port_named_inside_a_command_is_read_whole() -> None:
     assert parsed.nat is not None
     assert parsed.nat.rules[0].translated == "Ethernet1/1/1"
     assert parsed.nat.outside_interfaces == ["Ethernet1/1/1"]
+
+
+def test_the_time_source_is_read_but_a_radius_host_is_not_mistaken_for_one() -> None:
+    """FastIron は参照先を `ntp` の下に一段下げて書く。
+
+    行だけを見て `server 10.0.0.5` を拾うと、RADIUS の並びまで時刻の参照先
+    として数える。1台だけ参照先が違う、を見つける材料が狂う。
+    """
+    ntp = "  HW: Stackable ICX7150-48P\nhostname icx1\nntp\n server 10.0.99.10\n"
+    radius = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "aaa group server radius RAD",
+            " server 10.0.99.20",
+        ]
+    )
+
+    found = {(item.name, item.detail) for item in configparse.parse(ntp).features}
+    assert ("NTP", "参照先: 10.0.99.10") in found
+
+    assert not [item for item in configparse.parse(radius).features if item.name == "NTP"]
