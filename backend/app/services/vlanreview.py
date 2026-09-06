@@ -180,6 +180,17 @@ def _names_disagree(
     ]
 
 
+def _comparable(ledger_name: str, device_name: str) -> bool:
+    """その2つの名前を、突き合わせられるか。
+
+    台帳は日本語、機器は英数字、という組み合わせが現場では普通にある。
+    機器に日本語は入らないので、これは食い違いではなく、そもそも比べられない。
+    比べられないものを「違います」と言うと、全部の VLAN で同じ指摘が出て、
+    本当に見てほしい食い違いが埋まる。
+    """
+    return ledger_name.isascii() or not device_name.isascii()
+
+
 def _ledger_disagrees(
     vlan_id: int,
     entries: list[DeviceVlan],
@@ -190,7 +201,11 @@ def _ledger_disagrees(
     row = ledger.get(vlan_id)
     if row is None or not row.name:
         return []
-    differing = [entry for entry in entries if entry.name and _key(entry.name) != _key(row.name)]
+    differing = [
+        entry
+        for entry in entries
+        if entry.name and _key(entry.name) != _key(row.name) and _comparable(row.name, entry.name)
+    ]
     if not differing:
         return []
     return [

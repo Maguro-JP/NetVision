@@ -185,3 +185,33 @@ def test_nothing_is_said_when_every_switch_was_looked_at(db_session):
 
     report = vlanreview.review(db_session)
     assert not any("この一覧に入っていません" in note for note in report.notes)
+
+
+def test_a_japanese_ledger_name_is_not_called_a_disagreement(db_session):
+    """台帳が日本語・機器が英数字、は食い違いではなく比べられないだけ。
+
+    機器に日本語は入らない。これを「違います」と言うと、ほぼ全部の VLAN で
+    同じ指摘が出て、本当に見てほしい食い違いが埋まる。
+    """
+    device = Device(hostname="sw-01", vendor="Cisco", device_type=DeviceType.SWITCH)
+    db_session.add(device)
+    db_session.add(Vlan(vlan_id=10, name="全社ユーザー"))
+    db_session.flush()
+    db_session.add(DeviceVlan(device_id=device.id, vlan_id=10, name="USERS"))
+    db_session.commit()
+
+    titles = [item.finding.title for item in vlanreview.review(db_session).findings]
+    assert not [title for title in titles if "名前が違います" in title]
+
+
+def test_two_ascii_names_that_differ_are_still_called_out(db_session):
+    # 比べられるものは、これまでどおり指摘する
+    device = Device(hostname="sw-01", vendor="Cisco", device_type=DeviceType.SWITCH)
+    db_session.add(device)
+    db_session.add(Vlan(vlan_id=10, name="USER-SEG"))
+    db_session.flush()
+    db_session.add(DeviceVlan(device_id=device.id, vlan_id=10, name="SERVERS"))
+    db_session.commit()
+
+    titles = [item.finding.title for item in vlanreview.review(db_session).findings]
+    assert [title for title in titles if "名前が違います" in title]
