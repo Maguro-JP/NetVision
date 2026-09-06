@@ -292,6 +292,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
 | アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路、ハードウェア ACL（3000 番台と `access-list hardware`）を読みます |
 | アラクサラ | AX シリーズ | AX2500S / AX3650S など。`interface gigabitethernet 0/1` のように種別と番号を分ける書き方、引用符付きのホスト名と VLAN 名を読みます。公開書式から実装したもので、実機の出力では未検証です。名乗り（`ALAXALA`）か型番（`AX3650S`）が入っていないと、IOS と見分けが付かないので判別しません |
+| Ruckus / Brocade | FastIron（ICX） | ICX7150 / ICX7250 など。VLAN の持ち方が IOS と逆（VLAN の下に `tagged` / `untagged` で口を並べる）ので、そこを読んでポート側の所属に直します。`port-name`・`interface ethernet 1/1/1`・`HW:` / `SW:` の2行も読みます。公開書式から実装したもので、実機の出力では未検証です |
 | Cisco | AireOS 無線コントローラ | 5508 / 5520 / 3504 など。設定ファイルではなく `show sysinfo` / `show inventory` / `show interface summary` / `show wlan summary` / `show ap summary` を貼ったものから、型番・シリアル・版数・口・SSID・AP 一覧を読みます。貼られていない表のぶんは、無いのではなく読んでいないものとして扱います |
 | ファーウェイ | VRP（S / CE / AR） | `sysname`・`port link-type`・`Vlanif` を読みます。Comware（NEC QX）と書き方が重なるので、VRP の名乗りが出ているものだけをファーウェイとして扱います。メーカーを取り違えると、保守期限も脆弱性も別のメーカーのもので判定してしまうためです |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |

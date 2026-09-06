@@ -25,6 +25,7 @@ class Vendor(enum.StrEnum):
     ALAXALA = "alaxala"
     HUAWEI = "huawei"
     CISCO_WLC = "cisco_wlc"
+    FASTIRON = "fastiron"
     UNKNOWN = "unknown"
 
 

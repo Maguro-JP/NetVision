@@ -1,0 +1,71 @@
+"""Ruckus / Brocade FastIron（ICX）を読めること。
+
+見た目が IOS に近いので、これまでは Cisco として読んでいた。メーカーを
+取り違えると保守期限も脆弱性も別のもので判定してしまう。加えて VLAN の
+持ち方が IOS と逆なので、そのままでは VLAN も口の所属も空になる。
+"""
+
+from __future__ import annotations
+
+from app.services import configparse
+from app.services.configparse.base import Vendor
+
+_ICX = "\n".join(
+    [
+        "SSH@icx1#show version",
+        "  HW: Stackable ICX7150-48P",
+        "  SW: Version 08.0.95cT213",
+        "icx1#show running-config",
+        "hostname icx1",
+        "!",
+        "vlan 10 name USERS by port",
+        " tagged ethe 1/1/1",
+        " untagged ethe 1/1/3 to 1/1/6",
+        "!",
+        "vlan 20 name VOICE by port",
+        " tagged ethe 1/1/1",
+        "!",
+        "interface ethernet 1/1/1",
+        " port-name to-core",
+        "!",
+        "interface ve 10",
+        " ip address 10.0.10.1 255.255.255.0",
+        "!",
+        "ip route 0.0.0.0/0 10.0.10.254",
+    ]
+)
+
+
+def test_model_version_and_vlans_are_read() -> None:
+    parsed = configparse.parse(_ICX)
+    assert parsed.vendor is Vendor.FASTIRON
+    assert parsed.hostname == "icx1"
+    assert parsed.model == "ICX7150-48P"
+    assert parsed.os_version == "08.0.95cT213"
+    assert parsed.vlans == {10: "USERS", 20: "VOICE"}
+
+
+def test_membership_written_under_the_vlan_reaches_the_ports() -> None:
+    ports = {item.name: item for item in configparse.parse(_ICX).interfaces}
+    assert ports["Ethernet1/1/1"].description == "to-core"
+    assert ports["Ethernet1/1/1"].mode == "trunk"
+    assert ports["Ethernet1/1/1"].trunk_vlans == [10, 20]
+    # `to` の範囲は1つずつにほどく。まとめたままだと空きポートが数えられない
+    assert ports["Ethernet1/1/5"].vlan == 10
+    assert ports["Ethernet1/1/5"].mode == "access"
+    assert "Ethernet1/1/7" not in ports
+    assert ports["Ve10"].ip_address == "10.0.10.1/24"
+
+
+def test_a_cisco_config_is_not_taken_for_fastiron() -> None:
+    text = "\n".join(
+        [
+            "version 17.9",
+            "hostname c9300-01",
+            "vlan 10",
+            " name USERS",
+            "interface GigabitEthernet1/0/1",
+            " switchport access vlan 10",
+        ]
+    )
+    assert configparse.detect_vendor(text) is Vendor.CISCO_IOS
