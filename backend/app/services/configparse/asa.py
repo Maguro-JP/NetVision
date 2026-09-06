@@ -134,9 +134,18 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if current is None:
             continue
         body = raw.strip()
+        found = re.match(r"^description\s+(.+)$", body, re.IGNORECASE)
+        if found:
+            # 人が書いた説明を残したうえで、nameif と数字を後ろに足す。
+            # 先に上書きしてしまうと、現場が付けた呼び名が消える
+            current.description = found.group(1).strip()
+            continue
         found = re.match(r"^nameif\s+(\S+)", body, re.IGNORECASE)
         if found:
-            current.description = f"nameif {found.group(1)}"
+            label = f"nameif {found.group(1)}"
+            current.description = (
+                f"{current.description} / {label}" if current.description else label
+            )
             continue
         found = re.match(r"^security-level\s+(\d+)", body, re.IGNORECASE)
         if found:

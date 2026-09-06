@@ -173,3 +173,25 @@ def test_firepower_threat_defense_is_read_the_same_way():
     assert parsed.vendor is Vendor.CISCO_ASA
     assert parsed.model == "FPR-2110"
     assert parsed.os_version == "7.2.5"
+
+
+def test_the_written_description_is_kept_next_to_nameif() -> None:
+    # nameif と数字は説明の欄に持たせているが、人が書いた説明を
+    # 押しのけてしまうと現場の呼び名が消える
+    text = "\n".join(
+        [
+            "Cisco Adaptive Security Appliance Software Version 9.16(4)",
+            "hostname asa1",
+            "interface GigabitEthernet0/0",
+            " description 本社WAN",
+            " nameif outside",
+            " security-level 0",
+            " ip address 203.0.113.2 255.255.255.252",
+        ]
+    )
+    parsed = configparse.parse(text)
+    port = parsed.interfaces[0]
+    assert port.description is not None
+    assert "本社WAN" in port.description
+    assert asa.nameif_of(port) == "outside"
+    assert asa.security_level_of(port) == 0
