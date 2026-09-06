@@ -348,3 +348,28 @@ end
 
 def _titles(text: str) -> list[str]:
     return [f.title for f in policyreview.review(configparse.parse(text), text)]
+
+
+def test_vrp_writes_the_direction_first_when_applying_an_acl() -> None:
+    """VRP は `traffic-filter inbound acl 3000` の並び。
+
+    Comware の並びだけを見ていると、当ててあるのに「どこにも当たって
+    いません」と言うことになる。
+    """
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "acl number 3000",
+            " rule 5 permit ip source 10.0.99.0 0.0.0.255",
+            " rule 10 deny ip",
+            "#",
+            "interface 10GE1/0/1",
+            " traffic-filter inbound acl 3000",
+        ]
+    )
+    parsed = configparse.parse(text)
+    acl = next(item for item in parsed.acls if item.name == "3000")
+    assert acl.applied_to == ["interface 10GE1/0/1 入り"]
+    assert "ACL の適用" in {item.name for item in parsed.features}

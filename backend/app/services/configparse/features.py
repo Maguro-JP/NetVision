@@ -96,6 +96,7 @@ _RULES: tuple[_Rule, ...] = (
     _rule(ACCESS_CONTROL, "ACL", r"^\s*acl\s+(?:number|name|advanced|basic)\s"),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*ip\s+access-group\s"),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*packet-filter\s"),
+    _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*traffic-filter\s+(?:inbound|outbound)\s"),
     _rule(ACCESS_CONTROL, "フィルター", r"^\s*set\s+firewall\s+family\s"),
     _rule(ACCESS_CONTROL, "ポリシー", r"^\s*config\s+firewall\s+policy\s*$"),
     _rule(ACCESS_CONTROL, "ゾーン", r"^\s*config\s+system\s+zone\s*$"),

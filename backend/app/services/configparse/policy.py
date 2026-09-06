@@ -575,6 +575,17 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
             if match and match.group(1) in acls:
                 direction = "入り" if match.group(2).lower() == "inbound" else "出"
                 acls[match.group(1)].applied_to.append(f"interface {interface} {direction}")
+                continue
+            # VRP は向きを先に書く（`traffic-filter inbound acl 3000`）。
+            # Comware の並びだけを見ていると、当ててあるのに当たっていないと言う
+            match = re.match(
+                r"^traffic-filter\s+(inbound|outbound)\s+acl\s+(?:number\s+|name\s+)?(\S+)",
+                line,
+                re.IGNORECASE,
+            )
+            if match and match.group(2) in acls:
+                direction = "入り" if match.group(1).lower() == "inbound" else "出"
+                acls[match.group(2)].applied_to.append(f"interface {interface} {direction}")
 
     parsed.acls.extend(acls.values())
 
