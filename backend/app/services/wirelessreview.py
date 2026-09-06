@@ -70,6 +70,18 @@ def _one(wlan: ParsedWlan) -> list[Finding]:
     akm = set(wlan.akm)
 
     open_air = not security or security == {"open"}
+    if open_air and not akm and not wlan.security_read:
+        # 一覧の表だけでは守り方が分からない。無いのと、読めていないのは別
+        out.append(
+            Finding(
+                level=LOW,
+                title=f"SSID {name} の守り方は、この出力からは読めません",
+                why="一覧の表には、暗号化の種類も合言葉の置き方も出てきません。"
+                "`show wlan <番号>` の出力を一緒に渡すと、そこまで見られます。",
+                evidence=[wlan.raw or name],
+            )
+        )
+        return out
     if open_air and not akm:
         level = MEDIUM if _is_guest(wlan) else HIGH
         out.append(

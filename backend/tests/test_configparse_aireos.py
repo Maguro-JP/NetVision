@@ -100,3 +100,16 @@ def test_an_ios_xe_controller_is_still_read_as_ios() -> None:
         ]
     )
     assert configparse.detect_vendor(text) is Vendor.CISCO_IOS
+
+
+def test_the_summary_table_does_not_claim_the_radio_is_open() -> None:
+    """一覧の表には守り方が出てこない。読めていないのと、無いのは別。
+
+    掛けてあるのに「誰でも入れます」と言うと、直しようのない指摘になる。
+    """
+    from app.services import wirelessreview
+
+    parsed = configparse.parse(_SHOW)
+    titles = [item.title for item in wirelessreview.review(parsed)]
+    assert not [title for title in titles if "誰でも入れます" in title]
+    assert [title for title in titles if "読めません" in title]

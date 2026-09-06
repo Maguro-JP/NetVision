@@ -674,6 +674,10 @@ class ParsedWlan:
     bands: list[str] = field(default_factory=list)
     #: つないだ端末どうしを通さない（ゲスト用途で要る）
     client_isolation: bool = False
+    #: 守り方を読めたか。一覧の表（AireOS の `show wlan summary` など）には
+    #: 守り方が出てこない。読めていないものを「守っていない」と読むと、
+    #: 掛けてあるのに「誰でも入れます」と言うことになる
+    security_read: bool = True
     raw: str = ""
 
 

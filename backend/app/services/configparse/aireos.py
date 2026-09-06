@@ -114,6 +114,8 @@ def _read_wireless(text: str, fields: dict[str, str]) -> ParsedWireless:
                 name=row.group("profile").strip(),
                 ssid=row.group("ssid").strip(),
                 enabled=row.group("status").lower() == "enabled",
+                # 一覧の表には守り方が出てこない。`show wlan <id>` が要る
+                security_read=False,
                 raw=row.group(0).strip(),
             )
         )
