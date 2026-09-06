@@ -224,6 +224,10 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
         return _allied(plan)
     if vendor is Vendor.ALAXALA:
         return _alaxala(plan)
+    if vendor is Vendor.HUAWEI:
+        return _vrp(plan)
+    if vendor is Vendor.FASTIRON:
+        return _fastiron(plan)
     return _outline(plan, vendor)
 
 
@@ -250,6 +254,10 @@ def vendor_of(device: Device) -> Vendor:
         return Vendor.ALLIED
     if "alaxala" in name or "アラクサラ" in name or model.startswith("AX"):
         return Vendor.ALAXALA
+    if "huawei" in name or "ファーウェイ" in name or "ﾌｧｰｳｪｲ" in name:
+        return Vendor.HUAWEI
+    if "ruckus" in name or "brocade" in name or model.startswith("ICX"):
+        return Vendor.FASTIRON
     return Vendor.UNKNOWN
 
 
@@ -793,3 +801,106 @@ def _ax_port(name: str) -> str:
     if not found:
         return name
     return f"{found.group(1).lower()} {found.group(2)}"
+
+
+# ---------------------------------------------------------------------------
+# ファーウェイ VRP
+# ---------------------------------------------------------------------------
+
+
+def _vrp(plan: DesignInput) -> str:
+    """Comware とほぼ同じだが、VLAN の口の名前と許可の書き方が違う。"""
+    lines = _header(plan, Vendor.HUAWEI, "#")
+    lines.append(f"sysname {plan.device.hostname}")
+    lines.append("#")
+
+    for vlan in plan.vlans:
+        lines.append(f"vlan {vlan.vlan_id}")
+        lines.append(f" description {plan.vlan_name(vlan.vlan_id)}")
+        lines.append("#")
+
+    permitted = " ".join(str(v.vlan_id) for v in plan.vlans)
+    for link in plan.links:
+        lines.append(f"interface {link.local_interface}")
+        lines.append(f" description {link.description}")
+        if link.is_infrastructure and permitted:
+            lines.append(" port link-type trunk")
+            lines.append(f" port trunk allow-pass vlan {permitted}")
+            lines.append(f"# タグ無し VLAN（PVID）: {TODO}")
+            lines.append("#  1 のままにしない。使っていない番号を決めて、両端で同じにする")
+        elif not link.is_infrastructure:
+            lines.append(" port link-type access")
+            lines.append(f"# アクセス VLAN: {TODO}")
+            lines.append(" stp edged-port enable")
+        lines.append("#")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_netmask:
+        lines.append(f"interface Vlanif{plan.mgmt_vlan_id}")
+        lines.append(" description management")
+        lines.append(f" ip address {plan.device.mgmt_ip} {plan.mgmt_netmask}")
+        lines.append("#")
+    elif plan.device.mgmt_ip:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"# 管理VLAN / マスク: {TODO}")
+        lines.append("#")
+
+    lines.append("# 入り口は ssh だけにする")
+    lines.append("user-interface vty 0 4")
+    lines.append(" protocol inbound ssh")
+    lines.append("#")
+    lines.append(f"# アクセスポートの割り当て: {TODO}")
+    lines.append(f"# ログの送り先 / 時刻の参照先: {TODO}")
+    lines.append(f"# 経路制御・ACL・認証: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# Ruckus / Brocade FastIron（ICX）
+# ---------------------------------------------------------------------------
+
+
+def _fastiron(plan: DesignInput) -> str:
+    """VLAN の下に口を並べる書き方。IOS と向きが逆なので、そこを崩さない。
+
+    IOS の雛形をそのまま出すと、口の下に VLAN を書く形になって入らない。
+    """
+    lines = _header(plan, Vendor.FASTIRON, "!")
+    lines.append(f"hostname {plan.device.hostname}")
+    lines.append("!")
+
+    uplinks = [link.local_interface for link in plan.links if link.is_infrastructure]
+    for vlan in plan.vlans:
+        lines.append(f"vlan {vlan.vlan_id} name {plan.vlan_name(vlan.vlan_id)} by port")
+        for port in uplinks:
+            lines.append(f" tagged ethe {_icx_port(port)}")
+        lines.append(f"! この VLAN のアクセスポート（untagged ethe ...）: {TODO}")
+        lines.append("!")
+
+    for link in plan.links:
+        lines.append(f"interface ethernet {_icx_port(link.local_interface)}")
+        lines.append(f" port-name {link.description}")
+        if not link.is_infrastructure:
+            lines.append(f"! この口を載せる VLAN は、上の vlan 側に untagged で書く: {TODO}")
+        lines.append("!")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_netmask:
+        lines.append(f"interface ve {plan.mgmt_vlan_id}")
+        lines.append(f" ip address {plan.device.mgmt_ip} {plan.mgmt_netmask}")
+        lines.append("!")
+    elif plan.device.mgmt_ip:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"! 管理VLAN / マスク: {TODO}")
+        lines.append("!")
+
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
+    lines.append(f"! 経路制御・ACL・冗長化: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+#: FastIron は種別と番号を空けて書く。`Ethernet1/1/1` を `1/1/1` へ
+_ICX_PORT = re.compile(r"^[A-Za-z-]*\s*([\d/]+)$")
+
+
+def _icx_port(name: str) -> str:
+    found = _ICX_PORT.match(name.strip())
+    return found.group(1) if found else name

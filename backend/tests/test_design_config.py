@@ -289,3 +289,22 @@ def test_an_unknown_target_is_marked_instead_of_dropped(client):
     body = design(client, device)["body"]
     assert "ログの送り先: 設計から起こせないため" in body
     assert "時刻の参照先: 設計から起こせないため" in body
+
+
+def test_the_added_vendors_get_their_own_syntax(client):
+    """後から足したベンダーでも、他社の構文を出さないこと。"""
+    ax = make_device(client, "ax-sw-01", "アラクサラ", "AX3650S-24T4XW")
+    vrp = make_device(client, "hw-sw-01", "Huawei", "CE6850")
+    icx = make_device(client, "icx-sw-01", "Ruckus", "ICX7150-48P")
+
+    assert 'hostname "ax-sw-01"' in design(client, ax)["body"]
+
+    vrp_body = design(client, vrp)["body"]
+    assert "sysname hw-sw-01" in vrp_body
+    assert "user-interface vty" in vrp_body
+
+    icx_body = design(client, icx)["body"]
+    assert "hostname icx-sw-01" in icx_body
+    assert "FastIron" in icx_body
+    # VLAN の下に口を並べる書き方を崩さない。IOS の雛形をそのまま出さない
+    assert "switchport" not in icx_body
