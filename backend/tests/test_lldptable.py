@@ -76,3 +76,34 @@ def test_the_added_vendors_draw_their_links() -> None:
         parsed = configparse.parse(text)
         assert len(parsed.neighbors) == 1, parsed.vendor
         assert parsed.neighbors[0].remote_hostname == "core-sw-01", parsed.vendor
+
+
+def test_it_fills_in_when_the_vendor_reader_found_nothing() -> None:
+    """書式の違いで線が引けないより、拾えるものは拾う。
+
+    ベンダーごとの読み手が1本も見つけられなかったときだけ通す。見出しが
+    無ければ何も足さないので、無い線を作ることにはならない。
+    """
+    cisco_brief = "\n".join(
+        [
+            "version 17.9",
+            "hostname c1",
+            "Local Intf   Device ID    Port ID     Hold-time",
+            "Gi1/0/1      core-sw-01   Gi1/0/24    120",
+        ]
+    )
+    aruba = "\n".join(
+        [
+            "ArubaOS-CX",
+            "Version : FL.10.10.1050",
+            "hostname acx1",
+            "LOCAL-PORT  CHASSIS-ID  PORT-ID  SYSTEM-NAME",
+            "1/1/1       aa:bb:cc    1/1/24   core-sw-01",
+        ]
+    )
+    for text in (cisco_brief, aruba):
+        parsed = configparse.parse(text)
+        assert [item.remote_hostname for item in parsed.neighbors] == ["core-sw-01"], parsed.vendor
+
+    quiet = "version 17.9\nhostname c1\ninterface GigabitEthernet1/0/1\n description x\n"
+    assert configparse.parse(quiet).neighbors == []

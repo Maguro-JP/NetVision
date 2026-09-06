@@ -21,6 +21,7 @@ from app.services.configparse import (
     huawei,
     juniper,
     linkstate,
+    lldptable,
     loadbalance,
     multicast,
     nec,
@@ -174,6 +175,12 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     parsed.load_balance = loadbalance.parse(text)
     parsed.multicast = multicast.parse(text, _MULTICAST_STYLE.get(parsed.vendor, "cisco"))
     parsed.ha_pair = hapair.parse(text)
+    # どのベンダーの読み手も隣を見つけられなかったときだけ、見出しから列を
+    # 決める読み手を通す。書式の違いで線が引けないより、拾えるものは拾う。
+    # 見出しが無ければ何も足さないので、無い線を作ることにはならない
+    if not parsed.neighbors:
+        lldptable.parse(text, parsed)
+
     # 線が実際に上がっているか。show の表からだけ分かる
     linkstate.parse(text, parsed)
     return parsed

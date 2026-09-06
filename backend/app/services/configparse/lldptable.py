@@ -36,6 +36,17 @@ _ROLES: dict[str, str] = {
     "exptime": "skip",
     "hold": "skip",
     "ttl": "skip",
+    # 区切りに `-` を使う書き方（Aruba CX など）
+    "local-port": "local",
+    "local-intf": "local",
+    "system-name": "remote_host",
+    "device-id": "remote_host",
+    "neighbor-port": "remote_port",
+    "port-id": "remote_port",
+    "chassis-id": "skip",
+    "port-descr": "skip",
+    "port-description": "skip",
+    "hold-time": "skip",
 }
 _MAC = re.compile(r"^(?:[0-9a-f]{2}[:.-]?){5}[0-9a-f]{2}$", re.IGNORECASE)
 #: 見出しの語は長いものから当てる。`port id` を `port description` より先に
