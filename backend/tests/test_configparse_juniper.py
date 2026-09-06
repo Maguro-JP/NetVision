@@ -56,3 +56,22 @@ def test_the_configuration_forms_still_give_the_hostname():
     assert configparse.parse("set system host-name edge-rt-02\n").hostname == "edge-rt-02"
     braces = "system {\n    host-name edge-rt-03;\n}\ninterfaces {\n    ge-0/0/0 {\n    }\n}\n"
     assert configparse.parse(braces).hostname == "edge-rt-03"
+
+
+def test_unit_description_is_read() -> None:
+    # Junos は unit 側に説明を書くことがあり、物理側だけ見ると説明が
+    # 無いものとして扱われてしまう
+    text = "\n".join(
+        [
+            "set system host-name r1",
+            "set interfaces ge-0/0/0 unit 0 description WAN",
+            "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/30",
+            'set interfaces ge-0/0/1 description "to core"',
+            'set interfaces ge-0/0/2 unit 10 description "sub"',
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {item.name: item.description for item in parsed.interfaces}
+    assert found["ge-0/0/0"] == "WAN"
+    assert found["ge-0/0/1"] == "to core"
+    assert found["ge-0/0/2.10"] == "sub"

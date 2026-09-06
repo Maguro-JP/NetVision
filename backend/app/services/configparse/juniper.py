@@ -43,6 +43,11 @@ _MODEL = re.compile(r"^Model:\s*(\S+)", re.MULTILINE)
 _SERIAL = re.compile(r"^Chassis\s+([A-Za-z0-9]{6,})\b", re.MULTILINE)
 
 _SET_DESCRIPTION = re.compile(r"^set interfaces (\S+) description\s+(.+)$", re.MULTILINE)
+# Junos では説明を unit 側に書く流儀も普通にある。物理側だけ見ていると
+# 「説明が1つも無い」と誤って言ってしまうので、こちらも拾う
+_SET_UNIT_DESCRIPTION = re.compile(
+    r"^set interfaces (\S+) unit (\d+) description\s+(.+)$", re.MULTILINE
+)
 _SET_ADDRESS = re.compile(
     r"^set interfaces (\S+) unit (\d+) family inet(?:6)? address\s+(\S+)", re.MULTILINE
 )
@@ -478,6 +483,11 @@ def _vpn_detail(entry: ParsedCryptoMapEntry, rest: str, gateways: dict[str, str]
 def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:
     for name, description in _SET_DESCRIPTION.findall(text):
         parsed.add_interface(ParsedInterface(name=name, description=description.strip().strip('"')))
+    for name, unit, description in _SET_UNIT_DESCRIPTION.findall(text):
+        port = name if unit == "0" else f"{name}.{unit}"
+        entry = parsed.add_interface(ParsedInterface(name=port))
+        if not entry.description:
+            entry.description = description.strip().strip('"')
     for name, unit, address in _SET_ADDRESS.findall(text):
         # unit 0 は物理の口そのものとして呼ばれる（隣接情報もその名前で来る）。
         # 0 以外は副ポートなので、ge-0/0/1.10 という呼び名で持つ
