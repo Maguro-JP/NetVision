@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from app.services.configparse import (
+    aireos,
     alaxala,
     allied,
     arista,
@@ -50,6 +51,9 @@ from app.services.configparse.ifname import expand, normalize, normalize_hostnam
 # 判別は「特徴が強い順」に試す
 # NEC は Cisco 風に見える箇所があるので、Cisco より先に試す
 _DETECTORS = (
+    # AireOS の点線区切りは他に出てこない。IOS より先に見ないと、
+    # 混ざっている show 出力のほうを拾ってしまう
+    aireos.detect,
     fortinet.detect,
     juniper.detect,
     yamaha.detect,
@@ -85,6 +89,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
     Vendor.ALAXALA: "アラクサラ AX シリーズ",
     Vendor.HUAWEI: "ファーウェイ VRP",
+    Vendor.CISCO_WLC: "Cisco AireOS 無線コントローラ",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -103,6 +108,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.ALLIED: "アライドテレシス",
     Vendor.ALAXALA: "アラクサラ",
     Vendor.HUAWEI: "ファーウェイ",
+    Vendor.CISCO_WLC: "Cisco",
 }
 
 
@@ -141,6 +147,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = alaxala.parse(text)
     elif vendor is Vendor.HUAWEI:
         parsed = huawei.parse(text)
+    elif vendor is Vendor.CISCO_WLC:
+        parsed = aireos.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)
@@ -152,7 +160,9 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
     parsed.features = features.parse(text)
     # 無線は書き方がベンダーごとに離れているので、判別とは別に最後へ通す。
     # 無線機かどうかは機種名では決まらない（コントローラ内蔵の機種がある）
-    parsed.wireless = wireless.parse(text)
+    # 読み手が先に無線を読んでいたら、そちらを残す（AireOS は表からしか読めない）
+    if parsed.wireless is None or not (parsed.wireless.wlans or parsed.wireless.aps):
+        parsed.wireless = wireless.parse(text)
     # マルチキャストも書き方がベンダーごとに離れている。判別の結果だけ渡して最後へ
     parsed.load_balance = loadbalance.parse(text)
     parsed.multicast = multicast.parse(text, _MULTICAST_STYLE.get(parsed.vendor, "cisco"))
