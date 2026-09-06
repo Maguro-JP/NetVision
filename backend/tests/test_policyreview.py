@@ -90,8 +90,18 @@ ip access-list extended OUT
 
 
 def test_an_acl_nobody_applies_is_called_out():
-    text = "ip access-list extended LEFTOVER\n permit ip any any\n"
+    # 口が見えていて、そのどこにも当たっていないときに言う
+    text = (
+        "interface GigabitEthernet0/0\n description x\n"
+        "ip access-list extended LEFTOVER\n permit ip any any\n"
+    )
     assert _one(_review(text), "どこにも当たっていません").level == MEDIUM
+
+
+def test_an_acl_on_its_own_is_not_called_unapplied():
+    """口が1つも見えていないなら、当ててあるかどうかは分からない。"""
+    text = "ip access-list extended LEFTOVER\n permit ip any any\n"
+    assert not [item for item in _review(text) if "どこにも当たっていません" in item.title]
 
 
 def test_an_applied_acl_with_no_permit_stops_everything():

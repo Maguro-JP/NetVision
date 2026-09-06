@@ -977,3 +977,31 @@ def test_one_pasted_port_is_not_called_a_device_without_descriptions() -> None:
     parsed = configparse.parse(whole)
     titles = [item.title for item in configcheck._findings(parsed, whole)]
     assert [title for title in titles if "説明が1つも" in title]
+
+
+def test_a_fragment_is_not_told_its_acl_or_vlan_is_unused() -> None:
+    """口が1つも見えていないなら、当てているかどうかは分からない。
+
+    ACL だけ・VLAN の定義だけを貼った抜粋で「どこにも当たっていません」と
+    言うと、当ててあるのに出る。直しようのない指摘になる。
+    """
+    acl_only = "ip access-list extended MGMT\n 10 permit ip 10.0.99.0 0.0.0.255 any\n"
+    vlan_only = "vlan 10\n name USERS\n"
+    for text in (acl_only, vlan_only):
+        parsed = configparse.parse(text)
+        titles = [item.title for item in configcheck._findings(parsed, text)]
+        assert not [title for title in titles if "どこにも" in title], text.splitlines()[0]
+
+    # 口まで見えていれば、これまでどおり指摘する
+    whole = "\n".join(
+        [
+            "hostname c1",
+            "ip access-list extended MGMT",
+            " 10 permit ip 10.0.99.0 0.0.0.255 any",
+            "interface GigabitEthernet1/0/1",
+            " description x",
+        ]
+    )
+    parsed = configparse.parse(whole)
+    titles = [item.title for item in configcheck._findings(parsed, whole)]
+    assert [title for title in titles if "どこにも当たっていません" in title]

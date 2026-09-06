@@ -944,12 +944,15 @@ def _policy_routing(parsed: ParsedConfig) -> list[Finding]:
 
 def _acls(parsed: ParsedConfig) -> list[Finding]:
     findings: list[Finding] = []
+    # 口が1つも見えていないなら、当ててあるかどうかは分からない。ACL だけを
+    # 貼った抜粋で「どこにも当たっていません」と言うと、当ててあるのに出る
+    can_tell_where_applied = bool(parsed.interfaces)
     for acl in parsed.acls:
         rules = [entry for entry in acl.entries if entry.action in {"permit", "deny"}]
         if not rules:
             continue
         used = acl.applied_to or acl.referenced_by
-        if not used:
+        if not used and can_tell_where_applied:
             findings.append(
                 _note(
                     MEDIUM,

@@ -489,8 +489,9 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                 )
             )
 
+    # 口が1つも見えていないなら、使っているかどうかは分からない
     idle = sorted(v for v in parsed.vlans if v not in used and v != 1)
-    if idle:
+    if idle and parsed.interfaces:
         out.append(
             Finding(
                 level=LOW,
