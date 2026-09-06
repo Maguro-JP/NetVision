@@ -169,7 +169,18 @@ def parse(text: str) -> ParsedConfig:
     _read_redundancy(text, parsed)
     _read_lag(text, parsed)
     lldptable.parse(text, parsed)
+    _name_local_ports(parsed)
     return parsed
+
+
+def _name_local_ports(parsed: ParsedConfig) -> None:
+    """表に出てくる `1/1/1` を、config 側と同じ名前にそろえる。
+
+    そろっていないと、隣を見つけていても口に結び付かず、図に線が出ない。
+    """
+    for neighbor in parsed.neighbors:
+        if re.fullmatch(r"\d+(?:/\d+)+", neighbor.local_interface or ""):
+            neighbor.local_interface = f"Ethernet{neighbor.local_interface}"
 
 
 #: `lag "core" dynamic id 1` と、その下の `ports ethernet 1/1/1 to 1/1/2`

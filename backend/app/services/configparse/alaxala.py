@@ -114,6 +114,11 @@ def parse(text: str) -> ParsedConfig:
         parsed.model = _MODEL_ONLY.search(text).group(0)  # type: ignore[union-attr]
 
     lldptable.parse(text, parsed)
+    for neighbor in parsed.neighbors:
+        # 表に出てくる `0/1` を、config 側と同じ名前にそろえる。そろって
+        # いないと、隣を見つけていても口に結び付かず、図に線が出ない
+        if re.fullmatch(r"\d+(?:/\d+)+", neighbor.local_interface or ""):
+            neighbor.local_interface = f"GigabitEthernet{neighbor.local_interface}"
     for vlan_id, name in list(parsed.vlans.items()):
         if name:
             parsed.vlans[vlan_id] = name.strip('"')

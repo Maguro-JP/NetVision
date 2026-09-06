@@ -107,3 +107,49 @@ def test_it_fills_in_when_the_vendor_reader_found_nothing() -> None:
 
     quiet = "version 17.9\nhostname c1\ninterface GigabitEthernet1/0/1\n description x\n"
     assert configparse.parse(quiet).neighbors == []
+
+
+def test_the_local_port_name_matches_the_one_in_the_config() -> None:
+    """表の口の名前を、config 側と同じ形にそろえること。
+
+    そろっていないと、隣を見つけていても口に結び付かず、図に線が出ない。
+    どちらも読めているのに線だけ出ない、という気づきにくい形になる。
+    """
+    fastiron = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "interface ethernet 1/1/1",
+            " port-name to-core",
+            "Lcl Port  Chassis ID      Port ID   Port Description   System Name",
+            "1/1/1     0000.1111.2222  Gi1/0/1   to icx             core-sw-01",
+        ]
+    )
+    alaxala = "\n".join(
+        [
+            "Model AX3650S-24T4XW",
+            'hostname "ax01"',
+            "interface gigabitethernet 0/1",
+            "  switchport mode trunk",
+            "Local Port   System Name        Port ID",
+            "0/1          core-sw-01         GigabitEthernet1/0/5",
+        ]
+    )
+    # Aruba CX は `1/1/1` がそのまま口の名前。触らない
+    aruba = "\n".join(
+        [
+            "ArubaOS-CX",
+            "Version : FL.10.10.1050",
+            "hostname acx1",
+            "interface 1/1/1",
+            " no shutdown",
+            "LOCAL-PORT  CHASSIS-ID  PORT-ID  SYSTEM-NAME",
+            "1/1/1       aa:bb:cc    1/1/24   core-sw-01",
+        ]
+    )
+    for text in (fastiron, alaxala, aruba):
+        parsed = configparse.parse(text)
+        ports = {item.key for item in parsed.interfaces}
+        assert parsed.neighbors, parsed.vendor
+        for neighbor in parsed.neighbors:
+            assert configparse.normalize(neighbor.local_interface) in ports, parsed.vendor
