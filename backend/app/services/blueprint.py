@@ -511,6 +511,9 @@ class _PortAllocator:
             return f"Ethernet{48 - count}" if switch else f"Ethernet{1 + count}"
         if self._style == "allied":
             return f"port1.0.{24 - count}" if switch else f"port1.0.{1 + count}"
+        if self._style == "alaxala":
+            # AX は `0/1` の形。上流側は後ろの番号から使う
+            return f"0/{24 - count}" if switch else f"0/{1 + count}"
         if self._style == "juniper":
             # Junos は `ge-0/0/1` の形。上流側は後ろの番号から使う
             return f"ge-0/0/{47 - count}" if switch else f"ge-0/0/{1 + count}"
@@ -608,6 +611,7 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
         "arista": _arista,
         "allied": _allied,
         "juniper": _junos,
+        "alaxala": _alaxala,
         "cisco": _cisco,
     }.get(_style_of(request.vendor), _outline)
     for device in plan.devices:
@@ -764,7 +768,7 @@ def _comware(
 
 #: 書式を書いてある系統だけを名指しする。ここに無いベンダーで Cisco の
 #: 構文を出すと、そのまま貼れるように見えて入らない。空欄のほうが害が無い
-_KNOWN_STYLES = ("nec", "aruba", "arista", "allied", "cisco", "juniper")
+_KNOWN_STYLES = ("nec", "aruba", "arista", "allied", "cisco", "juniper", "alaxala")
 
 
 def _style_of(vendor: str) -> str:
@@ -776,9 +780,61 @@ def _style_of(vendor: str) -> str:
         return "allied"
     if "junos" in lowered or "srx" in lowered:
         return "juniper"
+    if "アラクサラ" in vendor:
+        return "alaxala"
     if "catalyst" in lowered or "ios" in lowered:
         return "cisco"
     return "unknown"
+
+
+def _alaxala(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """AX。IOS 風だが、口の種別と番号を分けて書き、名前は引用符で囲う。"""
+    # どの機種向けかを1行残す。これが無いと、出したものを自分の読み手で
+    # 読み戻したときに IOS と見分けが付かない
+    lines = ["! ALAXALA AX", f'hostname "{device.hostname}"', "!"]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"vlan {vlan_id}")
+        lines.append(f'  name "{_ascii(name)}"')
+        lines.append("!")
+
+    for port in ports:
+        if port.routed and port.vlan_id is not None:
+            lines.append(f"interface vlan {port.vlan_id}")
+        else:
+            lines.append(f"interface gigabitethernet {port.interface}")
+        lines.append(f'  description "to {port.peer}"')
+        if port.routed:
+            found = next((a for a in addresses if a.segment == port.segment), None)
+            if found:
+                lines.append(f"  ip address {found.address} {found.netmask}")
+                if found.virtual_ip:
+                    group = port.vlan_id or 1
+                    lines.append(f"  vrrp {group} ip {found.virtual_ip}")
+                    lines.append(f"  vrrp {group} priority {found.priority}")
+        elif port.vlan_id is not None and port.peer_routed:
+            lines.append("  switchport mode access")
+            lines.append(f"  switchport access vlan {port.vlan_id}")
+        elif port.vlan_id is not None:
+            lines.append("  switchport mode trunk")
+            lines.append(f"  switchport trunk allowed vlan {port.vlan_id}")
+        lines.append("!")
+
+    for route in [r for r in plan.routes if r.hostname == device.hostname]:
+        network = ipaddress.ip_network(route.destination)
+        lines.append(f"ip route {network.network_address} {network.netmask} {route.next_hop}")
+    if any(r.hostname == device.hostname for r in plan.routes):
+        lines.append("!")
+
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
 
 
 def _junos(

@@ -297,3 +297,21 @@ def test_junos_configs_read_back_with_the_same_tool():
     assert "vrrp-group" in body
     # 入り口は ssh だけにする
     assert "delete system services telnet" in body
+
+
+def test_alaxala_configs_read_back_with_the_same_tool():
+    """AX の書式で出したものを、同じ道具の読み手で読み戻せること。"""
+    from app.services import configparse
+    from app.services.configparse import Vendor
+
+    plan = _plan(bp.SEPARATE, bp.REDUNDANT, vendor="アラクサラ")
+    for hostname, body in plan.configs.items():
+        parsed = configparse.parse(body)
+        assert parsed.vendor is Vendor.ALAXALA, hostname
+        assert parsed.hostname == hostname
+        assert parsed.interfaces, hostname
+    router = next(p.hostname for p in plan.ports if p.routed)
+    body = plan.configs[router]
+    assert "vrrp" in body
+    # 口の種別と番号は分けて書く
+    assert "interface gigabitethernet " in body or "interface vlan " in body
