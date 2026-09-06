@@ -133,3 +133,17 @@ def test_the_seed_counts_what_went_in_not_what_it_meant_to_put_in() -> None:
     assert "len(wiring)" not in printed
     assert "_count(db, Link)" in printed
     assert "_count(db, Interface)" in printed
+
+
+def test_the_planted_wiring_problems_are_actually_found(client):
+    """仕込んだ問題が、実際に見つかること。
+
+    「見つけられる」を見せる材料なので、仕込んだつもりで見つからないと
+    デモの筋が通らない。資料に書いてあるのに出ない、が起きる。
+    """
+    _load(client)
+    response = client.get(f"{API}/topology/link-check")
+    assert response.status_code == 200, response.text
+    titles = [item["title"] for item in response.json()["findings"]]
+    assert [title for title in titles if "通す VLAN が両端でそろっていません" in title]
+    assert [title for title in titles if "タグ無しで渡す VLAN が両端で違います" in title]

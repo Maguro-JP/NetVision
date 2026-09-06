@@ -6,6 +6,7 @@ interface GigabitEthernet1
  description to core-sw-02
  switchport mode trunk
  switchport trunk allowed vlan 30,40
+ switchport trunk native vlan 1
 !
 interface Vlan30
  description MGMT

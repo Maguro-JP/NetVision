@@ -19,7 +19,7 @@ vlan 999
 interface GigabitEthernet0/1
  description to core-sw-01
  switchport mode trunk
- switchport trunk allowed vlan 10,30,40
+ switchport trunk allowed vlan 10,30
  switchport trunk native vlan 999
 !
 interface range GigabitEthernet0/2-20
