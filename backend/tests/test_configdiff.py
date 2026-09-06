@@ -238,7 +238,7 @@ def test_unverified_diff_returns_no_commands(monkeypatch):
 
     monkeypatch.setattr(engine, "apply_script", broken)
 
-    result = engine.build(CURRENT, CURRENT.replace(" shutdown\n", ""))
+    result = build(CURRENT, CURRENT.replace(" shutdown\n", ""))
     assert not result.verified
     assert result.commands == []
     assert result.mismatches
@@ -248,7 +248,7 @@ def test_mismatch_message_names_the_place(monkeypatch):
     from app.services.configdiff import engine
 
     monkeypatch.setattr(engine, "apply_script", lambda base, script, dialect: base)
-    result = engine.build(CURRENT, CURRENT + "ntp server 10.0.0.5\n")
+    result = build(CURRENT, CURRENT + "ntp server 10.0.0.5\n")
 
     assert any("ntp server 10.0.0.5" in m for m in result.mismatches)
 
@@ -649,3 +649,30 @@ def test_an_acl_without_line_numbers_still_rebuilds() -> None:
 
     assert result.verified
     assert "no ip access-list extended PLAIN" in result.script
+
+
+def test_a_vendor_we_cannot_write_for_gets_no_commands() -> None:
+    """出せないものを Cisco の書き方で出さない。
+
+    Cisco の規則で作ると、検証も同じ規則で通るので「収束を確認しました」と
+    言ってしまう。動かないコマンドに太鼓判を押す形になる。
+    """
+    current = "\n".join(
+        [
+            "set deviceconfig system hostname fw1",
+            "set network interface ethernet ethernet1/1 layer3 ip 203.0.113.2/30",
+        ]
+    )
+    target = current.replace("203.0.113.2", "203.0.113.3")
+    result = build(current, target)
+    assert result.commands == []
+    assert result.verified is False
+    assert any("出せません" in message for message in result.warnings)
+
+
+def test_comware_style_vendors_use_undo() -> None:
+    # VRP は Comware と同じ消し方。Cisco の no を出すと消えない
+    current = "sysname a\ninterface GigabitEthernet1/0/1\n description old\n"
+    target = "sysname a\ninterface GigabitEthernet1/0/1\n"
+    result = build(current, target, vendor="huawei")
+    assert "undo description" in result.script

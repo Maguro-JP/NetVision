@@ -414,18 +414,46 @@ _NEC_IX = Dialect(
 _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.NEC_IX: _NEC_IX,
     Vendor.NEC_QX: _NEC_QX,
+    # VRP は Comware と同じで、消すときに undo を使う
+    Vendor.HUAWEI: _NEC_QX,
     Vendor.CISCO_IOS: _CISCO,
     Vendor.CISCO_NXOS: _CISCO,
+    Vendor.CISCO_ASA: _CISCO,
+    # 消し方（no）とブロックの畳み方が IOS と同じ機種。書き方の細部は違うが、
+    # 差分の作り方として同じ規則で扱える
+    Vendor.ARISTA: _CISCO,
+    Vendor.ARUBA_CX: _CISCO,
+    Vendor.ALLIED: _CISCO,
+    Vendor.ALAXALA: _CISCO,
+    Vendor.FASTIRON: _CISCO,
+    Vendor.YAMAHA: _CISCO,
     Vendor.JUNIPER: _JUNIPER,
     Vendor.FORTINET: _FORTINET,
 }
 
+#: 投入コマンドの作り方をまだ書いていない機種。ここを Cisco の規則で通すと、
+#: 動かないコマンドを出したうえで、同じ規則で検証するので「収束を確認しました」
+#: と言ってしまう。分からないものは出さない
+UNSUPPORTED: frozenset[Vendor] = frozenset(
+    {
+        # set / delete で書く。no では消えない
+        Vendor.PALO_ALTO,
+        # config ... の対話コマンド。config ファイルの差分という形にならない
+        Vendor.CISCO_WLC,
+    }
+)
+
+
+def as_vendor(vendor: Vendor | str | None) -> Vendor | None:
+    """文字列で来たベンダー名を、分かる範囲で列挙子に直す。"""
+    if isinstance(vendor, str):
+        try:
+            return Vendor(vendor)
+        except ValueError:
+            return None
+    return vendor
+
 
 def for_vendor(vendor: Vendor | str | None) -> Dialect:
     """ベンダーに対応する規則を返す。分からなければ Cisco 系として扱う。"""
-    if isinstance(vendor, str):
-        try:
-            vendor = Vendor(vendor)
-        except ValueError:
-            vendor = None
-    return _BY_VENDOR.get(vendor or Vendor.UNKNOWN, _CISCO)
+    return _BY_VENDOR.get(as_vendor(vendor) or Vendor.UNKNOWN, _CISCO)

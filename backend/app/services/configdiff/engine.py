@@ -22,7 +22,7 @@ import re
 from dataclasses import dataclass, field
 
 from app.services.configdiff import tree
-from app.services.configdiff.dialects import Dialect, for_vendor
+from app.services.configdiff.dialects import UNSUPPORTED, Dialect, as_vendor, for_vendor
 from app.services.configdiff.tree import ConfigNode
 
 
@@ -375,9 +375,27 @@ def _vendor_of(current_text: str, target_text: str) -> str | None:
     return None
 
 
+def _label(vendor: object) -> str:
+    from app.services import configparse
+
+    return configparse.VENDOR_LABELS.get(vendor, str(vendor))  # type: ignore[arg-type]
+
+
 def build(current_text: str, target_text: str, vendor: str | None = None) -> DiffResult:
     """現行 config と将来 config から、投入コマンドと切り戻しコマンドを作る。"""
-    dialect = for_vendor(vendor or _vendor_of(current_text, target_text))
+    found = vendor or _vendor_of(current_text, target_text)
+    known = as_vendor(found)
+    if known in UNSUPPORTED:
+        # 出せないものを Cisco の書き方で出すと、同じ規則で検証するので
+        # 通ってしまう。何も出さないほうがよい
+        refused = DiffResult(dialect=for_vendor(known))
+        refused.warnings.append(
+            f"{_label(known)} の投入コマンドは、"
+            "まだ作り方を書いていないため出せません。差分の中身だけ見てください"
+        )
+        return refused
+
+    dialect = for_vendor(found)
     current = normalize(tree.parse(current_text, dialect), dialect)
     target = normalize(tree.parse(target_text, dialect), dialect)
 
