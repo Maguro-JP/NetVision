@@ -46,7 +46,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=FULL,
         generate=NONE,
-        note="型番が読めない Config は機器を作りません。EoL も脆弱性も型番で引くためです。",
+        note="型番が読めない Config は機器を作りません。EoL も脆弱性も型番で引くためです。"
+        "読めるのは Cisco（IOS / IOS-XE / NX-OS / ASA / AireOS）・Juniper・Fortinet・"
+        "NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・アライドテレシス・"
+        "アラクサラ・ファーウェイ・FastIron です。",
     ),
     Capability(
         area="土台",
@@ -185,8 +188,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="1行ずつ、当て先まで読みます。上の行に覆われて読まれない行、"
         "当てていない ACL、実質すべて通している ACL、落としているのに記録が"
         "残らない ACL、存在しない ACL を指しているところを指摘します。"
-        "読めるのは Cisco IOS・Arista EOS・Comware（NEC QX）・NEC IX・Junos・"
-        "FortiOS・ヤマハ（ip filter）・Aruba CX・アライドテレシス（ハードウェア ACL）の"
+        "読めるのは Cisco IOS・Arista EOS・Comware（NEC QX）・ファーウェイ VRP・"
+        "NEC IX・Junos・FortiOS・ヤマハ（ip filter）・Aruba CX・"
+        "アライドテレシス（ハードウェア ACL）・アラクサラ・FastIron の"
         "書き方です。通すべき通信が通るかどうかは、要件が要るので言いません。",
     ),
     Capability(
@@ -245,7 +249,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="配る範囲・既定ゲートウェイ・名前解決の先・転送先まで読みます。"
         "ゲートウェイが範囲の外、ゲートウェイまで配ってしまう、配っていない、"
-        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）の"
+        "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）・"
+        "ファーウェイ VRP（ip pool）・アラクサラ・FastIron（ip helper-address）の"
         "書き方です。",
     ),
     Capability(

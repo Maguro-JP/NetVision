@@ -706,7 +706,8 @@ _QX_NAT_SERVER = re.compile(
     r"(?:\s+(?P<gport>\S+))?\s+inside\s+(?P<inside>\S+)(?:\s+(?P<iport>\S+))?",
     re.IGNORECASE,
 )
-_QX_DHCP_POOL = re.compile(r"^dhcp server ip-pool\s+(\S+)", re.IGNORECASE)
+# VRP は `ip pool NAME`、Comware は `dhcp server ip-pool NAME`。同じ器で読む
+_QX_DHCP_POOL = re.compile(r"^(?:dhcp server ip-pool|ip pool)\s+(\S+)", re.IGNORECASE)
 _QX_CLASSIFIER = re.compile(r"^traffic classifier\s+(\S+)", re.IGNORECASE)
 _QX_BEHAVIOR = re.compile(r"^traffic behavior\s+(\S+)", re.IGNORECASE)
 _QX_POLICY = re.compile(r"^qos policy\s+(\S+)", re.IGNORECASE)
@@ -964,7 +965,9 @@ def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
         if found:
             current.domain = found.group(1)
             continue
-        found = re.match(r"^forbidden-ip\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE)
+        found = re.match(
+            r"^(?:forbidden-ip|excluded-ip-address)\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE
+        )
         if found:
             # 配らないアドレス。Cisco の excluded-address と同じ扱いにする
             dhcp.excluded.append((found.group(1), found.group(2) or found.group(1)))

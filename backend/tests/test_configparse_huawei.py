@@ -63,3 +63,26 @@ def test_an_unreadable_model_stays_empty_rather_than_blank() -> None:
     # 「読めなかった」を空文字にすると、型番が空欄の機器として台帳に入る
     parsed = configparse.parse("sysname qx1\n#\nvlan 10\n name USERS\n")
     assert parsed.model is None
+
+
+def test_the_vrp_address_pool_is_read() -> None:
+    # VRP は `ip pool`、Comware は `dhcp server ip-pool`。同じ器で読む
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "ip pool USERS",
+            " network 10.0.10.0 mask 255.255.255.0",
+            " gateway-list 10.0.10.1",
+            " dns-list 10.0.99.10",
+            " excluded-ip-address 10.0.10.2 10.0.10.10",
+        ]
+    )
+    dhcp = configparse.parse(text).dhcp
+    assert dhcp is not None
+    pool = dhcp.pools[0]
+    assert pool.network == "10.0.10.0 255.255.255.0"
+    assert pool.default_routers == ["10.0.10.1"]
+    assert pool.dns_servers == ["10.0.99.10"]
+    assert dhcp.excluded == [("10.0.10.2", "10.0.10.10")]
