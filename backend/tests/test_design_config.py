@@ -308,3 +308,16 @@ def test_the_added_vendors_get_their_own_syntax(client):
     assert "FastIron" in icx_body
     # VLAN の下に口を並べる書き方を崩さない。IOS の雛形をそのまま出さない
     assert "switchport" not in icx_body
+
+
+def test_yamaha_gets_its_own_syntax(client):
+    """ヤマハは口の名前が LAN1 / LAN2 で決まっている。番号を選べない。
+
+    どの口を何に使うかは現場で決まるので、勝手に決めずに人に残す。
+    """
+    device = make_device(client, "rtx-01", "ヤマハ", "RTX1220", device_type="router")
+    body = design(client, device)["body"]
+
+    assert "console prompt rtx-01" in body
+    assert "telnetd service off" in body
+    assert "hostname " not in body  # Cisco 風に出さない

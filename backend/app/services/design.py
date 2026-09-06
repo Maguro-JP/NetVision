@@ -228,6 +228,8 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
         return _vrp(plan)
     if vendor is Vendor.FASTIRON:
         return _fastiron(plan)
+    if vendor is Vendor.YAMAHA:
+        return _yamaha(plan)
     return _outline(plan, vendor)
 
 
@@ -254,6 +256,8 @@ def vendor_of(device: Device) -> Vendor:
         return Vendor.ALLIED
     if "alaxala" in name or "アラクサラ" in name or model.startswith("AX"):
         return Vendor.ALAXALA
+    if "yamaha" in name or "ヤマハ" in name or model.startswith(("RTX", "NVR", "FWX", "SRT")):
+        return Vendor.YAMAHA
     if "huawei" in name or "ファーウェイ" in name or "ﾌｧｰｳｪｲ" in name:
         return Vendor.HUAWEI
     if "ruckus" in name or "brocade" in name or model.startswith("ICX"):
@@ -904,3 +908,47 @@ _ICX_PORT = re.compile(r"^[A-Za-z-]*\s*([\d/]+)$")
 def _icx_port(name: str) -> str:
     found = _ICX_PORT.match(name.strip())
     return found.group(1) if found else name
+
+
+# ---------------------------------------------------------------------------
+# ヤマハ RTX / NVR
+# ---------------------------------------------------------------------------
+
+
+def _yamaha(plan: DesignInput) -> str:
+    """拠点ルーター。口の名前が LAN1 / LAN2 で決まっていて、番号を選べない。
+
+    どの口を何に使うかは現場で決まるので、対向の名前を注記に残して、割り当ては
+    人に決めてもらう。勝手に LAN2 を外向きと決めると、逆に付けたときに気づけない。
+    """
+    lines = _header(plan, Vendor.YAMAHA, "#")
+    lines.append(f"console prompt {plan.device.hostname}")
+    lines.append("#")
+
+    for index, link in enumerate(plan.links, start=1):
+        lines.append(f"# LAN{index} の予定: {link.description}（{link.local_interface} 相当）")
+        lines.append(f"# ip lan{index} address {TODO}")
+        lines.append(f"description lan{index} {link.description}")
+        lines.append("#")
+
+    for vlan in plan.vlans:
+        # タグ付き VLAN は口を分けて名前を付ける形になる
+        lines.append(
+            f"# vlan lan1/{vlan.vlan_id} 802.1q vid={vlan.vlan_id} "
+            f"name={plan.vlan_name(vlan.vlan_id)}"
+        )
+    if plan.vlans:
+        lines.append("#")
+
+    if plan.device.mgmt_ip:
+        lines.append(f"# 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"# どの口に付けるか: {TODO}")
+        lines.append("#")
+
+    lines.append("# 入り口は ssh だけにする")
+    lines.append("telnetd service off")
+    lines.append("sshd service on")
+    lines.append("#")
+    lines.append(f"# 既定の経路 / NAT / フィルター: {TODO}")
+    lines.append(f"# ログの送り先 / 時刻の参照先: {TODO}")
+    return "\n".join(lines) + "\n"
