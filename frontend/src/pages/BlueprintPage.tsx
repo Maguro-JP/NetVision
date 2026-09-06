@@ -133,6 +133,8 @@ export default function BlueprintPage() {
             <option value="Aruba">Aruba CX（AOS-CX）</option>
             <option value="Arista">Arista EOS</option>
             <option value="Allied">アライドテレシス AlliedWare Plus</option>
+            <option value="Juniper">Juniper Junos（set 形式）</option>
+            <option value="アラクサラ">アラクサラ AX シリーズ</option>
           </select>
         </label>
       </div>

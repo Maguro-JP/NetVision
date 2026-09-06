@@ -157,11 +157,28 @@ export interface ImportResult {
   rows_total: number;
 }
 
+/**
+ * 読み手が名乗るベンダー。画面に出すのは `vendor_label` のほうで、こちらは
+ * 突き合わせに使う。読み手を足したらここにも足す。書かれていない値が来ても
+ * 落ちはしないが、型が実態と食い違ったままになる。
+ */
 export type ConfigVendor =
   | "cisco_ios"
   | "cisco_nxos"
+  | "cisco_asa"
+  | "cisco_wlc"
   | "juniper"
   | "fortinet"
+  | "nec_ix"
+  | "nec_qx"
+  | "yamaha"
+  | "palo_alto"
+  | "arista"
+  | "aruba_cx"
+  | "allied"
+  | "alaxala"
+  | "huawei"
+  | "fastiron"
   | "unknown";
 
 export interface FieldDiff {

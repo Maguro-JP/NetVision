@@ -131,3 +131,20 @@ def test_a_config_with_no_vendor_marker_is_not_guessed() -> None:
     別ベンダーとして読むより、読めないと言うほうが害が小さい。
     """
     assert configparse.parse("この機器は先週入れ替えました\n").vendor is Vendor.UNKNOWN
+
+
+def test_the_screen_knows_every_vendor_the_reader_can_name() -> None:
+    """画面の型に、読み手が名乗るベンダーが全部あること。
+
+    足し忘れると、画面側の型と実態が食い違ったままになる。落ちはしないので
+    気づけない。
+    """
+    import pathlib
+    import re
+
+    types = pathlib.Path(__file__).resolve().parents[2] / "frontend" / "src" / "api" / "types.ts"
+    text = types.read_text(encoding="utf-8")
+    block = text[text.index("export type ConfigVendor") :]
+    block = block[: block.index(";")]
+    listed = set(re.findall(r'"([a-z_0-9]+)"', block))
+    assert {vendor.value for vendor in Vendor} <= listed
