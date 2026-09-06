@@ -118,3 +118,18 @@ def test_every_device_is_counted_in_each_breakdown(client, device_payload):
 
     maintenance = device_query.count_by_maintenance_severity(db)
     assert maintenance["unknown"] == len(ids) - 1, maintenance
+
+
+def test_the_seed_counts_what_went_in_not_what_it_meant_to_put_in() -> None:
+    """投入完了の数は、入れたつもりの数ではなく入ったあとの数であること。
+
+    Config の取り込みでも結線とポートが増える。足し算で出していると、
+    画面に出る数と食い違ったまま、その数を信じて話が進む。
+    """
+    from scripts import seed
+
+    source = pathlib.Path(seed.__file__).read_text(encoding="utf-8")
+    printed = source[source.index("投入完了") : source.index("該当{")]
+    assert "len(wiring)" not in printed
+    assert "_count(db, Link)" in printed
+    assert "_count(db, Interface)" in printed

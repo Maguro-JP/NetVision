@@ -384,7 +384,7 @@ def _seed(force: bool) -> None:
 
         # 全国規模の広域網。数台のサンプルだけだと「拠点が増えたときにどう使うか」を
         # 試せない。拠点を選ぶ・対向まで見る・名前で探す、が要る規模を入れておく
-        wan = seed_wan(db, by_host["edge-rt-01"])
+        seed_wan(db, by_host["edge-rt-01"])
 
         # 拠点は開いたり閉じたりする。機器を消さずに状態だけ変える運用を、
         # デモでも見えるようにしておく（移転・一時閉鎖・閉店）
@@ -404,16 +404,25 @@ def _seed(force: bool) -> None:
         snapshots = _seed_configs(db, by_host)
         reference_counts = _seed_reference(db)
         contracts = _seed_branch_contracts(db)
+        # 数えるのは、入れたつもりの数ではなく、入ったあとの数。Config の
+        # 取り込みでも結線が増えるので、足し算で出すと実際と食い違う
         print(
-            f"投入完了: 拠点{1 + wan['sites']}件 / 機器{len(devices) + wan['devices']}台 / "
-            f"保守契約{5 + contracts}件 / 結線{len(wiring) + wan['links']}本 / "
-            f"VLAN{len(segments)}件 / ポート{len(ports) + wan['interfaces']}件 / "
+            f"投入完了: 拠点{_count(db, Site)}件 / 機器{_count(db, Device)}台 / "
+            f"保守契約{5 + contracts}件 / 結線{_count(db, Link)}本 / "
+            f"VLAN{len(segments)}件 / ポート{_count(db, Interface)}件 / "
             f"Config{snapshots}件 / "
             f"型番{reference_counts[0]}件 / CVE{reference_counts[1]}件 / "
             f"該当{reference_counts[2]}件"
         )
     finally:
         db.close()
+
+
+def _count(db, model) -> int:
+    """いま入っている件数。入れたつもりの数と混ぜない。"""
+    from sqlalchemy import func, select
+
+    return db.scalar(select(func.count()).select_from(model)) or 0
 
 
 def _seed_branch_contracts(db) -> int:
