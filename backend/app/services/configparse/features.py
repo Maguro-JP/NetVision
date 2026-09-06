@@ -148,7 +148,11 @@ _RULES: tuple[_Rule, ...] = (
     _rule(AUTHENTICATION, "802.1X", r"^\s*aaa\s+authentication\s+port-access\s+dot1x\b"),
     _rule(AUTHENTICATION, "802.1X", r"^\s*set\s+protocols\s+dot1x\b"),
     _rule(AUTHENTICATION, "802.1X", r"^\s*dot1x\s*$"),
+    # VRP は `dot1x enable`、FastIron は `dot1x-enable`
+    _rule(AUTHENTICATION, "802.1X", r"^\s*dot1x[- ]enable\b"),
     _rule(AUTHENTICATION, "ポートセキュリティ", r"^\s*switchport\s+port-security\b"),
+    # FastIron は `port security`（ハイフン無し）
+    _rule(AUTHENTICATION, "ポートセキュリティ", r"^\s*port\s+security\s*$"),
     _rule(AUTHENTICATION, "ポートセキュリティ", r"^\s*port-security\s+enable\b"),
     # 管理
     _rule(MANAGEMENT, "SNMP", r"^\s*snmp-server\s+(?:community|host|group)\b"),

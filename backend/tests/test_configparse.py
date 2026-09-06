@@ -310,3 +310,36 @@ def test_a_numeric_lldp_port_id_falls_back_to_the_description():
     assert ports["wlc-01"] == "GigabitEthernet1"
     # どちらもポート名に見えないなら、読み取れたものを残す（こちらで作らない）
     assert ports["other-01"] == "aa:bb:cc:dd:ee:ff"
+
+
+def test_port_admission_is_seen_on_every_vendor() -> None:
+    """802.1X とポートセキュリティは、書き方が違うだけで同じ仕組み。
+
+    書き方を1つ落とすと、そのベンダーの機器だけ「入れていない」ことになる。
+    """
+    huawei = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (S5720 V200R011C10SPC600)",
+            "sysname hw1",
+            "dot1x enable",
+            "#",
+            "interface GigabitEthernet0/0/1",
+            " dot1x enable",
+            " port-security enable",
+        ]
+    )
+    fastiron = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "dot1x-enable",
+            " enable ethe 1/1/1",
+            "interface ethernet 1/1/1",
+            " dot1x port-control auto",
+            " port security",
+        ]
+    )
+    for text in (huawei, fastiron):
+        found = {item.name for item in configparse.parse(text).features}
+        assert "802.1X" in found, text.splitlines()[0]
+        assert "ポートセキュリティ" in found, text.splitlines()[0]
