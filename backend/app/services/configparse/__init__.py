@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 from app.services.configparse import (
+    alaxala,
     allied,
     arista,
     aruba,
@@ -57,6 +58,9 @@ _DETECTORS = (
     # アライドテレシスの目印（port1.0.1 / vlan database）は Aruba CX より強い。
     # vrrp の書き方が似ているので、先に見ないと取り違える
     allied.detect,
+    # アラクサラは名乗りか型番が出ているときだけ言う。IOS 風なので、
+    # 目印の無い config を横取りしない
+    alaxala.detect,
     aruba.detect,
     nec.detect,
     cisco.detect,
@@ -75,6 +79,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.ARISTA: "Arista EOS",
     Vendor.ARUBA_CX: "Aruba CX（AOS-CX）",
     Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
+    Vendor.ALAXALA: "アラクサラ AX シリーズ",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -91,6 +96,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.ARISTA: "Arista",
     Vendor.ARUBA_CX: "Aruba",
     Vendor.ALLIED: "アライドテレシス",
+    Vendor.ALAXALA: "アラクサラ",
 }
 
 
@@ -125,6 +131,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = aruba.parse(text)
     elif vendor is Vendor.ALLIED:
         parsed = allied.parse(text)
+    elif vendor is Vendor.ALAXALA:
+        parsed = alaxala.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

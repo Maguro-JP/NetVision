@@ -22,6 +22,7 @@ class Vendor(enum.StrEnum):
     ARISTA = "arista"
     ARUBA_CX = "aruba_cx"
     ALLIED = "allied"
+    ALAXALA = "alaxala"
     UNKNOWN = "unknown"
 
 

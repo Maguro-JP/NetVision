@@ -37,6 +37,7 @@ VLAN 台帳のどの区画に入るかは計算で決まるので、管理用の
 from __future__ import annotations
 
 import ipaddress
+import re
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -221,6 +222,8 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
         return _aruba_cx(plan)
     if vendor is Vendor.ALLIED:
         return _allied(plan)
+    if vendor is Vendor.ALAXALA:
+        return _alaxala(plan)
     return _outline(plan, vendor)
 
 
@@ -245,6 +248,8 @@ def vendor_of(device: Device) -> Vendor:
         return Vendor.ARUBA_CX if model.startswith(("6", "8", "CX", "R")) else Vendor.UNKNOWN
     if "allied" in name or "アライド" in name:
         return Vendor.ALLIED
+    if "alaxala" in name or "アラクサラ" in name or model.startswith("AX"):
+        return Vendor.ALAXALA
     return Vendor.UNKNOWN
 
 
@@ -731,3 +736,60 @@ def _outline(plan: DesignInput, vendor: Vendor) -> str:
     lines.append("#")
     lines.append(f"# 経路制御・ACL・認証: {TODO}")
     return "\n".join(lines) + "\n"
+
+
+# ---------------------------------------------------------------------------
+# アラクサラ AX シリーズ
+# ---------------------------------------------------------------------------
+
+
+def _alaxala(plan: DesignInput) -> str:
+    """IOS 風だが、口の種別と番号を分けて書き、名前は引用符で囲う。"""
+    lines = _header(plan, Vendor.ALAXALA, "!")
+    lines.append(f'hostname "{plan.device.hostname}"')
+    lines.append("!")
+    for vlan in plan.vlans:
+        lines.append(f"vlan {vlan.vlan_id}")
+        lines.append(f'  name "{plan.vlan_name(vlan.vlan_id)}"')
+        lines.append("!")
+
+    allowed = _trunk_vlans(plan)
+    for link in plan.links:
+        lines.append(f"interface {_ax_port(link.local_interface)}")
+        lines.append(f'  description "{link.description}"')
+        if link.is_infrastructure and allowed:
+            lines.append("  switchport mode trunk")
+            lines.append(f"  switchport trunk allowed vlan {allowed}")
+            lines.append(f"! タグ無し VLAN（native）: {TODO}")
+        elif link.is_infrastructure:
+            lines.append(f"! VLAN が台帳に無いため許可 VLAN を出せません: {TODO}")
+        else:
+            lines.append("  switchport mode access")
+            lines.append(f"! アクセス VLAN: {TODO}")
+            lines.append("  spanning-tree portfast")
+        lines.append("!")
+
+    if plan.device.mgmt_ip and plan.mgmt_vlan_id is not None and plan.mgmt_netmask:
+        lines.append(f"interface vlan {plan.mgmt_vlan_id}")
+        lines.append(f"  ip address {plan.device.mgmt_ip} {plan.mgmt_netmask}")
+        lines.append("!")
+    elif plan.device.mgmt_ip:
+        lines.append(f"! 管理IP: {plan.device.mgmt_ip}")
+        lines.append(f"! 管理VLAN / マスク: {TODO}")
+        lines.append("!")
+
+    lines.append(f"! ログの送り先 / 時刻の参照先 / 認証: {TODO}")
+    lines.append(f"! アクセスポートの割り当て: {TODO}")
+    lines.append(f"! 経路制御・ACL・認証・冗長化: {TODO}")
+    return "\n".join(lines) + "\n"
+
+
+#: AX は種別と番号を空けて書く。`GigabitEthernet0/1` を `gigabitethernet 0/1` へ
+_AX_PORT = re.compile(r"^([A-Za-z-]+?)\s*([\d/.:]+)$")
+
+
+def _ax_port(name: str) -> str:
+    found = _AX_PORT.match(name.strip())
+    if not found:
+        return name
+    return f"{found.group(1).lower()} {found.group(2)}"
