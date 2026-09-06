@@ -604,13 +604,52 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
         "aruba": _aruba_cx,
         "arista": _arista,
         "allied": _allied,
-    }.get(_style_of(request.vendor), _cisco)
+        "cisco": _cisco,
+    }.get(_style_of(request.vendor), _outline)
     for device in plan.devices:
         ports = [p for p in plan.ports if p.hostname == device.hostname]
         addresses = [a for a in plan.addresses if a.hostname == device.hostname]
         body, notes = writer(plan, device, ports, addresses)
         plan.configs[device.hostname] = body
         plan.notes[device.hostname] = notes
+
+
+def _outline(
+    plan: Blueprint,
+    device: PlannedDevice,
+    ports: list[PlannedPort],
+    addresses: list[PlannedAddress],
+) -> tuple[str, list[str]]:
+    """書式を書いていないベンダー。決めた中身だけを並べ、命令は出さない。
+
+    それらしい別ベンダーの構文を出すと、そのまま貼れるように見えて入らない。
+    もっともらしい嘘の Config は、空欄より害が大きい。
+    """
+    lines = [
+        f"# {device.hostname} の書式は未対応です。決めた中身だけを並べます。",
+        "# そのまま貼れる形にはなっていません。書き起こしの下敷きにしてください。",
+        f"# 機器名: {device.hostname}",
+    ]
+    notes: list[str] = [device.purpose] if device.purpose else []
+
+    vlans = {p.vlan_id: p.segment for p in ports if p.vlan_id is not None and not p.routed}
+    for vlan_id, name in sorted(vlans.items()):
+        lines.append(f"# VLAN {vlan_id}: {name}")
+    for port in ports:
+        detail = f"# ポート {port.interface}: {port.peer} へ"
+        if port.vlan_id is not None:
+            detail += f" / VLAN {port.vlan_id}"
+        if port.routed:
+            detail += " / L3"
+        lines.append(detail)
+    for address in addresses:
+        line = f"# アドレス {address.segment}: {address.address} {address.netmask}"
+        if address.virtual_ip:
+            line += f" / 仮想 {address.virtual_ip}"
+        lines.append(line)
+
+    notes.extend(_notes_for(plan, device, addresses))
+    return "\n".join(lines) + "\n", notes
 
 
 def _cisco(
@@ -719,14 +758,21 @@ def _comware(
     return "\n".join(lines) + "\n", notes
 
 
+#: 書式を書いてある系統だけを名指しする。ここに無いベンダーで Cisco の
+#: 構文を出すと、そのまま貼れるように見えて入らない。空欄のほうが害が無い
+_KNOWN_STYLES = ("nec", "aruba", "arista", "allied", "cisco")
+
+
 def _style_of(vendor: str) -> str:
     lowered = vendor.lower()
-    for key in ("nec", "aruba", "arista", "allied"):
+    for key in _KNOWN_STYLES:
         if key in lowered:
             return key
     if "アライド" in vendor:
         return "allied"
-    return "cisco"
+    if "catalyst" in lowered or "ios" in lowered:
+        return "cisco"
+    return "unknown"
 
 
 def _arista(

@@ -262,3 +262,19 @@ def test_arista_and_allied_configs_read_back_with_the_same_tool():
         # 経路は長さ付きで読めている
         assert any("/" in r.destination for r in parsed.routes) or not plan.routes
         assert any(i.ip_address and "/" in i.ip_address for i in parsed.interfaces)
+
+
+def test_an_unwritten_vendor_gets_the_decisions_not_cisco_syntax():
+    """書式を書いていないベンダーで、Cisco の構文を出さないこと。
+
+    そのまま貼れるように見えて入らない。もっともらしい嘘の Config は、
+    空欄より害が大きい。
+    """
+    plan = _plan(bp.SEPARATE, bp.REDUNDANT, vendor="Extreme")
+    bodies = "\n".join(plan.configs.values())
+    assert "未対応" in bodies
+    assert "switchport" not in bodies
+    assert "hostname " not in bodies
+    # 決めた中身そのものは出す。空にはしない
+    for hostname in plan.configs:
+        assert hostname in plan.configs[hostname]
