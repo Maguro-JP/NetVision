@@ -221,7 +221,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(l3review._unused_policies(parsed))
     found.extend(policyreview.review(parsed, text))
     found.extend(_hygiene(parsed, text))
-    found.extend(_operability(parsed, covered or set()))
+    found.extend(_operability(parsed, covered or set(), text))
     found.extend(_layer2(parsed))
     found.extend(_bundles(parsed))
     found.extend(_blocked_ports(parsed))
@@ -282,7 +282,28 @@ _MUST_SEND = (
 )
 
 
-def _operability(parsed: ParsedConfig, covered: set[str]) -> list[Finding]:
+#: 設定ぜんぶを渡された、と言える手掛かり。機器の名前を決める行は、
+#: running-config なら必ず頭のほうに出る。口の設定だけを貼ったものには
+#: 出てこないので、抜粋を「ぜんぶ」と取り違えない
+_CONFIGURATION = re.compile(
+    r"^\s*(?:hostname\s+\S|sysname\s+\S|device-name\s+\S"
+    r"|set\s+system\s+host-name\s+\S|console\s+prompt\s+\S"
+    r"|set\s+deviceconfig\s+system\s+hostname\s+\S"
+    r"|config\s+system\s+\S)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _has_configuration(text: str) -> bool:
+    """設定そのものを渡されたか。show の出力だけかもしれない。
+
+    渡されていないのに「入っていません」と言うと、書いてあるのに指摘される。
+    無いのと、そもそも見ていないのは別のことなので、混ぜない。
+    """
+    return _CONFIGURATION.search(text) is not None
+
+
+def _operability(parsed: ParsedConfig, covered: set[str], text: str = "") -> list[Finding]:
     """止まってからでは間に合わないもの。
 
     どれも動作には影響しないので、入っていなくても誰も困らない。
@@ -290,8 +311,9 @@ def _operability(parsed: ParsedConfig, covered: set[str]) -> list[Finding]:
     """
     out: list[Finding] = []
     names = {feature.name for feature in parsed.features}
+    seen_config = _has_configuration(text) if text else True
     for name, label, why in _MUST_SEND:
-        if name in names or label in covered:
+        if name in names or label in covered or not seen_config:
             continue
         out.append(
             Finding(

@@ -926,3 +926,30 @@ def test_vrp_dot1x_without_a_radius_server_is_caught() -> None:
     with_server = text.replace("#\n", "#\nradius-server template rad\n#\n", 1)
     quiet = [item.title for item in configcheck._port_admission(with_server)]
     assert not [title for title in quiet if "問い合わせ先がありません" in title]
+
+
+def test_a_show_output_alone_is_not_told_its_settings_are_missing() -> None:
+    """設定を渡されていないのに「入っていません」と言わないこと。
+
+    show の出力だけを貼ることは普通にある。そこにログの送り先が無いのは
+    当たり前で、無いのと、そもそも渡されていないのは別のことになる。
+    """
+    show_only = "\n".join(
+        [
+            "Cisco IOS XE Software, Version 17.09.04a",
+            "cisco C9300-48P (X86) processor",
+        ]
+    )
+    excerpt = "interface GigabitEthernet1/0/1\n switchport mode access\n"
+    for text in (show_only, excerpt):
+        parsed = configparse.parse(text)
+        titles = [item.title for item in configcheck._findings(parsed, text)]
+        assert not [title for title in titles if "入っていません" in title], text.splitlines()[0]
+
+
+def test_a_whole_config_without_a_log_target_is_still_called_out() -> None:
+    text = "version 17.9\nhostname c1\ninterface GigabitEthernet1/0/1\n description x\n"
+    parsed = configparse.parse(text)
+    titles = [item.title for item in configcheck._findings(parsed, text)]
+    assert "ログの送り先が入っていません" in titles
+    assert "時刻の参照先が入っていません" in titles
