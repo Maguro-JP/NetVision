@@ -818,3 +818,53 @@ def test_a_tidy_config_says_nothing_here() -> None:
         ]
     )
     assert _hygiene_titles(text) == []
+
+
+def test_a_baseline_is_only_compared_within_the_same_kind_of_device(client, db_session):
+    """決まり文句は、同じ種類の機器どうしでしか比べられない。
+
+    スイッチの `spanning-tree mode` を無線コントローラに当てると、入って
+    いないのが当たり前の行を「抜けている」と言うことになる。
+    """
+    import hashlib
+
+    from app.models import Device, DeviceType
+    from app.models.topology import ConfigSnapshot
+
+    def snapshot(device_id: int, name: str, body: str) -> ConfigSnapshot:
+        return ConfigSnapshot(
+            device_id=device_id,
+            filename=f"{name}.txt",
+            content=body,
+            sha256=hashlib.sha256(body.encode()).hexdigest(),
+        )
+
+    switch_body = "\n".join(
+        [
+            "hostname {name}",
+            "spanning-tree mode rapid-pvst",
+            "logging host 10.0.99.11",
+            "interface GigabitEthernet1/0/1",
+            " switchport mode access",
+        ]
+    )
+    for name in ("sw-01", "sw-02"):
+        device = Device(hostname=name, vendor="Cisco", device_type=DeviceType.SWITCH)
+        db_session.add(device)
+        db_session.flush()
+        db_session.add(snapshot(device.id, name, switch_body.format(name=name)))
+
+    controller = Device(hostname="wlc-01", vendor="Cisco", device_type=DeviceType.OTHER)
+    db_session.add(controller)
+    db_session.flush()
+    wlc_body = "hostname wlc-01\nlogging host 10.0.99.11\nwlan Corp 1 Corp-WiFi\n"
+    db_session.add(snapshot(controller.id, "wlc-01", wlc_body))
+    db_session.commit()
+
+    titles = [item.title for item in configcheck.check(db_session, wlc_body).differences]
+    assert not [title for title in titles if "入っていない行" in title]
+
+    # スイッチどうしでは、これまでどおり比べる
+    thin = "hostname sw-03\nlogging host 10.0.99.11\ninterface GigabitEthernet1/0/1\n"
+    switch_titles = [item.title for item in configcheck.check(db_session, thin).differences]
+    assert [title for title in switch_titles if "入っていない行" in title]

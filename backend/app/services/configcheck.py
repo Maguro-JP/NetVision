@@ -17,8 +17,10 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from app.models import Device
 from app.services import configparse, l3review, policyreview
 from app.services import conventions as conventions_module
 from app.services.configparse import ParsedConfig, Vendor
@@ -680,6 +682,26 @@ def _interface_blocks(text: str) -> list[tuple[str, list[str]]]:
     return out
 
 
+def _baseline_for(
+    db: Session, parsed: ParsedConfig, house: conventions_module.Conventions
+) -> list[str]:
+    """この機器と比べてよい決まり文句。
+
+    台帳に同じ種類の機器が足りないときは、何が決まり文句なのかを決められない。
+    そこで別の種類の決まり文句を当てると、誤って「抜けている」と言う。
+    分からないときは、何も言わないほうがよい。
+    """
+    if not parsed.hostname:
+        return house.baseline_lines
+    device = db.scalar(select(Device).where(Device.hostname == parsed.hostname))
+    if device is None:
+        return house.baseline_lines
+    same_kind = conventions_module.learn(db, kinds={device.device_type})
+    if same_kind.devices_seen < 2:
+        return []
+    return same_kind.baseline_lines
+
+
 def _differences(db: Session, parsed: ParsedConfig, text: str) -> list[Finding]:
     """覚えた現場の流儀と違うところ。
 
@@ -693,7 +715,11 @@ def _differences(db: Session, parsed: ParsedConfig, text: str) -> list[Finding]:
     out: list[Finding] = []
     lines = {line.strip() for line in text.splitlines()}
 
-    missing = [line for line in house.baseline_lines if line not in lines]
+    # 決まり文句は、同じ種類の機器どうしでしか比べられない。スイッチの
+    # `spanning-tree mode` を無線コントローラに当てると、入っていないのが
+    # 当たり前の行を「抜けている」と言うことになる
+    baseline = _baseline_for(db, parsed, house)
+    missing = [line for line in baseline if line not in lines]
     if missing:
         out.append(
             Finding(

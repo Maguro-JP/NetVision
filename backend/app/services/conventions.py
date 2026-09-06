@@ -27,7 +27,7 @@ from dataclasses import dataclass, field
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
-from app.models import Device
+from app.models import Device, DeviceType
 from app.models.topology import ConfigSnapshot
 from app.services import configparse
 
@@ -101,9 +101,17 @@ _SECRET = re.compile(
 )
 
 
-def learn(db: Session, *, sample: int = _SAMPLE) -> Conventions:
-    """取り込んである Config を数えて、その現場の流儀を出す。"""
-    snapshots = _latest_per_device(db, sample)
+def learn(
+    db: Session, *, sample: int = _SAMPLE, kinds: set[DeviceType] | None = None
+) -> Conventions:
+    """取り込んである Config を数えて、その現場の流儀を出す。
+
+    `kinds` を渡すと、その種類の機器だけで数える。スイッチの決まり文句を
+    無線コントローラに当てると、入っていないのが当たり前の行を「抜けている」
+    と言うことになる。種類をまたいで比べてよいのは、ログの送り先のように
+    現場ぜんぶで同じにするものだけ。
+    """
+    snapshots = _latest_per_device(db, sample, kinds)
     result = Conventions(devices_seen=len(snapshots))
     if len(snapshots) < _MIN_DEVICES:
         return result
@@ -118,7 +126,9 @@ def learn(db: Session, *, sample: int = _SAMPLE) -> Conventions:
     return result
 
 
-def _latest_per_device(db: Session, sample: int) -> list[tuple[str | None, str]]:
+def _latest_per_device(
+    db: Session, sample: int, kinds: set[DeviceType] | None = None
+) -> list[tuple[str | None, str]]:
     """機器ごとの、いちばん新しい Config。
 
     同じ機器の古い世代まで数えると、直した後の姿と直す前の姿が両方
@@ -130,11 +140,14 @@ def _latest_per_device(db: Session, sample: int) -> list[tuple[str | None, str]]
         .group_by(ConfigSnapshot.device_id)
         .limit(sample)
     )
-    rows = db.execute(
+    query = (
         select(Device.hostname, ConfigSnapshot.content)
         .join(Device, Device.id == ConfigSnapshot.device_id)
         .where(ConfigSnapshot.id.in_(newest))
-    ).all()
+    )
+    if kinds is not None:
+        query = query.where(Device.device_type.in_(kinds))
+    rows = db.execute(query).all()
     return [(hostname, content) for hostname, content in rows]
 
 
