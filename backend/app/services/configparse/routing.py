@@ -833,9 +833,14 @@ def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRouti
         if passive:
             protocol.passive_interfaces.append(expand(passive.group(1)))
             continue
+        version = re.match(r"^version\s+(\S+)", line, re.IGNORECASE)
+        if version:
+            protocol.version = version.group(1)
+            continue
         redistribute = re.match(r"^(?:redistribute|import-route)\s+(\S+)", line, re.IGNORECASE)
         if redistribute:
             protocol.redistributes.append(redistribute.group(1))
+            protocol.redistribute_lines.append(line.strip())
     return protocol
 
 

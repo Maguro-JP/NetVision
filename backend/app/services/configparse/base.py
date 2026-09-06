@@ -391,6 +391,11 @@ class ParsedRoutingProtocol:
     networks: list[str] = field(default_factory=list)
     passive_interfaces: list[str] = field(default_factory=list)
     redistributes: list[str] = field(default_factory=list)
+    #: RIP の版。v1 と v2 が混ざると経路が消えるので、書いてあるかを持つ
+    version: str | None = None
+    #: redistribute の行そのもの。絞り込み（route-map）が付いているかは
+    #: 元の行を見ないと分からない
+    redistribute_lines: list[str] = field(default_factory=list)
 
 
 @dataclass

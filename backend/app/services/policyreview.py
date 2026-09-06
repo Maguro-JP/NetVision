@@ -63,6 +63,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     """
     findings: list[Finding] = []
     findings.extend(_bgp(parsed))
+    findings.extend(_other_protocols(parsed))
     findings.extend(_route_maps(parsed))
     findings.extend(_prefix_lists(parsed))
     findings.extend(_virtual_gateways(parsed))
@@ -83,6 +84,81 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     if text is not None:
         findings.extend(_management_access(text, parsed))
         findings.extend(_missing_applied_acls(text, parsed))
+    return findings
+
+
+#: この名前で呼ばれることが多い、経路を絞る道具。redistribute の行に
+#: これらが出てこなければ、受け取ったものをそのまま流していることになる
+_FILTER_WORDS = ("route-map", "route-policy", "distribute-list", "policy")
+#: 画面に出す呼び名。IS-IS は間に区切りが入る
+_PROTOCOL_LABELS = {"eigrp": "EIGRP", "rip": "RIP", "isis": "IS-IS"}
+
+
+def _other_protocols(parsed: ParsedConfig) -> list[Finding]:
+    """EIGRP / RIP / IS-IS を見る。
+
+    読めてはいたが何も言っていなかったところ。OSPF や BGP と同じ粗が
+    そのまま起きるので、書いてある事実だけで言えるものを指摘する。
+    """
+    findings: list[Finding] = []
+    eigrp_ids = {p.identifier for p in parsed.protocols if p.name == "eigrp" and p.identifier}
+    if len(eigrp_ids) > 1:
+        findings.append(
+            _note(
+                "medium",
+                f"EIGRP が {len(eigrp_ids)} つの番号で動いています",
+                "EIGRP は AS 番号が違うと、同じ機器の中でも相手として見えません。"
+                "移行の途中でなければ、どちらかに寄せてください。",
+                [f"AS {value}" for value in sorted(eigrp_ids)],
+            )
+        )
+    for protocol in parsed.protocols:
+        label = _PROTOCOL_LABELS.get(protocol.name, protocol.name.upper())
+        if protocol.identifier:
+            label = f"{label} {protocol.identifier}"
+        if protocol.name == "isis" and not protocol.router_id:
+            findings.append(
+                _note(
+                    "high",
+                    f"{label} に NET アドレスが書かれていません",
+                    "IS-IS は NET が無いと自分の名前を決められず、隣とつながりません。"
+                    "この Config のままでは上がりません。",
+                    [label],
+                )
+            )
+        if protocol.name == "rip" and not protocol.version:
+            findings.append(
+                _note(
+                    "medium",
+                    f"{label} の版が書かれていません",
+                    "版を書かないと、機種によって v1 で送って v1/v2 の両方を受ける形に"
+                    "なります。マスクを持たない v1 が混ざると経路が消えます。"
+                    "`version 2` を書いてください。",
+                    [label],
+                )
+            )
+        if protocol.name in ("eigrp", "rip") and not protocol.networks:
+            findings.append(
+                _note(
+                    "medium",
+                    f"{label} に流す範囲が書かれていません",
+                    "network が1行も無いので、この設定では何も配りません。"
+                    "動かしているつもりで動いていない形です。",
+                    [label],
+                )
+            )
+        for line in protocol.redistribute_lines:
+            if any(word in line.lower() for word in _FILTER_WORDS):
+                continue
+            findings.append(
+                _note(
+                    "medium",
+                    f"{label} が、絞り込みなしで他から経路を取り込んでいます",
+                    "受け取ったものをそのまま流します。相手から来た経路がそのまま"
+                    "戻ることもあるので、route-map などで出すものを決めてください。",
+                    [line],
+                )
+            )
     return findings
 
 

@@ -99,10 +99,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         area="経路",
         name="EIGRP / IS-IS / RIP",
         read=FULL,
-        review=NONE,
+        review=PARTIAL,
         generate=NONE,
-        note="流している範囲・passive・再配布まで読みます。"
-        "設定の妥当性（メトリックの設計など）は見ていません。",
+        note="流している範囲・passive・再配布まで読みます。IS-IS の NET が無い、"
+        "RIP の版を書いていない、流す範囲が空、EIGRP の番号が分かれている、"
+        "絞り込み無しで他から取り込んでいる、を指摘します。"
+        "設計そのもの（メトリックの置き方など）は要件が要るので言いません。",
     ),
     Capability(
         area="経路",

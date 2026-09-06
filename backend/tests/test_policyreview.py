@@ -895,3 +895,43 @@ def test_the_same_address_in_different_vrfs_is_fine() -> None:
         ]
     )
     assert policyreview.review(configparse.parse(text)) == []
+
+
+def _protocol_config(body: str) -> str:
+    return "hostname r1\ninterface GigabitEthernet0/0\n ip address 10.0.0.1 255.255.255.0\n" + body
+
+
+def test_isis_without_a_net_address_is_pointed_out() -> None:
+    # NET が無いと自分の名前が決まらず、隣とつながらない
+    parsed = configparse.parse(_protocol_config("router isis\n is-type level-2-only\n"))
+    findings = policyreview.review(parsed)
+    assert any("NET アドレス" in item.title for item in findings)
+
+
+def test_rip_without_a_version_is_pointed_out() -> None:
+    parsed = configparse.parse(_protocol_config("router rip\n network 10.0.0.0\n"))
+    assert any("版が書かれていません" in item.title for item in policyreview.review(parsed))
+
+
+def test_eigrp_split_across_two_numbers_is_pointed_out() -> None:
+    body = "router eigrp 100\n network 10.0.0.0\nrouter eigrp 200\n network 10.1.0.0\n"
+    parsed = configparse.parse(_protocol_config(body))
+    assert any("2 つの番号" in item.title for item in policyreview.review(parsed))
+
+
+def test_redistribution_without_a_filter_is_pointed_out() -> None:
+    body = "router eigrp 100\n network 10.0.0.0\n redistribute static\n"
+    parsed = configparse.parse(_protocol_config(body))
+    assert any("絞り込みなし" in item.title for item in policyreview.review(parsed))
+
+
+def test_a_tidy_protocol_block_says_nothing() -> None:
+    # 誤指摘を出さないこと。書いてある事実だけで言えるものに限っている
+    body = (
+        "router eigrp 100\n network 10.0.0.0\n redistribute static route-map TO-EIGRP\n"
+        "router rip\n version 2\n network 10.0.0.0\n"
+        "router isis\n net 49.0001.0000.0000.0001.00\n"
+        "route-map TO-EIGRP permit 10\n"
+    )
+    parsed = configparse.parse(_protocol_config(body))
+    assert policyreview.review(parsed) == []
