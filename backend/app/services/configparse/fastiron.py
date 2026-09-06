@@ -104,8 +104,47 @@ def parse(text: str) -> ParsedConfig:
 
     _read_vlans(text, parsed)
     _read_redundancy(text, parsed)
+    _read_lag(text, parsed)
     lldptable.parse(text, parsed)
     return parsed
+
+
+#: `lag "core" dynamic id 1` と、その下の `ports ethernet 1/1/1 to 1/1/2`
+_LAG_HEAD = re.compile(
+    r"^lag\s+\"?(?P<name>[^\"\s]+)\"?\s+(?P<kind>static|dynamic|keep-alive)"
+    r"(?:\s+id\s+(?P<id>\d+))?",
+    re.IGNORECASE,
+)
+_LAG_PORTS = re.compile(r"^\s+ports\s+ethe(?:rnet)?\s+(?P<ports>.+?)\s*$", re.IGNORECASE)
+
+
+def _read_lag(text: str, parsed: ParsedConfig) -> None:
+    """束ねを読む。FastIron は束ねの側に口を並べるので、口だけ見ても分からない。
+
+    読めないと、2本で束ねてあるところが1本ずつに見え、落ちる範囲を数えたときに
+    実際より軽く出る。
+    """
+    group: int | None = None
+    kind: str | None = None
+    for raw in text.splitlines():
+        head = _LAG_HEAD.match(raw)
+        if head:
+            group = int(head.group("id")) if head.group("id") else None
+            kind = head.group("kind").lower()
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            group, kind = None, None
+            continue
+        if group is None:
+            continue
+        ports = _LAG_PORTS.match(raw)
+        if not ports:
+            continue
+        for name in _ports(ports.group("ports")):
+            interface = parsed.add_interface(ParsedInterface(name=name))
+            interface.lag_group = group
+            # dynamic は LACP でやりとりする形、static は決め打ち
+            interface.lag_mode = "active" if kind == "dynamic" else "on"
 
 
 #: `ip vrrp-extended vrid 10` / `ip vrrp vrid 10`。中身は次の行から下げて書く

@@ -100,3 +100,26 @@ def test_vrrp_and_the_stp_priority_are_read() -> None:
     assert ("STP の優先度", "優先度: 4096") in {
         (item.name, item.detail) for item in parsed.features
     }
+
+
+def test_the_bundle_is_read_from_the_lag_block() -> None:
+    """FastIron は束ねの側に口を並べる。口だけ見ても所属が分からない。
+
+    読めないと、2本で束ねてあるところが1本ずつに見え、落ちる範囲を数えた
+    ときに実際より軽く出る。
+    """
+    text = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            'lag "core" dynamic id 1',
+            " ports ethernet 1/1/1 to 1/1/2",
+            " primary-port 1/1/1",
+            " deploy",
+        ]
+    )
+    ports = {item.name: item for item in configparse.parse(text).interfaces}
+    assert ports["Ethernet1/1/1"].lag_group == 1
+    assert ports["Ethernet1/1/2"].lag_group == 1
+    # dynamic は LACP でやりとりする形
+    assert ports["Ethernet1/1/1"].lag_mode == "active"

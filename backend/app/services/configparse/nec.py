@@ -87,7 +87,10 @@ _QX_VLAN = re.compile(r"^\s*vlan\s+(\d+)\s*$", re.IGNORECASE)
 # `vlan 20 to 22` / `vlan 10 20 30` のまとめ書き
 _QX_VLAN_RANGE = re.compile(r"^\s*vlan\s+(\d[\d\s]*(?:to\s+\d+)?[\d\s]*)$", re.IGNORECASE)
 # LAG（Comware では Bridge-Aggregation）への所属
-_QX_LAG_MEMBER = re.compile(r"^\s*port\s+link-aggregation\s+group\s+(\d+)", re.IGNORECASE)
+# Comware は `port link-aggregation group 1`、VRP は `eth-trunk 1`。同じ意味
+_QX_LAG_MEMBER = re.compile(
+    r"^\s*(?:port\s+link-aggregation\s+group|eth-trunk)\s+(\d+)", re.IGNORECASE
+)
 _QX_ACCESS_VLAN = re.compile(r"^\s*port\s+access\s+vlan\s+(\d+)", re.IGNORECASE)
 _QX_LINK_TYPE = re.compile(r"^\s*port\s+link-type\s+(\S+)", re.IGNORECASE)
 # `port trunk permit vlan 10 20 30 to 40` / `port trunk permit vlan all`

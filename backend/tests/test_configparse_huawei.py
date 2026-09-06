@@ -86,3 +86,22 @@ def test_the_vrp_address_pool_is_read() -> None:
     assert pool.default_routers == ["10.0.10.1"]
     assert pool.dns_servers == ["10.0.99.10"]
     assert dhcp.excluded == [("10.0.10.2", "10.0.10.10")]
+
+
+def test_eth_trunk_membership_is_read() -> None:
+    # VRP は `eth-trunk 1`、Comware は `port link-aggregation group 1`
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "interface 10GE1/0/1",
+            " eth-trunk 1",
+            "#",
+            "interface 10GE1/0/2",
+            " eth-trunk 1",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert [item.lag_group for item in parsed.interfaces] == [1, 1]
+    assert "LAG" in {item.name for item in parsed.features}

@@ -133,6 +133,8 @@ _RULES: tuple[_Rule, ...] = (
     # ポートの束ね
     _rule(AGGREGATION, "LAG", r"^\s*channel-group\s+(\d+)", "グループ"),
     _rule(AGGREGATION, "LAG", r"^\s*port\s+link-aggregation\s+group\s+(\d+)", "グループ"),
+    _rule(AGGREGATION, "LAG", r"^\s*eth-trunk\s+(\d+)", "グループ"),
+    _rule(AGGREGATION, "LAG", r"^\s*lag\s+\S+\s+\S+\s+id\s+(\d+)", "グループ"),
     _rule(AGGREGATION, "LAG", r"^\s*set\s+interfaces\s+ae\d+\b"),
     # Aruba CX は `lag 1`、アライドテレシスは `static-channel-group 1`
     _rule(AGGREGATION, "LAG", r"^\s+lag\s+(\d+)\s*$", "グループ"),
