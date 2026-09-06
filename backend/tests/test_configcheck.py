@@ -868,3 +868,38 @@ def test_a_baseline_is_only_compared_within_the_same_kind_of_device(client, db_s
     thin = "hostname sw-03\nlogging host 10.0.99.11\ninterface GigabitEthernet1/0/1\n"
     switch_titles = [item.title for item in configcheck.check(db_session, thin).differences]
     assert [title for title in switch_titles if "入っていない行" in title]
+
+
+def test_an_edge_port_without_a_guard_is_caught_on_every_vendor() -> None:
+    """端末をつなぐ口の言い方は機種で違う。
+
+    1つの書き方だけを見ていると、他社の機器では黙って通る。誰かがスイッチを
+    挿したときに網全体が止まる、といういちばん重い事故の手前の設定。
+    """
+    edge_only = {
+        "cisco": "interface GigabitEthernet1/0/2\n spanning-tree portfast\n",
+        "comware": "interface GigabitEthernet1/0/2\n stp edged-port\n",
+        "vrp": "interface 10GE1/0/2\n stp edged-port enable\n",
+        "fastiron": "interface ethernet 1/1/2\n spanning-tree 802-1w admin-edge-port\n",
+        "aruba": "interface 1/1/2\n spanning-tree port-type admin-edge\n",
+    }
+    for name, body in edge_only.items():
+        titles = [item.title for item in configcheck._stp(body)]
+        assert [title for title in titles if "BPDU guard" in title], name
+
+
+def test_a_guard_written_in_any_of_its_spellings_is_accepted() -> None:
+    guarded = {
+        # 口ごとに書く形。ハイフンの有無は機種で違う
+        "cisco": "interface GigabitEthernet1/0/2\n spanning-tree portfast\n"
+        " spanning-tree bpduguard enable\n",
+        "allied": "interface port1.0.2\n spanning-tree portfast\n"
+        " spanning-tree portfast bpdu-guard enable\n",
+        # 1行で全ポートに掛ける形
+        "cisco-global": "spanning-tree portfast bpduguard default\n"
+        "interface GigabitEthernet1/0/2\n spanning-tree portfast\n",
+        "comware-global": "stp bpdu-protection\ninterface GigabitEthernet1/0/2\n stp edged-port\n",
+    }
+    for name, body in guarded.items():
+        titles = [item.title for item in configcheck._stp(body)]
+        assert not [title for title in titles if "BPDU guard" in title], name

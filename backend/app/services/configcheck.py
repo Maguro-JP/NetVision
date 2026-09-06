@@ -479,6 +479,25 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
     return out
 
 
+#: 端末をつなぐ口（つないだ瞬間に通す設定）。機種ごとの言い方
+_EDGE_PORT = re.compile(
+    r"^(?:spanning-tree\s+portfast(?:\s+trunk)?\s*$"
+    r"|stp\s+edged-port(?:\s+enable)?\s*$"  # Comware / VRP
+    r"|spanning-tree\s+802-1w\s+admin-edge-port\s*$"  # FastIron
+    r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
+    re.IGNORECASE,
+)
+#: 誰かがスイッチを挿したときに、その口だけ落とす仕組み
+_BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
+#: 機種によっては1行で全ポートに掛ける。口ごとに書いていなくても効いている
+_GLOBAL_BPDU_GUARD = re.compile(
+    r"^\s*(?:stp\s+bpdu-protection"
+    r"|spanning-tree\s+portfast\s+bpduguard\s+default"
+    r"|spanning-tree\s+bpdu-guard\s*$)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
 def _stp(text: str) -> list[Finding]:
     """ループを止める仕組み（STP）まわりで、後から効いてくるもの。
 
@@ -492,11 +511,15 @@ def _stp(text: str) -> list[Finding]:
     out: list[Finding] = []
     ports = _interface_blocks(text)
 
+    # 端末をつなぐ口の言い方は機種で違う。1つの書き方だけを見ていると、
+    # 他社の機器では黙って通る
+    guarded_here = _GLOBAL_BPDU_GUARD.search(text) is not None
     fast_without_guard = [
         name
         for name, body in ports
-        if any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
-        and not any("bpduguard" in line.lower() for line in body)
+        if any(_EDGE_PORT.match(line) for line in body)
+        and not guarded_here
+        and not any(_BPDU_GUARD.search(line) for line in body)
     ]
     if fast_without_guard:
         out.append(
