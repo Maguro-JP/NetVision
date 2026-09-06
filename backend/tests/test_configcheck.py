@@ -1005,3 +1005,30 @@ def test_a_fragment_is_not_told_its_acl_or_vlan_is_unused() -> None:
     parsed = configparse.parse(whole)
     titles = [item.title for item in configcheck._findings(parsed, whole)]
     assert [title for title in titles if "どこにも当たっていません" in title]
+
+
+def test_a_nat_or_policy_fragment_is_not_judged_by_what_it_cannot_show() -> None:
+    """当て先が見えていない抜粋に、当て先の話をしない。
+
+    NAT の行だけ・route-map だけを貼ることは普通にある。そこに内側の口や
+    当てている場所が無いのは当たり前で、書いてあるのに出ると直せない。
+    """
+    nat_only = "ip nat inside source list 1 interface GigabitEthernet0/0 overload\n"
+    policy_only = "route-map TO-ISP permit 10\n match ip address prefix-list P\n"
+    for text in (nat_only, policy_only):
+        parsed = configparse.parse(text)
+        titles = [item.title for item in configcheck._findings(parsed, text)]
+        assert not titles, (text.splitlines()[0], titles)
+
+    whole = "\n".join(
+        [
+            "hostname c1",
+            "interface GigabitEthernet0/0",
+            " ip nat outside",
+            "ip nat inside source list 1 interface GigabitEthernet0/0 overload",
+            "access-list 1 permit 10.0.0.0 0.0.0.255",
+        ]
+    )
+    parsed = configparse.parse(whole)
+    titles = [item.title for item in configcheck._findings(parsed, whole)]
+    assert [title for title in titles if "内側のポートが決まっていません" in title]

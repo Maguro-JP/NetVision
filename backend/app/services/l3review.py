@@ -604,6 +604,10 @@ def _unused_policies(parsed: ParsedConfig) -> list[Finding]:
     いる」場合は、絞れていない・広告できていない状態がそのまま残る。
     見分けるには人が要るので、挙げるだけにする。
     """
+    # 当てる先（口・BGP・再配布）が見えていないなら、使われていないとは
+    # 言えない。route-map だけを貼った抜粋で言うと、当ててあるのに出る
+    if not parsed.interfaces and parsed.bgp is None and not parsed.protocols:
+        return []
     unused = [p for p in parsed.policies if not p.used_by]
     if not unused:
         return []

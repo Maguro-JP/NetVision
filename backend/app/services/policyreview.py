@@ -1295,7 +1295,9 @@ def _nat(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     acl_names = {acl.name for acl in parsed.acls}
     route_maps = _names(parsed, "route-map")
 
-    if nat.rules and not (nat.inside_interfaces and nat.outside_interfaces):
+    # 口が1つも見えていないなら、内側と外側が決まっているかは分からない。
+    # NAT の行だけを貼った抜粋で言うと、書いてあるのに出る
+    if parsed.interfaces and nat.rules and not (nat.inside_interfaces and nat.outside_interfaces):
         missing = "内側" if not nat.inside_interfaces else "外側"
         findings.append(
             _note(
@@ -1311,6 +1313,10 @@ def _nat(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
         if rule.kind != "dynamic":
             continue
         known = acl_names | route_maps | set(parsed.address_objects)
+        # 抜粋には、指している側だけで定義側が入っていないことがある。
+        # 定義がどこにも見えていないなら、無いのではなく渡されていない
+        if not (parsed.interfaces or acl_names or route_maps or parsed.address_objects):
+            continue
         if rule.matched_is_name and rule.matched and rule.matched not in known:
             findings.append(
                 _note(
