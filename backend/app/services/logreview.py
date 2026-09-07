@@ -234,6 +234,13 @@ def _hardware(events: list[LogEvent]) -> Finding | None:
         "PWR-3",
         "POWER_SUPPLY",
         "PSU",
+        # ファーウェイ / Comware。同じ出来事でも語が違う
+        "hwPowerRemove",
+        "hwPowerFault",
+        "hwEntityTemperature",
+        "POWER_FAILED",
+        "FAN_ABSENT",
+        "TEMPERATURE_ALARM",
     )
     if not hits:
         return None

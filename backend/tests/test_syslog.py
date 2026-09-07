@@ -198,3 +198,20 @@ def test_a_flapping_port_is_found_on_huawei_too() -> None:
     report = syslog.review(None, "\n".join(lines))
     titles = [item.title for item in report.findings]
     assert [title for title in titles if "何度も上下しています" in title]
+
+
+def test_a_power_or_heat_alarm_is_found_on_every_vendor() -> None:
+    """電源と熱は、放っておくと機器ごと止まる。
+
+    語が違うだけで見逃すと、その機器の異常だけ出ない。いちばん重い部類の
+    出来事なので、機種によって黙るのは困る。
+    """
+    cases = [
+        "Sep  7 06:00:00 hw-01 %%01DEVM/4/hwPowerRemove: Power 1 is removed.",
+        "Sep  7 06:01:00 hw-01 %%01DEVM/4/hwEntityTemperature: The temperature exceeded.",
+        "Sep  7 06:02:00 qx-01 %%10DEV/4/POWER_FAILED: Power 1 failed.",
+        "Sep  7 06:03:00 c1 %PLATFORM_THERMAL-1-OVERTEMP: Temperature is too high",
+    ]
+    for line in cases:
+        titles = [item.title for item in syslog.review(None, line).findings]
+        assert [title for title in titles if "電源か冷却" in title], line
