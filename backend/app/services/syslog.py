@@ -119,6 +119,22 @@ _STAMPS = (
 _HOST = re.compile(r"^([A-Za-z][\w.\-]{1,60})\s")
 
 
+#: FortiGate の `level=warning`。syslog の重さの数字にそろえる
+_FORTI_LEVEL = re.compile(r"\blevel=(\w+)", re.IGNORECASE)
+_FORTI_SEVERITY = {
+    "emergency": 0,
+    "alert": 1,
+    "critical": 2,
+    "error": 3,
+    "warning": 4,
+    "notice": 5,
+    "notification": 5,
+    "information": 6,
+    "informational": 6,
+    "debug": 7,
+}
+
+
 def parse_line(line: str) -> LogEvent | None:
     """1行を読む。読めなければ None。"""
     text = line.strip()
@@ -162,6 +178,13 @@ def parse_line(line: str) -> LogEvent | None:
         break
     else:
         event.message = rest
+
+    if event.severity is None:
+        # FortiGate は key=value で書き、重さは `level=` に入る。読まないと、
+        # その機器の出来事だけ重さが分からないまま並ぶ
+        level = _FORTI_LEVEL.search(rest)
+        if level:
+            event.severity = _FORTI_SEVERITY.get(level.group(1).lower())
 
     if event.code is None and event.severity is None and event.at is None:
         return None  # 何も読み取れていない。ログの行とみなさない

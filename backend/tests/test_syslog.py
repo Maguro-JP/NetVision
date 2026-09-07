@@ -143,3 +143,27 @@ def test_the_api_takes_dropped_files(client):
     assert res.status_code == 200, res.text
     # 2つのファイルは、つなげて1つとして数える
     assert res.json()["parsed"] == 12
+
+
+def test_the_fortigate_level_is_read_as_the_weight() -> None:
+    """FortiGate は key=value で書き、重さは `level=` に入る。
+
+    読まないと、その機器の出来事だけ重さが分からないまま並ぶ。重い順に
+    見ている人が、いちばん重いものを見落とす。
+    """
+    warning = syslog.parse_line(
+        'Sep  7 01:01:00 fw-01 date=2026-09-07 level=warning msg="Admin login failed"'
+    )
+    assert warning is not None
+    assert warning.severity == 4
+
+    critical = syslog.parse_line('Sep  7 01:02:00 fw-01 level=critical msg="HA member down"')
+    assert critical is not None
+    assert critical.severity == 2
+
+    # 事象名から分かるものは、これまでどおりそちらを採る
+    cisco = syslog.parse_line(
+        "Sep  7 01:00:01 core-sw-01 %LINK-3-UPDOWN: Interface Gi1/0/1, changed state to down"
+    )
+    assert cisco is not None
+    assert cisco.severity == 3
