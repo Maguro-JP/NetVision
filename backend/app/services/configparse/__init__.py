@@ -20,6 +20,7 @@ from app.services.configparse import (
     fortinet,
     hapair,
     huawei,
+    inputtext,
     juniper,
     linkstate,
     lldptable,
@@ -128,6 +129,9 @@ def detect_vendor(text: str) -> Vendor:
 
 
 def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
+    # 行末・字下げ・先頭の見えない印は、意味を持たない差。ここで揃える。
+    # 揃えないと、中身は同じなのに「ホスト名が読めません」と出る
+    text = inputtext.clean(text)
     # ログイン時に見せる文言の中は、機器にとってはただの文字列。設定として
     # 読むと、無い口や無い合言葉を有ると言うことになる
     text = banners.strip(text)

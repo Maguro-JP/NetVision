@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import banners
+from app.services.configparse import banners, inputtext
 
 #: 機器名を宣言する行。行頭に書かれるものだけを見る。
 #: 字下げされた行（FortiGate の `set hostname` など）は、囲みの中でしか
@@ -34,7 +34,7 @@ _DEVICE_NAME = re.compile(
 
 def positions(text: str) -> list[int]:
     """機器名の行が何行目にあるか。文言の中は数えない。"""
-    cleaned = banners.strip(text).splitlines()
+    cleaned = banners.strip(inputtext.clean(text)).splitlines()
     return [index for index, line in enumerate(cleaned) if _DEVICE_NAME.match(line)]
 
 
