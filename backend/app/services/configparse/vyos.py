@@ -1,0 +1,172 @@
+"""VyOS / EdgeOS（Vyatta 系）の config を読む。
+
+書き方は2つある。どちらも現場から届くので、両方読む。
+
+- `set interfaces ethernet eth0 address '10.0.0.1/24'` の並び（コマンド形式）
+- 同じ内容を波括弧で入れ子にした保存形式
+
+Junos も `set` で始まるので、そこだけで決めると取り違える。口の名前が
+`eth0` / `switch0` の形であること、`set interfaces ethernet` と書くことで見分ける。
+"""
+
+from __future__ import annotations
+
+import re
+
+from app.services.configparse.base import (
+    ParsedConfig,
+    ParsedInterface,
+    ParsedRoute,
+    Vendor,
+)
+
+#: Vyatta 系にしか出てこない書き方
+_STRONG = (
+    re.compile(r"^\s*set\s+interfaces\s+ethernet\s+eth\d", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*interfaces\s*\{", re.MULTILINE),
+    re.compile(r"^\s*set\s+service\s+ssh\s+port\b", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*set\s+protocols\s+static\s+route\s+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bVyOS\b|\bEdgeOS\b|\bVyatta\b", re.IGNORECASE),
+)
+#: Junos も set で書く。口の名前で見分ける（Junos は ge-0/0/0 の形）
+_JUNOS = re.compile(
+    r"^\s*set\s+interfaces\s+(?:ge|xe|et|ae|irb|lo)-?\d", re.IGNORECASE | re.MULTILINE
+)
+
+_HOSTNAME = re.compile(
+    r"^\s*set\s+system\s+host-name\s+'?([^'\s]+)'?", re.IGNORECASE | re.MULTILINE
+)
+_VERSION = re.compile(
+    r"^\s*//\s*(?:vyos|Release)\s*version\s*:?\s*(\S+)", re.IGNORECASE | re.MULTILINE
+)
+_ADDRESS = re.compile(
+    r"^\s*set\s+interfaces\s+(?P<kind>\S+)\s+(?P<name>\S+)"
+    r"(?:\s+vif\s+(?P<vif>\d+))?\s+address\s+'?(?P<address>[^'\s]+)'?",
+    re.IGNORECASE,
+)
+_DESCRIPTION = re.compile(
+    r"^\s*set\s+interfaces\s+(?P<kind>\S+)\s+(?P<name>\S+)"
+    r"(?:\s+vif\s+(?P<vif>\d+))?\s+description\s+'?(?P<text>[^']+?)'?\s*$",
+    re.IGNORECASE,
+)
+_DISABLE = re.compile(
+    r"^\s*set\s+interfaces\s+(?P<kind>\S+)\s+(?P<name>\S+)"
+    r"(?:\s+vif\s+(?P<vif>\d+))?\s+disable\s*$",
+    re.IGNORECASE,
+)
+_ROUTE = re.compile(
+    r"^\s*set\s+protocols\s+static\s+route6?\s+'?(?P<dest>[\d.:/a-fA-F]+)'?"
+    r"\s+next-hop\s+'?(?P<hop>[^'\s]+)'?",
+    re.IGNORECASE,
+)
+_BOND = re.compile(
+    r"^\s*set\s+interfaces\s+ethernet\s+(?P<name>\S+)\s+bond-group\s+'?(?P<group>\S+)'?",
+    re.IGNORECASE,
+)
+
+
+def detect(text: str) -> Vendor | None:
+    if _JUNOS.search(text):
+        return None
+    for pattern in _STRONG:
+        if pattern.search(text):
+            return Vendor.VYOS
+    return None
+
+
+def parse(text: str) -> ParsedConfig:
+    parsed = ParsedConfig(vendor=Vendor.VYOS, os_name="VyOS / EdgeOS")
+    text = _flatten(text)
+
+    found = _HOSTNAME.search(text)
+    if found:
+        parsed.hostname = found.group(1)
+    found = _VERSION.search(text)
+    if found:
+        parsed.os_version = found.group(1)
+
+    for raw in text.splitlines():
+        found = _ADDRESS.match(raw)
+        if found:
+            port = _add(parsed, _name(found))
+            value = found.group("address")
+            if value.lower() in ("dhcp", "dhcpv6"):
+                # 貰う設定は「無い」ではない。空欄にすると付け忘れと区別が付かない
+                port.address_source = "dhcp"
+            elif port.ip_address is None:
+                port.ip_address = value
+            else:
+                port.extra_addresses.append(value)
+            if found.group("vif"):
+                port.vlan = int(found.group("vif"))
+            continue
+        found = _DESCRIPTION.match(raw)
+        if found:
+            _add(parsed, _name(found)).description = found.group("text").strip('"')
+            continue
+        found = _DISABLE.match(raw)
+        if found:
+            _add(parsed, _name(found)).enabled = False
+            continue
+        found = _BOND.match(raw)
+        if found:
+            port = _add(parsed, found.group("name"))
+            port.lag_group = int(re.sub(r"\D", "", found.group("group")) or 0)
+            continue
+        found = _ROUTE.match(raw)
+        if found:
+            parsed.routes.append(
+                ParsedRoute(destination=found.group("dest"), next_hop=found.group("hop"))
+            )
+
+    # VLAN の口（vif）から、その機器が持つ VLAN を起こす。
+    # VLAN の定義を別に書かない書き方なので、ここからしか分からない
+    for port in parsed.interfaces:
+        if port.vlan is not None:
+            parsed.vlans.setdefault(port.vlan, "")
+    return parsed
+
+
+def _add(parsed: ParsedConfig, name: str) -> ParsedInterface:
+    """口を足す。名前は機器が名乗るとおり（eth0）のままにする。
+
+    共通の読み手は `eth` を `Ethernet` に開くが、Vyatta 系ではそれが本名で、
+    開くと機器の画面と食い違う。突き合わせは正規化した鍵で行うので、
+    見せる名前は元に戻してよい。
+    """
+    port = parsed.add_interface(ParsedInterface(name=name))
+    port.name = name
+    return port
+
+
+def _name(found: re.Match[str]) -> str:
+    """`eth0` と、その上の VLAN の口（`eth0.10`）を分けて名前にする。"""
+    name = found.group("name")
+    vif = found.groupdict().get("vif")
+    return f"{name}.{vif}" if vif else name
+
+
+def _flatten(text: str) -> str:
+    """波括弧の保存形式を、`set` の並びに直す。
+
+    2つの書き方で読み手を分けると、片方だけ直したときに食い違う。
+    """
+    if "set " in text and "{" not in text:
+        return text
+
+    out: list[str] = []
+    stack: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("//", "/*", "#")):
+            continue
+        if line.endswith("{"):
+            stack.append(line[:-1].strip())
+            continue
+        if line == "}":
+            if stack:
+                stack.pop()
+            continue
+        # `address 10.0.0.1/24` のような葉。ここまでの入れ子と繋げて1行にする
+        out.append("set " + " ".join([*stack, line.rstrip(";")]))
+    return "\n".join(out) if out else text

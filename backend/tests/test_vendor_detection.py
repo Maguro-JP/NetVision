@@ -73,6 +73,14 @@ vlan trunk allowed 10,20
 interface vlan 20
     ip address 10.0.20.2/24
 """,
+    Vendor.VYOS: """set system host-name 'rt-vyos-01'
+set interfaces ethernet eth0 address '10.0.0.1/24'
+""",
+    Vendor.ROUTEROS: """/interface vlan
+add interface=bridge1 name=vlan10 vlan-id=10
+/ip address
+add address=10.0.0.1/24 interface=vlan10
+""",
     Vendor.EXOS: """configure snmp sysName "sw-exos-01"
 create vlan "USERS" tag 10
 configure vlan USERS add ports 1-20 untagged

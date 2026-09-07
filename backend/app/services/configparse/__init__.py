@@ -32,6 +32,8 @@ from app.services.configparse import (
     multicast,
     nec,
     panos,
+    routeros,
+    vyos,
     wireless,
     yamaha,
 )
@@ -65,6 +67,10 @@ _DETECTORS = (
     fortinet.detect,
     # EXOS は configure で始まる1行ずつの書き方。他とぶつからない
     exos.detect,
+    # RouterOS は / で始まる区画。他とぶつからない
+    routeros.detect,
+    # Vyatta 系も set で書く。Junos と紛れるので、口の名前で先に振り分ける
+    vyos.detect,
     juniper.detect,
     yamaha.detect,
     panos.detect,
@@ -115,6 +121,8 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.FASTIRON: "Ruckus / Brocade FastIron（ICX）",
     Vendor.EXOS: "Extreme EXOS",
     Vendor.DELL_OS10: "Dell OS10",
+    Vendor.VYOS: "VyOS / EdgeOS",
+    Vendor.ROUTEROS: "MikroTik RouterOS",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -139,6 +147,8 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.FASTIRON: "Ruckus",
     Vendor.EXOS: "Extreme Networks",
     Vendor.DELL_OS10: "Dell",
+    Vendor.VYOS: "VyOS",
+    Vendor.ROUTEROS: "MikroTik",
 }
 
 
@@ -195,6 +205,10 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = exos.parse(text)
     elif vendor is Vendor.DELL_OS10:
         parsed = dellos10.parse(text)
+    elif vendor is Vendor.VYOS:
+        parsed = vyos.parse(text)
+    elif vendor is Vendor.ROUTEROS:
+        parsed = routeros.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

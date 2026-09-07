@@ -1,0 +1,198 @@
+"""MikroTik RouterOS の config（`/export`）を読む。
+
+他社と書き方がまるで違う。`/` で始まる区画に入り、その中で `add` / `set` を
+並べ、値は `名前=値` で書く。IOS の目で読むと何も取れない。
+
+```
+/interface bridge
+add name=bridge1
+/interface vlan
+add interface=bridge1 name=vlan10 vlan-id=10
+/ip address
+add address=10.0.0.1/24 interface=vlan10
+/ip route
+add dst-address=0.0.0.0/0 gateway=10.0.0.254
+```
+
+行が長いと `\\` で折り返される。折り返しを繋いでから読まないと、
+後ろ半分の値がまるごと落ちる。
+"""
+
+from __future__ import annotations
+
+import re
+
+from app.services.configparse.base import (
+    ParsedConfig,
+    ParsedInterface,
+    ParsedRoute,
+    Vendor,
+)
+
+#: RouterOS にしか出てこない書き方
+_STRONG = (
+    re.compile(r"^/interface\s+(?:bridge|vlan|ethernet)\s*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^/ip\s+(?:address|route|firewall)\b", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*#\s*\w+.*by RouterOS", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^/system\s+identity\s*$", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"\bMikroTik\b|\bRouterOS\b", re.IGNORECASE),
+)
+
+_VERSION = re.compile(r"by RouterOS\s+(\S+)", re.IGNORECASE)
+_MODEL = re.compile(r"^\s*#\s*model\s*=\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
+
+def detect(text: str) -> Vendor | None:
+    for pattern in _STRONG:
+        if pattern.search(text):
+            return Vendor.ROUTEROS
+    return None
+
+
+def parse(text: str) -> ParsedConfig:
+    parsed = ParsedConfig(vendor=Vendor.ROUTEROS, os_name="RouterOS")
+
+    found = _VERSION.search(text)
+    if found:
+        parsed.os_version = found.group(1)
+    found = _MODEL.search(text)
+    if found:
+        parsed.model = found.group(1)
+
+    section = ""
+    for line in _joined(text):
+        if line.startswith("/"):
+            section = " ".join(line.split()).lower()
+            continue
+        if not section:
+            continue
+        verb, values = _values(line)
+        if verb is None:
+            continue
+
+        if section == "/system identity" and "name" in values:
+            parsed.hostname = values["name"]
+        elif section == "/interface vlan":
+            _vlan_port(parsed, values)
+        elif section in ("/interface bridge", "/interface bonding"):
+            if "name" in values:
+                _port(parsed, values["name"], values)
+        elif section == "/interface ethernet":
+            _ethernet(parsed, values)
+        elif section == "/ip address":
+            _address(parsed, values)
+        elif section == "/ip route":
+            _route(parsed, values)
+        elif section == "/interface bridge port":
+            _bridge_port(parsed, values)
+
+    return parsed
+
+
+def _vlan_port(parsed: ParsedConfig, values: dict[str, str]) -> None:
+    """`/interface vlan` の1行が、VLAN の定義とその口を兼ねている。"""
+    name = values.get("name")
+    tag = values.get("vlan-id")
+    if not name or not tag or not tag.isdigit():
+        return
+    number = int(tag)
+    parsed.vlans.setdefault(number, name)
+    port = _port(parsed, name, values)
+    port.vlan = number
+    port.mode = "routed"
+
+
+def _ethernet(parsed: ParsedConfig, values: dict[str, str]) -> None:
+    name = values.get("name") or values.get("default-name")
+    if not name:
+        return
+    _port(parsed, name, values)
+
+
+def _bridge_port(parsed: ParsedConfig, values: dict[str, str]) -> None:
+    """橋に足した口。タグ無しで渡す VLAN は `pvid` で書く。"""
+    name = values.get("interface")
+    if not name:
+        return
+    port = _port(parsed, name, values)
+    pvid = values.get("pvid")
+    if pvid and pvid.isdigit():
+        port.native_vlan = int(pvid)
+        port.mode = port.mode or "trunk"
+
+
+def _address(parsed: ParsedConfig, values: dict[str, str]) -> None:
+    """住所は口とは別の区画に書く。口の側に付け直さないと、どこにも出ない。"""
+    address = values.get("address")
+    name = values.get("interface")
+    if not address or not name:
+        return
+    port = _port(parsed, name, values)
+    if port.ip_address is None:
+        port.ip_address = address
+    else:
+        port.extra_addresses.append(address)
+
+
+def _route(parsed: ParsedConfig, values: dict[str, str]) -> None:
+    destination = values.get("dst-address")
+    if not destination:
+        return
+    parsed.routes.append(
+        ParsedRoute(
+            destination=destination,
+            next_hop=values.get("gateway"),
+            distance=int(values["distance"]) if values.get("distance", "").isdigit() else None,
+        )
+    )
+
+
+def _port(parsed: ParsedConfig, name: str, values: dict[str, str]) -> ParsedInterface:
+    """口を足す。名前は機器が名乗るとおり（ether1 / bridge1）のままにする。"""
+    port = parsed.add_interface(ParsedInterface(name=name))
+    port.name = name
+    if values.get("comment"):
+        port.description = port.description or values["comment"]
+    if values.get("disabled") == "yes":
+        # RouterOS は消さずに止める。止めてある口を生きていると数えない
+        port.enabled = False
+    return port
+
+
+def _joined(text: str) -> list[str]:
+    r"""行末の `\` で折り返された行を繋ぐ。
+
+    繋がないと、後ろ半分の値がまるごと落ちる。`address=` だけ読めて
+    `interface=` が落ちれば、その住所はどこにも付かない。
+    """
+    lines: list[str] = []
+    buffer = ""
+    for raw in text.splitlines():
+        stripped = raw.rstrip()
+        if stripped.endswith("\\"):
+            buffer += stripped[:-1].strip() + " "
+            continue
+        lines.append((buffer + stripped.strip()).strip())
+        buffer = ""
+    if buffer:
+        lines.append(buffer.strip())
+    return [line for line in lines if line]
+
+
+#: `name=vlan10` / `comment="to core"` の並び
+_PAIR = re.compile(r'(?P<key>[\w.-]+)=(?:"(?P<quoted>[^"]*)"|(?P<plain>\S+))')
+
+
+def _values(line: str) -> tuple[str | None, dict[str, str]]:
+    """`add name=x vlan-id=10` を、動詞と値の組にほどく。"""
+    head = line.split(None, 1)
+    if not head:
+        return None, {}
+    verb = head[0].lower()
+    if verb not in ("add", "set"):
+        return None, {}
+    values = {
+        found.group("key"): (found.group("quoted") or found.group("plain") or "")
+        for found in _PAIR.finditer(line)
+    }
+    return verb, values

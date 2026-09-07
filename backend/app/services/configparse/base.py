@@ -30,6 +30,8 @@ class Vendor(enum.StrEnum):
     FASTIRON = "fastiron"
     EXOS = "exos"
     DELL_OS10 = "dell_os10"
+    VYOS = "vyos"
+    ROUTEROS = "routeros"
     UNKNOWN = "unknown"
 
 

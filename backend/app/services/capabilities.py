@@ -50,7 +50,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         "読めるのは Cisco（IOS / IOS-XE / NX-OS / ASA / IOS-XR / AireOS）・Juniper・"
         "Fortinet・NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・"
         "Aruba AOS-S（ProCurve）・アライドテレシス・アラクサラ・ファーウェイ・"
-        "FastIron・Extreme EXOS・Dell OS10 の 20 機種です。",
+        "FastIron・Extreme EXOS・Dell OS10・VyOS / EdgeOS・MikroTik RouterOS の 22 機種です。",
     ),
     Capability(
         area="土台",
@@ -364,9 +364,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "書き方を持っているのは Cisco（IOS / NX-OS / ASA / IOS-XR）・Arista・"
         "Aruba CX・Aruba AOS-S・Dell OS10・アライドテレシス・アラクサラ・FastIron・"
         "NEC（IX / QX）・ファーウェイ・ヤマハ・Junos・PAN-OS・FortiOS です。"
-        "AireOS（Cisco WLC）は対話的なコマンドで、Extreme EXOS は囲みが無く"
-        "消し方の語も変わるため、どちらも Config の差分という形になりません。"
-        "その2つは何も出さずに理由を返します。",
+        "AireOS（Cisco WLC）は対話的なコマンド、Extreme EXOS は囲みが無く消し方の語も"
+        "変わる、MikroTik RouterOS は行を打ち消す形が無い（番号や条件で消す）ため、"
+        "この3つは Config の差分という形になりません。何も出さずに理由を返します。",
     ),
     Capability(
         area="運用",

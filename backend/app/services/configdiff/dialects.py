@@ -578,6 +578,8 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.ARUBA_OS: _AOS_S,
     # OS10 は消し方も囲みの畳み方も IOS と同じ
     Vendor.DELL_OS10: _CISCO,
+    # Vyatta 系は set / delete で、Junos と同じ組み立て方
+    Vendor.VYOS: _JUNIPER,
     Vendor.ALLIED: _ALLIED,
     Vendor.ALAXALA: _CISCO,
     Vendor.FASTIRON: _FASTIRON,
@@ -597,6 +599,9 @@ UNSUPPORTED: frozenset[Vendor] = frozenset(
         # EXOS は囲みが無く、1行ずつの命令が並ぶ。消すのも create / delete と
         # configure delete で語が変わる。IOS の規則では投入できる形にならない
         Vendor.EXOS,
+        # RouterOS は区画に入って add / set / remove を打つ。消すのは番号か
+        # 条件の指定で、行を no で打ち消す形にならない
+        Vendor.ROUTEROS,
     }
 )
 

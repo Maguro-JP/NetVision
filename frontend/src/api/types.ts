@@ -179,6 +179,8 @@ export type ConfigVendor =
   | "cisco_xr"
   | "exos"
   | "dell_os10"
+  | "vyos"
+  | "routeros"
   | "allied"
   | "alaxala"
   | "huawei"
