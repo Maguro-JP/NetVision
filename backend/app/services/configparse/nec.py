@@ -795,9 +795,12 @@ def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
 
 
 _QX_IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
-_QX_TRANSFORM = re.compile(r"^ipsec transform-set\s+(\S+)", re.IGNORECASE)
+# Comware は `ipsec transform-set`、VRP は `ipsec proposal`。同じもの
+_QX_TRANSFORM = re.compile(r"^ipsec (?:transform-set|proposal)\s+(\S+)", re.IGNORECASE)
+# VRP は相手を `ike peer 名前` の塊にまとめて書く
+_QX_IKE_PEER = re.compile(r"^ike peer\s+(\S+)", re.IGNORECASE)
 _QX_IPSEC_POLICY = re.compile(r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
-_QX_IPSEC_APPLY = re.compile(r"^\s*ipsec apply policy\s+(\S+)", re.IGNORECASE)
+_QX_IPSEC_APPLY = re.compile(r"^\s+(?:ipsec apply policy|ipsec policy)\s+(\S+)\s*$", re.IGNORECASE)
 _QX_IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:address|hostname)\s+(\S+)", re.IGNORECASE)
 
 
@@ -813,6 +816,10 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
     transform: ParsedTransformSet | None = None
     entry: ParsedCryptoMapEntry | None = None
     interface: str | None = None
+    # VRP は相手を `ike peer 名前` の塊にまとめ、policy 側からその名前を指す。
+    # 名前だけでは相手が分からないので、塊の中の宛先を覚えておいて後で渡す
+    peer_name: str | None = None
+    peers: dict[str, str] = {}
 
     for raw in text.splitlines():
         head = _QX_IKE_PROPOSAL.match(raw)
@@ -837,16 +844,21 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
             crypto.maps.append(entry)
             ike = transform = interface = None
             continue
+        head = _QX_IKE_PEER.match(raw)
+        if head:
+            peer_name = head.group(1)
+            ike = transform = entry = interface = None
+            continue
         head = _QX_INTERFACE.match(raw)
         if head:
             interface = head.group(1)
-            ike = transform = entry = None
+            ike = transform = entry = peer_name = None
             continue
 
         if raw and not raw.startswith((" ", "\t")):
             # 見出しの行だが、こちらで扱うものではない（ike keychain など）。
             # 前の塊のままにしておくと、その中身として読んでしまう
-            ike = transform = entry = None
+            ike = transform = entry = peer_name = None
             if not _QX_INTERFACE.match(raw):
                 interface = None
 
@@ -856,6 +868,11 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
             continue
         if transform is not None:
             _qx_transform_detail(transform, body)
+            continue
+        if peer_name is not None:
+            found = re.match(r"^remote-address\s+(\S+)", body, re.IGNORECASE)
+            if found:
+                peers[peer_name] = found.group(1)
             continue
         if entry is not None:
             _qx_policy_detail(entry, body)
@@ -867,6 +884,12 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
         key = _QX_IKE_KEY.match(raw)
         if key:
             crypto.keyed_peers.append(key.group(1))
+
+    # `ike-peer 名前` で指してある相手を、実際の宛先に置き換える
+    for item in crypto.maps:
+        address = peers.get(item.profile or "")
+        if address and address not in item.peers:
+            item.peers.append(address)
 
     if crypto.maps or crypto.ike_policies:
         parsed.crypto = crypto
@@ -915,7 +938,7 @@ def _qx_transform_detail(transform: ParsedTransformSet, body: str) -> None:
 
 
 def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
-    found = re.match(r"^transform-set\s+(.+)$", body, re.IGNORECASE)
+    found = re.match(r"^(?:transform-set|proposal)\s+(.+)$", body, re.IGNORECASE)
     if found:
         entry.transform_sets.extend(found.group(1).split())
         return
@@ -927,7 +950,7 @@ def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
     if found:
         entry.peers.append(found.group(1))
         return
-    found = re.match(r"^ike-profile\s+(\S+)", body, re.IGNORECASE)
+    found = re.match(r"^(?:ike-profile|ike-peer)\s+(\S+)", body, re.IGNORECASE)
     if found:
         entry.profile = found.group(1)
         return

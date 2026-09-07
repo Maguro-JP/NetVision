@@ -260,3 +260,52 @@ def test_vrp_qos_is_read_with_the_same_reader() -> None:
     assert [item.name for item in qos.policies] == ["qos-out"]
     assert [item.name for item in qos.classes] == ["voice"]
     assert qos.applied == [("10GE1/0/1", "output", "qos-out")]
+
+
+def test_vrp_site_to_site_ipsec_is_read_whole() -> None:
+    """VRP は相手を `ike peer` の塊にまとめ、policy 側から名前で指す。
+
+    読めないと、ちゃんと組んである拠点間 VPN に「このままでは上がりません」
+    「どのポートにも当たっていません」と出る。直しようのない指摘になる。
+    """
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (AR6120 V300R019C13SPC200)",
+            "sysname ar1",
+            "#",
+            "acl number 3001",
+            " rule 5 permit ip source 10.0.0.0 0.0.255.255",
+            "#",
+            "ike proposal 1",
+            " encryption-algorithm aes-256",
+            " authentication-algorithm sha2-256",
+            " dh group14",
+            "#",
+            "ike peer branch",
+            " ike-proposal 1",
+            " remote-address 203.0.113.9",
+            "#",
+            "ipsec proposal tran1",
+            " esp encryption-algorithm aes-256",
+            " esp authentication-algorithm sha2-256",
+            "#",
+            "ipsec policy map1 10 isakmp",
+            " security acl 3001",
+            " ike-peer branch",
+            " proposal tran1",
+            " pfs dh-group14",
+            "#",
+            "interface GigabitEthernet0/0/0",
+            " ip address 203.0.113.2 255.255.255.252",
+            " ipsec policy map1",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert parsed.crypto is not None
+    entry = parsed.crypto.maps[0]
+    # 名前で指してある相手を、実際の宛先に置き換えてある
+    assert entry.peers == ["203.0.113.9"]
+    assert entry.transform_sets == ["tran1"]
+    assert entry.match_address == "3001"
+    assert parsed.crypto.applied == [("GigabitEthernet0/0/0", "map1")]
+    assert policyreview.review(parsed, text) == []
