@@ -754,3 +754,31 @@ def test_panos_commands_are_written_in_its_own_form() -> None:
     assert [risk for risk in result.risks if "commit" in risk]
     # 戻せることも確かめてから出す
     assert result.rollback
+
+
+def test_yamaha_replaces_a_single_value_and_warns_before_removing_it() -> None:
+    """ヤマハは口の名前が決まっていて、アドレスは口ごとに1つ。
+
+    消してから入れる形にすると、その2行のあいだ、その口にアドレスが
+    無くなる。拠点ルーターにその手順を渡すと、そこで作業が切れる。
+    """
+    current = "\n".join(
+        [
+            "# RTX1220 Rev.15.04.03",
+            "console prompt rtx1",
+            "ip lan1 address 192.168.100.1/24",
+            "description lan1 office",
+            "ip route default gateway 203.0.113.1",
+        ]
+    )
+    changed = current.replace("192.168.100.1/24", "192.168.100.254/24")
+    result = build(current, changed)
+    assert result.verified
+    assert result.script.strip() == "ip lan1 address 192.168.100.254/24"
+
+    removed = build(
+        current,
+        "# RTX1220 Rev.15.04.03\nconsole prompt rtx1\nip route default gateway 203.0.113.1\n",
+    )
+    assert "no ip lan1 address" in removed.script
+    assert [risk for risk in removed.risks if "接続が切れます" in risk]

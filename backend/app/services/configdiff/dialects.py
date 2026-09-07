@@ -241,6 +241,45 @@ _JUNIPER = _JuniperDialect(
 )
 
 
+_YAMAHA = Dialect(
+    name="yamaha",
+    single_valued=[
+        # 口ごとに1つしか持てないもの。消してから入れる形にすると、
+        # その2行のあいだ、その口にアドレスが無くなる
+        re.compile(r"^ip\s+lan\d+\s+address\b", re.I),
+        re.compile(r"^ip\s+lan\d+\s+mtu\b", re.I),
+        re.compile(r"^ip\s+pp\s+address\b", re.I),
+        re.compile(r"^ip\s+pp\s+mtu\b", re.I),
+        re.compile(r"^description\s+lan\d+\b", re.I),
+        re.compile(r"^description\s+pp\s+\d+\b", re.I),
+        re.compile(r"^console\s+prompt\b", re.I),
+        re.compile(r"^login\s+timer\b", re.I),
+    ],
+    risks=[
+        RiskRule(
+            re.compile(r"^\s*no\s+ip\s+lan\d+\s+address\b", re.I),
+            "LAN 側のアドレスを外します。その経路で作業していると接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+(?:pp\s+select|pp\s+enable)\b", re.I),
+            "外向きの接続を落とします。拠点が外に出られなくなります",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+ip\s+route\b", re.I),
+            "経路を消します。到達性に影響します",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+(?:sshd\s+service|sshd\s+host)\b", re.I),
+            "管理アクセスに関わる設定を消します。締め出しに注意してください",
+        ),
+        RiskRule(
+            re.compile(r"^\s*no\s+ip\s+lan\d+\s+secure\s+filter\b", re.I),
+            "フィルターを外します。通していなかった通信が通ります",
+        ),
+    ],
+)
+
+
 class _PanosDialect(_JuniperDialect):
     """PAN-OS の set 形式。1行1設定で、消すのは `delete`。
 
@@ -462,7 +501,7 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.ALLIED: _CISCO,
     Vendor.ALAXALA: _CISCO,
     Vendor.FASTIRON: _CISCO,
-    Vendor.YAMAHA: _CISCO,
+    Vendor.YAMAHA: _YAMAHA,
     Vendor.JUNIPER: _JUNIPER,
     Vendor.PALO_ALTO: _PANOS,
     Vendor.FORTINET: _FORTINET,
