@@ -532,6 +532,192 @@ def _hardening(vendor: Vendor, values: dict[str, str]) -> list[str]:
     raise _unsupported(vendor, "管理の入口を絞る設定")
 
 
+def _redundancy(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """2台で1つの出口に見せる。端末はこの仮想アドレスを出口として使う。"""
+    vlan_id = _vlan(values)
+    address = _address(values, "ip", "この機器の IP アドレス")
+    length = _prefixlen(values)
+    virtual = _address(values, "virtual_ip", "仮想アドレス")
+    priority = _number(values, "priority", "優先度", low=1, high=255)
+    if virtual == address:
+        # 同じにすると、相手側から見てどちらが主か決まらない
+        raise RecipeError("仮想アドレスが、この機器のアドレスと同じです")
+    _same_segment(address, virtual, length)
+    mask = _netmask(length)
+    group = vlan_id
+
+    if vendor in _IOS_LIKE:
+        # IOS は HSRP、NX-OS / Arista は VRRP で書く
+        if vendor is Vendor.CISCO_IOS:
+            return [
+                f"interface Vlan{vlan_id}",
+                f" ip address {address} {mask}",
+                f" standby {group} ip {virtual}",
+                f" standby {group} priority {priority}",
+                f" standby {group} preempt",
+            ]
+        return [
+            f"interface Vlan{vlan_id}",
+            f" ip address {address} {mask}",
+            f" vrrp {group} ip {virtual}",
+            f" vrrp {group} priority {priority}",
+        ]
+    if vendor is Vendor.ALLIED:
+        return [
+            f"interface vlan{vlan_id}",
+            f" ip address {address} {mask}",
+            f"router vrrp {group} vlan{vlan_id}",
+            f" virtual-ip {virtual} backup",
+            f" priority {priority}",
+            " enable",
+        ]
+    if vendor is Vendor.ALAXALA:
+        return [
+            f"interface vlan {vlan_id}",
+            f"  ip address {address} {mask}",
+            f"  vrrp {group} ip {virtual}",
+            f"  vrrp {group} priority {priority}",
+        ]
+    if vendor is Vendor.ARUBA_CX:
+        return [
+            f"interface vlan {vlan_id}",
+            f"    ip address {address}/{length}",
+            f"    vrrp {group} address-family ipv4",
+            f"        address {virtual} primary",
+            f"        priority {priority}",
+            "        no shutdown",
+        ]
+    if vendor is Vendor.NEC_QX:
+        return [
+            f"interface Vlan-interface{vlan_id}",
+            f" ip address {address} {length}",
+            f" vrrp vrid {group} virtual-ip {virtual}",
+            f" vrrp vrid {group} priority {priority}",
+        ]
+    if vendor is Vendor.HUAWEI:
+        return [
+            f"interface Vlanif{vlan_id}",
+            f" ip address {address} {mask}",
+            f" vrrp vrid {group} virtual-ip {virtual}",
+            f" vrrp vrid {group} priority {priority}",
+        ]
+    if vendor is Vendor.JUNIPER:
+        return [
+            f"set interfaces irb unit {vlan_id} family inet address {address}/{length} "
+            f"vrrp-group {group} virtual-address {virtual}",
+            f"set interfaces irb unit {vlan_id} family inet address {address}/{length} "
+            f"vrrp-group {group} priority {priority}",
+        ]
+    raise _unsupported(vendor, "冗長（仮想アドレス）の設定")
+
+
+def _lag(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """何本かの線を1本として使う。両端でそろえないと束にならない。"""
+    group = _number(values, "group", "束ねの番号", low=1, high=4096)
+    written = _text(values, "interfaces", "ポート名")
+    ports = [port.strip() for port in re.split(r"[,\s]+", written) if port.strip()]
+    if len(ports) < 2:
+        raise RecipeError("束ねるポートを2つ以上入れてください")
+
+    lines: list[str] = []
+    if vendor in _IOS_LIKE or vendor is Vendor.ALLIED:
+        for port in ports:
+            lines += [
+                f"interface {port}",
+                f" channel-group {group} mode active",
+            ]
+        lines.append(f"interface Port-channel{group}")
+        return lines
+    if vendor is Vendor.ALAXALA:
+        for port in ports:
+            lines += [f"interface {_ax_port(port)}", f"  channel-group {group} mode active"]
+        lines.append(f"interface port-channel {group}")
+        return lines
+    if vendor is Vendor.ARUBA_CX:
+        for port in ports:
+            lines += [f"interface {port}", f"    lag {group}"]
+        lines += [f"interface lag {group}", "    no shutdown", "    lacp mode active"]
+        return lines
+    if vendor is Vendor.NEC_QX:
+        lines.append(f"interface Bridge-Aggregation{group}")
+        lines.append(" link-aggregation mode dynamic")
+        for port in ports:
+            lines += [f"interface {port}", f" port link-aggregation group {group}"]
+        return lines
+    if vendor is Vendor.HUAWEI:
+        lines += [f"interface Eth-Trunk{group}", " mode lacp-static"]
+        for port in ports:
+            lines += [f"interface {port}", f" eth-trunk {group}"]
+        return lines
+    if vendor is Vendor.JUNIPER:
+        for port in ports:
+            lines.append(f"set interfaces {port} ether-options 802.3ad ae{group}")
+        lines.append(f"set interfaces ae{group} aggregated-ether-options lacp active")
+        return lines
+    if vendor is Vendor.FASTIRON:
+        joined = " ".join(_icx_port(port) for port in ports)
+        return [f"lag lag{group} dynamic id {group}", f" ports ethe {joined}", " deploy"]
+    raise _unsupported(vendor, "束ね（LAG）の設定")
+
+
+def _dhcp_relay(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """配る役を別の機器に任せる。転送先を書かないと、その VLAN だけ配られない。"""
+    vlan_id = _vlan(values)
+    server = _address(values, "server", "配る機器の住所")
+
+    if vendor in _IOS_LIKE or vendor is Vendor.ALLIED or vendor is Vendor.ALAXALA:
+        return [f"interface Vlan{vlan_id}", f" ip helper-address {server}"]
+    if vendor is Vendor.ARUBA_CX:
+        return [f"interface vlan {vlan_id}", f"    ip helper-address {server}"]
+    if vendor is Vendor.NEC_QX:
+        return [
+            "dhcp enable",
+            f"dhcp relay server-group {vlan_id} ip {server}",
+            f"interface Vlan-interface{vlan_id}",
+            " dhcp select relay",
+            f" dhcp relay server-select {vlan_id}",
+        ]
+    if vendor is Vendor.HUAWEI:
+        return [
+            "dhcp enable",
+            f"interface Vlanif{vlan_id}",
+            " dhcp select relay",
+            f" dhcp relay server-ip {server}",
+        ]
+    if vendor is Vendor.JUNIPER:
+        return [
+            f"set forwarding-options dhcp-relay server-group NETVISION {server}",
+            f"set forwarding-options dhcp-relay group VLAN{vlan_id} interface irb.{vlan_id}",
+            f"set forwarding-options dhcp-relay group VLAN{vlan_id} active-server-group NETVISION",
+        ]
+    if vendor is Vendor.FASTIRON:
+        return [f"interface ve {vlan_id}", f" ip helper-address 1 {server}"]
+    raise _unsupported(vendor, "DHCP の転送（リレー）の設定")
+
+
+def _same_segment(address, virtual, length: int) -> None:
+    """仮想アドレスが、その口の帯の中にあるか。
+
+    外れていると、端末が出口として使えない。しかも通信するまで気づけない。
+    """
+    import ipaddress as _ip
+
+    network = _ip.ip_network(f"{address}/{length}", strict=False)
+    if virtual not in network:
+        raise RecipeError(f"仮想アドレスが、この口の帯（{network}）の外です")
+
+
+def _number(values: dict[str, str], key: str, label: str, *, low: int, high: int) -> int:
+    raw = _text(values, key, label)
+    try:
+        number = int(raw)
+    except ValueError as error:
+        raise RecipeError(f"{label}は数字で入れてください（{raw}）") from error
+    if not low <= number <= high:
+        raise RecipeError(f"{label}は {low}〜{high} の範囲です（{number}）")
+    return number
+
+
 RECIPES: tuple[Recipe, ...] = (
     Recipe(
         name="vlan",
@@ -602,6 +788,51 @@ RECIPES: tuple[Recipe, ...] = (
             Field("ntp_host", "時刻の参照先", "ip", placeholder="10.10.20.10"),
         ),
         render=_logging,
+    ),
+    Recipe(
+        name="redundancy",
+        label="2台で1つの出口に見せる",
+        why="端末はこの仮想アドレスを出口として使う。帯の外の値を入れると、"
+        "通信するまで気づけない。ここで確かめる。",
+        fields=(
+            Field("vlan_id", "VLAN 番号", "number", placeholder="10"),
+            Field("ip", "この機器の IP アドレス", "ip", placeholder="10.0.10.2"),
+            Field("prefixlen", "マスク長", "number", placeholder="24"),
+            Field("virtual_ip", "仮想アドレス", "ip", placeholder="10.0.10.1"),
+            Field(
+                "priority",
+                "優先度",
+                "number",
+                placeholder="110",
+                help="高いほうが主になる。2台で違う値にする",
+            ),
+        ),
+        render=_redundancy,
+    ),
+    Recipe(
+        name="lag",
+        label="線を束ねて1本にする",
+        why="片側だけ束ねる、方式が違う（LACP と決め打ち）と束にならない。両端でそろえる。",
+        fields=(
+            Field("group", "束ねの番号", "number", placeholder="1"),
+            Field(
+                "interfaces",
+                "束ねるポート",
+                "text",
+                placeholder="GigabitEthernet0/23, GigabitEthernet0/24",
+            ),
+        ),
+        render=_lag,
+    ),
+    Recipe(
+        name="dhcp_relay",
+        label="住所を配る役を別の機器に任せる",
+        why="転送先を書き忘れると、その VLAN の端末だけ住所を貰えない。",
+        fields=(
+            Field("vlan_id", "VLAN 番号", "number", placeholder="10"),
+            Field("server", "配る機器の住所", "ip", placeholder="10.10.20.5"),
+        ),
+        render=_dhcp_relay,
     ),
     Recipe(
         name="hardening",

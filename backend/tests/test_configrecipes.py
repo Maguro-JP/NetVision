@@ -188,3 +188,71 @@ def test_what_is_made_here_can_be_turned_into_commands(vendor: Vendor, recipe: s
     diff = build(current, current + "\n".join(added) + "\n", vendor=vendor)
     assert diff.verified, diff.script
     assert diff.script.strip()
+
+
+def test_the_virtual_address_outside_the_segment_is_refused() -> None:
+    """端末はこの住所を出口として使う。外れていると通信するまで気づけない。"""
+    with pytest.raises(recipes.RecipeError, match="帯"):
+        _body(
+            "redundancy",
+            Vendor.CISCO_IOS,
+            vlan_id="10",
+            ip="10.0.10.2",
+            prefixlen="24",
+            virtual_ip="10.9.9.9",
+            priority="110",
+        )
+
+
+def test_the_virtual_address_same_as_the_machines_own_is_refused() -> None:
+    """同じにすると、相手側から見てどちらが主か決まらない。"""
+    with pytest.raises(recipes.RecipeError):
+        _body(
+            "redundancy",
+            Vendor.CISCO_IOS,
+            vlan_id="10",
+            ip="10.0.10.1",
+            prefixlen="24",
+            virtual_ip="10.0.10.1",
+            priority="110",
+        )
+
+
+def test_redundancy_comes_out_in_each_vendors_own_words() -> None:
+    """IOS は HSRP、他は VRRP。混ぜると入らない。"""
+    values = {
+        "vlan_id": "10",
+        "ip": "10.0.10.2",
+        "prefixlen": "24",
+        "virtual_ip": "10.0.10.1",
+        "priority": "110",
+    }
+    assert " standby 10 ip 10.0.10.1" in _body("redundancy", Vendor.CISCO_IOS, **values)
+    assert " vrrp 10 ip 10.0.10.1" in _body("redundancy", Vendor.ARISTA, **values)
+    assert " vrrp vrid 10 virtual-ip 10.0.10.1" in _body("redundancy", Vendor.HUAWEI, **values)
+
+
+def test_bundling_needs_at_least_two_ports() -> None:
+    """1本を束ねても束にならない。"""
+    with pytest.raises(recipes.RecipeError):
+        _body("lag", Vendor.CISCO_IOS, group="1", interfaces="GigabitEthernet0/23")
+
+
+def test_bundling_puts_every_port_into_the_same_group() -> None:
+    body = _body(
+        "lag",
+        Vendor.CISCO_IOS,
+        group="1",
+        interfaces="GigabitEthernet0/23, GigabitEthernet0/24",
+    )
+    assert body.count(" channel-group 1 mode active") == 2
+    assert "interface Port-channel1" in body
+
+
+def test_the_relay_target_is_written_where_that_vendor_puts_it() -> None:
+    assert " ip helper-address 10.10.20.5" in _body(
+        "dhcp_relay", Vendor.CISCO_IOS, vlan_id="10", server="10.10.20.5"
+    )
+    assert " dhcp select relay" in _body(
+        "dhcp_relay", Vendor.HUAWEI, vlan_id="10", server="10.10.20.5"
+    )
