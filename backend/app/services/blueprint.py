@@ -172,8 +172,12 @@ def build(request: BlueprintRequest) -> Blueprint:
     )
 
     prefix = request.prefix
-    a_switch = _name(prefix, request.a_name, "sw")
-    b_switch = _name(prefix, request.b_name, "sw")
+    a_switch = _name(prefix, request.a_name, "sw", fallback="a")
+    b_switch = _name(prefix, request.b_name, "sw", fallback="b")
+    if a_switch == b_switch:
+        # 同じ名前を2台に付けると、線の両端が同じ機器を指してしまう
+        a_switch = _name(prefix, "a", "sw")
+        b_switch = _name(prefix, "b", "sw")
 
     plan.devices.append(
         PlannedDevice(
@@ -199,10 +203,15 @@ def build(request: BlueprintRequest) -> Blueprint:
     return plan
 
 
-def _name(prefix: str, base: str, suffix: str) -> str:
-    """機器名を作る。機器名は ASCII に寄せる（日本語は機器によって化ける）。"""
+def _name(prefix: str, base: str, suffix: str, fallback: str = "site") -> str:
+    """機器名を作る。機器名は ASCII に寄せる（日本語は機器によって化ける）。
+
+    寄せると何も残らない名前がある（「本社」「工場」など）。そのときに
+    どちらも同じ名前にしてしまうと、別の機器が1台に潰れる。`fallback` で
+    左右を分ける。
+    """
     ascii_base = "".join(ch for ch in base if ch.isascii() and (ch.isalnum() or ch in "-_"))
-    stem = (ascii_base or "site").lower()
+    stem = (ascii_base or fallback).lower()
     head = f"{prefix}-" if prefix else ""
     return f"{head}{stem}-{suffix}-01"
 

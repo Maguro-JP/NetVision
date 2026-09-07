@@ -48,6 +48,14 @@ export default function BlueprintPage() {
     queryFn: api.testSites,
   });
 
+  // 開いた拠点ぶんだけ組み立てる。置いてある拠点を全部組み立てると重い
+  const [opened, setOpened] = useState<number | null>(null);
+  const siteConfigs = useQuery({
+    queryKey: ["siteDesignConfigs", opened],
+    queryFn: () => api.siteDesignConfigs(opened as number),
+    enabled: opened !== null,
+  });
+
   const body = {
     a_name: aName.trim() || "A",
     b_name: bName.trim() || "B",
@@ -337,6 +345,10 @@ export default function BlueprintPage() {
                 <td>{site.name}</td>
                 <td>{site.devices} 台</td>
                 <td>
+                  <button onClick={() => setOpened(site.id)}>
+                    Config をまとめて作る
+                  </button>{" "}
+                  <a href={api.siteDesignConfigsUrl(site.id)}>まとめて落とす</a>{" "}
                   <button
                     disabled={remove.isPending}
                     onClick={() => remove.mutate(site.id)}
@@ -348,6 +360,28 @@ export default function BlueprintPage() {
             ))}
           </tbody>
         </table>
+      )}
+
+      {opened !== null && (
+        <>
+          <h3>拠点ぶんの想定 Config</h3>
+          {siteConfigs.isLoading && <p className="muted">組み立て中…</p>}
+          {siteConfigs.error && (
+            <div className="error">{(siteConfigs.error as Error).message}</div>
+          )}
+          {siteConfigs.data?.configs.map((item) => (
+            <details key={item.device_id}>
+              <summary>
+                {item.hostname}
+                <span className="muted">
+                  {" "}
+                  結線 {item.link_count} 本 / VLAN {item.vlan_count} 件から生成
+                </span>
+              </summary>
+              <pre className="config-preview">{item.body}</pre>
+            </details>
+          ))}
+        </>
       )}
     </>
   );

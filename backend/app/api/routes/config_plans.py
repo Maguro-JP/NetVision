@@ -1,3 +1,5 @@
+import io
+import zipfile
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
@@ -6,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db import get_db
-from app.models import ConfigPlan, Device
+from app.models import ConfigPlan, Device, Site
 from app.models.config_plan import PlanStatus
 from app.schemas.config_plans import (
     ConfigDraftRead,
@@ -93,6 +95,76 @@ def design_config(device_id: int, db: DbSession) -> dict[str, object]:
             for link in plan.links
         ],
     }
+
+
+@router.get("/sites/{site_id}/design-configs", response_model=dict[str, object])
+def design_configs_for_site(site_id: int, db: DbSession) -> dict[str, object]:
+    """拠点にある機器ぶんの想定 Config を、まとめて組み立てて返す。
+
+    テスト拠点を図で組んだあと、機器を1台ずつ開いて写すのは手間なので、
+    拠点まるごとで出す。1台ずつ出すのと同じものを並べているだけで、
+    ここでも保存はしない。
+    """
+    from app.services import design
+
+    site = db.get(Site, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"site {site_id} が見つかりません")
+
+    devices = db.scalars(
+        select(Device).where(Device.site_id == site_id).order_by(Device.hostname)
+    ).all()
+
+    configs = []
+    for device in devices:
+        plan = design.collect(db, device)
+        configs.append(
+            {
+                "device_id": device.id,
+                "hostname": device.hostname,
+                "vendor": str(design.vendor_of(device)),
+                "body": design.build(db, device),
+                "link_count": len(plan.links),
+                "vlan_count": len(plan.vlans),
+            }
+        )
+    return {"site_id": site.id, "site_name": site.name, "configs": configs}
+
+
+@router.get("/sites/{site_id}/design-configs.zip")
+def download_design_configs(site_id: int, db: DbSession) -> Response:
+    """拠点ぶんの想定 Config を、機器ごとのファイルにして1つにまとめて渡す。
+
+    画面で1台ずつ写させない。配るときも1ファイルで済む。
+    """
+    from app.services import design
+
+    site = db.get(Site, site_id)
+    if site is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, f"site {site_id} が見つかりません")
+
+    devices = db.scalars(
+        select(Device).where(Device.site_id == site_id).order_by(Device.hostname)
+    ).all()
+    if not devices:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "この拠点には機器がありません")
+
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
+        for device in devices:
+            archive.writestr(f"{device.hostname}.txt", design.build(db, device))
+
+    name = _ascii_filename(site.name) or f"site{site.id}"
+    return Response(
+        content=buffer.getvalue(),
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{name}-configs.zip"'},
+    )
+
+
+def _ascii_filename(name: str) -> str:
+    """拠点名をファイル名に使える形へ。日本語の拠点名は文字化けの元になる。"""
+    return "".join(ch for ch in name if ch.isascii() and (ch.isalnum() or ch in "-_"))
 
 
 @router.get("/config-plans", response_model=list[ConfigPlanRead])

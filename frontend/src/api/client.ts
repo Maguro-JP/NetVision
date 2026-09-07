@@ -915,6 +915,23 @@ export const api = {
       link_count: number;
     }>("/blueprint/apply", { method: "POST", body: JSON.stringify(body) }),
   testSites: () => request<TestSite[]>("/blueprint/test-sites"),
+  /** 拠点にある機器ぶんの想定 Config を、まとめて組み立てる。保存はしない。 */
+  siteDesignConfigs: (siteId: number) =>
+    request<{
+      site_id: number;
+      site_name: string;
+      configs: {
+        device_id: number;
+        hostname: string;
+        vendor: string;
+        body: string;
+        link_count: number;
+        vlan_count: number;
+      }[];
+    }>(`/sites/${siteId}/design-configs`),
+  /** 同じものを、機器ごとのファイルにまとめて落とす */
+  siteDesignConfigsUrl: (siteId: number) =>
+    `${BASE}/sites/${siteId}/design-configs.zip`,
   removeTestSite: (siteId: number) =>
     request<{ removed_devices: number }>(`/blueprint/test-sites/${siteId}`, {
       method: "DELETE",

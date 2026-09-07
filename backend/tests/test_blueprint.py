@@ -137,6 +137,18 @@ def test_names_stay_ascii():
         assert hostname.isascii()
 
 
+def test_two_sides_stay_two_devices_even_when_the_names_leave_nothing():
+    """「本社」「工場」は ASCII に寄せると何も残らない。
+
+    そこで同じ名前を付けると、別々の2台が1台に潰れ、線の両端が同じ機器を
+    指すことになる。図としても Config としても成立しなくなる。
+    """
+    plan = _plan(bp.SEPARATE, a_name="本社", b_name="工場")
+    hostnames = [device.hostname for device in plan.devices]
+    assert len(hostnames) == len(set(hostnames))
+    assert len(plan.configs) == len(hostnames)
+
+
 # ---------------------------------------------------------------------------
 # テスト拠点として置いてみる
 # ---------------------------------------------------------------------------
@@ -315,3 +327,30 @@ def test_alaxala_configs_read_back_with_the_same_tool():
     assert "vrrp" in body
     # 口の種別と番号は分けて書く
     assert "interface gigabitethernet " in body or "interface vlan " in body
+
+
+def test_a_whole_test_site_can_be_written_out_at_once(client, db_session):
+    """図を組んだあと、機器を1台ずつ開いて写すのは手間になる。"""
+    plan = _plan(bp.SEPARATE, bp.RESTRICT)
+    site = bp.apply_to_ledger(db_session, plan, "matomete")
+
+    response = client.get(f"{API}/sites/{site.id}/design-configs")
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body["configs"]) == len(plan.devices)
+    for item in body["configs"]:
+        assert item["hostname"]
+        assert item["body"].strip()
+
+    archive = client.get(f"{API}/sites/{site.id}/design-configs.zip")
+    assert archive.status_code == 200
+    assert archive.headers["content-type"] == "application/zip"
+
+
+def test_a_site_without_devices_says_so_instead_of_handing_over_an_empty_file(client, db_session):
+    """空の zip を渡されると、作れたのか作れなかったのか分からない。"""
+    site = Site(name="からっぽ")
+    db_session.add(site)
+    db_session.commit()
+
+    assert client.get(f"{API}/sites/{site.id}/design-configs.zip").status_code == 404
