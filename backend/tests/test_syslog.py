@@ -271,3 +271,21 @@ def test_a_change_and_the_trouble_after_it_are_linked_on_every_vendor() -> None:
     alone = ["Sep  7 08:01:00 hw-01 %%01IFNET/3/LINK_STATE: Interface 10GE1/0/1 entered DOWN."]
     titles = [item.title for item in syslog.review(None, "\n".join(alone)).findings]
     assert not [title for title in titles if "設定を変えた直後" in title]
+
+
+def test_a_routing_neighbour_going_down_is_found_on_every_vendor() -> None:
+    """相手が落ちた、の言い方も機種で違う。
+
+    VRP は BGP を `STATE_CHANGED`、OSPF を `NBR_DOWN` と書く。取りこぼすと、
+    経路が揺れているのにその機器では何も出ない。
+    """
+    vrp_bgp = [
+        f"Sep  7 09:0{index}:00 hw-01 %%01BGP/3/STATE_CHANGED: Peer 10.0.0.2 changed to IDLE."
+        for index in range(4)
+    ]
+    titles = [item.title for item in syslog.review(None, "\n".join(vrp_bgp)).findings]
+    assert [title for title in titles if "経路の相手が繰り返し落ちています" in title]
+
+    # 1回だけなら、再起動でも起きる。繰り返してはじめて言う
+    once = syslog.review(None, vrp_bgp[0]).findings
+    assert not [item for item in once if "繰り返し落ちています" in item.title]

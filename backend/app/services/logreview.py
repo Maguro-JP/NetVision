@@ -301,8 +301,10 @@ def _neighbours_going_down(events: list[LogEvent]) -> Finding | None:
     hits = [
         e
         for e in events
-        if _has(e, "ADJCHG", "ADJCHANGE", "NBRCHANGE", "NEIGHBOR")
-        and _has(e, "down", "Down", "DOWN", "Loading", "Init")
+        # 相手が落ちた、の言い方も機種で違う。VRP は BGP を `STATE_CHANGED`、
+        # OSPF を `NBR_DOWN` と書く
+        if _has(e, "ADJCHG", "ADJCHANGE", "NBRCHANGE", "NEIGHBOR", "NBR_DOWN", "STATE_CHANGED")
+        and _has(e, "down", "Down", "DOWN", "Loading", "Init", "IDLE", "Idle")
     ]
     if len(hits) < _NEIGHBOR_DOWN_MIN:
         return None
