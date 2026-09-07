@@ -239,6 +239,18 @@ MEANINGS: dict[str, str] = {
     "SHELL/5/SHELL_LOGIN": "ログインした",
     "IFNET/3/PHY_UPDOWN": "ポートの線が上がった / 落ちた",
     "IFNET/5/LINK_UPDOWN": "ポートの通信が始まった / 止まった",
+    # ファーウェイ VRP。同じ出来事でも語が違う
+    "IFNET/4/LINK_STATE": "ポートの通信が始まった / 止まった",
+    "IFNET/4/IF_STATE": "ポートの線が上がった / 落ちた",
+    "OSPF/3/NBR_DOWN": "OSPF の相手との関係が切れた",
+    "OSPF/4/NBR_CHANGE": "OSPF の相手との関係が変わった",
+    "BGP/3/STATE_CHANGED": "BGP の相手との関係が変わった",
+    "VRRP/4/STATEWARNING": "既定ゲートウェイの主が入れ替わった",
+    "SSH/5/SSH_USER_LOGIN": "ログインした",
+    "SSH/4/SSH_FAIL": "ログインに失敗した",
+    "STP/4/PFWD_LG_VLAN": "STP が、輪になりかけたポートを塞いだ",
+    "DEVM/4/hwPowerRemove": "電源が抜かれた",
+    "DEVM/4/hwEntityTemperature": "機器が熱い",
 }
 
 

@@ -167,3 +167,16 @@ def test_the_fortigate_level_is_read_as_the_weight() -> None:
     )
     assert cisco is not None
     assert cisco.severity == 3
+
+
+def test_huawei_event_names_are_explained_too() -> None:
+    """同じ出来事でも、機種によって事象名の語が違う。
+
+    引けないと、ログの一覧に事象名だけが並ぶ。何が起きたのかを読む人が
+    その場で調べることになり、貼って見るという使い方にならない。
+    """
+    assert syslog.meaning_of("IFNET/4/IF_STATE")
+    assert syslog.meaning_of("OSPF/3/NBR_DOWN")
+    assert syslog.meaning_of("SSH/5/SSH_USER_LOGIN")
+    # 知らないものは、それらしい言葉を作らない
+    assert syslog.meaning_of("KNOWN_TO_NOBODY/9/XYZ") == ""
