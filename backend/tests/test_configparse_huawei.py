@@ -117,3 +117,45 @@ def test_the_local_users_count_as_aaa() -> None:
         ]
     )
     assert "AAA" in {item.name for item in configparse.parse(text).features}
+
+
+def test_the_vlans_a_trunk_passes_are_read_in_huaweis_words() -> None:
+    """VRP は Comware と同じことを `allow-pass` と書く。
+
+    読めていないと、両端で通す VLAN がそろっているかを比べられない。
+    比べられないのに何も出ないと、そろっていると読めてしまう。
+    """
+    text = (
+        "sysname hw-01\n#\n"
+        "interface 10GE1/0/1\n"
+        " port link-type trunk\n"
+        " port trunk allow-pass vlan 10 20\n"
+        " port trunk allow-pass vlan 30 to 32\n"
+        "#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.trunk_vlans == [10, 20, 30, 31, 32]
+
+
+def test_a_vlan_taken_off_the_trunk_is_no_longer_passed() -> None:
+    """この書き方は足していく形なので、外す行を読み落とすと多く見える。"""
+    text = (
+        "sysname hw-01\n#\n"
+        "interface 10GE1/0/1\n"
+        " port link-type trunk\n"
+        " port trunk allow-pass vlan 10 20 30\n"
+        " undo port trunk allow-pass vlan 20\n"
+        "#\n"
+    )
+    assert configparse.parse(text).interfaces[0].trunk_vlans == [10, 30]
+
+
+def test_passing_everything_is_kept_as_everything() -> None:
+    """番号に展開すると、あとで VLAN が増えたときに古い一覧が残る。"""
+    text = (
+        "sysname hw-01\n#\n"
+        "interface 10GE1/0/1\n port link-type trunk\n port trunk allow-pass vlan all\n#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.trunk_all is True
+    assert port.trunk_vlans == []

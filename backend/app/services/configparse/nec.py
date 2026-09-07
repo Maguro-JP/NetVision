@@ -93,8 +93,13 @@ _QX_LAG_MEMBER = re.compile(
 )
 _QX_ACCESS_VLAN = re.compile(r"^\s*port\s+access\s+vlan\s+(\d+)", re.IGNORECASE)
 _QX_LINK_TYPE = re.compile(r"^\s*port\s+link-type\s+(\S+)", re.IGNORECASE)
-# `port trunk permit vlan 10 20 30 to 40` / `port trunk permit vlan all`
-_QX_TRUNK_PERMIT = re.compile(r"^\s*port\s+trunk\s+permit\s+vlan\s+(.+?)\s*$", re.IGNORECASE)
+# `port trunk permit vlan 10 20 30 to 40` / `port trunk permit vlan all`。
+# ファーウェイ VRP は同じことを `allow-pass` と書く。語が違うだけで意味は同じで、
+# どちらも「足す」書き方（同じ口に何行も並ぶ）。外すときは頭に undo を付ける
+_QX_TRUNK_PERMIT = re.compile(
+    r"^\s*(undo\s+)?port\s+trunk\s+(?:permit|allow-pass)\s+vlan\s*(.*?)\s*$",
+    re.IGNORECASE,
+)
 # ネイティブ VLAN にあたるのが PVID
 _QX_PVID = re.compile(r"^\s*port\s+(?:trunk|hybrid)\s+pvid\s+vlan\s+(\d+)", re.IGNORECASE)
 # hybrid ポートは tagged / untagged を並べて書く
@@ -635,12 +640,20 @@ def _parse_qx(text: str) -> ParsedConfig:
             continue
         permit = _QX_TRUNK_PERMIT.match(raw)
         if permit:
+            removing = bool(permit.group(1))
+            values = permit.group(2)
             permitted.add(current.key)
-            if vlanlist.is_all(permit.group(1)):
-                current.trunk_all = True
+            if vlanlist.is_all(values) or not values:
+                # `undo ... vlan all` と、番号を書かない `undo ... vlan` は全部外す
+                current.trunk_all = not removing
+                if removing:
+                    current.trunk_vlans = []
+            elif removing:
+                drop = set(vlanlist.parse_ranges(values))
+                current.trunk_vlans = [v for v in current.trunk_vlans if v not in drop]
             else:
                 current.trunk_vlans = sorted(
-                    set(current.trunk_vlans) | set(vlanlist.parse_ranges(permit.group(1)))
+                    set(current.trunk_vlans) | set(vlanlist.parse_ranges(values))
                 )
             continue
         hybrid = _QX_HYBRID_VLAN.match(raw)

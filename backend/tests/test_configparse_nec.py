@@ -434,3 +434,35 @@ interface GigaEthernet0.0
     assert routes["::/0"].next_hop == "2001:db8::1"
     # 宛先を書く形も、これまで通り読める
     assert routes["192.168.20.0/24"].next_hop == "10.1.0.253"
+
+
+def test_a_vlan_taken_off_the_trunk_is_no_longer_permitted() -> None:
+    """Comware は許可を足していく形で書く。外す行は頭に undo が付く。
+
+    そこを読み落とすと、通していない VLAN を通していることにしてしまう。
+    両端で VLAN がそろっているかの突き合わせが、そのぶん狂う。
+    """
+    text = (
+        "sysname qx-01\n#\n"
+        "interface GigabitEthernet1/0/1\n"
+        " port link-type trunk\n"
+        " port trunk permit vlan 10 20\n"
+        " port trunk permit vlan 30\n"
+        " undo port trunk permit vlan 20\n"
+        "#\n"
+    )
+    assert configparse.parse(text).interfaces[0].trunk_vlans == [10, 30]
+
+
+def test_taking_everything_off_the_trunk_leaves_nothing() -> None:
+    text = (
+        "sysname qx-01\n#\n"
+        "interface GigabitEthernet1/0/1\n"
+        " port link-type trunk\n"
+        " port trunk permit vlan 10 20\n"
+        " undo port trunk permit vlan all\n"
+        "#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.trunk_vlans == []
+    assert port.trunk_all is False
