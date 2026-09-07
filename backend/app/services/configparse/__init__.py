@@ -188,7 +188,10 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
 
 #: 機能の拾い出しの前に、囲みの中でしか意味が決まらない行をほどく機種。
 #: 行だけを見ると別の設定と見分けが付かない書き方があるもの
-_FEATURE_TEXT = {Vendor.FASTIRON: fastiron.feature_text}
+_FEATURE_TEXT = {
+    Vendor.FASTIRON: fastiron.feature_text,
+    Vendor.FORTINET: fortinet.feature_text,
+}
 
 #: マルチキャストの書き方の系統。読み手はこの3つしか持たない
 _MULTICAST_STYLE = {

@@ -147,3 +147,26 @@ def test_the_planted_wiring_problems_are_actually_found(client):
     titles = [item["title"] for item in response.json()["findings"]]
     assert [title for title in titles if "通す VLAN が両端でそろっていません" in title]
     assert [title for title in titles if "タグ無しで渡す VLAN が両端で違います" in title]
+
+
+def test_the_demo_shows_more_than_one_vendor(client):
+    """デモに Cisco 以外の機器も入っていること。
+
+    読めるベンダーは16ありますが、デモが Cisco だけだと、そこが伝わりません。
+    台帳には Juniper と Fortinet が居るので、その Config も入れてあります。
+    """
+    from app.services.configparse import Vendor
+
+    vendors = {item["vendor"] for item in _load(client)}
+    assert str(Vendor.JUNIPER) in vendors
+    assert str(Vendor.FORTINET) in vendors
+
+
+def test_the_firewall_config_is_not_told_its_log_target_is_missing(client):
+    """FortiOS は送り先を囲みの中に書く。読めないと、書いてあるのに指摘される。"""
+    _load(client)
+    body = (DEMO / "fw-01.txt").read_text(encoding="utf-8")
+    response = client.post(f"{API}/config-check", json={"text": body, "filename": "fw-01.txt"})
+    assert response.status_code == 200, response.text
+    titles = [item["title"] for item in response.json()["differences"]]
+    assert not [title for title in titles if "入っていません" in title]

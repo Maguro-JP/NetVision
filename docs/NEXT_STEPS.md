@@ -140,8 +140,10 @@ Config には管理IP・ACL・SNMP コミュニティ名が入ります。攻撃
 
 ## 6. 人に見せるときの順番（デモの筋道）
 
-`python -m scripts.seed` で、台帳・結線・VLAN に加えて本社4台の Config も
-入ります（`backend/scripts/demo_configs/`）。あわせて、型番ごとの期限、CVE と
+`python -m scripts.seed` で、台帳・結線・VLAN に加えて本社6台の Config も
+入ります（`backend/scripts/demo_configs/`）。Cisco 4台に加えて、
+Juniper（edge-rt-01）と FortiGate（fw-01）も入れてあるので、
+1つのベンダーだけで動いているようには見えません。あわせて、型番ごとの期限、CVE と
 その該当、弱点への対処、設定変更用のテンプレート、更改の検討案が1本入ります
 （`backend/scripts/demo_reference/`）。入れたあとは、点検・L3・Config 計画・
 対処手順・テンプレート・シナリオの画面が、どれも中身のある状態で開きます。

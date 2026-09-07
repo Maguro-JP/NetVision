@@ -55,6 +55,41 @@ def detect(text: str) -> Vendor | None:
     return None
 
 
+#: 送り先は囲みの中に `set server "10.0.0.1"` と書く。行だけを見ると、
+#: どのサービスの送り先なのか分からない
+_LOG_BLOCK = re.compile(r"^\s*config\s+log\s+syslogd\d*\s+setting\s*$", re.IGNORECASE)
+_NTP_BLOCK = re.compile(r"^\s*config\s+ntpserver\s*$", re.IGNORECASE)
+_SERVER_LINE = re.compile(r"^\s*set\s+server\s+\"?([^\"\s]+)\"?\s*$", re.IGNORECASE)
+
+
+def feature_text(text: str) -> str:
+    """機能の拾い出しに渡す文。囲みの中でしか意味が決まらない行をほどく。
+
+    送り先を読めないと、書いてあるのに「入っていません」と言うことになる。
+    """
+    rows: list[str] = []
+    where: str | None = None
+    for raw in text.splitlines():
+        if _LOG_BLOCK.match(raw):
+            where = "syslog"
+        elif _NTP_BLOCK.match(raw):
+            where = "ntp"
+        elif raw.strip().lower() == "end":
+            where = None
+        elif where:
+            found = _SERVER_LINE.match(raw)
+            if found:
+                rows.append(raw)
+                rows.append(
+                    f"syslog host {found.group(1)}"
+                    if where == "syslog"
+                    else f"ntp server {found.group(1)}"
+                )
+                continue
+        rows.append(raw)
+    return "\n".join(rows)
+
+
 def parse(text: str) -> ParsedConfig:
     parsed = ParsedConfig(vendor=Vendor.FORTINET, os_name="FortiOS")
 

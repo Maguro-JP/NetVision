@@ -1,0 +1,95 @@
+config system global
+    set hostname "fw-01"
+    set admin-sport 443
+    set admintimeout 10
+    set timezone 60
+end
+config system interface
+    edit "port1"
+        set alias "to edge-rt-01"
+        set ip 203.0.113.2 255.255.255.252
+        set allowaccess ping
+        set role wan
+    next
+    edit "port2"
+        set alias "to core-sw-01"
+        set allowaccess ping
+        set role lan
+    next
+    edit "port3"
+        set alias "to core-sw-02"
+        set allowaccess ping
+        set role lan
+    next
+    edit "vlan30"
+        set alias "MGMT"
+        set ip 10.0.0.10 255.255.255.0
+        set allowaccess ping https ssh
+        set interface "port2"
+        set vlanid 30
+    next
+    edit "vlan20"
+        set alias "SERVERS"
+        set ip 10.0.20.1 255.255.255.0
+        set allowaccess ping
+        set interface "port2"
+        set vlanid 20
+    next
+end
+config router static
+    edit 1
+        set gateway 203.0.113.1
+        set device "port1"
+    next
+end
+config firewall address
+    edit "MGMT-SEG"
+        set subnet 10.0.0.0 255.255.255.0
+    next
+    edit "SERVER-SEG"
+        set subnet 10.0.20.0 255.255.255.0
+    next
+end
+config firewall policy
+    edit 1
+        set name "servers-to-internet"
+        set srcintf "vlan20"
+        set dstintf "port1"
+        set srcaddr "SERVER-SEG"
+        set dstaddr "all"
+        set action accept
+        set schedule "always"
+        set service "HTTP" "HTTPS" "DNS"
+        set logtraffic all
+        set nat enable
+    next
+    edit 2
+        set name "mgmt-to-servers"
+        set srcintf "vlan30"
+        set dstintf "vlan20"
+        set srcaddr "MGMT-SEG"
+        set dstaddr "SERVER-SEG"
+        set action accept
+        set schedule "always"
+        set service "SSH" "HTTPS"
+        set logtraffic all
+    next
+end
+config log syslogd setting
+    set status enable
+    set server "10.10.20.20"
+end
+config system ntp
+    set ntpsync enable
+    set type custom
+    config ntpserver
+        edit 1
+            set server "10.10.20.10"
+        next
+    end
+end
+fw-01 # get system lldp neighbors-summary
+Local Intf   Device ID    Port ID              Hold-time
+port1        edge-rt-01   ge-0/0/0             120
+port2        core-sw-01   GigabitEthernet1/0/24 120
+port3        core-sw-02   GigabitEthernet1/0/23 120

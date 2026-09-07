@@ -1,0 +1,22 @@
+set version 21.4R3-S4.9
+set system host-name edge-rt-01
+set system services ssh
+set system syslog host 10.10.20.20 any notice
+set system ntp server 10.10.20.10
+set interfaces ge-0/0/0 description "to fw-01 port1"
+set interfaces ge-0/0/0 unit 0 family inet address 203.0.113.1/30
+set interfaces ge-0/0/1 description "to carrier"
+set interfaces ge-0/0/1 unit 0 family inet address 198.51.100.2/30
+set interfaces lo0 unit 0 family inet address 10.255.0.1/32
+set routing-options static route 0.0.0.0/0 next-hop 198.51.100.1
+set routing-options static route 10.0.0.0/16 next-hop 203.0.113.2
+set firewall filter PROTECT-RE term ssh from source-address 10.0.0.0/24
+set firewall filter PROTECT-RE term ssh from protocol tcp
+set firewall filter PROTECT-RE term ssh from destination-port 22
+set firewall filter PROTECT-RE term ssh then accept
+set firewall filter PROTECT-RE term rest then discard
+set interfaces lo0 unit 0 family inet filter input PROTECT-RE
+
+edge-rt-01> show lldp neighbors
+Local Interface    Parent Interface    Chassis Id          Port info          System Name
+ge-0/0/0           -                   00:1b:c5:00:00:11   port1              fw-01
