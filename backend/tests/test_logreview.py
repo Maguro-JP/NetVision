@@ -243,3 +243,19 @@ def test_a_blocked_port_is_called_a_loop() -> None:
     item = _one(_findings(text), "輪")
     assert item.level == logreview.HIGH
     assert item.count == 1
+
+
+def test_one_mac_move_is_not_called_an_attack() -> None:
+    """端末を挿し替えても無線で歩いても出る行なので、1件で疑わない。"""
+    text = "Aug 22 06:00:00 acc-sw-03 %%10MAC/4/MAC_MOVE: MAC moved to GigabitEthernet0/3."
+    assert not _findings(text)
+
+
+def test_a_mac_moving_over_and_over_is_called_out() -> None:
+    """数が多ければ、輪かなりすましの入口として見せる。"""
+    text = "\n".join(
+        f"Aug 22 06:0{minute}:00 acc-sw-03 %%10MAC/4/MAC_MOVE: MAC moved to GigabitEthernet0/3."
+        for minute in range(0, 7)
+    )
+    item = _one(_findings(text), "居場所")
+    assert item.kind == logreview.TROUBLE

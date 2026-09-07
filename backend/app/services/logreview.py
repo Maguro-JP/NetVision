@@ -68,6 +68,10 @@ _AFTER_CHANGE = timedelta(minutes=10)
 #: これを超えて初めて「落ち着いていない」と言う
 _TOPOLOGY_MIN = 10
 
+#: 「移った」だけの行の件数。挿し替えや無線の移動でも出るので、
+#: これを超えて初めて落ち着いていないと見る
+_MAC_MOVE_MIN = 5
+
 #: 1件あたりに出す生ログの行数。多いと読む気が失せる
 _EVIDENCE = 3
 
@@ -708,18 +712,33 @@ def _denied_a_lot(events: list[LogEvent]) -> Finding | None:
 
 def _mac_moving(events: list[LogEvent]) -> Finding | None:
     # VRP は `MFLP`（MAC flapping）と書く。語が違うだけで同じ出来事
-    hits = _pick(events, "MACFLAP", "MAC_MOVE", "MACMOVE", "mac flapping", "MFLP", "MAC_MOVED")
-    if not hits:
+    flapping = _pick(events, "MACFLAP", "mac flapping", "MFLP")
+    if flapping:
+        return _finding(
+            HIGH,
+            ATTACK,
+            "同じ機器が、複数のポートに現れています",
+            f"行き来を示す行が {len(flapping)} 件あります。"
+            "線が輪になっているか、誰かが同じ番号（MAC）を名乗っている可能性があります。",
+            "そのポートの先を確認してください。輪であれば L2 の問題、"
+            "そうでなければ、なりすましを疑います。",
+            flapping,
+        )
+
+    # 「移った」だけの行は、端末を挿し替えても無線で歩いても出る。
+    # 数が多いときに限って、落ち着いていないこととして出す
+    moved = _pick(events, "MAC_MOVE", "MACMOVE", "MAC_MOVED")
+    if len(moved) < _MAC_MOVE_MIN:
         return None
     return _finding(
-        HIGH,
-        ATTACK,
-        "同じ機器が、複数のポートに現れています",
-        f"移動を示す行が {len(hits)} 件あります。"
-        "線が輪になっているか、誰かが同じ番号（MAC）を名乗っている可能性があります。",
-        "そのポートの先を確認してください。輪であれば L2 の問題、"
-        "そうでなければ、なりすましを疑います。",
-        hits,
+        MEDIUM,
+        TROUBLE,
+        "機器の居場所が何度も変わっています",
+        f"移った行が {len(moved)} 件あります。挿し替えや無線の移動でも出ますが、"
+        "同じ番号（MAC）が行き来しているなら、輪かなりすましの入口です。",
+        "どの番号がどのポートの間を移っているかを見てください。"
+        "同じ組み合わせを往復しているなら、その2ポートの先を確認します。",
+        moved,
     )
 
 

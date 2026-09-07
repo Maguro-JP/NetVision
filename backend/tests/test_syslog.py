@@ -241,7 +241,7 @@ def test_mac_moves_and_rogue_dhcp_are_found_on_every_vendor() -> None:
     cases = {
         "同じ機器が、複数のポートに現れています": [
             "Sep  7 08:00:00 hw-01 %%01L2IF/4/MFLP_VLAN: MAC move detected on 10GE1/0/1.",
-            "Sep  7 08:00:00 qx-01 %%10MAC/4/MAC_MOVE: MAC moved.",
+            "Sep  7 08:00:01 c1 %SW_MATM-4-MACFLAP_NOTIF: Host is flapping between ports",
         ],
         "許していない機器が、住所を配ろうとしています": [
             "Sep  7 08:01:00 qx-01 %%10DHCPSNP/4/DHCPSNP_UNTRUSTED: Untrusted port got a reply.",
