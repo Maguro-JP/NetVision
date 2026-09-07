@@ -666,7 +666,8 @@ def _denied_a_lot(events: list[LogEvent]) -> Finding | None:
 
 
 def _mac_moving(events: list[LogEvent]) -> Finding | None:
-    hits = _pick(events, "MACFLAP", "MAC_MOVE", "MACMOVE", "mac flapping")
+    # VRP は `MFLP`（MAC flapping）と書く。語が違うだけで同じ出来事
+    hits = _pick(events, "MACFLAP", "MAC_MOVE", "MACMOVE", "mac flapping", "MFLP", "MAC_MOVED")
     if not hits:
         return None
     return _finding(
@@ -685,7 +686,8 @@ def _rogue_dhcp(events: list[LogEvent]) -> Finding | None:
     hits = [
         e
         for e in events
-        if _has(e, "DHCP_SNOOPING", "DHCPSNOOP") and _has(e, "DENY", "drop", "untrusted", "rogue")
+        if _has(e, "DHCP_SNOOPING", "DHCPSNOOP", "DHCPSNP")
+        and _has(e, "DENY", "drop", "untrusted", "rogue")
     ]
     if not hits:
         return None

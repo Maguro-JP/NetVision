@@ -231,3 +231,24 @@ def test_a_port_security_violation_is_said_in_the_more_specific_way() -> None:
     attack = 'Sep  7 07:10:00 fw-01 level=alert type=ips msg="Attack detected"'
     titles = [item.title for item in syslog.review(None, attack).findings]
     assert [title for title in titles if "攻撃として記録" in title]
+
+
+def test_mac_moves_and_rogue_dhcp_are_found_on_every_vendor() -> None:
+    """どちらも、線がループしているか、誰かが機器を挿したかを疑うところ。
+
+    語が違うだけで見逃すと、その機器では何も出ない。
+    """
+    cases = {
+        "同じ機器が、複数のポートに現れています": [
+            "Sep  7 08:00:00 hw-01 %%01L2IF/4/MFLP_VLAN: MAC move detected on 10GE1/0/1.",
+            "Sep  7 08:00:00 qx-01 %%10MAC/4/MAC_MOVE: MAC moved.",
+        ],
+        "許していない機器が、住所を配ろうとしています": [
+            "Sep  7 08:01:00 qx-01 %%10DHCPSNP/4/DHCPSNP_UNTRUSTED: Untrusted port got a reply.",
+            "Sep  7 08:01:00 c1 %DHCP_SNOOPING-5-UNTRUSTED_PORT: received on untrusted port",
+        ],
+    }
+    for expected, lines in cases.items():
+        for line in lines:
+            titles = [item.title for item in syslog.review(None, line).findings]
+            assert expected in titles, line
