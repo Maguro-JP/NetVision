@@ -828,3 +828,35 @@ def test_each_vendor_replaces_its_own_single_valued_commands() -> None:
         vendor="aruba_cx",
     )
     assert "no vlan access 10" in removed.script
+
+
+def test_set_style_vendors_replace_a_leaf_but_not_a_list() -> None:
+    """set 形式では、値を1つしか持てない末端は打ち直しで置き換わる。
+
+    ただし複数持てるもの（アドレス・vlan members）まで同じ扱いにすると、
+    「足す」つもりの変更が「消して入れ替える」になる。そこは分ける。
+    """
+    junos = "set system host-name a\nset interfaces ge-0/0/0 description {}\n"
+    changed = build(junos.format("old"), junos.format("new"), vendor="juniper")
+    assert changed.verified
+    assert changed.script.strip() == "set interfaces ge-0/0/0 description new"
+
+    # アドレスは1つの口に何本でも付く。足すだけの変更で、消す行を出さない
+    one = "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/30\n"
+    two = one + "set interfaces ge-0/0/0 unit 0 family inet address 10.0.1.1/30\n"
+    added = build(one, two, vendor="juniper")
+    assert added.verified
+    assert "delete " not in added.script
+
+    # 付け替えるときは、消す行が要る
+    moved = build(one, one.replace("10.0.0.1/30", "10.0.0.5/30"), vendor="juniper")
+    assert moved.verified
+    assert "delete interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/30" in moved.script
+
+    panos = (
+        "set deviceconfig system hostname fw1\n"
+        "set network interface ethernet ethernet1/1 comment {}\n"
+    )
+    commented = build(panos.format("old"), panos.format("new"), vendor="palo_alto")
+    assert commented.verified
+    assert commented.script.strip() == "set network interface ethernet ethernet1/1 comment new"

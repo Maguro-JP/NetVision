@@ -219,8 +219,21 @@ class _JuniperDialect(Dialect):
         return f"delete {line}"
 
 
+#: set 形式で、値を1つしか持てない末端。ここは `set` を打ち直せば置き換わる。
+#: 複数持てるもの（アドレス・vlan members・next-hop）は入れない。入れると
+#: 「足す」つもりの変更が「消して入れ替える」になる
+_SET_LEAVES = [
+    re.compile(r"^set\s+.*\bdescription\b", re.I),
+    re.compile(r"^set\s+system\s+host-name\b", re.I),
+    re.compile(r"^set\s+.*\binterface-mode\b", re.I),
+    re.compile(r"^set\s+.*\bnative-vlan-id\b", re.I),
+    re.compile(r"^set\s+.*\bmtu\b", re.I),
+]
+
+
 _JUNIPER = _JuniperDialect(
     name="juniper",
+    single_valued=_SET_LEAVES,
     risks=[
         RiskRule(
             re.compile(r"^\s*delete\s+interfaces\b", re.I),
@@ -300,6 +313,11 @@ class _PanosDialect(_JuniperDialect):
 
 _PANOS = _PanosDialect(
     name="palo_alto",
+    single_valued=[
+        *_SET_LEAVES,
+        re.compile(r"^set\s+.*\bcomment\b", re.I),
+        re.compile(r"^set\s+deviceconfig\s+system\s+hostname\b", re.I),
+    ],
     risks=[
         RiskRule(
             re.compile(r"^\s*delete\s+network\s+interface\b", re.I),
