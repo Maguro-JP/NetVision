@@ -580,7 +580,14 @@ def test_the_vendor_is_read_from_the_config_when_it_is_not_given() -> None:
     comware_base += "interface GigabitEthernet1/0/1\n port link-type trunk\n"
     comware = build(comware_base.format("USERS"), comware_base.format("OFFICE"))
     assert comware.verified
-    assert "undo name USERS" in comware.script
+    # 値が1つしか持てない命令は、消さずに置き換える
+    assert "name OFFICE" in comware.script
+    assert "undo " not in comware.script
+
+    # 消す側は Comware の書き方（undo）になる。no を出すと消えない
+    dropped = build(comware_base.format("USERS"), "sysname qx-01\nvlan 10\n name USERS\n")
+    assert dropped.verified
+    assert "undo interface GigabitEthernet1/0/1" in dropped.script
 
     forti = build(
         'config system interface\n    edit "port1"\n        set ip 203.0.113.2 255.255.255.248\n'
@@ -676,3 +683,42 @@ def test_comware_style_vendors_use_undo() -> None:
     target = "sysname a\ninterface GigabitEthernet1/0/1\n"
     result = build(current, target, vendor="huawei")
     assert "undo description" in result.script
+
+
+def test_a_single_valued_command_is_replaced_in_place_on_every_dialect() -> None:
+    """値が1つしか持てない命令は、消してから入れる形にしない。
+
+    NEC / ファーウェイの規則では、単一値の並びが正規表現の書き損じで
+    1つも効いていなかった。そのため `undo ip address 旧` を出してから
+    新しいアドレスを入れる形になっていた。管理経路でそれをやると、
+    その2行のあいだ、その口にアドレスが無くなる。
+    """
+    cases = {
+        "nec_qx": (
+            "sysname qx1\n#\ninterface GigabitEthernet1/0/1\n port access vlan 10\n",
+            "sysname qx1\n#\ninterface GigabitEthernet1/0/1\n port access vlan 20\n",
+            "port access vlan 20",
+        ),
+        "huawei": (
+            "sysname hw1\n#\ninterface 10GE1/0/1\n description a\n",
+            "sysname hw1\n#\ninterface 10GE1/0/1\n description b\n",
+            "description b",
+        ),
+        "nec_ix": (
+            "device-name ix1\ninterface GigaEthernet0.0\n ip address 10.0.0.1/24\n",
+            "device-name ix1\ninterface GigaEthernet0.0\n ip address 10.0.0.2/24\n",
+            "ip address 10.0.0.2/24",
+        ),
+    }
+    for vendor, (current, target, expected) in cases.items():
+        result = build(current, target, vendor=vendor)
+        assert result.verified, vendor
+        assert expected in result.script, (vendor, result.script)
+        assert "undo " not in result.script, (vendor, result.script)
+
+
+def test_the_single_valued_patterns_are_written_as_word_boundaries() -> None:
+    # `\b` のつもりで制御文字が入っていると、どのパターンも当たらないまま黙る
+    for name in ("cisco_ios", "nec_qx", "nec_ix", "huawei", "fortinet"):
+        for pattern in for_vendor(name).single_valued:
+            assert "\x08" not in pattern.pattern, (name, pattern.pattern)

@@ -339,14 +339,14 @@ class _ComwareDialect(Dialect):
 _NEC_QX = _ComwareDialect(
     name="nec_qx",
     single_valued=[
-        re.compile(r"^description", re.I),
-        re.compile(r"^sysname", re.I),
-        re.compile(r"^name", re.I),
-        re.compile(r"^ip\s+address", re.I),
-        re.compile(r"^port\s+link-type", re.I),
-        re.compile(r"^port\s+access\s+vlan", re.I),
-        re.compile(r"^speed", re.I),
-        re.compile(r"^duplex", re.I),
+        re.compile(r"^description\b", re.I),
+        re.compile(r"^sysname\b", re.I),
+        re.compile(r"^name\b", re.I),
+        re.compile(r"^ip\s+address\b", re.I),
+        re.compile(r"^port\s+link-type\b", re.I),
+        re.compile(r"^port\s+access\s+vlan\b", re.I),
+        re.compile(r"^speed\b", re.I),
+        re.compile(r"^duplex\b", re.I),
     ],
     risks=[
         RiskRule(
@@ -380,10 +380,10 @@ _NEC_QX = _ComwareDialect(
 _NEC_IX = Dialect(
     name="nec_ix",
     single_valued=[
-        re.compile(r"^description", re.I),
-        re.compile(r"^device-name", re.I),
-        re.compile(r"^ip\s+address", re.I),
-        re.compile(r"^ip\s+mtu", re.I),
+        re.compile(r"^description\b", re.I),
+        re.compile(r"^device-name\b", re.I),
+        re.compile(r"^ip\s+address\b", re.I),
+        re.compile(r"^ip\s+mtu\b", re.I),
     ],
     risks=[
         RiskRule(
