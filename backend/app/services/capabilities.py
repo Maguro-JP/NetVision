@@ -350,6 +350,21 @@ CAPABILITIES: tuple[Capability, ...] = (
     ),
     Capability(
         area="運用",
+        name="Config 差分・投入コマンド",
+        read=FULL,
+        review=FULL,
+        generate=PARTIAL,
+        note="いまの Config と将来の Config から、投入コマンドと切り戻しを作ります。"
+        "出す前に、作った手順を別経路で当て直して将来の姿に一致するかを確かめ、"
+        "一致しなければコマンドを出しません。値が1つしか持てない命令は、"
+        "消してから入れる形にせず打ち直します（その間だけ設定が外れるのを避けるため）。"
+        "書き方を持っているのは Cisco（IOS / NX-OS / ASA）・Arista・Aruba CX・"
+        "アライドテレシス・アラクサラ・FastIron・NEC（IX / QX）・ファーウェイ・"
+        "ヤマハ・Junos・PAN-OS・FortiOS です。AireOS は対話的なコマンドで"
+        "Config の差分という形にならないので、何も出さずに理由を返します。",
+    ),
+    Capability(
+        area="運用",
         name="ログの解析",
         read=PARTIAL,
         review=PARTIAL,
