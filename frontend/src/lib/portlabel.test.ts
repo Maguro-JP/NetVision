@@ -42,3 +42,20 @@ describe("formatPort", () => {
     expect(formatPort("", "short")).toBe("");
   });
 });
+
+describe("後から足したベンダーのポート名", () => {
+  it("ファーウェイは速度が頭に来る", () => {
+    expect(splitPort("10GE1/0/1")).toEqual({
+      short: "10GE",
+      number: "1/0/1",
+      media: "ten",
+    });
+    expect(splitPort("100GE1/0/1").media).toBe("hundred");
+  });
+
+  it("仮想の口と束ねを、その色で出す", () => {
+    expect(splitPort("Vlanif10").media).toBe("virtual");
+    expect(splitPort("Ve10").media).toBe("virtual");
+    expect(splitPort("Eth-Trunk1").media).toBe("lag");
+  });
+});

@@ -66,3 +66,16 @@ def test_gigaethernet_is_not_confused_with_gigabitethernet():
     """
     assert format("GigaEthernet0.1", "short") == "GE0.1"
     assert format("GigabitEthernet0/1", "short") == "Gi0/1"
+
+
+def test_the_added_vendors_port_names_are_split() -> None:
+    """後から足したベンダーの口の名前も、略記と番号に分けること。
+
+    分けられないと、図に長い名前がそのまま載って重なる。速度が色に出ないので、
+    どの線が太いのかも読めない。画面側（portlabel.ts）と同じ規則にしてある。
+    """
+    assert split("10GE1/0/1") == ("10GE", "1/0/1", Media.TEN)
+    assert split("100GE1/0/1") == ("100GE", "1/0/1", Media.HUNDRED)
+    assert split("Vlanif10") == ("Vlanif", "10", Media.VIRTUAL)
+    assert split("Ve10") == ("Ve", "10", Media.VIRTUAL)
+    assert split("Eth-Trunk1") == ("Eth-Trunk", "1", Media.LAG)

@@ -60,6 +60,16 @@ MEDIA_COLOR: dict[Media, str] = {
 }
 
 # 接頭辞 → (略記, 種別)。長いものから順に見る
+#: ファーウェイの `10GE1/0/1` の形。速度が頭に来る
+_HUAWEI_SPLIT = re.compile(r"^(10|25|40|100|400)GE([\d/.:].*)?$", re.IGNORECASE)
+_HUAWEI_MEDIA: dict[str, Media] = {
+    "10": Media.TEN,
+    "25": Media.FAST_40,
+    "40": Media.FAST_40,
+    "100": Media.HUNDRED,
+    "400": Media.HUNDRED,
+}
+
 _PREFIXES: tuple[tuple[str, str, Media], ...] = (
     ("tengigabitethernet", "Te", Media.TEN),
     ("ten-gigabitethernet", "Te", Media.TEN),
@@ -78,6 +88,10 @@ _PREFIXES: tuple[tuple[str, str, Media], ...] = (
     ("loopback", "Lo", Media.VIRTUAL),
     ("tunnel", "Tu", Media.VIRTUAL),
     ("vlan-interface", "Vlan", Media.VIRTUAL),
+    # ファーウェイの SVI と束ね、FastIron の SVI
+    ("vlanif", "Vlanif", Media.VIRTUAL),
+    ("eth-trunk", "Eth-Trunk", Media.LAG),
+    ("ve", "Ve", Media.VIRTUAL),
     ("vlan", "Vlan", Media.VIRTUAL),
     ("xgigabitethernet", "XGE", Media.TEN),
     ("ethernet", "Eth", Media.OTHER),
@@ -108,6 +122,13 @@ def split(name: str) -> tuple[str, str, Media]:
     text = (name or "").strip()
     if not text:
         return "", "", Media.OTHER
+
+    # ファーウェイは速度を数字で頭に付ける（10GE1/0/1 / 100GE1/0/1）。
+    # 数字で始まるので、他の機種と同じ切り方では分けられない
+    huawei = _HUAWEI_SPLIT.match(text)
+    if huawei:
+        speed = huawei.group(1)
+        return f"{speed}GE", huawei.group(2) or "", _HUAWEI_MEDIA.get(speed, Media.OTHER)
 
     juniper = _JUNIPER_SPLIT.match(text)
     if juniper and juniper.group(1).lower() in _JUNIPER:

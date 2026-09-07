@@ -43,6 +43,16 @@ export const MEDIA_COLOR: Record<Media, string> = {
 
 export type PortStyle = "full" | "short" | "number";
 
+/** ファーウェイの `10GE1/0/1` の形。速度が頭に来るので、他と切り方が違う */
+const HUAWEI_SPLIT = /^(10|25|40|100|400)GE([\d/.:].*)?$/i;
+const HUAWEI_MEDIA: Record<string, Media> = {
+  "10": "ten",
+  "25": "forty",
+  "40": "forty",
+  "100": "hundred",
+  "400": "hundred",
+};
+
 const PREFIXES: [string, string, Media][] = [
   ["tengigabitethernet", "Te", "ten"],
   ["ten-gigabitethernet", "Te", "ten"],
@@ -61,6 +71,10 @@ const PREFIXES: [string, string, Media][] = [
   ["loopback", "Lo", "virtual"],
   ["tunnel", "Tu", "virtual"],
   ["vlan-interface", "Vlan", "virtual"],
+  // ファーウェイの SVI と束ね、FastIron の SVI
+  ["vlanif", "Vlanif", "virtual"],
+  ["eth-trunk", "Eth-Trunk", "lag"],
+  ["ve", "Ve", "virtual"],
   ["vlan", "Vlan", "virtual"],
   ["xgigabitethernet", "XGE", "ten"],
   ["ethernet", "Eth", "other"],
@@ -92,6 +106,16 @@ export interface PortParts {
 export function splitPort(name: string): PortParts {
   const text = (name ?? "").trim();
   if (!text) return { short: "", number: "", media: "other" };
+
+  const huawei = HUAWEI_SPLIT.exec(text);
+  if (huawei) {
+    const speed = huawei[1];
+    return {
+      short: `${speed}GE`,
+      number: huawei[2] ?? "",
+      media: HUAWEI_MEDIA[speed] ?? "other",
+    };
+  }
 
   const juniper = JUNIPER_SPLIT.exec(text);
   if (juniper && JUNIPER[juniper[1].toLowerCase()]) {
