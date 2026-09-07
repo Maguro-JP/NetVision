@@ -215,3 +215,19 @@ def test_a_power_or_heat_alarm_is_found_on_every_vendor() -> None:
     for line in cases:
         titles = [item.title for item in syslog.review(None, line).findings]
         assert [title for title in titles if "電源か冷却" in title], line
+
+
+def test_a_port_security_violation_is_said_in_the_more_specific_way() -> None:
+    """同じ行を2つの見方で出すと、どちらを見ればよいのか分からなくなる。
+
+    「許していない端末が挿された」のほうが具体的で、次にやることも書ける。
+    機器が `Intrusion` と書いていても、そちらに寄せる。
+    """
+    comware = "Sep  7 07:02:00 qx-01 %%10PORTSEC/4/PORTSEC_VIOLATION: Intrusion on GE1/0/5."
+    titles = [item.title for item in syslog.review(None, comware).findings]
+    assert titles == ["許していない端末が挿されています"]
+
+    # 本当に攻撃として記録された行は、これまでどおり上げる
+    attack = 'Sep  7 07:10:00 fw-01 level=alert type=ips msg="Attack detected"'
+    titles = [item.title for item in syslog.review(None, attack).findings]
+    assert [title for title in titles if "攻撃として記録" in title]

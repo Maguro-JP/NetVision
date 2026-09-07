@@ -701,8 +701,19 @@ def _rogue_dhcp(events: list[LogEvent]) -> Finding | None:
     )
 
 
+#: 「許していない端末が挿された」の言い方。Comware / VRP は PORTSEC_VIOLATION
+_PORT_SECURITY_WORDS = (
+    "PSECURE_VIOLATION",
+    "PORT_SECURITY",
+    "SECURITY_VIOLATION",
+    "PORTSEC_VIOLATION",
+    "PORTSEC/",
+    "MACSEC_VIOLATION",
+)
+
+
 def _port_security(events: list[LogEvent]) -> Finding | None:
-    hits = _pick(events, "PSECURE_VIOLATION", "PORT_SECURITY", "SECURITY_VIOLATION")
+    hits = _pick(events, *_PORT_SECURITY_WORDS)
     if not hits:
         return None
     return _finding(
@@ -723,6 +734,9 @@ def _attack_reported_by_device(events: list[LogEvent]) -> Finding | None:
         e
         for e in events
         if _has(e, "attack", "anomaly", "ips", "intrusion", "flood", "spoof", "733100")
+        # ポートに挿された、はもっと具体的な言い方ができる。同じ行を2つの
+        # 見方で出すと、どちらを見ればよいのか分からなくなる
+        and not _has(e, *_PORT_SECURITY_WORDS)
     ]
     if not hits:
         return None
