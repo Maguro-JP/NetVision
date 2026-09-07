@@ -64,6 +64,10 @@ _SCAN_PORTS = 5
 #: 長く取ると無関係なものまで拾い、短いと反映待ちの分を落とす
 _AFTER_CHANGE = timedelta(minutes=10)
 
+#: 木の作り直しの回数。ポートが1本上がるだけでも1回は出るので、
+#: これを超えて初めて「落ち着いていない」と言う
+_TOPOLOGY_MIN = 10
+
 #: 1件あたりに出す生ログの行数。多いと読む気が失せる
 _EVIDENCE = 3
 
@@ -351,16 +355,30 @@ def _spanning_tree(events: list[LogEvent]) -> Finding | None:
     if not hits:
         return None
     blocked = _pick(hits, "BLOCK", "LOOP", "INCONSISTENT")
-    level = HIGH if blocked else MEDIUM
+    if not blocked:
+        # 木の作り直しは、ポートが1本上がるだけでも出る。輪の証拠ではないので、
+        # 輪の話にはしない。落ち着いていないと言えるのは、数が多いときだけ
+        if len(hits) < _TOPOLOGY_MIN:
+            return None
+        return _finding(
+            LOW,
+            TROUBLE,
+            "L2 の木が作り直され続けています",
+            f"作り直しの行が {len(hits)} 件あります。作り直している間、"
+            "そのVLAN の通信は短く途切れます。輪になっているとは限りません。",
+            "毎回どのポートがきっかけになっているかを見てください。"
+            "端末をつなぐポートなら、portfast（edge）を入れると出なくなります。",
+            hits,
+        )
     return _finding(
-        level,
+        HIGH,
         TROUBLE,
         "L2 が輪になりかけています",
         f"STP の行が {len(hits)} 件（うち塞いだ・食い違いが {len(blocked)} 件）あります。"
         "輪になると、同じ荷物が回り続けて、つながっている機器がまとめて重くなります。",
         "塞がれたポートの先に何が挿さっているかを確認してください。"
         "現場でハブや余った線が挿されていることが多いところです。",
-        hits,
+        blocked,
     )
 
 

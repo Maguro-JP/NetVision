@@ -213,3 +213,33 @@ def test_the_api_returns_the_findings(client):
     assert first["title"] and first["why"] and first["what_now"]
     assert first["level"] in ("high", "medium", "low")
     assert first["kind"] in ("障害", "設定", "攻撃")
+
+
+TOPOLOGY_CHANGES = "\n".join(
+    f"Aug 22 04:0{minute}:00 acc-sw-02 %SPANTREE-5-TOPOTRAP: Topology Change Trap for vlan 10"
+    for minute in range(0, 9)
+)
+
+
+def test_a_few_topology_changes_are_not_called_a_loop() -> None:
+    """木の作り直しは、端末が1台つながるだけでも出る。輪の証拠ではない。"""
+    assert "輪" not in _titles(_findings(TOPOLOGY_CHANGES))
+
+
+def test_many_topology_changes_are_called_out_without_calling_it_a_loop() -> None:
+    """数が多ければ落ち着いていない。それでも輪だとは言わない。"""
+    text = TOPOLOGY_CHANGES + "\n" + TOPOLOGY_CHANGES.replace("04:0", "05:0")
+    item = _one(_findings(text), "作り直され")
+    assert item.level == logreview.LOW
+    assert "輪" not in _titles(_findings(text))
+
+
+def test_a_blocked_port_is_called_a_loop() -> None:
+    """塞いだ・食い違いの行があって初めて、輪の話をする。"""
+    text = (
+        TOPOLOGY_CHANGES + "\nAug 22 04:10:00 acc-sw-02 %SPANTREE-2-BLOCK_BPDUGUARD: "
+        "Received BPDU on port GigabitEthernet0/7 with BPDU Guard enabled. Disabling port."
+    )
+    item = _one(_findings(text), "輪")
+    assert item.level == logreview.HIGH
+    assert item.count == 1
