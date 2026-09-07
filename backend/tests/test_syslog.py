@@ -252,3 +252,22 @@ def test_mac_moves_and_rogue_dhcp_are_found_on_every_vendor() -> None:
         for line in lines:
             titles = [item.title for item in syslog.review(None, line).findings]
             assert expected in titles, line
+
+
+def test_a_change_and_the_trouble_after_it_are_linked_on_every_vendor() -> None:
+    """設定を変えた、の言い方も機種で違う。
+
+    取りこぼすと、直後に出た重い事象と結び付かない。原因の当たりとしては
+    最初に見るところなので、機種によって出ないのは困る。
+    """
+    vrp = [
+        "Sep  7 08:00:00 hw-01 %%01CFM/4/SAVE: The configuration was saved by admin.",
+        "Sep  7 08:01:00 hw-01 %%01IFNET/3/LINK_STATE: Interface 10GE1/0/1 entered DOWN.",
+    ]
+    titles = [item.title for item in syslog.review(None, "\n".join(vrp)).findings]
+    assert [title for title in titles if "設定を変えた直後" in title]
+
+    # 変更が無ければ、結び付けない
+    alone = ["Sep  7 08:01:00 hw-01 %%01IFNET/3/LINK_STATE: Interface 10GE1/0/1 entered DOWN."]
+    titles = [item.title for item in syslog.review(None, "\n".join(alone)).findings]
+    assert not [title for title in titles if "設定を変えた直後" in title]

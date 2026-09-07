@@ -529,7 +529,20 @@ def _clock_not_set(events: list[LogEvent]) -> Finding | None:
 
 def _trouble_after_change(events: list[LogEvent]) -> Finding | None:
     """設定変更の直後に重い事象が出ている。原因の当たりとしては最初に見る所。"""
-    changes = _pick(events, "CONFIG_I", "CONFIG_CHANGE", "SHELL_CMD", "configured from")
+    # 設定を変えた、の言い方も機種で違う。VRP は保存したことを CFM/ で書き、
+    # Junos は commit で書く。ここを取りこぼすと、直後の事象と結び付かない
+    changes = _pick(
+        events,
+        "CONFIG_I",
+        "CONFIG_CHANGE",
+        "SHELL_CMD",
+        "configured from",
+        "CFM/",
+        "SAVE_CFG",
+        "UPDATE_CFG",
+        "UI_COMMIT",
+        "cfgchange",
+    )
     changes = [e for e in changes if e.at is not None]
     if not changes:
         return None
