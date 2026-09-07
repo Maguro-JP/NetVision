@@ -73,6 +73,14 @@ vlan trunk allowed 10,20
 interface vlan 20
     ip address 10.0.20.2/24
 """,
+    Vendor.EXOS: """configure snmp sysName "sw-exos-01"
+create vlan "USERS" tag 10
+configure vlan USERS add ports 1-20 untagged
+""",
+    Vendor.DELL_OS10: """hostname sw-dell-01
+interface ethernet 1/1/1
+ switchport access vlan 10
+""",
     Vendor.CISCO_XR: """!! IOS XR Configuration 7.5.2
 hostname rtr-xr-01
 interface GigabitEthernet0/0/0/0

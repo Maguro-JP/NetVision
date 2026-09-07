@@ -177,6 +177,8 @@ export type ConfigVendor =
   | "aruba_cx"
   | "aruba_os"
   | "cisco_xr"
+  | "exos"
+  | "dell_os10"
   | "allied"
   | "alaxala"
   | "huawei"

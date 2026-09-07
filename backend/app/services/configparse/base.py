@@ -28,6 +28,8 @@ class Vendor(enum.StrEnum):
     HUAWEI = "huawei"
     CISCO_WLC = "cisco_wlc"
     FASTIRON = "fastiron"
+    EXOS = "exos"
+    DELL_OS10 = "dell_os10"
     UNKNOWN = "unknown"
 
 

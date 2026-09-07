@@ -47,9 +47,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=FULL,
         generate=NONE,
         note="型番が読めない Config は機器を作りません。EoL も脆弱性も型番で引くためです。"
-        "読めるのは Cisco（IOS / IOS-XE / NX-OS / ASA / AireOS）・Juniper・Fortinet・"
-        "NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・アライドテレシス・"
-        "アラクサラ・ファーウェイ・FastIron です。",
+        "読めるのは Cisco（IOS / IOS-XE / NX-OS / ASA / IOS-XR / AireOS）・Juniper・"
+        "Fortinet・NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・"
+        "Aruba AOS-S（ProCurve）・アライドテレシス・アラクサラ・ファーウェイ・"
+        "FastIron・Extreme EXOS・Dell OS10 の 20 機種です。",
     ),
     Capability(
         area="土台",
@@ -360,10 +361,12 @@ CAPABILITIES: tuple[Capability, ...] = (
         "出す前に、作った手順を別経路で当て直して将来の姿に一致するかを確かめ、"
         "一致しなければコマンドを出しません。値が1つしか持てない命令は、"
         "消してから入れる形にせず打ち直します（その間だけ設定が外れるのを避けるため）。"
-        "書き方を持っているのは Cisco（IOS / NX-OS / ASA）・Arista・Aruba CX・"
-        "アライドテレシス・アラクサラ・FastIron・NEC（IX / QX）・ファーウェイ・"
-        "ヤマハ・Junos・PAN-OS・FortiOS です。AireOS は対話的なコマンドで"
-        "Config の差分という形にならないので、何も出さずに理由を返します。",
+        "書き方を持っているのは Cisco（IOS / NX-OS / ASA / IOS-XR）・Arista・"
+        "Aruba CX・Aruba AOS-S・Dell OS10・アライドテレシス・アラクサラ・FastIron・"
+        "NEC（IX / QX）・ファーウェイ・ヤマハ・Junos・PAN-OS・FortiOS です。"
+        "AireOS（Cisco WLC）は対話的なコマンドで、Extreme EXOS は囲みが無く"
+        "消し方の語も変わるため、どちらも Config の差分という形になりません。"
+        "その2つは何も出さずに理由を返します。",
     ),
     Capability(
         area="運用",

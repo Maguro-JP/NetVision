@@ -16,6 +16,8 @@ from app.services.configparse import (
     asa,
     banners,
     cisco,
+    dellos10,
+    exos,
     fastiron,
     features,
     fortinet,
@@ -61,6 +63,8 @@ _DETECTORS = (
     # 混ざっている show 出力のほうを拾ってしまう
     aireos.detect,
     fortinet.detect,
+    # EXOS は configure で始まる1行ずつの書き方。他とぶつからない
+    exos.detect,
     juniper.detect,
     yamaha.detect,
     panos.detect,
@@ -77,6 +81,9 @@ _DETECTORS = (
     alaxala.detect,
     # FastIron は `by port` / `port-name` が目印。IOS より先に見る
     fastiron.detect,
+    # OS10 は IOS 風だが口の書き方が違う。FastIron と同じ書き出しの行が
+    # あるので、そちらを見たあとに見る
+    dellos10.detect,
     # AOS-S は VLAN の下に口を並べる。AOS-CX とは別物なので、先に見分ける
     arubaos.detect,
     aruba.detect,
@@ -106,6 +113,8 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.HUAWEI: "ファーウェイ VRP",
     Vendor.CISCO_WLC: "Cisco AireOS 無線コントローラ",
     Vendor.FASTIRON: "Ruckus / Brocade FastIron（ICX）",
+    Vendor.EXOS: "Extreme EXOS",
+    Vendor.DELL_OS10: "Dell OS10",
     Vendor.UNKNOWN: "判別できません",
 }
 
@@ -128,6 +137,8 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.HUAWEI: "ファーウェイ",
     Vendor.CISCO_WLC: "Cisco",
     Vendor.FASTIRON: "Ruckus",
+    Vendor.EXOS: "Extreme Networks",
+    Vendor.DELL_OS10: "Dell",
 }
 
 
@@ -180,6 +191,10 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = aireos.parse(text)
     elif vendor is Vendor.FASTIRON:
         parsed = fastiron.parse(text)
+    elif vendor is Vendor.EXOS:
+        parsed = exos.parse(text)
+    elif vendor is Vendor.DELL_OS10:
+        parsed = dellos10.parse(text)
     else:
         # 判別できなくても、Cisco 形式の show 出力が混ざっていることが多いので試す
         parsed = cisco.parse(text, Vendor.UNKNOWN)

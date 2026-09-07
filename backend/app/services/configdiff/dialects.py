@@ -576,6 +576,8 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.ARISTA: _CISCO,
     Vendor.ARUBA_CX: _AOS_CX,
     Vendor.ARUBA_OS: _AOS_S,
+    # OS10 は消し方も囲みの畳み方も IOS と同じ
+    Vendor.DELL_OS10: _CISCO,
     Vendor.ALLIED: _ALLIED,
     Vendor.ALAXALA: _CISCO,
     Vendor.FASTIRON: _FASTIRON,
@@ -592,6 +594,9 @@ UNSUPPORTED: frozenset[Vendor] = frozenset(
     {
         # config ... の対話コマンド。config ファイルの差分という形にならない
         Vendor.CISCO_WLC,
+        # EXOS は囲みが無く、1行ずつの命令が並ぶ。消すのも create / delete と
+        # configure delete で語が変わる。IOS の規則では投入できる形にならない
+        Vendor.EXOS,
     }
 )
 
