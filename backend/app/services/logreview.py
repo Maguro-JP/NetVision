@@ -505,6 +505,8 @@ def _address_pool_empty(events: list[LogEvent]) -> Finding | None:
 
 
 def _tunnel_not_coming_up(events: list[LogEvent]) -> Finding | None:
+    # 張り直し（delete / retransmit）は、期限が来て鍵を作り直すときにも出る。
+    # 張れていないと言えるのは、失敗そのものが書かれているときだけ
     hits = [
         e
         for e in events
@@ -516,11 +518,8 @@ def _tunnel_not_coming_up(events: list[LogEvent]) -> Finding | None:
             "reject",
             "no proposal",
             "mismatch",
-            "spi",
-            "delete",
             "no sa",
             "no_sa",
-            "retransmit",
         )
     ]
     if not hits:

@@ -259,3 +259,18 @@ def test_a_mac_moving_over_and_over_is_called_out() -> None:
     )
     item = _one(_findings(text), "居場所")
     assert item.kind == logreview.TROUBLE
+
+
+def test_rekeying_a_tunnel_is_not_called_a_failure() -> None:
+    """期限が来て鍵を作り直すときも delete は出る。それを失敗と呼ばない。"""
+    text = "Aug 22 07:00:00 fw-01 %CRYPTO-5-IPSEC_SA: deleting SA to 203.0.113.10 (lifetime)"
+    assert "IPsec" not in _titles(_findings(text))
+
+
+def test_a_tunnel_that_cannot_agree_is_called_out() -> None:
+    text = (
+        "Aug 22 07:01:00 fw-01 %CRYPTO-4-IKMP_NO_SA: IKE message from 203.0.113.10 "
+        "failed its sanity check: no proposal chosen"
+    )
+    item = _one(_findings(text), "IPsec")
+    assert item.kind == logreview.CONFIG
