@@ -502,6 +502,36 @@ _CISCO_ASA = dataclasses.replace(
     single_valued=[*_CISCO.single_valued, *_ASA_EXTRA],
 )
 
+#: 消し方は IOS と同じだが、口ごとに1つしか持てない命令の名前が違う機種。
+#: そこを持たないと、値を変えるだけの場面で「消してから入れる」形が出る
+_AOS_CX = dataclasses.replace(
+    _CISCO,
+    name="aruba_cx",
+    single_valued=[
+        *_CISCO.single_valued,
+        re.compile(r"^vlan\s+access\b", re.I),
+        re.compile(r"^vlan\s+trunk\s+native\b", re.I),
+        re.compile(r"^lag\b", re.I),
+    ],
+)
+_ALLIED = dataclasses.replace(
+    _CISCO,
+    name="allied",
+    single_valued=[
+        *_CISCO.single_valued,
+        re.compile(r"^static-channel-group\b", re.I),
+    ],
+)
+_FASTIRON = dataclasses.replace(
+    _CISCO,
+    name="fastiron",
+    single_valued=[
+        *_CISCO.single_valued,
+        # FastIron は説明を port-name と書く
+        re.compile(r"^port-name\b", re.I),
+    ],
+)
+
 
 _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.NEC_IX: _NEC_IX,
@@ -514,10 +544,10 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     # 消し方（no）とブロックの畳み方が IOS と同じ機種。書き方の細部は違うが、
     # 差分の作り方として同じ規則で扱える
     Vendor.ARISTA: _CISCO,
-    Vendor.ARUBA_CX: _CISCO,
-    Vendor.ALLIED: _CISCO,
+    Vendor.ARUBA_CX: _AOS_CX,
+    Vendor.ALLIED: _ALLIED,
     Vendor.ALAXALA: _CISCO,
-    Vendor.FASTIRON: _CISCO,
+    Vendor.FASTIRON: _FASTIRON,
     Vendor.YAMAHA: _YAMAHA,
     Vendor.JUNIPER: _JUNIPER,
     Vendor.PALO_ALTO: _PANOS,

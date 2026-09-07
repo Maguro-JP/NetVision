@@ -800,3 +800,31 @@ def test_asa_replaces_the_interface_name_and_level_in_place() -> None:
     levelled = build(base, raised, vendor="cisco_asa")
     assert levelled.verified
     assert "no security-level" not in levelled.script
+
+
+def test_each_vendor_replaces_its_own_single_valued_commands() -> None:
+    """口ごとに1つしか持てない命令は、機種ごとに名前が違う。
+
+    そこを持たないと、値を変えるだけの場面で「消してから入れる」形が出る。
+    アクセス VLAN を一度外すと、その口は既定の VLAN に落ちる。
+    """
+    cases = [
+        ("aruba_cx", "hostname a\ninterface 1/1/1\n vlan access {}\n", "10", "20"),
+        ("aruba_cx", "hostname a\ninterface 1/1/1\n vlan trunk native {}\n", "1", "999"),
+        ("aruba_cx", "hostname a\ninterface 1/1/1\n lag {}\n", "1", "2"),
+        ("allied", "hostname a\ninterface port1.0.1\n static-channel-group {}\n", "1", "2"),
+        ("fastiron", "hostname a\ninterface ethernet 1/1/1\n port-name {}\n", "old", "new"),
+    ]
+    for vendor, shape, before, after in cases:
+        result = build(shape.format(before), shape.format(after), vendor=vendor)
+        assert result.verified, (vendor, shape)
+        assert "no " not in result.script, (vendor, result.script)
+        assert after in result.script, (vendor, result.script)
+
+    # 本当に消すときは、これまでどおり打ち消しを出す
+    removed = build(
+        "hostname a\ninterface 1/1/1\n vlan access 10\n",
+        "hostname a\ninterface 1/1/1\n",
+        vendor="aruba_cx",
+    )
+    assert "no vlan access 10" in removed.script
