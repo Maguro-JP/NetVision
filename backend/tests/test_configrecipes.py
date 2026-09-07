@@ -133,3 +133,58 @@ def test_the_screen_gets_the_config(client) -> None:
     )
     assert response.status_code == 200
     assert "undo telnet server enable" in response.json()["body"]
+
+
+#: 差分にかけるときの、機種ごとの土台と口の名前
+_BASE = {
+    Vendor.CISCO_IOS: (
+        "hostname sw-01\n!\nvlan 10\n name USERS\n!\n"
+        "interface GigabitEthernet0/5\n switchport mode access\n!\n",
+        "GigabitEthernet0/5",
+    ),
+    Vendor.NEC_QX: (
+        "sysname sw-01\n#\nvlan 10\n name USERS\n#\ninterface GigabitEthernet1/0/5\n#\n",
+        "GigabitEthernet1/0/5",
+    ),
+    Vendor.HUAWEI: (
+        "sysname sw-01\n#\nvlan 10\n description USERS\n#\ninterface 10GE1/0/5\n#\n",
+        "10GE1/0/5",
+    ),
+    Vendor.ARUBA_CX: (
+        "hostname sw-01\n!\nvlan 10\n    name USERS\n!\ninterface 1/1/5\n    no shutdown\n!\n",
+        "1/1/5",
+    ),
+    Vendor.JUNIPER: (
+        "set system host-name sw-01\nset vlans USERS vlan-id 10\n",
+        "ge-0/0/5",
+    ),
+}
+
+
+@pytest.mark.parametrize("vendor", list(_BASE))
+@pytest.mark.parametrize("recipe", ["access_port", "svi", "static_route", "logging"])
+def test_what_is_made_here_can_be_turned_into_commands(vendor: Vendor, recipe: str) -> None:
+    """作った Config を、そのまま差分にかけて投入コマンドが出せること。
+
+    差分は、出したコマンドを当て直して目標に一致するかを自分で確かめる。
+    ここが通らないなら、作った側と差分側で書き方が食い違っている。
+    """
+    from app.services.configdiff import build
+
+    current, port = _BASE[vendor]
+    body = _body(
+        recipe,
+        vendor,
+        interface=port,
+        vlan_id="10",
+        ip="10.0.0.21",
+        prefixlen="24",
+        destination="0.0.0.0/0",
+        next_hop="10.0.0.1",
+        syslog_host="10.10.20.20",
+        ntp_host="10.10.20.10",
+    )
+    added = [line for line in body.splitlines() if not line.startswith(("!", "#"))]
+    diff = build(current, current + "\n".join(added) + "\n", vendor=vendor)
+    assert diff.verified, diff.script
+    assert diff.script.strip()
