@@ -227,3 +227,36 @@ def test_a_clean_ix_config_gets_no_findings():
 def test_ix_without_a_gateway_is_reported():
     text = IX.replace("  default-gateway 192.168.10.1\n", "")
     assert [t for t in titles(text) if "既定ゲートウェイを配っていません" in t]
+
+
+def test_vrp_qos_is_read_with_the_same_reader() -> None:
+    """VRP は見出しと当て方だけ Comware と違う。
+
+    `qos policy` に対して `traffic policy`、`qos apply policy` に対して
+    `traffic-policy`。中身（classifier / behavior）は同じ書き方なので、
+    そこだけ両方を見れば同じ器で読める。読めないと、当ててあるのに
+    「どこにも当たっていない」と言うことになる。
+    """
+    text = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "traffic classifier voice operator or",
+            " if-match dscp ef",
+            "#",
+            "traffic behavior voice",
+            " queue ef bandwidth 30",
+            "#",
+            "traffic policy qos-out",
+            " classifier voice behavior voice",
+            "#",
+            "interface 10GE1/0/1",
+            " traffic-policy qos-out outbound",
+        ]
+    )
+    qos = configparse.parse(text).qos
+    assert qos is not None
+    assert [item.name for item in qos.policies] == ["qos-out"]
+    assert [item.name for item in qos.classes] == ["voice"]
+    assert qos.applied == [("10GE1/0/1", "output", "qos-out")]

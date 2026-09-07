@@ -713,8 +713,13 @@ _QX_NAT_SERVER = re.compile(
 _QX_DHCP_POOL = re.compile(r"^(?:dhcp server ip-pool|ip pool)\s+(\S+)", re.IGNORECASE)
 _QX_CLASSIFIER = re.compile(r"^traffic classifier\s+(\S+)", re.IGNORECASE)
 _QX_BEHAVIOR = re.compile(r"^traffic behavior\s+(\S+)", re.IGNORECASE)
-_QX_POLICY = re.compile(r"^qos policy\s+(\S+)", re.IGNORECASE)
-_QX_APPLY = re.compile(r"^\s*qos apply policy\s+(\S+)\s+(inbound|outbound)", re.IGNORECASE)
+# Comware は `qos policy` と `qos apply policy`、VRP は `traffic policy` と
+# `traffic-policy`。中身（classifier / behavior）は同じ書き方なので、
+# 見出しと当て方だけ両方を見る
+_QX_POLICY = re.compile(r"^(?:qos policy|traffic policy)\s+(\S+)", re.IGNORECASE)
+_QX_APPLY = re.compile(
+    r"^\s*(?:qos apply policy|traffic-policy)\s+(\S+)\s+(inbound|outbound)", re.IGNORECASE
+)
 
 
 def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
