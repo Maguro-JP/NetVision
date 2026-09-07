@@ -13,6 +13,7 @@ from app.services.configparse import (
     arista,
     aruba,
     asa,
+    banners,
     cisco,
     fastiron,
     features,
@@ -127,6 +128,9 @@ def detect_vendor(text: str) -> Vendor:
 
 
 def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
+    # ログイン時に見せる文言の中は、機器にとってはただの文字列。設定として
+    # 読むと、無い口や無い合言葉を有ると言うことになる
+    text = banners.strip(text)
     vendor = vendor or detect_vendor(text)
 
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):

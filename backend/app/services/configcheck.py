@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 from app.models import Device
 from app.services import configparse, l3review, policyreview
 from app.services import conventions as conventions_module
-from app.services.configparse import ParsedConfig, Vendor
+from app.services.configparse import ParsedConfig, Vendor, banners
 from app.services.l3review import HIGH, LOW, MEDIUM, Finding
 
 
@@ -164,6 +164,9 @@ _HYGIENE = (
 def check(db: Session, text: str, *, filename: str = "config.txt") -> CheckResult:
     """その場で見る。台帳には何も書かない。"""
     parsed = configparse.parse(text)
+    # 行を直に見る検算も、文言（banner）の中は設定として見ない。
+    # 注意書きに設定例を書いてある機器は多い
+    text = banners.strip(text)
     result = CheckResult(
         filename=filename,
         vendor=str(parsed.vendor),
