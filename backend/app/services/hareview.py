@@ -34,6 +34,11 @@ class HaReport:
     notes: list[str] = field(default_factory=list)
 
 
+#: 1台の中で完結する仕組み。読んで一覧には出すが、機器をまたいで比べない。
+#: 比べると、別々のスタックが「同じ組」に見えて、優先度がぶつかっていると言う
+_WITHIN_ONE_DEVICE = frozenset({"stack", "stackwise", "irf"})
+
+
 def review(db: Session) -> HaReport:
     report = HaReport()
     members: list[Member] = []
@@ -63,6 +68,10 @@ def review(db: Session) -> HaReport:
     report.groups = {key: [m.hostname for m in group] for key, group in by_group.items()}
 
     for key, group in by_group.items():
+        if group[0].pair.kind in _WITHIN_ONE_DEVICE:
+            # スタックは1台の中の話。別々の機器が同じ台数で組んでいるだけで
+            # 「同じ組」ではないので、機器をまたいだ突き合わせはしない
+            continue
         report.findings.extend(_alone(key, group))
         report.findings.extend(_roles(key, group))
         report.findings.extend(_priorities(key, group))

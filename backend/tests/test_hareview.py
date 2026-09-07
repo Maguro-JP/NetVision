@@ -147,3 +147,29 @@ def test_one_provisioned_switch_is_not_called_a_stack() -> None:
     # 1台だけ書いてあるのは組ではない。組んでいると読むと、冗長に見えてしまう
     text = "hostname c1\nswitch 1 provision c9300-48p\n"
     assert configparse.parse(text).ha_pair is None
+
+
+def test_two_separate_stacks_are_not_treated_as_one_pair(client):
+    """スタックは1台の中の話。別々の機器を「同じ組」と読まないこと。
+
+    台数が同じというだけで組にすると、優先度がぶつかっていると言うことに
+    なる。2台で1台に見せる仕組みとは、そもそも別の話。
+    """
+    body = (
+        "hostname {name}\n"
+        "switch 1 provision c9300-48p\n"
+        "switch 2 provision c9300-48p\n"
+        "switch 1 priority 15\n"
+        "interface GigabitEthernet1/0/1\n description a\n"
+    )
+    files = [
+        ("files", (f"{name}.txt", body.format(name=name).encode(), "text/plain"))
+        for name in ("sw-01", "sw-02")
+    ]
+    client.post(f"{API}/configs/upload", files=files, data={"create_missing": "true"})
+
+    report = client.get(f"{API}/topology/ha-check").json()
+    # 読めていることは見せる
+    assert report["groups"]
+    # 機器をまたいだ突き合わせはしない
+    assert report["findings"] == []
