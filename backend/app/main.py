@@ -12,6 +12,7 @@ from app.api.routes import (
     changes,
     config_plans,
     configcheck,
+    configrecipes,
     configs,
     conventions,
     dashboard,
@@ -105,6 +106,7 @@ app.include_router(capabilities.router, prefix=api)
 app.include_router(glossary.router, prefix=api)
 app.include_router(conventions.router, prefix=api)
 app.include_router(configcheck.router, prefix=api)
+app.include_router(configrecipes.router, prefix=api)
 app.include_router(syslog.router, prefix=api)
 
 _SCHEMA_OPEN = (

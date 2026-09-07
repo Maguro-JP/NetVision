@@ -10,7 +10,9 @@ import type {
   ConfigEdit,
   AskBackAnswer,
   ConfigCheck,
+  ConfigRecipe,
   ConfigTemplateDraft,
+  RenderedRecipe,
   HouseStyle,
   AskResult,
   GlossaryTerm,
@@ -774,6 +776,19 @@ export const api = {
         infrastructure: boolean;
       }[];
     }>(`/devices/${deviceId}/design-config`),
+
+  /** 選んで値を入れるだけの Config 作成。献立と入力欄の一覧。 */
+  configRecipes: () => request<ConfigRecipe[]>("/config-recipes"),
+  /** 献立と値から Config を組み立てる。保存も投入もしない。 */
+  renderConfigRecipe: (
+    name: string,
+    vendor: string,
+    values: Record<string, string>,
+  ) =>
+    request<RenderedRecipe>(`/config-recipes/${name}`, {
+      method: "POST",
+      body: JSON.stringify({ vendor, values }),
+    }),
 
   /** 貼ったログを読む。台帳には何も書かない。 */
   readSyslog: (text: string) =>

@@ -603,6 +603,33 @@ export interface TemplateVariable {
   help?: string;
 }
 
+/** 選んで値を入れるだけの Config 作成。献立1つ分。 */
+export interface ConfigRecipe {
+  name: string;
+  label: string;
+  why: string;
+  fields: RecipeField[];
+  /** その献立を出せる機種。ここに無い機種は選べない */
+  vendors: { name: string; label: string }[];
+}
+
+export interface RecipeField {
+  name: string;
+  label: string;
+  /** text / number / vlan_list / ip */
+  kind: string;
+  required: boolean;
+  help: string;
+  placeholder: string;
+}
+
+export interface RenderedRecipe {
+  vendor: string;
+  vendor_label: string;
+  body: string;
+  notes: string[];
+}
+
 export interface ConfigTemplate {
   id: number;
   name: string;

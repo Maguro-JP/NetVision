@@ -14,6 +14,7 @@ import BlueprintPage from "./pages/BlueprintPage";
 import CalcPage from "./pages/CalcPage";
 import CapabilitiesPage from "./pages/CapabilitiesPage";
 import ConfigCheckPage from "./pages/ConfigCheckPage";
+import ConfigRecipesPage from "./pages/ConfigRecipesPage";
 import SyslogPage from "./pages/SyslogPage";
 import GlossaryPage from "./pages/GlossaryPage";
 import ConfigPlansPage from "./pages/ConfigPlansPage";
@@ -77,6 +78,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="hidden" element={<HiddenPage />} />
               <Route path="capabilities" element={<CapabilitiesPage />} />
               <Route path="config-check" element={<ConfigCheckPage />} />
+              <Route path="config-recipes" element={<ConfigRecipesPage />} />
               <Route path="syslog" element={<SyslogPage />} />
               <Route path="glossary" element={<GlossaryPage />} />
               <Route path="devices" element={<DeviceListPage />} />

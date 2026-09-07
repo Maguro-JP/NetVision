@@ -47,6 +47,7 @@ export const SECTIONS: NavSection[] = [
     items: [
       { to: "/configs", label: "取り込み" },
       { to: "/config-check", label: "点検" },
+      { to: "/config-recipes", label: "作成" },
       { to: "/config-plans", label: "変更計画" },
       { to: "/config-templates", label: "テンプレート" },
     ],
