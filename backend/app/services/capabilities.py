@@ -175,9 +175,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="FortiGate HA・ASA failover・Aruba VSX・Arista MLAG・Cisco vPC・"
-        "IRF（QX）を同じ形で"
+        "IRF（QX）・スタック（Catalyst の StackWise、VRP の iStack / CSS）を同じ形で"
         "読み、機器をまたいで、相手が台帳に無い、両方とも primary、優先度が同じ、"
-        "を指摘します。スタック（1台の中の話）は入っていることまでです。",
+        "を指摘します。スタックは、組んでいることと主を決めてあることまでです"
+        "（1台の中の話なので、機器をまたいだ突き合わせはしません）。",
     ),
     Capability(
         area="制限",

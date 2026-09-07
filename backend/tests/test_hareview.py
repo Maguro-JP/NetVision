@@ -2,7 +2,7 @@
 
 from app.models import Device
 from app.models.topology import ConfigSnapshot
-from app.services import hareview
+from app.services import configparse, hareview
 from app.services.configparse import hapair
 from tests.conftest import API
 
@@ -108,3 +108,42 @@ def test_the_api_returns_the_groups(client, db_session):
     assert body["devices_seen"] == 2
     assert list(body["groups"].values()) == [["fw-a", "fw-b"]]
     assert body["findings"] == []
+
+
+def test_a_stack_is_read_as_one_failure_domain() -> None:
+    """組んであるスイッチは、外から見ると1台になる。
+
+    読めないと、落ちる範囲を数えるときに別々の機器として数えてしまう。
+    2台あるから大丈夫、と読める形で、実際は1台ぶんしか無い。
+    """
+    vrp = "\n".join(
+        [
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
+            "sysname hw1",
+            "#",
+            "stack",
+            " stack member 1 priority 150",
+        ]
+    )
+    catalyst = "\n".join(
+        [
+            "hostname c1",
+            "switch 1 provision c9300-48p",
+            "switch 2 provision c9300-48p",
+            "switch 1 priority 15",
+        ]
+    )
+    assert configparse.parse(vrp).ha_pair is not None
+    assert configparse.parse(vrp).ha_pair.kind == "stack"
+
+    stacked = configparse.parse(catalyst).ha_pair
+    assert stacked is not None
+    assert stacked.kind == "stackwise"
+    assert stacked.group == "2"
+    assert stacked.priority == 15
+
+
+def test_one_provisioned_switch_is_not_called_a_stack() -> None:
+    # 1台だけ書いてあるのは組ではない。組んでいると読むと、冗長に見えてしまう
+    text = "hostname c1\nswitch 1 provision c9300-48p\n"
+    assert configparse.parse(text).ha_pair is None

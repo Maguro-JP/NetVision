@@ -22,6 +22,8 @@ KIND_LABELS = {
     "mlag": "Arista MLAG",
     "vpc": "Cisco vPC（NX-OS）",
     "irf": "IRF（QX / Comware）",
+    "stack": "スタック（VRP の iStack / CSS）",
+    "stackwise": "StackWise（Catalyst）",
 }
 
 
@@ -52,11 +54,23 @@ _IRF_DOMAIN = re.compile(r"^\s*irf\s+domain\s+(\d+)", re.IGNORECASE | re.MULTILI
 _IRF_PRIORITY = re.compile(
     r"^\s*irf\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
 )
+# VRP の iStack / CSS。`stack` の下に `stack member N priority M` と書く
+_STACK_HEAD = re.compile(r"^stack\s*$", re.IGNORECASE | re.MULTILINE)
+_STACK_PRIORITY = re.compile(
+    r"^\s*stack\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
+)
+# Catalyst の StackWise。`switch N provision 型番` が台数、`switch N priority M` が主
+_STACKWISE_MEMBER = re.compile(
+    r"^\s*switch\s+(\d+)\s+provision\s+(\S+)", re.IGNORECASE | re.MULTILINE
+)
+_STACKWISE_PRIORITY = re.compile(
+    r"^\s*switch\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
+)
 
 
 def parse(text: str) -> ParsedHaPair | None:
     """入っていれば1つ返す。2つ以上の仕組みを同時に入れる機器は見ない。"""
-    for reader in (_fortigate, _asa, _vsx, _mlag, _vpc, _irf):
+    for reader in (_fortigate, _asa, _vsx, _mlag, _vpc, _irf, _stack, _stackwise):
         found = reader(text)
         if found is not None:
             return found
@@ -203,6 +217,40 @@ def _irf(text: str) -> ParsedHaPair | None:
     pair = ParsedHaPair(kind="irf")
     if domain:
         pair.group = domain.group(1)
+    if priority:
+        pair.priority = int(priority.group(2))
+    return pair
+
+
+def _stack(text: str) -> ParsedHaPair | None:
+    """VRP の iStack / CSS。`stack` の塊で組み、`stack member` で主を決める。
+
+    組んであるスイッチは、外から見ると1台になる。読めないと、落ちる範囲を
+    数えるときに別々の機器として数えてしまう。
+    """
+    head = _STACK_HEAD.search(text)
+    priority = _STACK_PRIORITY.search(text)
+    if head is None and priority is None:
+        return None
+    pair = ParsedHaPair(kind="stack")
+    if priority:
+        pair.group = priority.group(1)
+        pair.priority = int(priority.group(2))
+    return pair
+
+
+def _stackwise(text: str) -> ParsedHaPair | None:
+    """Catalyst の StackWise。`switch N provision` が台数、`switch N priority` が主。"""
+    members = _STACKWISE_MEMBER.findall(text)
+    priority = _STACKWISE_PRIORITY.search(text)
+    if not members and priority is None:
+        return None
+    pair = ParsedHaPair(kind="stackwise")
+    if members:
+        # 何台で組んであるか。1台だけの `provision` は組ではない
+        if len(members) < 2 and priority is None:
+            return None
+        pair.group = str(len(members))
     if priority:
         pair.priority = int(priority.group(2))
     return pair
