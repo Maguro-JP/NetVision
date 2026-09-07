@@ -73,6 +73,11 @@ vlan trunk allowed 10,20
 interface vlan 20
     ip address 10.0.20.2/24
 """,
+    Vendor.CISCO_XR: """!! IOS XR Configuration 7.5.2
+hostname rtr-xr-01
+interface GigabitEthernet0/0/0/0
+ ipv4 address 10.0.0.1 255.255.255.0
+""",
     Vendor.ARUBA_OS: """hostname "sw-aoss-01"
 module 1 type jl253a
 vlan 10

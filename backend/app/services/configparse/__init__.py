@@ -22,6 +22,7 @@ from app.services.configparse import (
     hapair,
     huawei,
     inputtext,
+    iosxr,
     juniper,
     linkstate,
     lldptable,
@@ -64,6 +65,9 @@ _DETECTORS = (
     yamaha.detect,
     panos.detect,
     asa.detect,
+    # IOS-XR は IOS と書き方が違うところがある。IOS より先に見ないと、
+    # 読めた形で通って住所も経路も抜ける
+    iosxr.detect,
     arista.detect,
     # アライドテレシスの目印（port1.0.1 / vlan database）は Aruba CX より強い。
     # vrrp の書き方が似ているので、先に見ないと取り違える
@@ -87,6 +91,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.CISCO_IOS: "Cisco IOS / IOS-XE",
     Vendor.CISCO_NXOS: "Cisco NX-OS",
     Vendor.CISCO_ASA: "Cisco ASA / FTD",
+    Vendor.CISCO_XR: "Cisco IOS-XR",
     Vendor.JUNIPER: "Juniper Junos",
     Vendor.FORTINET: "Fortinet FortiOS",
     Vendor.NEC_IX: "NEC IX シリーズ",
@@ -108,6 +113,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.CISCO_IOS: "Cisco",
     Vendor.CISCO_NXOS: "Cisco",
     Vendor.CISCO_ASA: "Cisco",
+    Vendor.CISCO_XR: "Cisco",
     Vendor.JUNIPER: "Juniper",
     Vendor.FORTINET: "Fortinet",
     Vendor.NEC_IX: "NEC",
@@ -154,6 +160,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = yamaha.parse(text)
     elif vendor is Vendor.CISCO_ASA:
         parsed = asa.parse(text)
+    elif vendor is Vendor.CISCO_XR:
+        parsed = iosxr.parse(text)
     elif vendor is Vendor.PALO_ALTO:
         parsed = panos.parse(text)
     elif vendor is Vendor.ARISTA:
