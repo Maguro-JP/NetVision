@@ -241,6 +241,42 @@ _JUNIPER = _JuniperDialect(
 )
 
 
+class _PanosDialect(_JuniperDialect):
+    """PAN-OS の set 形式。1行1設定で、消すのは `delete`。
+
+    書き方の仕組みは Junos と同じなので、そこは受け継ぐ。危ないところだけ
+    こちらで持つ。投入したあと `commit` を打つまで反映されない点は、
+    生成したコマンドの後ろに注意として付ける。
+    """
+
+
+_PANOS = _PanosDialect(
+    name="palo_alto",
+    risks=[
+        RiskRule(
+            re.compile(r"^\s*delete\s+network\s+interface\b", re.I),
+            "インターフェース設定を削除します。管理経路だと接続が切れます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*delete\s+rulebase\s+security\b", re.I),
+            "通す通信の決めごとを消します。その通信が落ちます",
+        ),
+        RiskRule(
+            re.compile(r"^\s*delete\s+(?:network\s+virtual-router|network\s+routing)\b", re.I),
+            "経路制御の設定が消えます。到達性に影響します",
+        ),
+        RiskRule(
+            re.compile(r"^\s*delete\s+deviceconfig\s+system\b", re.I),
+            "管理アクセスに関わる設定を消します。締め出しに注意してください",
+        ),
+        RiskRule(
+            re.compile(r"^\s*set\s+", re.I),
+            "PAN-OS は commit するまで反映されません。投入後に commit してください",
+        ),
+    ],
+)
+
+
 class _FortiDialect(Dialect):
     """FortiOS は `set X 値` を `unset X` で戻し、`edit X` を `delete X` で消す。
 
@@ -428,6 +464,7 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.FASTIRON: _CISCO,
     Vendor.YAMAHA: _CISCO,
     Vendor.JUNIPER: _JUNIPER,
+    Vendor.PALO_ALTO: _PANOS,
     Vendor.FORTINET: _FORTINET,
 }
 
@@ -436,8 +473,6 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
 #: と言ってしまう。分からないものは出さない
 UNSUPPORTED: frozenset[Vendor] = frozenset(
     {
-        # set / delete で書く。no では消えない
-        Vendor.PALO_ALTO,
         # config ... の対話コマンド。config ファイルの差分という形にならない
         Vendor.CISCO_WLC,
     }

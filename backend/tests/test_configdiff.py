@@ -664,13 +664,15 @@ def test_a_vendor_we_cannot_write_for_gets_no_commands() -> None:
     Cisco の規則で作ると、検証も同じ規則で通るので「収束を確認しました」と
     言ってしまう。動かないコマンドに太鼓判を押す形になる。
     """
+    # AireOS は対話的な config コマンドで、config ファイルの差分の形にならない
     current = "\n".join(
         [
-            "set deviceconfig system hostname fw1",
-            "set network interface ethernet ethernet1/1 layer3 ip 203.0.113.2/30",
+            "Product Version.................................. 8.10.185.0",
+            "System Name...................................... wlc-01",
+            "IP Address....................................... 10.0.0.31",
         ]
     )
-    target = current.replace("203.0.113.2", "203.0.113.3")
+    target = current.replace("10.0.0.31", "10.0.0.32")
     result = build(current, target)
     assert result.commands == []
     assert result.verified is False
@@ -722,3 +724,33 @@ def test_the_single_valued_patterns_are_written_as_word_boundaries() -> None:
     for name in ("cisco_ios", "nec_qx", "nec_ix", "huawei", "fortinet"):
         for pattern in for_vendor(name).single_valued:
             assert "\x08" not in pattern.pattern, (name, pattern.pattern)
+
+
+def test_panos_commands_are_written_in_its_own_form() -> None:
+    """PAN-OS は set / delete で書く。Cisco の no では消えない。
+
+    以前は書き方を持っていなかったので、何も出さずに理由を返していた。
+    仕組みは Junos と同じなので、そこは同じ規則で扱う。
+    """
+    current = "\n".join(
+        [
+            "set deviceconfig system hostname fw1",
+            "set network interface ethernet ethernet1/1 layer3 ip 203.0.113.2/30",
+            "set network interface ethernet ethernet1/2 layer3 ip 192.168.1.1/24",
+        ]
+    )
+    target = "\n".join(
+        [
+            "set deviceconfig system hostname fw1",
+            "set network interface ethernet ethernet1/1 layer3 ip 203.0.113.3/30",
+        ]
+    )
+    result = build(current, target)
+    assert result.verified
+    assert "delete network interface ethernet ethernet1/2" in result.script
+    assert "set network interface ethernet ethernet1/1 layer3 ip 203.0.113.3/30" in result.script
+    assert "no " not in result.script
+    # 投入しただけでは反映されない機種なので、そこを黙らない
+    assert [risk for risk in result.risks if "commit" in risk]
+    # 戻せることも確かめてから出す
+    assert result.rollback

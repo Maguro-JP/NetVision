@@ -288,7 +288,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
-| Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます |
+| Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます。投入コマンドも `set` / `delete` で出します（commit するまで反映されない点を注意に付けます） |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
 | アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路、ハードウェア ACL（3000 番台と `access-list hardware`）を読みます |
 | アラクサラ | AX シリーズ | AX2500S / AX3650S など。`interface gigabitethernet 0/1` のように種別と番号を分ける書き方、引用符付きのホスト名と VLAN 名を読みます。公開書式から実装したもので、実機の出力では未検証です。名乗り（`ALAXALA`）か型番（`AX3650S`）が入っていないと、IOS と見分けが付かないので判別しません |
