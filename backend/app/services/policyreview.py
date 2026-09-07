@@ -1059,6 +1059,18 @@ def _lets_everything_through(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> lis
     ]
 
 
+def _entry_label(entry) -> str:  # noqa: ANN001
+    """1行を指す短い呼び名。番号と、付けてある名前があればそれ。
+
+    見出しに行そのものを入れると、画面では読めない長さになる。中身は
+    根拠（evidence）に出ているので、見出しは指し示すだけでよい。
+    """
+    parts = [part for part in (entry.seq, entry.remark) if part]
+    if not parts:
+        return entry.raw
+    return parts[0] if len(parts) == 1 else f"{parts[0]}（{parts[1]}）"
+
+
 #: 外向きと読めるゾーン・口の名前。現場でこの名前を使うときは、外に面している
 _OUTSIDE_WORDS = ("outside", "wan", "internet", "untrust", "外部")
 
@@ -1105,7 +1117,7 @@ def _open_from_outside(
         out.append(
             _note(
                 HIGH,
-                f"{acl.name} の {entry.raw} は、外から中へすべて通しています",
+                f"{acl.name} {_entry_label(entry)} は、外から中へすべて通しています",
                 f"{zone} から来た通信を、宛先もサービスも限定せずに通しています。"
                 "外に面した側を広く開けると、中の全部に外から届きます。"
                 "宛先かサービスを絞ってください。",

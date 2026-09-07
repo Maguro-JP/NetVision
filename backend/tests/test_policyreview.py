@@ -945,3 +945,38 @@ def test_a_tidy_protocol_block_says_nothing() -> None:
     )
     parsed = configparse.parse(_protocol_config(body))
     assert policyreview.review(parsed) == []
+
+
+def test_a_wide_inbound_rule_is_named_not_quoted_whole():
+    """見出しは、どの行かを指し示すだけにする。
+
+    行そのものを見出しに入れると、画面では読めない長さになる。中身は根拠の
+    ほうに出ているので、見出しは番号と名前で足りる。
+    """
+    text = "\n".join(
+        [
+            "config system interface",
+            '    edit "port1"',
+            '        set alias "to isp"',
+            "        set role wan",
+            "    next",
+            "end",
+            "config firewall policy",
+            "    edit 2",
+            '        set name "inbound-any"',
+            '        set srcintf "port1"',
+            '        set dstintf "vlan20"',
+            '        set srcaddr "all"',
+            '        set dstaddr "all"',
+            "        set action accept",
+            '        set schedule "always"',
+            '        set service "ALL"',
+            "    next",
+            "end",
+        ]
+    )
+    found = _one(_review(text), "外から中へすべて通しています")
+    assert "policy 2（inbound-any）" in found.title
+    assert "srcaddr all" not in found.title
+    # 中身は根拠に出す
+    assert [line for line in found.evidence if "srcaddr all" in line]
