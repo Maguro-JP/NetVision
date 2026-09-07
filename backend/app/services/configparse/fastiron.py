@@ -284,6 +284,9 @@ def _read_vlans(text: str, parsed: ParsedConfig) -> None:
     IOS と向きが逆なので、ここを読まないと VLAN も所属も空のままになる。
     """
     current: int | None = None
+    #: タグ無しで載せた VLAN。タグ付きの行が後から来ることがあるので、
+    #: どちらの意味になるかは読み終えてから決める
+    untagged: dict[str, int] = {}
     for raw in text.splitlines():
         head = _VLAN_HEAD.match(raw)
         if head and not raw.startswith((" ", "\t")):
@@ -308,5 +311,16 @@ def _read_vlans(text: str, parsed: ParsedConfig) -> None:
                 if current not in interface.trunk_vlans:
                     interface.trunk_vlans.append(current)
             else:
-                interface.mode = interface.mode or "access"
-                interface.vlan = interface.vlan or current
+                untagged.setdefault(name, current)
+
+    # タグ付きと一緒に載っているタグ無しは、トランクのタグ無し VLAN（native）である。
+    # アクセス VLAN として持つと、両端で食い違っていても比べられない。
+    # タグ無しだけなら、それは端末を挿す口
+    for name, vlan_id in untagged.items():
+        interface = parsed.add_interface(ParsedInterface(name=name))
+        if interface.trunk_vlans:
+            interface.mode = "trunk"
+            interface.native_vlan = interface.native_vlan or vlan_id
+        else:
+            interface.mode = interface.mode or "access"
+            interface.vlan = interface.vlan or vlan_id

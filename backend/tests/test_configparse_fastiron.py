@@ -196,3 +196,43 @@ def test_the_time_source_is_read_but_a_radius_host_is_not_mistaken_for_one() -> 
     assert ("NTP", "参照先: 10.0.99.10") in found
 
     assert not [item for item in configparse.parse(radius).features if item.name == "NTP"]
+
+
+def test_the_untagged_vlan_on_a_trunk_is_the_native_vlan() -> None:
+    """ICX は VLAN の下に口を並べる。タグ付きと一緒に載ったタグ無しは native。
+
+    アクセス VLAN として持つと、両端で食い違っていても比べられない。
+    タグ無しの食い違いは、分けたはずのものが混ざる、いちばん気づきにくい形。
+    """
+    text = (
+        "hostname icx-01\n!\n"
+        "vlan 10 name USERS by port\n tagged ethe 1/1/1\n!\n"
+        "vlan 20 name SRV by port\n tagged ethe 1/1/1\n!\n"
+        "vlan 999 name NATIVE by port\n untagged ethe 1/1/1\n!\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.mode == "trunk"
+    assert port.trunk_vlans == [10, 20]
+    assert port.native_vlan == 999
+    assert port.vlan is None
+
+
+def test_the_order_the_vlans_are_written_in_does_not_matter() -> None:
+    """タグ無しの行が先に来ることもある。読み終えてから決める。"""
+    text = (
+        "hostname icx-01\n!\n"
+        "vlan 999 name NATIVE by port\n untagged ethe 1/1/1\n!\n"
+        "vlan 10 name USERS by port\n tagged ethe 1/1/1\n!\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.mode == "trunk"
+    assert port.native_vlan == 999
+
+
+def test_a_port_with_only_an_untagged_vlan_is_a_port_for_a_device() -> None:
+    """タグ無しだけなら、それは端末を挿す口。トランクにしてしまわない。"""
+    text = "hostname icx-01\n!\nvlan 10 name USERS by port\n untagged ethe 1/1/5\n!\n"
+    port = configparse.parse(text).interfaces[0]
+    assert port.mode == "access"
+    assert port.vlan == 10
+    assert port.native_vlan is None
