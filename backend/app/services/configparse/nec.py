@@ -102,9 +102,12 @@ _QX_TRUNK_PERMIT = re.compile(
 )
 # ネイティブ VLAN にあたるのが PVID
 _QX_PVID = re.compile(r"^\s*port\s+(?:trunk|hybrid)\s+pvid\s+vlan\s+(\d+)", re.IGNORECASE)
-# hybrid ポートは tagged / untagged を並べて書く
+# hybrid ポートは tagged / untagged を並べて書く。Comware は番号の後ろに、
+# ファーウェイ VRP は前に置く。同じ意味なので、どちらの並びでも読む
 _QX_HYBRID_VLAN = re.compile(
-    r"^\s*port\s+hybrid\s+vlan\s+(.+?)\s+(tagged|untagged)\s*$", re.IGNORECASE
+    r"^\s*port\s+hybrid\s+vlan\s+(?P<vlans>.+?)\s+(?P<how>tagged|untagged)\s*$"
+    r"|^\s*port\s+hybrid\s+(?P<how2>tagged|untagged)\s+vlan\s+(?P<vlans2>.+?)\s*$",
+    re.IGNORECASE,
 )
 # VRF にあたるのが VPN インスタンス
 _QX_VPN_INSTANCE = re.compile(r"^ip\s+vpn-instance\s+(\S+)", re.IGNORECASE)
@@ -659,7 +662,8 @@ def _parse_qx(text: str) -> ParsedConfig:
         hybrid = _QX_HYBRID_VLAN.match(raw)
         if hybrid:
             permitted.add(current.key)
-            values = vlanlist.parse_ranges(hybrid.group(1))
+            written = hybrid.group("vlans") or hybrid.group("vlans2") or ""
+            values = vlanlist.parse_ranges(written)
             current.trunk_vlans = sorted(set(current.trunk_vlans) | set(values))
             continue
         pvid = _QX_PVID.match(raw)

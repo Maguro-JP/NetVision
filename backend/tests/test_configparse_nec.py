@@ -466,3 +466,22 @@ def test_taking_everything_off_the_trunk_leaves_nothing() -> None:
     port = configparse.parse(text).interfaces[0]
     assert port.trunk_vlans == []
     assert port.trunk_all is False
+
+
+def test_a_hybrid_port_is_read_in_huaweis_word_order_too() -> None:
+    """Comware は番号の後ろに tagged を置き、ファーウェイ VRP は前に置く。
+
+    同じ意味なので、片方の並びしか読まないと、その機種だけ VLAN が空になる。
+    """
+    text = (
+        "sysname hw-01\n#\n"
+        "interface 10GE1/0/1\n"
+        " port link-type hybrid\n"
+        " port hybrid tagged vlan 10 20\n"
+        " port hybrid untagged vlan 999\n"
+        " port hybrid pvid vlan 999\n"
+        "#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.trunk_vlans == [10, 20, 999]
+    assert port.native_vlan == 999
