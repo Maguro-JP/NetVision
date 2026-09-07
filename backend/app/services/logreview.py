@@ -95,7 +95,9 @@ class Finding:
 #: ポート名。機種で書き方が違うので、よくある形をまとめて拾う
 _INTERFACE = re.compile(
     r"\b((?:Gigabit|TenGigabit|FastEthernet|GigabitEthernet|Ethernet|Te|Gi|Fa|Eth|Port|port|"
-    r"XGE|GE)[\w./:-]*\d[\w./:-]*)"
+    r"XGE|GE|Vlanif|Vlan-interface|Eth-Trunk|Ve)[\w./:-]*\d[\w./:-]*"
+    # ファーウェイは速度を頭に付ける（10GE1/0/1）ので、数字から始まる
+    r"|\d{2,3}GE[\d/.:]+)"
 )
 #: IPv4。送信元・相手を見分けるのに使う
 _IPV4 = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
@@ -249,7 +251,13 @@ def _hardware(events: list[LogEvent]) -> Finding | None:
 
 def _flapping_links(events: list[LogEvent]) -> Finding | None:
     """同じポートが何度も上下する。線・光の部品・速度の食い違いを疑うところ。"""
-    updown = [e for e in events if _has(e, "UPDOWN", "LINK_UPDOWN", "PHY_UPDOWN")]
+    # 同じ出来事でも、機種によって事象名が違う。1つの語だけを見ていると、
+    # そのベンダーの機器だけ揺れていないことになる
+    updown = [
+        e
+        for e in events
+        if _has(e, "UPDOWN", "LINK_UPDOWN", "PHY_UPDOWN", "IF_STATE", "LINK_STATE")
+    ]
     if not updown:
         return None
 

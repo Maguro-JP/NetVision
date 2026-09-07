@@ -180,3 +180,21 @@ def test_huawei_event_names_are_explained_too() -> None:
     assert syslog.meaning_of("SSH/5/SSH_USER_LOGIN")
     # 知らないものは、それらしい言葉を作らない
     assert syslog.meaning_of("KNOWN_TO_NOBODY/9/XYZ") == ""
+
+
+def test_a_flapping_port_is_found_on_huawei_too() -> None:
+    """同じ出来事でも、機種によって事象名が違う。
+
+    1つの語だけを見ていると、そのベンダーの機器だけ「揺れていない」ことに
+    なる。線や光の部品を疑う手掛かりが、その機器では出ない。
+    """
+    lines = []
+    for index in range(8):
+        state = "DOWN" if index % 2 == 0 else "UP"
+        lines.append(
+            f"Sep  7 03:0{index}:00 hw-01 "
+            f"%%01IFNET/4/IF_STATE: Interface 10GE1/0/1 turned into {state} state."
+        )
+    report = syslog.review(None, "\n".join(lines))
+    titles = [item.title for item in report.findings]
+    assert [title for title in titles if "何度も上下しています" in title]
