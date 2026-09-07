@@ -13,6 +13,7 @@
 
 from __future__ import annotations
 
+import dataclasses
 import re
 from dataclasses import dataclass, field
 
@@ -239,6 +240,14 @@ _JUNIPER = _JuniperDialect(
         ),
     ],
 )
+
+
+#: ASA だけが持つ、口ごとに1つしか持てない命令。名前と内側らしさは
+#: 上書きで変わる。消してから入れる形にすると、その間その口の設定が外れる
+_ASA_EXTRA = [
+    re.compile(r"^nameif\b", re.I),
+    re.compile(r"^security-level\b", re.I),
+]
 
 
 _YAMAHA = Dialect(
@@ -486,6 +495,14 @@ _NEC_IX = Dialect(
 )
 
 
+#: ASA は IOS 系だが、口の名前と内側らしさを持つぶんだけ規則が増える
+_CISCO_ASA = dataclasses.replace(
+    _CISCO,
+    name="cisco_asa",
+    single_valued=[*_CISCO.single_valued, *_ASA_EXTRA],
+)
+
+
 _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.NEC_IX: _NEC_IX,
     Vendor.NEC_QX: _NEC_QX,
@@ -493,7 +510,7 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.HUAWEI: _NEC_QX,
     Vendor.CISCO_IOS: _CISCO,
     Vendor.CISCO_NXOS: _CISCO,
-    Vendor.CISCO_ASA: _CISCO,
+    Vendor.CISCO_ASA: _CISCO_ASA,
     # 消し方（no）とブロックの畳み方が IOS と同じ機種。書き方の細部は違うが、
     # 差分の作り方として同じ規則で扱える
     Vendor.ARISTA: _CISCO,

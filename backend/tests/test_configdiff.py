@@ -782,3 +782,21 @@ def test_yamaha_replaces_a_single_value_and_warns_before_removing_it() -> None:
     )
     assert "no ip lan1 address" in removed.script
     assert [risk for risk in removed.risks if "接続が切れます" in risk]
+
+
+def test_asa_replaces_the_interface_name_and_level_in_place() -> None:
+    """ASA の口は、名前（nameif）と内側らしさ（security-level）を1つずつ持つ。
+
+    消してから入れる形にすると、その間その口の設定が外れる。ファイアウォール
+    でそれをやると、通していた通信が落ちる。
+    """
+    base = "hostname fw1\ninterface GigabitEthernet0/0\n nameif outside\n security-level 0\n"
+    renamed = build(base, base.replace("nameif outside", "nameif inside"), vendor="cisco_asa")
+    assert renamed.verified
+    assert renamed.script.strip().splitlines()[-1].strip() == "nameif inside"
+    assert "no nameif" not in renamed.script
+
+    raised = base.replace("security-level 0", "security-level 50")
+    levelled = build(base, raised, vendor="cisco_asa")
+    assert levelled.verified
+    assert "no security-level" not in levelled.script
