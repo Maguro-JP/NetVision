@@ -111,7 +111,7 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
           ✓ この投入コマンドを当てると対応版 config
           と同じ状態になることを確認しました
         </div>
-      ) : (
+      ) : fix.diff.mismatches.length > 0 ? (
         <div
           className="card"
           style={{ marginTop: 8, borderColor: "var(--sev-expired)" }}
@@ -123,7 +123,26 @@ function FixPanel({ row, onClose }: { row: ExposureRow; onClose: () => void }) {
             ))}
           </ul>
         </div>
+      ) : (
+        // 収束しなかったのではなく、その機種の書き方を持っていない。
+        // 理由は下の注意にそのまま出る
+        <div
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}
+        >
+          <strong>この機種の投入コマンドは出していません。</strong>
+        </div>
       )}
+
+      {fix.diff.warnings.map((w) => (
+        <div
+          key={w}
+          className="card"
+          style={{ marginTop: 8, borderColor: "var(--sev-warning)" }}
+        >
+          {w}
+        </div>
+      ))}
 
       {fix.diff.risks.length > 0 && (
         <div
