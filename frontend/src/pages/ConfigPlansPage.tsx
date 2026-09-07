@@ -640,7 +640,7 @@ export default function ConfigPlansPage() {
                       （追加 {diff.added} / 変更 {diff.changed} / 削除{" "}
                       {diff.removed}）
                     </div>
-                  ) : (
+                  ) : diff.mismatches.length > 0 ? (
                     <div
                       className="card"
                       style={{ borderColor: "var(--sev-expired)" }}
@@ -653,6 +653,15 @@ export default function ConfigPlansPage() {
                           <li key={m}>{m}</li>
                         ))}
                       </ul>
+                    </div>
+                  ) : (
+                    // 収束しなかったのではなく、その機種の書き方を持っていない。
+                    // 理由は warnings に入っているので、ここで見出しを断定しない
+                    <div
+                      className="card"
+                      style={{ borderColor: "var(--sev-warning)" }}
+                    >
+                      <strong>この機種の投入コマンドは出していません。</strong>
                     </div>
                   )}
 
