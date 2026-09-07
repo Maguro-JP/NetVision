@@ -860,3 +860,42 @@ def test_set_style_vendors_replace_a_leaf_but_not_a_list() -> None:
     commented = build(panos.format("old"), panos.format("new"), vendor="palo_alto")
     assert commented.verified
     assert commented.script.strip() == "set network interface ethernet ethernet1/1 comment new"
+
+
+#: ベンダーごとの、値を書き換えて回すための形。単一値の命令を必ず1つ含める
+_SHAPES = {
+    "cisco_ios": "hostname h{n}\ninterface Gi1\n description d{n}\n switchport access vlan {v}\n",
+    "aruba_cx": "hostname h{n}\ninterface 1/1/1\n description d{n}\n vlan access {v}\n",
+    "allied": "hostname h{n}\ninterface port1.0.1\n description d{n}\n"
+    " switchport access vlan {v}\n",
+    "fastiron": "hostname h{n}\ninterface ethernet 1/1/1\n port-name d{n}\n",
+    "nec_qx": "sysname h{n}\n#\ninterface GigabitEthernet1/0/1\n description d{n}\n"
+    " port access vlan {v}\n",
+    "huawei": "sysname h{n}\n#\ninterface 10GE1/0/1\n description d{n}\n port default vlan {v}\n",
+    "nec_ix": "device-name h{n}\ninterface GigaEthernet0.0\n ip address 10.0.{v}.1/24\n",
+    "yamaha": "console prompt h{n}\nip lan1 address 192.168.{v}.1/24\ndescription lan1 d{n}\n",
+    "juniper": "set system host-name h{n}\nset interfaces ge-0/0/0 description d{n}\n",
+    "palo_alto": "set deviceconfig system hostname h{n}\n"
+    "set network interface ethernet ethernet1/1 comment d{n}\n",
+}
+
+
+@pytest.mark.parametrize("vendor", sorted(_SHAPES))
+def test_every_vendor_converges_when_values_change(vendor):
+    """値を書き換えたとき、出した手順が将来の姿にたどり着くこと。
+
+    単一値の扱いを機種ごとに足したので、そこで取りこぼすと「出したのに
+    合わない」が起きる。合わないときはコマンドを出さない、も一緒に見る。
+    """
+    import random
+
+    shape = _SHAPES[vendor]
+    rng = random.Random(vendor)
+    for _ in range(40):
+        current = shape.format(n=rng.randint(1, 3), v=rng.randint(10, 30))
+        target = shape.format(n=rng.randint(1, 3), v=rng.randint(10, 30))
+        result = build(current, target, vendor=vendor)
+        if current.strip() == target.strip():
+            assert result.commands == []
+            continue
+        assert result.verified, (vendor, result.mismatches, result.script)
