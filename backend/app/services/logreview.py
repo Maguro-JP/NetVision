@@ -400,7 +400,15 @@ def _duplex_mismatch(events: list[LogEvent]) -> Finding | None:
 
 
 def _native_vlan_mismatch(events: list[LogEvent]) -> Finding | None:
-    hits = _pick(events, "NATIVE_VLAN_MISMATCH", "native vlan mismatch")
+    # Comware / VRP は同じ食い違いを PVID の名前で書く
+    hits = _pick(
+        events,
+        "NATIVE_VLAN_MISMATCH",
+        "native vlan mismatch",
+        "PVID_INCONSISTENT",
+        "PVID mismatch",
+        "PVID inconsistent",
+    )
     if not hits:
         return None
     return _finding(

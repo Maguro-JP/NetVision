@@ -289,3 +289,19 @@ def test_a_routing_neighbour_going_down_is_found_on_every_vendor() -> None:
     # 1回だけなら、再起動でも起きる。繰り返してはじめて言う
     once = syslog.review(None, vrp_bgp[0]).findings
     assert not [item for item in once if "繰り返し落ちています" in item.title]
+
+
+def test_a_native_vlan_mismatch_is_found_however_the_device_words_it() -> None:
+    """Comware / VRP は同じ食い違いを PVID の名前で書く。
+
+    タグ無しで渡す VLAN が両端で違うと、その VLAN の通信だけが漏れる。
+    設定を見ないと分からない食い違いなので、ログから出せる意味は大きい。
+    """
+    lines = [
+        "Sep  7 10:00:00 hw-01 %%01LLDP/4/PVID_INCONSISTENT: PVID mismatch on 10GE1/0/1.",
+        "Sep  7 10:01:00 qx-01 %%10LLDP/4/LLDP_PVID_INCONSISTENT: PVID inconsistent on GE1/0/1.",
+        "Sep  7 10:02:00 c1 %CDP-4-NATIVE_VLAN_MISMATCH: Native VLAN mismatch on Gi1/0/1",
+    ]
+    for line in lines:
+        titles = [item.title for item in syslog.review(None, line).findings]
+        assert [title for title in titles if "タグ無し VLAN" in title], line
