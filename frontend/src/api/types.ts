@@ -175,6 +175,7 @@ export type ConfigVendor =
   | "palo_alto"
   | "arista"
   | "aruba_cx"
+  | "aruba_os"
   | "allied"
   | "alaxala"
   | "huawei"

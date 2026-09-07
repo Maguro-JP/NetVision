@@ -12,6 +12,7 @@ from app.services.configparse import (
     allied,
     arista,
     aruba,
+    arubaos,
     asa,
     banners,
     cisco,
@@ -72,6 +73,8 @@ _DETECTORS = (
     alaxala.detect,
     # FastIron は `by port` / `port-name` が目印。IOS より先に見る
     fastiron.detect,
+    # AOS-S は VLAN の下に口を並べる。AOS-CX とは別物なので、先に見分ける
+    arubaos.detect,
     aruba.detect,
     # ファーウェイ VRP は Comware と書き方が重なる。名乗りが出ているうちに拾わないと
     # NEC QX として読んでしまう
@@ -92,6 +95,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.PALO_ALTO: "Palo Alto PAN-OS",
     Vendor.ARISTA: "Arista EOS",
     Vendor.ARUBA_CX: "Aruba CX（AOS-CX）",
+    Vendor.ARUBA_OS: "Aruba / HPE（AOS-S / ProCurve）",
     Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
     Vendor.ALAXALA: "アラクサラ AX シリーズ",
     Vendor.HUAWEI: "ファーウェイ VRP",
@@ -112,6 +116,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.PALO_ALTO: "Palo Alto",
     Vendor.ARISTA: "Arista",
     Vendor.ARUBA_CX: "Aruba",
+    Vendor.ARUBA_OS: "Aruba",
     Vendor.ALLIED: "アライドテレシス",
     Vendor.ALAXALA: "アラクサラ",
     Vendor.HUAWEI: "ファーウェイ",
@@ -155,6 +160,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = arista.parse(text)
     elif vendor is Vendor.ARUBA_CX:
         parsed = aruba.parse(text)
+    elif vendor is Vendor.ARUBA_OS:
+        parsed = arubaos.parse(text)
     elif vendor is Vendor.ALLIED:
         parsed = allied.parse(text)
     elif vendor is Vendor.ALAXALA:

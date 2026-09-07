@@ -532,6 +532,16 @@ _AOS_CX = dataclasses.replace(
         re.compile(r"^lag\b", re.I),
     ],
 )
+#: AOS-S は VLAN の囲みの中に口を並べる。消し方は IOS と同じ `no`。
+#: 囲みの中で1つしか持てないのは名前と住所
+_AOS_S = dataclasses.replace(
+    _CISCO,
+    name="aruba_os",
+    single_valued=[
+        *_CISCO.single_valued,
+        re.compile(r"^name\b", re.I),
+    ],
+)
 _ALLIED = dataclasses.replace(
     _CISCO,
     name="allied",
@@ -563,6 +573,7 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     # 差分の作り方として同じ規則で扱える
     Vendor.ARISTA: _CISCO,
     Vendor.ARUBA_CX: _AOS_CX,
+    Vendor.ARUBA_OS: _AOS_S,
     Vendor.ALLIED: _ALLIED,
     Vendor.ALAXALA: _CISCO,
     Vendor.FASTIRON: _FASTIRON,

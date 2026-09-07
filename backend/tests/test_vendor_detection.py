@@ -73,6 +73,13 @@ vlan trunk allowed 10,20
 interface vlan 20
     ip address 10.0.20.2/24
 """,
+    Vendor.ARUBA_OS: """hostname "sw-aoss-01"
+module 1 type jl253a
+vlan 10
+   name "USERS"
+   untagged 1-20
+   exit
+""",
     Vendor.ALLIED: """hostname at-sw-01
 interface port1.0.1
  switchport mode trunk
