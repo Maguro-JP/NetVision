@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.config import settings
 from app.db import get_db
 from app.services import configcheck as service
-from app.services import textencoding
+from app.services import configsplit, textencoding
 
 router = APIRouter(tags=["config-check"])
 
@@ -104,7 +104,13 @@ async def check_files(
         text = _decode(raw)
         if not text.strip():
             continue
-        out.append(_read(service.check(db, text, filename=file.filename or "config.txt")))
+        # 1つのファイルに何台分も貼ってあることがある。混ぜて見ると、
+        # 2台目の口が1台目のものとして指摘に出る
+        name = file.filename or "config.txt"
+        chunks = configsplit.split(text)
+        for number, chunk in enumerate(chunks, start=1):
+            label = name if len(chunks) == 1 else f"{name} ({number}/{len(chunks)})"
+            out.append(_read(service.check(db, chunk, filename=label)))
     if not out:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "読める中身がありませんでした")
     return out

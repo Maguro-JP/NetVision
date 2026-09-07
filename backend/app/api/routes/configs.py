@@ -112,16 +112,16 @@ async def upload_configs(
                 status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
                 f"{upload.filename}: ファイルサイズが大きすぎます（上限 10MB）",
             )
-        results.append(
-            _to_read(
-                service.ingest(
-                    db,
-                    upload.filename or "config.txt",
-                    _decode(content),
-                    device_id=device_id,
-                    apply_inventory=apply_inventory,
-                    create_missing=create_missing,
-                )
+        # 1つのファイルに何台分も貼ってあることがある。台数ぶんに分けて取り込む
+        results.extend(
+            _to_read(item)
+            for item in service.ingest_many(
+                db,
+                upload.filename or "config.txt",
+                _decode(content),
+                device_id=device_id,
+                apply_inventory=apply_inventory,
+                create_missing=create_missing,
             )
         )
     return results

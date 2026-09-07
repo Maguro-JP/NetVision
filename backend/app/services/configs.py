@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from app.models import Device, DeviceTunnel, DeviceType, DeviceVlan, DeviceVrf
 from app.models.change_log import ChangeSource
 from app.models.topology import ConfigSnapshot, Interface, Link, LinkOrigin
-from app.services import configparse
+from app.services import configparse, configsplit
 from app.services.audit import audit_context
 from app.services.configparse import ParsedConfig, Vendor, normalize, normalize_hostname, vlanlist
 
@@ -217,6 +217,53 @@ def compute_diffs(device: Device | None, parsed: ParsedConfig) -> list[FieldDiff
             )
         )
     return diffs
+
+
+def ingest_many(
+    db: Session,
+    filename: str,
+    text: str,
+    *,
+    device_id: int | None = None,
+    apply_inventory: bool = False,
+    create_missing: bool = False,
+) -> list[IngestResult]:
+    """1ファイルを、入っている台数ぶんに分けて取り込む。
+
+    現場では何台かの `show running-config` をまとめて貼る。そのまま読むと
+    2台目以降の口と VLAN が1台目に付き、台帳にその機器が持っていない口が
+    載る。分けてから読む。
+
+    `device_id` が指定されているときは分けない。どの機器のものかを人が
+    決めているのに、こちらで分けると指定と食い違う。
+    """
+    chunks = [text] if device_id is not None else configsplit.split(text)
+    if len(chunks) == 1:
+        return [
+            ingest(
+                db,
+                filename,
+                text,
+                device_id=device_id,
+                apply_inventory=apply_inventory,
+                create_missing=create_missing,
+            )
+        ]
+
+    results: list[IngestResult] = []
+    for number, chunk in enumerate(chunks, start=1):
+        # どの塊から出たのかを名前に残す。1つのファイルから複数の結果が並ぶので、
+        # 名前が同じだと、どれがどれか分からなくなる
+        results.append(
+            ingest(
+                db,
+                f"{filename} ({number}/{len(chunks)})",
+                chunk,
+                apply_inventory=apply_inventory,
+                create_missing=create_missing,
+            )
+        )
+    return results
 
 
 def ingest(
