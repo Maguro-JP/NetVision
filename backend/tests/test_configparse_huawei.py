@@ -214,3 +214,30 @@ def test_vlan_batch_and_the_rd_under_ipv4_family_are_read() -> None:
     assert set(parsed.vlans) == {10, 20, 30, 31, 32}
     assert [(v.name, v.rd) for v in parsed.vrfs] == [("CUST", "65000:1")]
     assert parsed.interfaces[0].lag_mode == "active"
+
+
+def test_a_running_config_without_the_banner_is_still_read_as_vrp() -> None:
+    """`display current-configuration` には名乗りが出ないことが多い。
+
+    名乗りだけで決めると NEC QX として読まれ、allow-pass の VLAN が読めずに
+    黙って落ちる。VRP にしか無い書き方（書き方の指紋）で見分ける。
+    """
+    bare = (
+        "sysname hw-01\n#\nvlan 10\n description USERS\n#\n"
+        "interface 10GE1/0/1\n port link-type trunk\n port trunk allow-pass vlan 10 20\n#\n"
+        "interface Vlanif10\n ip address 10.0.10.1 255.255.255.0\n#\n"
+    )
+    parsed = configparse.parse(bare)
+    assert parsed.vendor is Vendor.HUAWEI
+    assert parsed.interfaces[0].trunk_vlans == [10, 20]
+    assert parsed.vlans == {10: "USERS"}
+
+
+def test_a_nec_config_with_its_own_forms_is_not_taken_over() -> None:
+    """NEC QX にしか無い書き方が出ていれば、それは NEC の config。"""
+    nec = (
+        "sysname qx-01\n#\ninterface GigabitEthernet1/0/1\n port link-type trunk\n"
+        " port trunk permit vlan 10\n#\ninterface Vlan-interface10\n"
+        " ip address 10.0.10.1 255.255.255.0\n#\n"
+    )
+    assert configparse.detect_vendor(nec) is Vendor.NEC_QX

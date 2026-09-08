@@ -60,6 +60,33 @@ from app.services.configparse.base import (
 _BANNER = re.compile(
     r"Huawei Versatile Routing Platform|VRP\s*\(R\)\s*software|\bHUAWEI\b", re.IGNORECASE
 )
+#: VRP にしか無い書き方（書き方の指紋。出自の話ではない）。`display current-configuration`
+#: には名乗りが出ないことが多いので、名乗りが無くてもこれで見分ける
+_VRP_ONLY = re.compile(
+    r"^\s+port\s+trunk\s+allow-pass\s+vlan\b"
+    r"|^\s+port\s+default\s+vlan\s+\d"
+    r"|^\s+port\s+hybrid\s+(?:tagged|untagged)\s+vlan\b"
+    r"|^interface\s+Vlanif\d"
+    r"|^interface\s+Eth-Trunk\d"
+    r"|^\s+eth-trunk\s+\d+\s*$"
+    r"|^ip\s+pool\s+\S+"
+    r"|^\s+traffic-policy\s+\S+\s+(?:inbound|outbound)"
+    r"|^traffic\s+policy\s+\S+"
+    r"|^ipsec\s+proposal\s+\S+"
+    r"|^ike\s+peer\s+\S+",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: NEC QX にしか無い書き方。これが出ていれば、上の指紋があっても NEC の config
+_NEC_ONLY = re.compile(
+    r"^interface\s+Vlan-interface\d"
+    r"|^interface\s+Bridge-Aggregation\d"
+    r"|^\s+port\s+link-aggregation\s+group\s+\d"
+    r"|^dhcp\s+server\s+ip-pool\s+\S+"
+    r"|^qos\s+policy\s+\S+"
+    r"|^ipsec\s+transform-set\s+\S+"
+    r"|\bNEC\b|\bUNIVERGE\b|\bQX-S\d",
+    re.IGNORECASE | re.MULTILINE,
+)
 _VERSION = re.compile(r"^\s*VRP\s*\(R\).*?Version\s+([\w.]+)", re.IGNORECASE | re.MULTILINE)
 #: `Version 8.180 (CE6850 V200R005C10SPC800)` の括弧に型番が入る
 _MODEL_IN_VERSION = re.compile(r"\(\s*((?:CE|S|AR|NE|USG)\d[\w-]*)\s", re.IGNORECASE)
@@ -134,8 +161,18 @@ _IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:cipher|simple)?\s*\S+", re.IGNOR
 
 
 def detect(text: str) -> Vendor | None:
-    """VRP かどうか。名乗りが出ているときだけ言う。"""
-    return Vendor.HUAWEI if _BANNER.search(text) else None
+    """VRP かどうか。名乗りがあればそれで、無ければ VRP にしか無い書き方で見る。
+
+    `display current-configuration` には名乗りが出ないことが多い。名乗りだけで
+    決めると、そういう config は NEC QX として読まれ、`allow-pass` の VLAN が
+    読めずに黙って落ちる（読めていないのに読めた形で通る）。
+    NEC QX にしか無い書き方が出ていれば、それは NEC の config なので名乗らない。
+    """
+    if _BANNER.search(text):
+        return Vendor.HUAWEI
+    if _NEC_ONLY.search(text):
+        return None
+    return Vendor.HUAWEI if _VRP_ONLY.search(text) else None
 
 
 def parse(text: str) -> ParsedConfig:
