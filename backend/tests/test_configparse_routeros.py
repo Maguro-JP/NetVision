@@ -9,7 +9,7 @@ from app.services.configparse.base import Vendor
 EXPORT = """# sep/07/2026 10:00:00 by RouterOS 7.14.2
 # model = CCR2004
 /interface bridge
-add name=bridge1
+add name=bridge1 vlan-filtering=yes
 /interface vlan
 add interface=bridge1 name=vlan10 vlan-id=10
 add interface=bridge1 name=vlan30 vlan-id=30
@@ -66,6 +66,20 @@ def test_a_line_folded_with_a_backslash_is_read_whole() -> None:
 
 def test_the_untagged_vlan_on_a_bridge_port_is_read() -> None:
     assert _port("ether1").native_vlan == 999
+
+
+def test_a_pvid_on_a_bridge_that_does_not_sort_by_vlan_is_not_taken_as_native() -> None:
+    """効いていない値を根拠に、両端の食い違いを言うことになる。
+
+    RouterOS の pvid が効くのは、その橋が `vlan-filtering=yes` のときだけ。
+    """
+    text = (
+        "/interface bridge\nadd name=bridge1\n"
+        "/interface bridge port\nadd bridge=bridge1 interface=ether1 pvid=999\n"
+        "/system identity\nset name=rt-mt-01\n"
+    )
+    port = next(p for p in configparse.parse(text).interfaces if p.name == "ether1")
+    assert port.native_vlan is None
 
 
 def test_a_port_that_is_only_stopped_is_not_counted_as_live() -> None:

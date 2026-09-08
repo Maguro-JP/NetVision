@@ -59,6 +59,10 @@ def parse(text: str) -> ParsedConfig:
     if found:
         parsed.model = found.group(1)
 
+    # 橋ごとに、VLAN を見て振り分ける設定になっているか。
+    # 入っていない橋では pvid は効かないので、タグ無し VLAN として持たない
+    filtering: set[str] = set()
+
     section = ""
     for line in _joined(text):
         if line.startswith("/"):
@@ -77,6 +81,8 @@ def parse(text: str) -> ParsedConfig:
         elif section in ("/interface bridge", "/interface bonding"):
             if "name" in values:
                 _port(parsed, values["name"], values)
+                if values.get("vlan-filtering") == "yes":
+                    filtering.add(values["name"])
         elif section == "/interface ethernet":
             _ethernet(parsed, values)
         elif section == "/ip address":
@@ -84,7 +90,7 @@ def parse(text: str) -> ParsedConfig:
         elif section == "/ip route":
             _route(parsed, values)
         elif section == "/interface bridge port":
-            _bridge_port(parsed, values)
+            _bridge_port(parsed, values, filtering)
 
     return parsed
 
@@ -109,14 +115,19 @@ def _ethernet(parsed: ParsedConfig, values: dict[str, str]) -> None:
     _port(parsed, name, values)
 
 
-def _bridge_port(parsed: ParsedConfig, values: dict[str, str]) -> None:
-    """橋に足した口。タグ無しで渡す VLAN は `pvid` で書く。"""
+def _bridge_port(parsed: ParsedConfig, values: dict[str, str], filtering: set[str]) -> None:
+    """橋に足した口。タグ無しで渡す VLAN は `pvid` で書く。
+
+    ただし pvid が効くのは、その橋が VLAN を見て振り分ける設定
+    （`vlan-filtering=yes`）になっているときだけ。入っていない橋の pvid を
+    タグ無し VLAN として持つと、効いていない値を根拠に食い違いを言うことになる。
+    """
     name = values.get("interface")
     if not name:
         return
     port = _port(parsed, name, values)
     pvid = values.get("pvid")
-    if pvid and pvid.isdigit():
+    if pvid and pvid.isdigit() and values.get("bridge") in filtering:
         port.native_vlan = int(pvid)
         port.mode = port.mode or "trunk"
 
