@@ -78,6 +78,23 @@ def normalize_name(value: str | None) -> str:
     return re.sub(r"[^a-z0-9]", "", (value or "").lower())
 
 
+def model_key(vendor: str | None, model: str | None) -> str:
+    """型番の突き合わせ用の鍵。DB の結合（機器 ↔ 製品リファレンス）に使う。
+
+    Cisco は同じハードを `WS-C2960X-48FPD-L` とも `C2960X-48FPD-L` とも、
+    `C9300-48P` とも `C9300-48P-A` とも印字する。飾りを外した形に寄せないと、
+    型番単位で持つ EoL が現場の機器に当たらない。他のベンダーは記号と大文字小文字
+    だけを吸収する（Cisco の規則を他社の型番に当てはめない）。
+    """
+    if "cisco" in (vendor or "").lower():
+        from app.services.configparse import ciscomodel
+
+        read = ciscomodel.read(model)
+        if read:
+            return normalize_name(read.canonical)
+    return normalize_name(model)
+
+
 def matches_model(pattern: str | None, model: str | None) -> bool:
     """影響範囲の型番指定と機器の型番を突き合わせる。
 

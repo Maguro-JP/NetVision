@@ -76,7 +76,8 @@ def _missing_product():
     matched = exists(
         select(ProductReference.id).where(
             func.lower(ProductReference.vendor) == func.lower(Device.vendor),
-            func.lower(ProductReference.model) == func.lower(Device.model),
+            ProductReference.model_key == Device.model_key,
+            ProductReference.model_key != "",
         )
     )
     return ~matched

@@ -43,8 +43,8 @@ def _stale_days() -> int:
 
 def _device_counts(db: Session) -> dict[tuple[str, str], int]:
     counts: dict[tuple[str, str], int] = {}
-    for vendor, model in db.execute(select(Device.vendor, Device.model)).all():
-        key = (versions.normalize_name(vendor), versions.normalize_name(model))
+    for vendor, key in db.execute(select(Device.vendor, Device.model_key)).all():
+        key = (versions.normalize_name(vendor), key)
         counts[key] = counts.get(key, 0) + 1
     return counts
 
@@ -67,9 +67,7 @@ def _to_product_read(
         source_url=product.source_url,
         fetched_at=product.fetched_at,
         notes=product.notes,
-        device_count=counts.get(
-            (versions.normalize_name(product.vendor), versions.normalize_name(product.model)), 0
-        ),
+        device_count=counts.get((versions.normalize_name(product.vendor), product.model_key), 0),
         age_days=age,
         stale=age is None or age > _stale_days(),
     )
@@ -361,20 +359,15 @@ def freshness(db: DbSession) -> ReferenceFreshness:
     vulnerabilities = list(db.scalars(select(Vulnerability)))
     devices = _active_devices(db)
 
-    product_keys = {
-        (versions.normalize_name(p.vendor), versions.normalize_name(p.model)) for p in products
-    }
+    product_keys = {(versions.normalize_name(p.vendor), p.model_key) for p in products}
     covered = [
-        d
-        for d in devices
-        if (versions.normalize_name(d.vendor), versions.normalize_name(d.model)) in product_keys
+        d for d in devices if (versions.normalize_name(d.vendor), d.model_key) in product_keys
     ]
     uncovered = sorted(
         {
             f"{d.vendor} {d.model}"
             for d in devices
-            if (versions.normalize_name(d.vendor), versions.normalize_name(d.model))
-            not in product_keys
+            if (versions.normalize_name(d.vendor), d.model_key) not in product_keys
         }
     )
 

@@ -139,7 +139,8 @@ def _eol_expr():
         select(ProductReference.eol_date)
         .where(
             func.lower(ProductReference.vendor) == func.lower(Device.vendor),
-            func.lower(ProductReference.model) == func.lower(Device.model),
+            ProductReference.model_key == Device.model_key,
+            ProductReference.model_key != "",
         )
         .correlate(Device)
         .limit(1)

@@ -13,6 +13,7 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    event,
     func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -45,6 +46,8 @@ class ProductReference(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     vendor: Mapped[str] = mapped_column(String(80), index=True)
     model: Mapped[str] = mapped_column(String(120), index=True)
+    #: 突き合わせ用の鍵（versions.model_key）。保存時に vendor / model から作る
+    model_key: Mapped[str] = mapped_column(String(120), index=True, default="", server_default="")
 
     product_name: Mapped[str | None] = mapped_column(String(200), default=None)
     eos_date: Mapped[date | None] = mapped_column(Date, default=None)  # 販売終了
@@ -134,3 +137,11 @@ class VulnerabilityAffect(Base):
     fixed_version: Mapped[str | None] = mapped_column(String(80), default=None)
 
     vulnerability: Mapped[Vulnerability] = relationship(back_populates="affects")
+
+
+@event.listens_for(ProductReference, "before_insert")
+@event.listens_for(ProductReference, "before_update")
+def _fill_product_model_key(_mapper, _connection, product: ProductReference) -> None:
+    from app.services.versions import model_key
+
+    product.model_key = model_key(product.vendor, product.model)

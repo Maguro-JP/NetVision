@@ -3,7 +3,7 @@ from __future__ import annotations
 import enum
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, and_, func
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, String, Text, and_, event, func
 from sqlalchemy.orm import Mapped, foreign, mapped_column, relationship
 
 from app.db import Base
@@ -47,6 +47,8 @@ class Device(Base):
     # 場所ごとに食い違う（未入力は missing_fields で拾う）
     vendor: Mapped[str] = mapped_column(String(80), index=True, default="", server_default="")
     model: Mapped[str] = mapped_column(String(120), index=True, default="", server_default="")
+    #: 型番の突き合わせ用の鍵（versions.model_key）。保存時に vendor / model から作る
+    model_key: Mapped[str] = mapped_column(String(120), index=True, default="", server_default="")
     serial_number: Mapped[str | None] = mapped_column(String(120), unique=True, default=None)
     device_type: Mapped[DeviceType] = mapped_column(
         Enum(DeviceType, native_enum=False, length=32), default=DeviceType.OTHER, index=True
@@ -102,11 +104,13 @@ class Device(Base):
         return [label for name, label in self.REQUIRED_FIELDS if not getattr(self, name, None)]
 
     # 型番のライフサイクル情報。EoL は本来型番の属性なので製品マスターに正規化してある。
-    # 台帳の表記ゆれ（cisco / Cisco）を吸収するため、大文字小文字を無視して突き合わせる。
+    # ベンダーは大文字小文字を無視し、型番は飾りを外した鍵（model_key）で突き合わせる
+    # （`WS-C2960X-48FPD-L` の機器に `C2960X-48FPD-L` の EoL が当たるように）。
     product: Mapped[ProductReference | None] = relationship(
         primaryjoin=lambda: and_(
             func.lower(foreign(Device.vendor)) == func.lower(ProductReference.vendor),
-            func.lower(foreign(Device.model)) == func.lower(ProductReference.model),
+            foreign(Device.model_key) == ProductReference.model_key,
+            ProductReference.model_key != "",
         ),
         viewonly=True,
         uselist=False,
@@ -117,3 +121,11 @@ class Device(Base):
         cascade="all, delete-orphan",
         order_by="MaintenanceContract.end_date",
     )
+
+
+@event.listens_for(Device, "before_insert")
+@event.listens_for(Device, "before_update")
+def _fill_device_model_key(_mapper, _connection, device: Device) -> None:
+    from app.services.versions import model_key
+
+    device.model_key = model_key(device.vendor, device.model)
