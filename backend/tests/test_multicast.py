@@ -135,7 +135,7 @@ set protocols pim rp static address 10.0.0.2
     assert not any("決まっていません" in f.title for f in multicastreview.review(parsed))
 
 
-def test_comware_is_read():
+def test_necqx_is_read():
     text = """sysname qx-01
 #
 multicast routing

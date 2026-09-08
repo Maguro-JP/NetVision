@@ -1,6 +1,6 @@
 """NEC（IX / QX）の変換・配布・優先制御・暗号化を読む。
 
-IX は自社系、QX は Comware ベースで書き方がまったく違う。どちらも
+IX と QX は書き方がまったく違う。どちらも
 Cisco と同じ器へ読み替えて、粗を見るところは1つのままにする。
 IX の優先制御は、確かめられる書き方が手元に無いので読んでいない。
 読めないものを当てずっぽうで読むと、間違った断定が資料に載る。
@@ -106,7 +106,7 @@ def titles(text: str) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# QX（Comware）
+# QX
 # ---------------------------------------------------------------------------
 
 
@@ -230,7 +230,7 @@ def test_ix_without_a_gateway_is_reported():
 
 
 def test_vrp_qos_is_read_with_the_same_reader() -> None:
-    """VRP は見出しと当て方だけ Comware と違う。
+    """VRP は見出しと当て方だけ QX と違う。
 
     `qos policy` に対して `traffic policy`、`qos apply policy` に対して
     `traffic-policy`。中身（classifier / behavior）は同じ書き方なので、

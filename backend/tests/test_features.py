@@ -72,7 +72,7 @@ def test_every_find_carries_the_line_it_came_from():
         assert feature.count >= 1
 
 
-COMWARE = """sysname edge-sw-01
+NECQX = """sysname edge-sw-01
 #
 acl number 3000
 #
@@ -98,7 +98,7 @@ interface Vlan-interface10
 
 
 def test_the_same_meaning_is_found_in_another_vendor_wording():
-    found = _found(COMWARE)
+    found = _found(NECQX)
     assert f"{features.ACCESS_CONTROL}:ACL" in found
     assert f"{features.NAT}:NAT" in found
     assert f"{features.DHCP}:DHCP リレー" in found

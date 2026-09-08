@@ -360,7 +360,7 @@ def _describe_mismatch(current: ConfigNode, target: ConfigNode, path: tuple[str,
 def _vendor_of(current_text: str, target_text: str) -> str | None:
     """ベンダーが渡されなかったときに、Config 本文から見分ける。
 
-    分からないまま Cisco として扱うと、Junos に `no set ...`、Comware に
+    分からないまま Cisco として扱うと、Junos に `no set ...`、NEC QX に
     `no ...` を出す。どちらも実機では通らない。しかも検証は同じ間違った
     規則で当てて確かめるので、「収束を確認しました」と出てしまう。
 

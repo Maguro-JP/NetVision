@@ -47,7 +47,7 @@ running-config
 | Juniper Junos / SRX | ✅ | `show version` / `show chassis hardware`（SRX は `security policies` も読みます） |
 | Fortinet FortiOS | ✅ | `get system status` |
 | NEC IX シリーズ | ✅ | `show version`（`IX Series IX2215 ...` の行） |
-| NEC QX シリーズ | ✅ | `display version`（Comware ベース） |
+| NEC QX シリーズ | ✅ | `display version`（`Software, Version` の行）、または設定先頭の `version` 行 |
 | ヤマハ RTX / NVR / FWX | ✅ | `show config` の1行目（`# RTX830 Rev.15.02.28 ...`） |
 | Cisco ASA / FTD | ✅ | `ASA Version` の行、`show version` の Hardware / Serial Number |
 | Palo Alto PAN-OS | ✅ | `show system info` の model / sw-version / serial（XML は `<config>` の中身から） |
@@ -171,7 +171,7 @@ VLAN が多い場合は「実機の名前で下書きを作る」で実機の VL
 |---|---|---|
 | Cisco | VRF | `vrf definition NAME` / `ip vrf NAME` |
 | NEC IX | VRF | `ip vrf NAME` |
-| NEC QX（Comware） | VPN インスタンス | `ip vpn-instance NAME` |
+| NEC QX | VPN インスタンス | `ip vpn-instance NAME` |
 | Juniper | routing-instance | `set routing-instances NAME instance-type virtual-router` |
 | Fortinet | VDOM | `config vdom` / `edit NAME` |
 

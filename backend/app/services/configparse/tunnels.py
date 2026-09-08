@@ -27,7 +27,7 @@ def is_tunnel(name: str) -> bool:
 
 
 def parse_block_style(text: str, parsed: ParsedConfig) -> None:
-    """`interface TunnelN` … の形（Cisco IOS / NEC IX / Comware）を読む。
+    """`interface TunnelN` … の形（Cisco IOS / NEC IX / NEC QX）を読む。
 
     書式の細かい差（`tunnel source` と `source`）は両方受ける。
     どちらか片方しか見ないと、ベンダーを跨いだ瞬間に黙って空になる。

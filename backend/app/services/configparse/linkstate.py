@@ -16,7 +16,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
 - Cisco NX-OS `show interface brief`
   （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port）
-- Comware（NEC QX）`display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
+- NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -47,14 +47,14 @@ _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
 _PARAGRAPH = re.compile(
     r"^(\S+) is (up|down|administratively down),\s*line protocol is (up|down)\b", re.IGNORECASE
 )
-#: Comware / VRP の `display interface`。`GigabitEthernet1/0/1 current state: UP`
+#: NEC QX / VRP の `display interface`。`GigabitEthernet1/0/1 current state: UP`
 _STATE_PARAGRAPH = re.compile(
     r"^(\S+)\s+current state\s*:\s*(UP|DOWN|Administratively DOWN)\b", re.IGNORECASE
 )
 #: NX-OS `show interface brief`。Ethernet の行は 5 列目が up / down
 _NXOS_HEADER = re.compile(r"^\s*Ethernet\s+VLAN\s+Type\s+Mode\s+Status\s+Reason\b", re.IGNORECASE)
-#: Comware `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
-_COMWARE_HEADER = re.compile(
+#: NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
+_UNDOFORM_HEADER = re.compile(
     r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
 )
 #: VRP の `display interface brief`。物理の状態は PHY の列に出る
@@ -91,8 +91,8 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_terse(lines[index + 1 :], parsed)
         elif _ARUBA_HEADER.match(line):
             _read_aruba(lines[index + 1 :], parsed)
-        elif _COMWARE_HEADER.match(line):
-            _read_comware(lines[index + 1 :], parsed)
+        elif _UNDOFORM_HEADER.match(line):
+            _read_undoform(lines[index + 1 :], parsed)
         elif _PANOS_HEADER.match(line):
             _read_panos(lines[index + 1 :], parsed)
         elif _NXOS_HEADER.match(line):
@@ -208,7 +208,7 @@ def _read_aruba(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = found.group(3).lower()
 
 
-def _read_comware(rows: list[str], parsed: ParsedConfig) -> None:
+def _read_undoform(rows: list[str], parsed: ParsedConfig) -> None:
     for row in rows:
         columns = row.split()
         if len(columns) < 2:
@@ -313,7 +313,7 @@ def _read_forti_physical(lines: list[str], parsed: ParsedConfig) -> None:
 #: `31337 input errors, 31337 CRC, ...` の行。数え始めからの累計
 # 壊れて届いた数（CRC）。書き方は3通りあるが、どれも「数字 + CRC」か
 # 「CRC: 数字」の形で、他の意味には使われない。行の頭に固定すると、
-# Comware のように途中で改行する出力を取りこぼす
+# NEC QX のように途中で改行する出力を取りこぼす
 _CRC_LINE = re.compile(r"(?:(?P<crc>\d+)\s+CRC\b|CRC\s*:\s*(?P<colon>\d+))", re.IGNORECASE)
 
 

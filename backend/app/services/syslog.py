@@ -107,8 +107,8 @@ class LogReport:
 _PRI = re.compile(r"^<(\d{1,3})>")
 #: Cisco 系の事象名。`%LINK-3-UPDOWN:` `%SYS-5-CONFIG_I:`
 _CODE = re.compile(r"%([A-Z0-9_]+(?:-[A-Z0-9_]+)*-\d-[A-Z0-9_]+)\s*:?\s*(.*)$")
-#: Comware 系。`%%10SHELL/5/SHELL_LOGIN:`
-_CODE_COMWARE = re.compile(r"%%\d*([A-Z0-9]+/\d+/[A-Z0-9_]+)\s*:?\s*(.*)$")
+#: `%%10SHELL/5/SHELL_LOGIN:` の形（NEC QX / VRP / H3C）
+_CODE_SLASHED = re.compile(r"%%\d*([A-Z0-9]+/\d+/[A-Z0-9_]+)\s*:?\s*(.*)$")
 #: 日付。よくある3つの形だけ見る（増やすのは実物を見てから）
 _STAMPS = (
     (re.compile(r"^(\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2})"), "%Y-%m-%d %H:%M:%S"),
@@ -164,7 +164,7 @@ def parse_line(line: str) -> LogEvent | None:
         event.host = host.group(1)
         rest = rest[host.end() :].strip()
 
-    for pattern in (_CODE_COMWARE, _CODE):
+    for pattern in (_CODE_SLASHED, _CODE):
         found = pattern.search(rest)
         if not found:
             continue

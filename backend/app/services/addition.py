@@ -558,7 +558,7 @@ def _upstream_config(
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _upstream_cisco(plan, parsed)
     if vendor is Vendor.NEC_QX:
-        return _upstream_comware(plan, parsed)
+        return _upstream_necqx(plan, parsed)
     return _upstream_outline(plan, vendor, upstream)
 
 
@@ -607,7 +607,7 @@ def _upstream_cisco(plan: AdditionPlan, parsed: ParsedConfig) -> tuple[str, list
     return "\n".join(lines) + "\n", notes
 
 
-def _upstream_comware(plan: AdditionPlan, parsed: ParsedConfig) -> tuple[str, list[str]]:
+def _upstream_necqx(plan: AdditionPlan, parsed: ParsedConfig) -> tuple[str, list[str]]:
     lines: list[str] = []
     notes = [
         f"最初の塊（vlan {plan.vlan_id} と {plan.upstream_interface or 'ポート'}）"
@@ -679,7 +679,7 @@ def _device_config(
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _device_cisco(plan)
     if vendor is Vendor.NEC_QX:
-        return _device_comware(plan)
+        return _device_necqx(plan)
     return _device_outline(plan, vendor, request)
 
 
@@ -730,7 +730,7 @@ def _device_cisco(plan: AdditionPlan) -> tuple[str, list[str]]:
     return "\n".join(lines) + "\n", notes
 
 
-def _device_comware(plan: AdditionPlan) -> tuple[str, list[str]]:
+def _device_necqx(plan: AdditionPlan) -> tuple[str, list[str]]:
     lines = [f"sysname {plan.hostname}", "#"]
     notes = [f"sysname から {plan.device_uplink} までを入れれば繋がります。"]
 

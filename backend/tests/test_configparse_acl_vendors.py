@@ -67,7 +67,7 @@ def _acl(text: str, name: str):
     return next(acl for acl in parsed.acls if acl.name == name)
 
 
-def test_comware_rules_are_read_by_the_words_not_the_positions():
+def test_necqx_rules_are_read_by_the_words_not_the_positions():
     acl = _acl(QX, "3000")
     assert [entry.seq for entry in acl.entries] == ["5", "10", "15"]
     first = acl.entries[0]
@@ -79,7 +79,7 @@ def test_comware_rules_are_read_by_the_words_not_the_positions():
     assert acl.applied_to == ["interface GigabitEthernet1/0/1 入り"]
 
 
-def test_a_shadowed_rule_is_found_on_comware_too():
+def test_a_shadowed_rule_is_found_on_necqx_too():
     """器が同じなら、見つける仕組みは1つで足りる。"""
     findings = policyreview.review(configparse.parse(QX))
     assert any("読まれません" in f.title for f in findings)
@@ -353,7 +353,7 @@ def _titles(text: str) -> list[str]:
 def test_vrp_writes_the_direction_first_when_applying_an_acl() -> None:
     """VRP は `traffic-filter inbound acl 3000` の並び。
 
-    Comware の並びだけを見ていると、当ててあるのに「どこにも当たって
+    QX の並びだけを見ていると、当ててあるのに「どこにも当たって
     いません」と言うことになる。
     """
     text = "\n".join(

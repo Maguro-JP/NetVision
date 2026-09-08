@@ -264,7 +264,7 @@ def test_a_virtual_gateway_on_the_edge_of_the_segment_is_called_out():
     assert "配れない" in _virtual(_hsrp("10.0.10.255"))[0].title
 
 
-def test_vrrp_written_the_comware_way_is_checked_too():
+def test_vrrp_written_the_necqx_way_is_checked_too():
     cfg = (
         "sysname s1\ninterface Vlan-interface10\n"
         " ip address 10.0.10.2 255.255.255.0\n vrrp vrid 10 virtual-ip 10.0.77.1\n"

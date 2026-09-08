@@ -94,10 +94,10 @@ _DETECTORS = (
     # AOS-S は VLAN の下に口を並べる。AOS-CX とは別物なので、先に見分ける
     arubaos.detect,
     aruba.detect,
-    # ファーウェイ VRP は Comware と書き方が重なる。名乗りが出ているうちに拾わないと
-    # NEC QX として読んでしまう
+    # ファーウェイ VRP は NEC QX と書き方が重なる箇所がある。名乗りが出ているうちに
+    # 拾わないと NEC QX として読んでしまう
     huawei.detect,
-    # H3C も Comware。名乗りが出ているうちに拾わないと NEC として読んでしまう
+    # H3C も書き方が重なる。製品の印が出ているうちに拾わないと NEC として読んでしまう
     h3c.detect,
     nec.detect,
     cisco.detect,
@@ -252,12 +252,13 @@ _FEATURE_TEXT = {
     Vendor.FORTINET: fortinet.feature_text,
 }
 
-#: マルチキャストの書き方の系統。読み手はこの3つしか持たない
+#: マルチキャストの書き方の系統。読み手はこの3つしか持たない。
+#: undoform は、否定を `undo` で書き `#` で区切る書式（NEC QX / VRP / H3C）
 _MULTICAST_STYLE = {
     Vendor.JUNIPER: "juniper",
-    Vendor.NEC_QX: "comware",
-    Vendor.HUAWEI: "comware",
-    Vendor.H3C: "comware",
+    Vendor.NEC_QX: "undoform",
+    Vendor.HUAWEI: "undoform",
+    Vendor.H3C: "undoform",
     Vendor.ARUBA_CX: "aruba",
 }
 

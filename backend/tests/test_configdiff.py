@@ -564,7 +564,7 @@ def test_the_entry_settings_are_replaced_in_one_line() -> None:
 def test_the_vendor_is_read_from_the_config_when_it_is_not_given() -> None:
     """ベンダーが渡されなかったときに、Cisco だと決めつけない。
 
-    決めつけると Junos に `no set ...`、Comware に `no ...` を出す。どちらも
+    決めつけると Junos に `no set ...`、NEC QX に `no ...` を出す。どちらも
     実機では通らない。しかも検証は同じ間違った規則で当てて確かめるので、
     「収束を確認しました」と出てしまう。貼った人は、弾かれるまで気づけない。
     """
@@ -576,16 +576,16 @@ def test_the_vendor_is_read_from_the_config_when_it_is_not_given() -> None:
     assert junos.script.startswith("delete interfaces")
     assert "no set" not in junos.script
 
-    comware_base = "sysname qx-01\nvlan 10\n name {}\n"
-    comware_base += "interface GigabitEthernet1/0/1\n port link-type trunk\n"
-    comware = build(comware_base.format("USERS"), comware_base.format("OFFICE"))
-    assert comware.verified
+    necqx_base = "sysname qx-01\nvlan 10\n name {}\n"
+    necqx_base += "interface GigabitEthernet1/0/1\n port link-type trunk\n"
+    necqx = build(necqx_base.format("USERS"), necqx_base.format("OFFICE"))
+    assert necqx.verified
     # 値が1つしか持てない命令は、消さずに置き換える
-    assert "name OFFICE" in comware.script
-    assert "undo " not in comware.script
+    assert "name OFFICE" in necqx.script
+    assert "undo " not in necqx.script
 
-    # 消す側は Comware の書き方（undo）になる。no を出すと消えない
-    dropped = build(comware_base.format("USERS"), "sysname qx-01\nvlan 10\n name USERS\n")
+    # 消す側は NEC QX の書き方（undo）になる。no を出すと消えない
+    dropped = build(necqx_base.format("USERS"), "sysname qx-01\nvlan 10\n name USERS\n")
     assert dropped.verified
     assert "undo interface GigabitEthernet1/0/1" in dropped.script
 
@@ -679,8 +679,8 @@ def test_a_vendor_we_cannot_write_for_gets_no_commands() -> None:
     assert any("出せません" in message for message in result.warnings)
 
 
-def test_comware_style_vendors_use_undo() -> None:
-    # VRP は Comware と同じ消し方。Cisco の no を出すと消えない
+def test_undo_style_vendors_use_undo() -> None:
+    # VRP も消すのは undo。Cisco の no を出すと消えない
     current = "sysname a\ninterface GigabitEthernet1/0/1\n description old\n"
     target = "sysname a\ninterface GigabitEthernet1/0/1\n"
     result = build(current, target, vendor="huawei")

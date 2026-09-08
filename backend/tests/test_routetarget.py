@@ -29,7 +29,7 @@ set routing-instances CUST-B vrf-target import target:65000:30
 set routing-instances CUST-B vrf-target export target:65000:31
 """
 
-COMWARE = """sysname pe-03
+NECQX = """sysname pe-03
 ip vpn-instance CUST-A
  route-distinguisher 65000:10
  vpn-target 65000:10 import-extcommunity
@@ -52,8 +52,8 @@ def test_junos_targets_drop_the_target_prefix_so_they_compare_with_cisco():
     assert targets["CUST-B"].exports == {"65000:31"}
 
 
-def test_comware_targets_are_read():
-    targets = routetarget.parse(COMWARE)
+def test_necqx_targets_are_read():
+    targets = routetarget.parse(NECQX)
     assert targets["CUST-A"].imports == {"65000:10", "65000:99"}
     assert targets["CUST-A"].exports == {"65000:10"}
 
@@ -79,7 +79,7 @@ def _device(db, hostname: str, text: str, vrfs: list[str]) -> Device:
 
 def test_an_import_nobody_exports_is_marked_across_devices(db_session, client):
     _device(db_session, "pe-01", CISCO, ["CUST-A", "OLD"])
-    _device(db_session, "pe-03", COMWARE, ["CUST-A"])
+    _device(db_session, "pe-03", NECQX, ["CUST-A"])
 
     views = {v.name: v for v in topology.vrf_summary(db_session)}
     # 65000:99 は 2 台とも import しているが、誰も export していない

@@ -143,7 +143,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="名前と RD、経路の相互流入（route-target）まで読みます。同じ VRF 名なのに"
         "機器ごとに RD が違う、import しているのにどの機器も export していない"
-        "route-target、を機器をまたいで指摘します（Cisco / Arista / Junos / Comware）。",
+        "route-target、を機器をまたいで指摘します（Cisco / Arista / Junos / NEC QX）。",
     ),
     Capability(
         area="冗長",
@@ -191,7 +191,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="1行ずつ、当て先まで読みます。上の行に覆われて読まれない行、"
         "当てていない ACL、実質すべて通している ACL、落としているのに記録が"
         "残らない ACL、存在しない ACL を指しているところを指摘します。"
-        "読めるのは Cisco IOS・Arista EOS・Comware（NEC QX）・ファーウェイ VRP・"
+        "読めるのは Cisco IOS・Arista EOS・NEC QX・ファーウェイ VRP・"
         "NEC IX・Junos・FortiOS・ヤマハ（ip filter）・Aruba CX・"
         "アライドテレシス（ハードウェア ACL）・アラクサラ・FastIron の"
         "書き方です。通すべき通信が通るかどうかは、要件が要るので言いません。",
@@ -276,7 +276,7 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="PIM を入れている口と動作、集合場所（RP）、IGMP スヌーピングを"
-        "帯ごとに読みます（Cisco IOS / NX-OS・Arista・Junos・Comware）。"
+        "帯ごとに読みます（Cisco IOS / NX-OS・Arista・Junos・NEC QX）。"
         "sparse-mode なのに RP が決まっていない、RP への行き方が無い、"
         "スヌーピングだけ入れて聞いて回る役（querier）が居ない、"
         "口が1つだけ、を指摘します。どこに RP を置くべきかという設計は、"

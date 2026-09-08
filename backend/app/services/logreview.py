@@ -242,7 +242,7 @@ def _hardware(events: list[LogEvent]) -> Finding | None:
         "PWR-3",
         "POWER_SUPPLY",
         "PSU",
-        # ファーウェイ / Comware。同じ出来事でも語が違う
+        # ファーウェイ / NEC QX。同じ出来事でも語が違う
         "hwPowerRemove",
         "hwPowerFault",
         "hwEntityTemperature",
@@ -422,7 +422,7 @@ def _duplex_mismatch(events: list[LogEvent]) -> Finding | None:
 
 
 def _native_vlan_mismatch(events: list[LogEvent]) -> Finding | None:
-    # Comware / VRP は同じ食い違いを PVID の名前で書く
+    # NEC QX / VRP は同じ食い違いを PVID の名前で書く
     hits = _pick(
         events,
         "NATIVE_VLAN_MISMATCH",
@@ -762,7 +762,7 @@ def _rogue_dhcp(events: list[LogEvent]) -> Finding | None:
     )
 
 
-#: 「許していない端末が挿された」の言い方。Comware / VRP は PORTSEC_VIOLATION
+#: 「許していない端末が挿された」の言い方。NEC QX / VRP は PORTSEC_VIOLATION
 _PORT_SECURITY_WORDS = (
     "PSECURE_VIOLATION",
     "PORT_SECURITY",

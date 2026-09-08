@@ -86,8 +86,8 @@ def test_except_removes_only_the_named_vlans():
     assert port.carried_vlans({10, 20, 30}) == {10, 20}
 
 
-COMWARE = """
-Comware Software, Version 5.20.99
+NECQX = """
+ version 5.20.99
 NEC QX-S5528P
 #
  sysname qx-sw-02
@@ -111,9 +111,9 @@ interface GigabitEthernet1/0/2
 """
 
 
-def test_comware_trunk_and_pvid_are_read():
-    """Comware は書式が違うだけで意味は同じ。同じ形に寄せて持つ。"""
-    parsed = configparse.parse(COMWARE)
+def test_necqx_trunk_and_pvid_are_read():
+    """QX は書式が違うだけで意味は同じ。同じ形に寄せて持つ。"""
+    parsed = configparse.parse(NECQX)
     ports = {i.key: i for i in parsed.interfaces}
 
     trunk = ports["gigabitethernet1/0/1"]

@@ -119,7 +119,7 @@ _RULES: tuple[_Rule, ...] = (
         r"^\s*spanning-tree\s+vlan\s+\S+\s+priority\s+(\S+)",
         "優先度",
     ),
-    # Comware / VRP は `stp instance 0 priority 4096`、FastIron は VLAN の下に
+    # NEC QX / VRP は `stp instance 0 priority 4096`、FastIron は VLAN の下に
     # `spanning-tree priority 4096` と書く
     _rule(
         SPANNING_TREE,

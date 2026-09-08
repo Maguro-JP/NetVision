@@ -285,7 +285,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | Juniper | Junos / SRX | ルーターとファイアウォール。`firewall filter` に加え、SRX の `security policies`（ゾーンごとの許否）・アドレス帳・source NAT を読みます |
 | Fortinet | FortiOS | |
 | NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式、拠点間 IPsec（`ike proposal` / `ipsec autokey-map`）を読みます |
-| NEC | QX シリーズ | QX-S。H3C Comware ベースで、否定は `undo` |
+| NEC | QX シリーズ | QX-S。`sysname`・`port link-type`・`Vlan-interface` を読みます。否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
 | Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます。投入コマンドも `set` / `delete` で出します（commit するまで反映されない点を注意に付けます） |
@@ -294,7 +294,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | アラクサラ | AX シリーズ | AX2500S / AX3650S など。`interface gigabitethernet 0/1` のように種別と番号を分ける書き方、引用符付きのホスト名と VLAN 名を読みます。公開書式から実装したもので、実機の出力では未検証です。名乗り（`ALAXALA`）か型番（`AX3650S`）が入っていないと、IOS と見分けが付かないので判別しません |
 | Ruckus / Brocade | FastIron（ICX） | ICX7150 / ICX7250 など。VLAN の持ち方が IOS と逆（VLAN の下に `tagged` / `untagged` で口を並べる）ので、そこを読んでポート側の所属に直します。`port-name`・`interface ethernet 1/1/1`・`HW:` / `SW:` の2行も読みます。公開書式から実装したもので、実機の出力では未検証です |
 | Cisco | AireOS 無線コントローラ | 5508 / 5520 / 3504 など。設定ファイルではなく `show sysinfo` / `show inventory` / `show interface summary` / `show wlan summary` / `show ap summary` を貼ったものから、型番・シリアル・版数・口・SSID・AP 一覧を読みます。貼られていない表のぶんは、無いのではなく読んでいないものとして扱います |
-| ファーウェイ | VRP（S / CE / AR） | `sysname`・`port link-type`・`Vlanif` を読みます。Comware（NEC QX）と書き方が重なるので、VRP の名乗りが出ているものだけをファーウェイとして扱います。メーカーを取り違えると、保守期限も脆弱性も別のメーカーのもので判定してしまうためです |
+| ファーウェイ | VRP（S / CE / AR） | `sysname`・`port link-type`・`Vlanif` を読みます。NEC QX と書き方が重なる箇所があるので、VRP の名乗りが出ているものだけをファーウェイとして扱います。メーカーを取り違えると、保守期限も脆弱性も別のメーカーのもので判定してしまうためです |
 | Aruba | CX（AOS-CX） | `1/1/1` 形式のポート、`vlan access` / `vlan trunk allowed`、`access-list ip`、`lag` を読みます。ポートは `no shutdown` を書いて初めて上がる扱いです |
 
 アラクサラ / ファーウェイ / FastIron の LLDP は、`show lldp neighbors` の見出しから
@@ -645,7 +645,7 @@ STP のモード、そして「どの機器にも入っている行」です。1
 条件が要求しないものは置きません。挟むほど止まる場所が増え、設定を合わせる箇所も
 増えるためです。何も条件が無ければ、スイッチどうしを直結して終わりです。
 
-Config の書式は Cisco IOS 系・NEC QX（Comware）・Aruba CX（AOS-CX）・Arista EOS・
+Config の書式は Cisco IOS 系・NEC QX・Aruba CX（AOS-CX）・Arista EOS・
 アライドテレシス AlliedWare Plus から選べます。書き出したものは、この道具の読み手で
 そのまま読み戻せることを試験で確かめています。
 
@@ -785,7 +785,7 @@ Config は「どう設定してあるか」で、SNMP は「いまどうなっ�
 端末に保存して、機内モードでも開けます。アプリを動かしている場合は `/phone.html`
 でも開けます。
 
-読める形は Cisco IOS / IOS-XE・NX-OS、Arista、Aruba CX、NEC QX（Comware）、
+読める形は Cisco IOS / IOS-XE・NX-OS、Arista、Aruba CX、NEC QX、
 AlliedWare Plus です。VLAN・アドレス・上位につなぐ口・端末をつなぐ口・既定の出口・
 時刻とログの送り先を入れると、その機器ぶんの Config が出ます。
 
@@ -1012,7 +1012,7 @@ VLAN の事故はほぼ全部この3つの混同から出ます。混ぜて持�
 | ベンダー | トランク許可 | ネイティブ |
 |---|---|---|
 | Cisco | `switchport trunk allowed vlan 10,20`（`add` / `remove` / `except` / `none` 対応） | `switchport trunk native vlan N` |
-| NEC QX（Comware） | `port trunk permit vlan 10 20 to 30` / `port hybrid vlan ... tagged` | `port trunk pvid vlan N` |
+| NEC QX | `port trunk permit vlan 10 20 to 30` / `port hybrid vlan ... tagged` | `port trunk pvid vlan N` |
 | Juniper | `vlan members [ v10 v20 ]`（名前を番号に解決） | `native-vlan-id N` |
 
 結線が実際に運んでいる VLANは、両端のポート設定を突き合わせて出します。

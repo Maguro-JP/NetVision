@@ -1,9 +1,9 @@
 """H3C（Comware）の config を読む。
 
-NEC QX は H3C の OEM で、書き方は今日のところ重なる。だが別の製品である。
-別の製品を「似ているから」と同じ読み手に通すと、片方の都合で直した読み方が
-もう片方にも黙って効き、H3C だけに出てくる書き方（`port link-mode` など）を
-足す場所も無くなる。読み手も判別も、この機種のものとして独立して持つ。
+書き方は NEC QX と一致する箇所が多い。だが別の製品である。似ているだけの
+別の製品を同じ読み手に通すと、片方の都合で直した読み方がもう片方にも黙って効き、
+H3C だけに出てくる書き方（`port link-mode` など）を足す場所も無くなる。
+読み手も判別も、この機種のものとして独立して持つ。
 
 読める書き方（H3C の `display current-configuration` に出る形）:
 
@@ -18,8 +18,8 @@ NEC QX は H3C の OEM で、書き方は今日のところ重なる。だが別
 - VRF … `ip vpn-instance`
 - 隣 … `display lldp neighbor-information`（詳細と list）
 
-経路（`ip route-static`・OSPF・BGP）、経路の道具、トンネルは、Comware という
-言語の共通読み手に渡す。言語は共通でも、機種の名乗りと判別はここが持つ。
+経路（`ip route-static`・OSPF・BGP）、経路の道具、トンネルは、否定を `undo` で
+書く書式の共通読み手に渡す。書式が共通でも、機種の名乗りと判別はここが持つ。
 """
 
 from __future__ import annotations
@@ -38,8 +38,8 @@ from app.services.configparse.base import (
 
 # --- 名乗り -----------------------------------------------------------------
 
-#: H3C の OS の名乗り。`display version` の1行目に出る。OEM の NEC QX でも
-#: この行は同じに出るので、これだけでは製品を決められない
+#: H3C の OS の名乗り。`display version` の1行目に出る。これだけでは
+#: 製品を決めない（製品の印が別にあるならそちらが機器の名前）
 _OS_BANNER = re.compile(r"\bH3C\s+Comware\b", re.IGNORECASE)
 #: H3C の製品の名乗り。型番の前に会社名が付く、または manuinfo の VENDOR_NAME
 _PRODUCT = re.compile(
@@ -67,7 +67,7 @@ _MANUINFO_HEADER = re.compile(
 _MANUINFO_SERIAL = re.compile(r"^DEVICE_SERIAL_NUMBER\s*:\s*(\S+)", re.IGNORECASE)
 _MANUINFO_NAME = re.compile(r"^DEVICE_NAME\s*:\s*(.+?)\s*$", re.IGNORECASE)
 
-#: NEC の製品の名乗り。同じ OS で動くので、製品の印で見分ける
+#: NEC の製品の名乗り。書き方が重なるので、製品の印で見分ける
 _NEC_PRODUCT = re.compile(
     r"\bNEC\s+QX-S\d|\bUNIVERGE\b|\bQX-S\d[\w-]*\b|^\s*VENDOR_NAME\s*:\s*NEC\b",
     re.IGNORECASE | re.MULTILINE,
@@ -122,11 +122,10 @@ _MAC = re.compile(r"^(?:[0-9a-f]{4}-){2}[0-9a-f]{4}$|^(?:[0-9a-f]{2}[:-]){5}[0-9
 def detect(text: str) -> Vendor | None:
     """H3C かどうか。製品の印で決める。OS の名乗りでは決めない。
 
-    NEC QX は H3C の OS で動くので、`display version` の1行目には NEC の機器でも
-    「H3C Comware」と出る。それを見て H3C と呼ぶと、NEC の機器がまるごと
-    H3C になる。逆に OEM 元だから、買った先だから、という理由で片方に寄せる
-    こともしない。製品の印（型番・VENDOR_NAME・型番の前の会社名）が
-    その機器の名前で、OS の名前はその機器の名前ではない。それだけの規則。
+    製品の印（型番・VENDOR_NAME・型番の前の会社名）がその機器の名前で、
+    OS の名乗りはその機器の名前ではない。NEC の製品の印がある config を、
+    OS の名乗りを理由に H3C と呼ぶことはしない。逆に、どちらかに寄せる理由も
+    持たない。それだけの規則。
 
     - NEC の製品の印がある … NEC（こちらは名乗らない）
     - H3C の製品の印がある … H3C
@@ -162,10 +161,10 @@ def parse(text: str) -> ParsedConfig:
     _read_lldp(text, parsed)
     _read_lldp_list(text, parsed)
 
-    # 経路と経路の道具、トンネルは、Comware という言語の共通読み手に渡す
+    # 経路と経路の道具、トンネルは、undo 書式の共通読み手に渡す
     tunnels.parse_block_style(text, parsed)
-    routing.parse_comware(text, parsed)
-    policy.parse_comware(text, parsed)
+    routing.parse_undoform(text, parsed)
+    policy.parse_undoform(text, parsed)
     return parsed
 
 

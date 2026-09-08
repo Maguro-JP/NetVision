@@ -740,7 +740,7 @@ def _stp_root(vendor: Vendor, values: dict[str, str]) -> list[str]:
         # AOS-CX は 0〜15 の段で書く。4096 刻みの何段目か
         return [f"spanning-tree priority {priority // 4096}"]
     if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
-        # Comware / VRP は木ごとに決める。VLAN と木の対応は現場で決まる
+        # NEC QX / VRP は木ごとに決める。VLAN と木の対応は現場で決まる
         return [
             f"stp instance 0 root {role}",
             f"{comment_of(vendor)} この機器で使う木と VLAN の対応: {TODO}",
@@ -808,7 +808,7 @@ def _voice_vlan(vendor: Vendor, values: dict[str, str]) -> list[str]:
             f"    vlan trunk native {data_vlan}",
         ]
     if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
-        # Comware / VRP は「電話用の VLAN」を口に足す形で書く
+        # NEC QX / VRP は「電話用の VLAN」を口に足す形で書く
         lines = [f"interface {port}", " port link-type hybrid"]
         if vendor is Vendor.NEC_QX:
             lines += [

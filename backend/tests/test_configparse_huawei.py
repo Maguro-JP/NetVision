@@ -1,6 +1,6 @@
 """ファーウェイ VRP を、NEC QX と取り違えないこと。
 
-VRP と Comware は元が同じで書き方が重なる。メーカーを取り違えると、
+VRP と NEC QX は書き方が重なる箇所がある。メーカーを取り違えると、
 保守期限も脆弱性も別のメーカーのもので判定してしまい、しかも黙って通る。
 """
 
@@ -44,7 +44,7 @@ def test_vrp_is_read_as_huawei() -> None:
     assert [route.destination for route in parsed.routes] == ["0.0.0.0/0"]
 
 
-def test_a_comware_config_is_still_read_as_nec_qx() -> None:
+def test_a_config_without_a_vrp_banner_is_still_read_as_nec_qx() -> None:
     text = "\n".join(
         [
             "sysname qx1",
@@ -66,7 +66,7 @@ def test_an_unreadable_model_stays_empty_rather_than_blank() -> None:
 
 
 def test_the_vrp_address_pool_is_read() -> None:
-    # VRP は `ip pool`、Comware は `dhcp server ip-pool`。同じ器で読む
+    # VRP は `ip pool`、NEC QX は `dhcp server ip-pool`。同じ器で読む
     text = "\n".join(
         [
             "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
@@ -89,7 +89,7 @@ def test_the_vrp_address_pool_is_read() -> None:
 
 
 def test_eth_trunk_membership_is_read() -> None:
-    # VRP は `eth-trunk 1`、Comware は `port link-aggregation group 1`
+    # VRP は `eth-trunk 1`、NEC QX は `port link-aggregation group 1`
     text = "\n".join(
         [
             "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
@@ -120,7 +120,7 @@ def test_the_local_users_count_as_aaa() -> None:
 
 
 def test_the_vlans_a_trunk_passes_are_read_in_huaweis_words() -> None:
-    """VRP は Comware と同じことを `allow-pass` と書く。
+    """VRP は NEC QX の `permit` と同じことを `allow-pass` と書く。
 
     読めていないと、両端で通す VLAN がそろっているかを比べられない。
     比べられないのに何も出ないと、そろっていると読めてしまう。

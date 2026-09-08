@@ -532,7 +532,7 @@ footer { color: var(--muted); font-size: 0.8rem; padding: 4px 0 24px; }
     return out;
   }
 
-  function comware(input, nets) {
+  function necqx(input, nets) {
     const out = [`sysname ${input.hostname}`, "#"];
     (input.vlans || []).forEach((vlan) => {
       out.push(`vlan ${vlan.id}`);
@@ -625,7 +625,7 @@ footer { color: var(--muted); font-size: 0.8rem; padding: 4px 0 24px; }
     nxos: { label: "Cisco NX-OS", build: (i, n) => cisco(i, n, true) },
     arista: { label: "Arista EOS", build: arista },
     arubacx: { label: "Aruba CX（AOS-CX）", build: arubacx },
-    comware: { label: "NEC QX / Comware", build: comware },
+    necqx: { label: "NEC QX", build: necqx },
     allied: { label: "AlliedWare Plus", build: allied },
   };
 

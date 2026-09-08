@@ -19,7 +19,7 @@ from app.services.portlabel import Media, format, media_of, split
         ("HundredGigE1/0/1", "Hu", "1/0/1", Media.HUNDRED),
         # NEC IX は GigaEthernet（bit が無い）。サブインターフェース番号まで含む
         ("GigaEthernet0.1", "GE", "0.1", Media.GIGA),
-        # Comware の集約
+        # NEC QX の集約
         ("Bridge-Aggregation1", "BAGG", "1", Media.LAG),
         # Juniper は接頭辞そのものが種別
         ("ge-0/0/1", "ge", "0/0/1", Media.GIGA),

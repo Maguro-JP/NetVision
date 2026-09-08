@@ -28,7 +28,7 @@ CASES = [
     ("Arista", "! device: sw (DCS-7050SX3-48YC8, EOS-4.29.2F)\nhostname sw\n", "4.29.2F"),
     ("Aruba CX", "!Version ArubaOS-CX FL.10.11.1010\nhostname sw\n", "FL.10.11.1010"),
     (
-        "Comware（設定だけ）",
+        "NEC QX（設定だけ）",
         "sysname qx1\n#\n version 7.1.070, Release 3506P05\n#\ninterface Vlan-interface10\n",
         "7.1.070",
     ),

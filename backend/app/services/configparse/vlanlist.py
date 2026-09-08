@@ -3,7 +3,7 @@
 トランクの許可 VLAN はベンダーごとに書式が違う。
 
 - Cisco   … `switchport trunk allowed vlan 10,20,30-40`（追記は `add`）
-- Comware … `port trunk permit vlan 10 20 30 to 40`
+- NEC QX … `port trunk permit vlan 10 20 30 to 40`
 - Junos   … `vlan members [ v10 v20 ]`（名前で書けるので番号は別途解決）
 
 上位では「番号の集合」として扱いたいので、ここで一度ならして扱う。

@@ -1,8 +1,8 @@
 """H3C を、NEC QX とは別の製品として読むこと。
 
-NEC QX は H3C の OEM で、書き方は今日のところ重なる。だが別の製品である。
-別の製品を「似ているから」と同じ読み手に通すと、片方の都合で直した読み方が
-もう片方にも黙って効く。読み手も判別も、この機種のものとして独立して持つ。
+書き方は NEC QX と一致する箇所が多い。だが別の製品である。似ているだけの
+別の製品を同じ読み手に通すと、片方の都合で直した読み方がもう片方にも黙って効く。
+読み手も判別も、この機種のものとして独立して持つ。
 """
 
 from app.services import configparse
@@ -161,17 +161,15 @@ def test_a_nec_config_is_still_nec() -> None:
     assert configparse.parse(nec_text).vendor is Vendor.NEC_QX
 
 
-def test_the_os_banner_does_not_decide_the_product() -> None:
-    """NEC QX の display version も、1行目は「H3C Comware」と出る。
+def test_the_product_mark_decides_and_the_os_banner_does_not() -> None:
+    """製品の印（型番・VENDOR_NAME・型番の前の会社名）がその機器の名前。
 
-    それを見て H3C と呼ぶと、NEC の機器がまるごと H3C になる。製品の印
-    （型番・VENDOR_NAME・型番の前の会社名）がその機器の名前で、OS の名前は
-    その機器の名前ではない。OEM 元だから、買った先だから、とは考えない。
+    OS の名乗りは機器の名前ではない。NEC の製品の印がある config を、
+    OS の名乗りを理由に H3C と呼ばない。どちらかに寄せる理由も持たない。
     """
     nec_unit = (
-        "H3C Comware Platform Software\n"
-        "Comware Software, Version 5.20.99, Release 6108\n"
         "NEC QX-S5528P Routing Switch uptime is 3 days\n"
+        "H3C Comware Software, Version 7.1.070\n"
         " sysname qx-sw-01\n"
     )
     h3c_unit = (
@@ -196,7 +194,7 @@ def test_a_config_without_a_name_is_not_called_h3c() -> None:
 
 
 def test_the_two_readers_agree_on_what_they_both_read_today() -> None:
-    """独立させても、今日は同じ言語なので同じ結果になるはず。
+    """独立させても、今日は書き方が重なるので同じ結果になるはず。
 
     ここがずれたら、どちらかの読み手が壊れている（意図して分けた差ではない）。
     """
@@ -211,7 +209,7 @@ def test_the_two_readers_agree_on_what_they_both_read_today() -> None:
 
 
 def test_the_commands_to_get_there_can_be_written() -> None:
-    """消し方は undo。差分もそのまま出せる。"""
+    """消し方は `undo`。差分もそのまま出せる。"""
     from app.services.configdiff import build
 
     future = H3C.replace(" port trunk permit vlan 10 20\n", " port trunk permit vlan 10 20 30\n")

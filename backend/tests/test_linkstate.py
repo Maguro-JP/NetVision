@@ -127,7 +127,7 @@ Port       Native  Mode    Type   Enabled Status  Reason   Speed  Description
 1/1/11     20      access  1GbT        no      down    Administratively down  --   yobi-port
 """
 
-COMWARE_BRIEF = """
+NECQX_BRIEF = """
 display interface brief
 Brief information on interfaces in bridge mode:
 Link: ADM - administratively down; Stby - standby
@@ -152,8 +152,8 @@ def test_aruba_cx_brief_is_read_even_though_the_header_spans_two_lines():
     assert states["1/1/11"] == "disabled"
 
 
-def test_comware_brief_is_read_with_the_abbreviated_names():
-    text = (FIXTURES / "qx-sw-01.txt").read_text() + COMWARE_BRIEF
+def test_necqx_brief_is_read_with_the_abbreviated_names():
+    text = (FIXTURES / "qx-sw-01.txt").read_text() + NECQX_BRIEF
     states = _states(configparse.parse(text))
     assert states["GigabitEthernet1/0/1"] == "up"
     assert states["GigabitEthernet1/0/8"] == "disabled"
@@ -168,7 +168,7 @@ def test_arista_status_with_the_extra_flags_column_is_read():
 
 def test_a_show_header_is_not_mistaken_for_a_port():
     """`Interface  IP-Address ...` の見出しを、interface の行と取り違えない。"""
-    for name, extra in (("core-sw-01.txt", BRIEF), ("qx-sw-01.txt", COMWARE_BRIEF)):
+    for name, extra in (("core-sw-01.txt", BRIEF), ("qx-sw-01.txt", NECQX_BRIEF)):
         parsed = configparse.parse((FIXTURES / name).read_text() + extra)
         names = {i.name for i in parsed.interfaces}
         assert not names & {"IP-Address", "Link", "Interface"}, name
@@ -337,13 +337,13 @@ def test_the_added_vendors_say_whether_the_link_is_up() -> None:
         assert states == ["up", "down"], text.splitlines()[0]
 
 
-def test_broken_frames_are_counted_on_comware_and_vrp() -> None:
-    """壊れて届いた数（CRC）を、Comware / VRP の書き方でも読むこと。
+def test_broken_frames_are_counted_on_necqx_and_vrp() -> None:
+    """壊れて届いた数（CRC）を、NEC QX / VRP の書き方でも読むこと。
 
     線は上がっているのに通信が遅い、の手掛かりになる。Cisco の並びだけを
     見ていると、その機器だけ「壊れていない」ことになる。
     """
-    comware = "\n".join(
+    necqx = "\n".join(
         [
             "sysname qx1",
             "#",
@@ -365,7 +365,7 @@ def test_broken_frames_are_counted_on_comware_and_vrp() -> None:
             "    CRC: 42,  Overrun: 0",
         ]
     )
-    for text, expected in ((comware, 55), (vrp, 42)):
+    for text, expected in ((necqx, 55), (vrp, 42)):
         port = configparse.parse(text).interfaces[0]
         assert port.link_state == "up"
         assert port.input_crc_errors == expected

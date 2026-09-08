@@ -615,7 +615,7 @@ def _write_configs(plan: Blueprint, request: BlueprintRequest) -> None:
     消し忘れがそのまま機器に入る。
     """
     writer = {
-        "nec": _comware,
+        "nec": _necqx,
         "aruba": _aruba_cx,
         "arista": _arista,
         "allied": _allied,
@@ -724,7 +724,7 @@ def _cisco(
     return "\n".join(lines) + "\n", notes
 
 
-def _comware(
+def _necqx(
     plan: Blueprint,
     device: PlannedDevice,
     ports: list[PlannedPort],

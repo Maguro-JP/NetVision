@@ -557,8 +557,8 @@ _QX_ACL = re.compile(
 _QX_RULE = re.compile(r"^rule\s+(?:(\d+)\s+)?(permit|deny)\s*(.*)$", re.IGNORECASE)
 
 
-def parse_comware(text: str, parsed: ParsedConfig) -> None:
-    """NEC QX（H3C Comware 系）の acl / rule を読む。"""
+def parse_undoform(text: str, parsed: ParsedConfig) -> None:
+    """NEC QX などの acl / rule を読む。"""
     acls: dict[str, ParsedAcl] = {}
     for head, body in _blocks(text, _QX_ACL):
         name = head.group(1)
@@ -566,7 +566,7 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
         for line in body:
             rule = _QX_RULE.match(line)
             if rule:
-                acl.entries.append(_comware_entry(rule, line))
+                acl.entries.append(_undoform_entry(rule, line))
 
     for head, body in _blocks(text, _INTERFACE):
         interface = expand(head.group(1))
@@ -577,7 +577,7 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
                 acls[match.group(1)].applied_to.append(f"interface {interface} {direction}")
                 continue
             # VRP は向きを先に書く（`traffic-filter inbound acl 3000`）。
-            # Comware の並びだけを見ていると、当ててあるのに当たっていないと言う
+            # 並びだけを見ていると、当ててあるのに当たっていないと言う
             match = re.match(
                 r"^traffic-filter\s+(inbound|outbound)\s+acl\s+(?:number\s+|name\s+)?(\S+)",
                 line,
@@ -590,10 +590,10 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
     parsed.acls.extend(acls.values())
 
 
-def _comware_entry(rule: re.Match[str], raw: str) -> ParsedAclEntry:
+def _undoform_entry(rule: re.Match[str], raw: str) -> ParsedAclEntry:
     """`rule 5 permit tcp source 10.0.0.0 0.0.0.255 destination-port eq 80` を読む。
 
-    Comware は何をどこに書くかを言葉で示すので、位置ではなく言葉で拾う。
+    この書式は何をどこに書くかを言葉で示すので、位置ではなく言葉で拾う。
     """
     rest = rule.group(3).split()
     entry = ParsedAclEntry(seq=rule.group(1), action=rule.group(2).lower(), raw=raw)

@@ -41,7 +41,7 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("fo", "FortyGigabitEthernet"),
     ("te", "TenGigabitEthernet"),
     ("gi", "GigabitEthernet"),
-    ("ge", "GigabitEthernet"),  # Comware の GE1/0/1。Juniper の ge-0/0/1 は先に除外する
+    ("ge", "GigabitEthernet"),  # NEC QX の GE1/0/1。Juniper の ge-0/0/1 は先に除外する
     ("fa", "FastEthernet"),
     ("po", "Port-channel"),
     ("lo", "Loopback"),
@@ -50,7 +50,7 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("et", "Ethernet"),
 )
 
-# Juniper 系（ge-0/0/1 など）。ハイフン必須。無いと Comware の GE1/0/1 を Juniper と誤る
+# Juniper 系（ge-0/0/1 など）。ハイフン必須。無いと NEC QX の GE1/0/1 を Juniper と誤る
 _JUNIPER = re.compile(r"^(ge|xe|et|fe|em|fxp|irb|ae|lo)-\d", re.IGNORECASE)
 _SPLIT = re.compile(r"^([A-Za-z\-]+)\s*([\d/\.:]+.*)?$")
 

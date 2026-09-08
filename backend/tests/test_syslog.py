@@ -223,8 +223,8 @@ def test_a_port_security_violation_is_said_in_the_more_specific_way() -> None:
     「許していない端末が挿された」のほうが具体的で、次にやることも書ける。
     機器が `Intrusion` と書いていても、そちらに寄せる。
     """
-    comware = "Sep  7 07:02:00 qx-01 %%10PORTSEC/4/PORTSEC_VIOLATION: Intrusion on GE1/0/5."
-    titles = [item.title for item in syslog.review(None, comware).findings]
+    necqx = "Sep  7 07:02:00 qx-01 %%10PORTSEC/4/PORTSEC_VIOLATION: Intrusion on GE1/0/5."
+    titles = [item.title for item in syslog.review(None, necqx).findings]
     assert titles == ["許していない端末が挿されています"]
 
     # 本当に攻撃として記録された行は、これまでどおり上げる
@@ -292,7 +292,7 @@ def test_a_routing_neighbour_going_down_is_found_on_every_vendor() -> None:
 
 
 def test_a_native_vlan_mismatch_is_found_however_the_device_words_it() -> None:
-    """Comware / VRP は同じ食い違いを PVID の名前で書く。
+    """NEC QX / VRP は同じ食い違いを PVID の名前で書く。
 
     タグ無しで渡す VLAN が両端で違うと、その VLAN の通信だけが漏れる。
     設定を見ないと分からない食い違いなので、ログから出せる意味は大きい。

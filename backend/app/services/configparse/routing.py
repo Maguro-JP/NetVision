@@ -508,7 +508,7 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
 
 
 # ---------------------------------------------------------------------------
-# NEC QX（H3C Comware 系）
+# NEC QX（否定を undo で書く書式）
 # ---------------------------------------------------------------------------
 
 _QX_ROUTE = re.compile(
@@ -521,7 +521,7 @@ _QX_BGP = re.compile(r"^bgp\s+(\S+)\s*$", re.IGNORECASE)
 _QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 
 
-def parse_comware(text: str, parsed: ParsedConfig) -> None:
+def parse_undoform(text: str, parsed: ParsedConfig) -> None:
     parse_other_protocols(text, parsed)
     parse_policies(text, parsed)
     for line in text.splitlines():
@@ -541,7 +541,7 @@ def parse_comware(text: str, parsed: ParsedConfig) -> None:
                 route.interface = expand(token)
         parsed.routes.append(route)
 
-    # Comware はエリアが入れ子（ospf 1 → area 0.0.0.0 → network ...）
+    # この書式はエリアが入れ子（ospf 1 → area 0.0.0.0 → network ...）
     for head, body in _blocks(text, _QX_OSPF):
         ospf = parsed.ospf or ParsedOspf()
         ospf.process_id = ospf.process_id or (head.group(1) or "1")

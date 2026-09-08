@@ -81,8 +81,8 @@ _HYGIENE = (
             r"|set allowaccess\b.*\btelnet\b"  # FortiGate
             r"|telnetd service on\b"  # ヤマハ
             r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
-            r"|telnet server enable\b"  # Comware
-            r"|protocol inbound (?:all|telnet)\b"  # Comware / VRP の vty
+            r"|telnet server enable\b"  # NEC QX
+            r"|protocol inbound (?:all|telnet)\b"  # NEC QX / VRP の vty
             r"|telnet server\s*$"  # FastIron（no telnet server は止めた形）
             r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
             re.IGNORECASE,
@@ -144,7 +144,7 @@ _HYGIENE = (
     (
         re.compile(
             r"^\s*(?:username\s+\S+\s+password\s+"  # Cisco IOS（secret なら言わない）
-            r"|(?:set\s+authentication\s+)?password\s+simple\s)",  # Comware（cipher なら言わない）
+            r"|(?:set\s+authentication\s+)?password\s+simple\s)",  # NEC QX（cipher なら言わない）
             re.IGNORECASE,
         ),
         MEDIUM,
@@ -510,7 +510,7 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
 #: 端末をつなぐ口（つないだ瞬間に通す設定）。機種ごとの言い方
 _EDGE_PORT = re.compile(
     r"^(?:spanning-tree\s+portfast(?:\s+trunk)?\s*$"
-    r"|stp\s+edged-port(?:\s+enable)?\s*$"  # Comware / VRP
+    r"|stp\s+edged-port(?:\s+enable)?\s*$"  # NEC QX / VRP
     r"|spanning-tree\s+802-1w\s+admin-edge-port\s*$"  # FastIron
     r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
     re.IGNORECASE,
@@ -618,7 +618,7 @@ def _port_admission(text: str) -> list[Finding]:
         if any("port-control auto" in line.lower() for line in body)
         or any(line.lower().startswith("dot1x port-control auto") for line in body)
         # Aruba CX（口の下に aaa authentication port-access dot1x authenticator）と
-        # Comware（口の下に dot1x だけ）
+        # NEC QX（口の下に dot1x だけ）
         or any(line.lower().startswith("aaa authentication port-access dot1x") for line in body)
         or any(line.lower() == "dot1x" for line in body)
         # VRP は口の下に `dot1x enable` と書く
@@ -637,7 +637,7 @@ def _port_admission(text: str) -> list[Finding]:
                 "radius server",
                 "aaa group server radius",
                 "set access radius-server",  # Junos
-                "radius scheme",  # Comware
+                "radius scheme",  # NEC QX
                 "radius-server template",  # VRP
                 "hwtacacs-server",  # VRP
             )
@@ -664,7 +664,7 @@ def _port_admission(text: str) -> list[Finding]:
                 "set protocols dot1x",  # Junos
             )
         )
-        or line == "dot1x"  # Comware（全体で有効にする行）
+        or line == "dot1x"  # NEC QX（全体で有効にする行）
         for line in lowered
     )
     if dot1x_on and not controlled:

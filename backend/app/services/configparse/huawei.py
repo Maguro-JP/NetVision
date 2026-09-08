@@ -1,12 +1,12 @@
 """ファーウェイ VRP（S / CE / AR シリーズ）の config を読む。
 
-VRP と Comware（NEC QX / H3C）は元が同じなので、基本の書き方はほぼ重なる。
-`sysname`・`vlan`・`port link-type`・`ip route-static` はそのまま読める。
-違うのは VLAN の口の名前（VRP は `Vlanif10`、Comware は `Vlan-interface10`）と、
-名乗り方だけなので、Comware の読み手に任せてから上から直す。
+`sysname`・`vlan`・`port link-type`・`ip route-static` の書き方は NEC QX と
+一致する箇所が多く、いまは NEC QX の読み手を通してから VRP だけの書き方
+（`Vlanif10`、`allow-pass`、VLAN 名を `description` に書く形）を上から直している。
 
-分けている理由は、型番と保守期限・脆弱性が別物だから。ここを混ぜると、
-別のメーカーの期限で判定してしまい、しかも黙って通る。
+だが別の製品である。似ているだけで同じ扱いにしない。H3C と同じく、
+読み手はこの機種のものとして独立させる（次の変更で行う）。メーカーの取り違えは、
+別のメーカーの保守期限と脆弱性で判定することになり、しかも黙って通る。
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import re
 from app.services.configparse import lldptable, nec
 from app.services.configparse.base import ParsedConfig, Vendor
 
-#: VRP の名乗り。Comware と見分けが付くのはここだけ
+#: VRP の名乗り。NEC QX と見分けが付くのはここだけ
 _BANNER = re.compile(
     r"Huawei Versatile Routing Platform|VRP\s*\(R\)\s*software|\bHUAWEI\b", re.IGNORECASE
 )
@@ -32,13 +32,13 @@ _DISPLAY_MODEL = re.compile(
 def detect(text: str) -> Vendor | None:
     """VRP かどうか。名乗りが出ているときだけ言う。
 
-    Comware と書き方が重なるので、名乗りが無いものを VRP だと決めない。
+    NEC QX と書き方が重なる箇所があるので、名乗りが無いものを VRP だと決めない。
     決め打つと、NEC QX の config をファーウェイとして読むことになる。
     """
     return Vendor.HUAWEI if _BANNER.search(text) else None
 
 
-#: VRP は VLAN の名前を `description` に書くことが多い（Comware は `name`）
+#: VRP は VLAN の名前を `description` に書くことが多い（NEC QX は `name`）
 _VLAN_HEAD = re.compile(r"^\s*vlan\s+(\d+)\s*$", re.IGNORECASE)
 _VLAN_DESCRIPTION = re.compile(r"^\s+description\s+(.+?)\s*$", re.IGNORECASE)
 
@@ -62,7 +62,7 @@ def _vlan_names(text: str) -> dict[int, str]:
 
 
 def parse(text: str) -> ParsedConfig:
-    """Comware の読み手に任せてから、VRP だけの書き方を上から直す。"""
+    """いまは NEC QX の読み手を通してから、VRP だけの書き方を上から直す。"""
     parsed = nec.parse(text, Vendor.NEC_QX)
     parsed.vendor = Vendor.HUAWEI
     parsed.os_name = "VRP"

@@ -8,7 +8,7 @@
 - IGMP スヌーピングだけ入れて、定期的に聞いて回る役（querier）が居ない
   L3 が居ない帯でこれをやると、数分後に配信が止まる
 
-読めるのは Cisco IOS / NX-OS、Arista、Junos（set 形式）、Comware（NEC QX）、
+読めるのは Cisco IOS / NX-OS、Arista、Junos（set 形式）、NEC QX、
 Aruba CX の書き方。判断はしない。判断は multicastreview.py の仕事。
 """
 
@@ -269,7 +269,7 @@ def parse_junos(text: str, found: ParsedMulticast) -> None:
 
 
 # ---------------------------------------------------------------------------
-# Comware（NEC QX）/ Aruba CX
+# NEC QX / Aruba CX
 # ---------------------------------------------------------------------------
 
 _CW_ROUTING = re.compile(r"^\s*multicast\s+routing\b", re.IGNORECASE)
@@ -286,8 +286,8 @@ _VLAN_BLOCK = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _PIM_BLOCK = re.compile(r"^router\s+pim\b", re.IGNORECASE)
 
 
-def parse_comware(text: str, found: ParsedMulticast) -> None:
-    """Comware（NEC QX）と Aruba CX。帯の中に書く流儀を見る。"""
+def parse_undoform(text: str, found: ParsedMulticast) -> None:
+    """NEC QX と Aruba CX。帯の中に書く流儀を見る。"""
     interface: str | None = None
     vlan: int | None = None
     for raw in text.splitlines():
@@ -341,9 +341,9 @@ _PARSERS = {
     "arista": parse_cisco,
     "nxos": parse_cisco,
     "juniper": parse_junos,
-    "comware": parse_comware,
-    "nec": parse_comware,
-    "aruba": parse_comware,
+    "undoform": parse_undoform,
+    "nec": parse_undoform,
+    "aruba": parse_undoform,
 }
 
 

@@ -209,7 +209,7 @@ def build(db: Session, device: Device, *, vlan_ids: list[int] | None = None) -> 
     if vendor in (Vendor.CISCO_IOS, Vendor.CISCO_NXOS):
         return _cisco(plan)
     if vendor is Vendor.NEC_QX:
-        return _comware(plan)
+        return _necqx(plan)
     if vendor is Vendor.NEC_IX:
         return _nec_ix(plan)
     if vendor is Vendor.JUNIPER:
@@ -388,11 +388,11 @@ def _cisco_management(plan: DesignInput) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# NEC QX（Comware）
+# NEC QX
 # ---------------------------------------------------------------------------
 
 
-def _comware(plan: DesignInput) -> str:
+def _necqx(plan: DesignInput) -> str:
     lines = _header(plan, Vendor.NEC_QX, "#")
     lines.append(f"sysname {plan.device.hostname}")
     lines.append("#")
@@ -813,7 +813,7 @@ def _ax_port(name: str) -> str:
 
 
 def _vrp(plan: DesignInput) -> str:
-    """Comware とほぼ同じだが、VLAN の口の名前と許可の書き方が違う。"""
+    """NEC QX と重なる箇所が多いが、VLAN の口の名前と許可の書き方が違う。"""
     lines = _header(plan, Vendor.HUAWEI, "#")
     lines.append(f"sysname {plan.device.hostname}")
     lines.append("#")

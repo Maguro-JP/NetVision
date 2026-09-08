@@ -425,8 +425,8 @@ _FORTINET = _FortiDialect(
 )
 
 
-class _ComwareDialect(Dialect):
-    """NEC QX（Comware）は否定が `no` ではなく `undo`。"""
+class _UndoDialect(Dialect):
+    """否定が `no` ではなく `undo` の書式（NEC QX / VRP / H3C）。"""
 
     def parse_change(self, line: str) -> tuple[str, bool]:
         stripped = line.strip()
@@ -438,7 +438,7 @@ class _ComwareDialect(Dialect):
         return f"undo {line}"
 
 
-_NEC_QX = _ComwareDialect(
+_NEC_QX = _UndoDialect(
     name="nec_qx",
     single_valued=[
         re.compile(r"^description\b", re.I),
@@ -564,7 +564,7 @@ _FASTIRON = dataclasses.replace(
 _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.NEC_IX: _NEC_IX,
     Vendor.NEC_QX: _NEC_QX,
-    # VRP と H3C は Comware と同じで、消すときに undo を使う
+    # VRP と H3C も、消すときに undo を使う
     Vendor.HUAWEI: _NEC_QX,
     Vendor.H3C: _NEC_QX,
     Vendor.CISCO_IOS: _CISCO,

@@ -8,7 +8,7 @@ VRF は RD で区別し、route-target で「どの VRF の経路を受け取る
 
 - Cisco / Arista `vrf definition X` / `ip vrf X` の下の `route-target import|export|both A:B`
 - Junos `set routing-instances X vrf-target target:A:B`（import / export 付きも）
-- Comware（NEC QX）`ip vpn-instance X` の下の
+- NEC QX `ip vpn-instance X` の下の
   `vpn-target A:B import-extcommunity|export-extcommunity|both`
 """
 
@@ -21,7 +21,7 @@ _HEAD = re.compile(
     r"^(?:vrf definition|ip vrf|vrf context|ip vpn-instance)\s+(\S+)\s*$", re.IGNORECASE
 )
 _CISCO_RT = re.compile(r"^\s+route-target\s+(import|export|both)\s+(\S+)", re.IGNORECASE)
-_COMWARE_RT = re.compile(
+_UNDOFORM_RT = re.compile(
     r"^\s+vpn-target\s+(.+?)\s+(import-extcommunity|export-extcommunity|both)\s*$",
     re.IGNORECASE,
 )
@@ -64,10 +64,10 @@ def parse(text: str) -> dict[str, RouteTargets]:
         if cisco:
             _add(out[current], cisco.group(1).lower(), _bare(cisco.group(2)))
             continue
-        comware = _COMWARE_RT.match(raw)
-        if comware:
-            direction = comware.group(2).lower().replace("-extcommunity", "")
-            for value in comware.group(1).split():
+        rule = _UNDOFORM_RT.match(raw)
+        if rule:
+            direction = rule.group(2).lower().replace("-extcommunity", "")
+            for value in rule.group(1).split():
                 _add(out[current], direction, _bare(value))
     return out
 

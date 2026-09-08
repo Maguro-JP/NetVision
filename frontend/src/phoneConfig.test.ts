@@ -162,8 +162,8 @@ describe("ベンダーごとの書き方", () => {
     expect(config).toContain("address 10.0.10.1 primary");
   });
 
-  it("Comware は Vlan-interface とマスクで書く", () => {
-    const config = NV.generate({ ...full, vendor: "comware" }).config;
+  it("NEC QX は Vlan-interface とマスクで書く", () => {
+    const config = NV.generate({ ...full, vendor: "necqx" }).config;
     expect(config).toContain("interface Vlan-interface10");
     expect(config).toContain("ip address 10.0.10.2 255.255.255.0");
     expect(config).toContain("vrrp vrid 10 virtual-ip 10.0.10.1");

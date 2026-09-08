@@ -4,7 +4,7 @@ NEC は系統が2つあり、書式がまったく違うので分けて扱う。
 
 - IX シリーズ（IX2000 / IX3000）… 自社系のルーター。`device-name` でホスト名、
   インターフェースは `GigaEthernet0.0` のようにサブインターフェース番号まで含む
-- QX シリーズ（QX-S）… H3C Comware ベースのスイッチ。機器名は `sysname`
+- QX シリーズ（QX-S）… スイッチ。機器名は `sysname`
   （`hostname` ではない）。否定は `no` ではなく `undo`。running-config
   だけでも sysname で判別する
 
@@ -61,12 +61,12 @@ _IX_VLAN_TAG = re.compile(
 _IX_VRF_DEF = re.compile(r"^(?:ip\s+)?vrf\s+(?:definition\s+)?(\S+)\s*$", re.IGNORECASE)
 _IX_VRF_FORWARDING = re.compile(r"^\s*(?:ip\s+)?vrf\s+forwarding\s+(\S+)", re.IGNORECASE)
 
-# --- QX（Comware）---------------------------------------------------------
+# --- QX -------------------------------------------------------------------
 
 _QX_MODEL = re.compile(r"\b(?:NEC\s+)?(QX-S\d+\w*)\b", re.IGNORECASE)
-_QX_COMWARE_VERSION = re.compile(
-    r"Comware\s+(?:Software|Platform Software).*?Version\s+([\w.]+)", re.IGNORECASE | re.DOTALL
-)
+#: `display version` の「... Software, Version 5.20.99」。機器が名乗る OS 名は
+#: ここでは読まない（何と呼ぶかは機器が決めることで、こちらが決めることではない）
+_QX_DISPLAY_VERSION = re.compile(r"Software,?\s+Version\s+([\w.]+)", re.IGNORECASE)
 #: 設定の先頭に出る ` version 7.1.070, Release 3506P05`。show を付けずに
 #: 設定だけ貼られたときは、版が分かるのはこの行しかない
 _QX_CONFIG_VERSION = re.compile(r"^\s*version\s+(\d[\w.]*)(?:,|\s|$)", re.IGNORECASE | re.MULTILINE)
@@ -74,7 +74,7 @@ _QX_SYSNAME = re.compile(r'^\s*sysname\s+"?([^"\n]+?)"?\s*$', re.IGNORECASE | re
 _HOSTNAME_CMD = re.compile(r"^\s*hostname\s+\S+", re.IGNORECASE | re.MULTILINE)
 _IX_IFACE = re.compile(r"^interface\s+GigaEthernet", re.IGNORECASE | re.MULTILINE)
 _QX_HINT = re.compile(
-    r"Comware|\bH3C\b|\bNEC\b|port\s+link-type|interface\s+Vlan-interface|^\s*undo\s+",
+    r"\bNEC\b|\bUNIVERGE\b|port\s+link-type|interface\s+Vlan-interface|^\s*undo\s+",
     re.IGNORECASE | re.MULTILINE,
 )
 _QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
@@ -86,8 +86,8 @@ _QX_IP = re.compile(
 _QX_VLAN = re.compile(r"^\s*vlan\s+(\d+)\s*$", re.IGNORECASE)
 # `vlan 20 to 22` / `vlan 10 20 30` のまとめ書き
 _QX_VLAN_RANGE = re.compile(r"^\s*vlan\s+(\d[\d\s]*(?:to\s+\d+)?[\d\s]*)$", re.IGNORECASE)
-# LAG（Comware では Bridge-Aggregation）への所属
-# Comware は `port link-aggregation group 1`、VRP は `eth-trunk 1`。同じ意味
+# LAG（QX では Bridge-Aggregation）への所属
+# QX は `port link-aggregation group 1`、VRP は `eth-trunk 1`。同じ意味
 _QX_LAG_MEMBER = re.compile(
     r"^\s*(?:port\s+link-aggregation\s+group|eth-trunk)\s+(\d+)", re.IGNORECASE
 )
@@ -102,7 +102,7 @@ _QX_TRUNK_PERMIT = re.compile(
 )
 # ネイティブ VLAN にあたるのが PVID
 _QX_PVID = re.compile(r"^\s*port\s+(?:trunk|hybrid)\s+pvid\s+vlan\s+(\d+)", re.IGNORECASE)
-# hybrid ポートは tagged / untagged を並べて書く。Comware は番号の後ろに、
+# hybrid ポートは tagged / untagged を並べて書く。QX は番号の後ろに、
 # ファーウェイ VRP は前に置く。同じ意味なので、どちらの並びでも読む
 _QX_HYBRID_VLAN = re.compile(
     r"^\s*port\s+hybrid\s+vlan\s+(?P<vlans>.+?)\s+(?P<how>tagged|untagged)\s*$"
@@ -149,7 +149,7 @@ def _from_prompt(text: str, pattern: re.Pattern[str]) -> str | None:
 def _looks_like_vlan_block(raw: str) -> bool:
     """インターフェースの中の行ではなく、VLAN の定義行か。
 
-    Comware はどちらも空白で始まる。VLAN の定義は `vlan 10` だけの行で、
+    QX はどちらも空白で始まる。VLAN の定義は `vlan 10` だけの行で、
     ポートの設定は `port access vlan 10` のように前に語が付く。
     """
     return bool(re.match(r"^\s*vlan\s+\d+\s*$", raw, re.IGNORECASE))
@@ -174,8 +174,8 @@ def detect(text: str) -> Vendor | None:
     """NEC かどうかを見る。共通語ではなく、その機種にしか出ない語で判別する。"""
     if _IX_BANNER.search(text) or _IX_DEVICE_NAME.search(text) or _IX_IFACE.search(text):
         return Vendor.NEC_IX
-    # QX は Comware ベース。現場では running-config だけ（sysname のみ、
-    # Comware のバナーも型番も無い）が来ることが多い
+    # 現場では running-config だけ（sysname のみ、名乗りも型番も無い）が
+    # 来ることが多い
     if _QX_MODEL.search(text):
         return Vendor.NEC_QX
     if _QX_SYSNAME.search(text) and (_QX_HINT.search(text) or not _HOSTNAME_CMD.search(text)):
@@ -279,7 +279,7 @@ def _parse_ix(text: str) -> ParsedConfig:
 
 # --- IX の変換と配布 --------------------------------------------------------
 #
-# IX は Cisco とも Comware とも違う書き方をする。読めるのは、実機の設定で
+# IX は Cisco とも QX とも違う書き方をする。読めるのは、実機の設定で
 # ふつうに出てくる形（ip napt enable / ip napt static / ip dhcp profile）に
 # 限ってある。自信の無い書き方を当てずっぽうで読むと、間違った断定が資料に
 # 載るので、読めないものは読めないままにしてある。
@@ -516,7 +516,7 @@ def _qx_is_chassis_section(header: str | None) -> bool:
 
 
 def _qx_serial(text: str) -> str | None:
-    """Comware の display device manuinfo / ESN からシャーシのシリアルを取る。"""
+    """QX の display device manuinfo / ESN からシャーシのシリアルを取る。"""
     section: str | None = None
     for raw in text.splitlines():
         header = _QX_MANUINFO_HEADER.match(raw.strip())
@@ -555,18 +555,20 @@ def _qx_device_name_from_manuinfo(text: str) -> str | None:
 
 
 # ---------------------------------------------------------------------------
-# QX（Comware）
+# QX
 # ---------------------------------------------------------------------------
 
 
 def _parse_qx(text: str) -> ParsedConfig:
-    parsed = ParsedConfig(vendor=Vendor.NEC_QX, os_name="Comware")
+    # OS の名前は入れない。機器が何と名乗るかは機器が決めることで、こちらが
+    # 決めることではない。読めていないものは空のままにする
+    parsed = ParsedConfig(vendor=Vendor.NEC_QX)
 
     model = _QX_MODEL.search(text)
     if model:
         parsed.model = model.group(1)
 
-    version = _QX_COMWARE_VERSION.search(text) or _QX_CONFIG_VERSION.search(text)
+    version = _QX_DISPLAY_VERSION.search(text) or _QX_CONFIG_VERSION.search(text)
     if version:
         parsed.os_version = version.group(1)
 
@@ -634,7 +636,7 @@ def _parse_qx(text: str) -> ParsedConfig:
             continue
         link_type = _QX_LINK_TYPE.match(raw)
         if link_type:
-            # Comware の access / trunk / hybrid を、他ベンダーと同じ語に寄せる
+            # QX の access / trunk / hybrid を、他ベンダーと同じ語に寄せる
             current.mode = link_type.group(1).lower()
             continue
         access = _QX_ACCESS_VLAN.match(raw)
@@ -688,13 +690,13 @@ def _parse_qx(text: str) -> ParsedConfig:
             continue
         lag_mode = re.match(r"^\s*link-aggregation\s+mode\s+(\S+)\s*$", raw, re.IGNORECASE)
         if lag_mode:
-            # Comware は dynamic / static。他ベンダーの語に寄せる
+            # QX は dynamic / static。他ベンダーの語に寄せる
             current.lag_mode = "active" if lag_mode.group(1).lower() == "dynamic" else "on"
             continue
         if re.match(r"^\s*shutdown\s*$", raw, re.IGNORECASE):
             current.enabled = False
 
-    # Comware も、許可 VLAN を書いていないトランクは VLAN 1 だけが通る既定。
+    # QX も、許可 VLAN を書いていないトランクは VLAN 1 だけが通る既定。
     # ただし「書いていない」と読み落としの区別がつかないので、全許可とはみなさない
     for interface in parsed.interfaces:
         if interface.mode == "trunk" and interface.key not in permitted:
@@ -704,8 +706,8 @@ def _parse_qx(text: str) -> ParsedConfig:
 
     _parse_qx_lldp(text, parsed)
     tunnels.parse_block_style(text, parsed)
-    routing.parse_comware(text, parsed)
-    policy.parse_comware(text, parsed)
+    routing.parse_undoform(text, parsed)
+    policy.parse_undoform(text, parsed)
     _parse_qx_nat(text, parsed)
     _parse_qx_dhcp(text, parsed)
     _parse_qx_qos(text, parsed)
@@ -713,7 +715,7 @@ def _parse_qx(text: str) -> ParsedConfig:
     return parsed
 
 
-# --- QX（Comware）の変換・配布・優先制御 ------------------------------------
+# --- QX の変換・配布・優先制御 ---------------------------------------------
 
 _QX_NAT_GROUP = re.compile(r"^nat address-group\s+(\S+)", re.IGNORECASE)
 _QX_NAT_OUTBOUND = re.compile(
@@ -726,11 +728,11 @@ _QX_NAT_SERVER = re.compile(
     r"(?:\s+(?P<gport>\S+))?\s+inside\s+(?P<inside>\S+)(?:\s+(?P<iport>\S+))?",
     re.IGNORECASE,
 )
-# VRP は `ip pool NAME`、Comware は `dhcp server ip-pool NAME`。同じ器で読む
+# VRP は `ip pool NAME`、QX は `dhcp server ip-pool NAME`。同じ器で読む
 _QX_DHCP_POOL = re.compile(r"^(?:dhcp server ip-pool|ip pool)\s+(\S+)", re.IGNORECASE)
 _QX_CLASSIFIER = re.compile(r"^traffic classifier\s+(\S+)", re.IGNORECASE)
 _QX_BEHAVIOR = re.compile(r"^traffic behavior\s+(\S+)", re.IGNORECASE)
-# Comware は `qos policy` と `qos apply policy`、VRP は `traffic policy` と
+# QX は `qos policy` と `qos apply policy`、VRP は `traffic policy` と
 # `traffic-policy`。中身（classifier / behavior）は同じ書き方なので、
 # 見出しと当て方だけ両方を見る
 _QX_POLICY = re.compile(r"^(?:qos policy|traffic policy)\s+(\S+)", re.IGNORECASE)
@@ -740,7 +742,7 @@ _QX_APPLY = re.compile(
 
 
 def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
-    """アドレス変換を読む。Comware は変換をポートの下に書く。"""
+    """アドレス変換を読む。QX は変換をポートの下に書く。"""
     nat = ParsedNat()
     interface: str | None = None
     group: ParsedNatPool | None = None
@@ -812,7 +814,7 @@ def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
 
 
 _QX_IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
-# Comware は `ipsec transform-set`、VRP は `ipsec proposal`。同じもの
+# QX は `ipsec transform-set`、VRP は `ipsec proposal`。同じもの
 _QX_TRANSFORM = re.compile(r"^ipsec (?:transform-set|proposal)\s+(\S+)", re.IGNORECASE)
 # VRP は相手を `ike peer 名前` の塊にまとめて書く
 _QX_IKE_PEER = re.compile(r"^ike peer\s+(\S+)", re.IGNORECASE)
@@ -824,7 +826,7 @@ _QX_IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:address|hostname)\s+(\S+)", r
 def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
     """拠点間の暗号化を読む。
 
-    Comware は ike proposal（鍵の交換）・ipsec transform-set（中身の暗号化）・
+    QX は ike proposal（鍵の交換）・ipsec transform-set（中身の暗号化）・
     ipsec policy（相手と範囲）に分かれる。Cisco の isakmp policy /
     transform-set / crypto map と役割が同じなので、そこへ読み替える。
     """
@@ -977,7 +979,7 @@ def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
 
 
 def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
-    """配るアドレスを読む。Comware は pool の中に範囲と配るものを書く。"""
+    """配るアドレスを読む。QX は pool の中に範囲と配るものを書く。"""
     dhcp = ParsedDhcp()
     current: ParsedDhcpPool | None = None
 
@@ -1029,7 +1031,7 @@ def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
 
 
 def _parse_qx_qos(text: str, parsed: ParsedConfig) -> None:
-    """優先制御を読む。Comware は classifier・behavior・policy に分かれる。"""
+    """優先制御を読む。QX は classifier・behavior・policy に分かれる。"""
     qos = ParsedQos()
     behaviors: dict[str, list[str]] = {}
     classifier: ParsedQosClass | None = None
@@ -1091,7 +1093,7 @@ def _parse_qx_qos(text: str, parsed: ParsedConfig) -> None:
 
 
 def _parse_qx_vpn_instances(text: str, parsed: ParsedConfig) -> None:
-    """Comware の VPN インスタンス（他ベンダーで言う VRF）を読む。"""
+    """QX の VPN インスタンス（他ベンダーで言う VRF）を読む。"""
     current: ParsedVrf | None = None
     for raw in text.splitlines():
         match = _QX_VPN_INSTANCE.match(raw)
@@ -1110,7 +1112,7 @@ def _parse_qx_vpn_instances(text: str, parsed: ParsedConfig) -> None:
             current.description = stripped.split(maxsplit=1)[1]
 
 
-# Comware の `display lldp neighbor-information` は
+# QX の `display lldp neighbor-information` は
 # 「LLDP neighbor-information of port N[GigabitEthernet1/0/1]」で始まる
 _QX_LLDP_PORT = re.compile(
     r"LLDP\s+neighbor-information\s+of\s+port\s+\d+\s*\[([^\]]+)\]", re.IGNORECASE

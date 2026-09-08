@@ -33,8 +33,8 @@ interface GigabitEthernet0/0/2
 !
 """
 
-COMWARE = """
-Comware Software, Version 5.20.99
+NECQX = """
+ version 5.20.99
 NEC QX-S5528P
 #
  sysname qx-rt-01
@@ -103,8 +103,8 @@ def test_cisco_vrfs_and_their_interfaces():
     assert ports["gigabitethernet0/0/2"].vrf is None
 
 
-def test_comware_vpn_instance_is_treated_as_a_vrf():
-    parsed = configparse.parse(COMWARE)
+def test_necqx_vpn_instance_is_treated_as_a_vrf():
+    parsed = configparse.parse(NECQX)
     vrfs = {v.name: v for v in parsed.vrfs}
 
     assert vrfs["SHANAI"].rd == "65000:100"
@@ -166,7 +166,7 @@ def upload(client, name: str, body: str):
 def test_vrf_summary_groups_by_name(client):
     """同じ VRF を複数台に延ばすのが普通なので、名前でまとめる。"""
     upload(client, "core-rt-01.txt", CISCO)
-    upload(client, "qx-rt-01.txt", COMWARE)
+    upload(client, "qx-rt-01.txt", NECQX)
 
     vrfs = {v["name"]: v for v in client.get(f"{API}/topology/vrfs").json()}
     assert len(vrfs["SHANAI"]["device_names"]) == 2
@@ -178,7 +178,7 @@ def test_vrf_summary_groups_by_name(client):
 def test_rd_mismatch_is_flagged(client):
     """同じ VRF 名で RD が食い違っていれば印を付ける。設計ミスの兆候になる。"""
     upload(client, "core-rt-01.txt", CISCO)
-    upload(client, "qx-rt-01.txt", COMWARE.replace("65000:100", "65000:999"))
+    upload(client, "qx-rt-01.txt", NECQX.replace("65000:100", "65000:999"))
 
     vrfs = {v["name"]: v for v in client.get(f"{API}/topology/vrfs").json()}
     assert vrfs["SHANAI"]["rd_mismatch"] is True
@@ -193,7 +193,7 @@ def test_topology_nodes_carry_their_vrfs(client):
 
 def test_export_can_be_filtered_by_vrf(client):
     upload(client, "core-rt-01.txt", CISCO)
-    upload(client, "qx-rt-01.txt", COMWARE)
+    upload(client, "qx-rt-01.txt", NECQX)
 
     res = client.get(f"{API}/topology/export.svg", params={"vrf": "KOKYAKU"})
     assert res.status_code == 200

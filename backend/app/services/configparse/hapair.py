@@ -21,7 +21,7 @@ KIND_LABELS = {
     "vsx": "Aruba VSX",
     "mlag": "Arista MLAG",
     "vpc": "Cisco vPC（NX-OS）",
-    "irf": "IRF（QX / Comware）",
+    "irf": "IRF（NEC QX / H3C）",
     "stack": "スタック（VRP の iStack / CSS）",
     "stackwise": "StackWise（Catalyst）",
 }
@@ -209,7 +209,7 @@ def _vpc(text: str) -> ParsedHaPair | None:
 
 
 def _irf(text: str) -> ParsedHaPair | None:
-    """Comware の IRF。`irf domain` で組を、`irf member N priority` で主を決める。"""
+    """IRF。`irf domain` で組を、`irf member N priority` で主を決める。"""
     domain = _IRF_DOMAIN.search(text)
     priority = _IRF_PRIORITY.search(text)
     if domain is None and priority is None:

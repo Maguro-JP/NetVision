@@ -571,7 +571,7 @@ def test_a_config_without_any_vlan_definition_is_not_accused(db_session):
     assert not [f for f in result.findings if "定義が無い VLAN" in f.title]
 
 
-def test_default_snmp_communities_are_caught_in_junos_and_comware_too(db_session):
+def test_default_snmp_communities_are_caught_in_junos_and_necqx_too(db_session):
     """public のままなのは、書き方が違っても同じ穴。"""
     junos = "set system host-name rt\nset snmp community public authorization read-write\n"
     result = configcheck.check(db_session, junos)
@@ -579,8 +579,8 @@ def test_default_snmp_communities_are_caught_in_junos_and_comware_too(db_session
     assert "SNMP の合言葉が既定のままです" in titles
     assert "SNMP から設定を書き換えられます" in titles
 
-    comware = "sysname sw\nsnmp-agent community write private\n"
-    titles = _titles(configcheck.check(db_session, comware))
+    necqx = "sysname sw\nsnmp-agent community write private\n"
+    titles = _titles(configcheck.check(db_session, necqx))
     assert "SNMP の合言葉が既定のままです" in titles
     assert "SNMP から設定を書き換えられます" in titles
 
@@ -596,7 +596,7 @@ def test_telnet_left_open_is_caught_in_every_vendor_s_wording(db_session):
         "yamaha": "# RTX830 Rev.15.02.28\ntelnetd service on\n",
         "allied": "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\n"
         "hostname sw\nservice telnet\n",
-        "comware": "sysname sw\ntelnet server enable\n",
+        "necqx": "sysname sw\ntelnet server enable\n",
         "asa": "ASA Version 9.16(4)\nhostname fw\ntelnet 10.0.0.0 255.255.255.0 inside\n",
     }
     for vendor, text in samples.items():
@@ -607,7 +607,7 @@ def test_telnet_left_open_is_caught_in_every_vendor_s_wording(db_session):
     assert "telnet で入れる状態です" not in titles
 
 
-def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_session):
+def test_dot1x_without_radius_is_caught_in_aruba_junos_and_necqx_too(db_session):
     samples = {
         "aruba": (
             "!Version ArubaOS-CX FL.10.09.0010\nhostname sw\n"
@@ -619,7 +619,7 @@ def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_sessio
             "set system host-name sw\n"
             "set protocols dot1x authenticator interface ge-0/0/5.0 supplicant multiple\n"
         ),
-        "comware": "sysname sw\ndot1x\ninterface GigabitEthernet1/0/5\n dot1x\n",
+        "necqx": "sysname sw\ndot1x\ninterface GigabitEthernet1/0/5\n dot1x\n",
     }
     for vendor, text in samples.items():
         titles = _titles(configcheck.check(db_session, text))
@@ -630,7 +630,7 @@ def test_dot1x_without_radius_is_caught_in_aruba_junos_and_comware_too(db_sessio
     assert "802.1X を当てていますが、問い合わせ先がありません" not in titles
 
 
-def test_a_plain_password_is_caught_in_comware_too(db_session):
+def test_a_plain_password_is_caught_in_necqx_too(db_session):
     text = "sysname sw\nlocal-user admin\n password simple himitsu\n"
     titles = _titles(configcheck.check(db_session, text))
     assert "利用者のパスワードが、元に戻せる形で入っています" in titles
@@ -878,7 +878,7 @@ def test_an_edge_port_without_a_guard_is_caught_on_every_vendor() -> None:
     """
     edge_only = {
         "cisco": "interface GigabitEthernet1/0/2\n spanning-tree portfast\n",
-        "comware": "interface GigabitEthernet1/0/2\n stp edged-port\n",
+        "necqx": "interface GigabitEthernet1/0/2\n stp edged-port\n",
         "vrp": "interface 10GE1/0/2\n stp edged-port enable\n",
         "fastiron": "interface ethernet 1/1/2\n spanning-tree 802-1w admin-edge-port\n",
         "aruba": "interface 1/1/2\n spanning-tree port-type admin-edge\n",
@@ -898,7 +898,7 @@ def test_a_guard_written_in_any_of_its_spellings_is_accepted() -> None:
         # 1行で全ポートに掛ける形
         "cisco-global": "spanning-tree portfast bpduguard default\n"
         "interface GigabitEthernet1/0/2\n spanning-tree portfast\n",
-        "comware-global": "stp bpdu-protection\ninterface GigabitEthernet1/0/2\n stp edged-port\n",
+        "necqx-global": "stp bpdu-protection\ninterface GigabitEthernet1/0/2\n stp edged-port\n",
     }
     for name, body in guarded.items():
         titles = [item.title for item in configcheck._stp(body)]

@@ -1,6 +1,6 @@
 """NEC の機器（IX / QX）を読めること。
 
-IX は自社系、QX は H3C Comware ベースで書式がまったく違う。
+IX と QX は書式がまったく違う。
 どちらも Cisco 風に見える箇所があるので、取り違えないことも確かめる。
 """
 
@@ -51,7 +51,7 @@ def test_ix_vendor_name_is_nec():
 
 
 # ---------------------------------------------------------------------------
-# QX シリーズ（Comware）
+# QX シリーズ
 # ---------------------------------------------------------------------------
 
 
@@ -61,7 +61,8 @@ def test_qx_is_detected_and_read():
     assert parsed.vendor is Vendor.NEC_QX
     assert parsed.hostname == "qx-sw-01"
     assert parsed.model == "QX-S5528P"
-    assert parsed.os_name == "Comware"
+    # OS の名前は入れない。機器が何と名乗るかは機器が決めること
+    assert parsed.os_name is None
     assert parsed.os_version == "5.20.99"
     assert parsed.serial_number == "210235A0L6C123000010"
 
@@ -81,7 +82,7 @@ def test_qx_interfaces_and_vlans():
 
 
 def test_qx_lldp_neighbors_are_read():
-    """Comware の display lldp neighbor-information から結線が引けること。"""
+    """QX の display lldp neighbor-information から結線が引けること。"""
     parsed = configparse.parse(load("qx-sw-01"))
 
     assert len(parsed.neighbors) == 1
@@ -240,8 +241,8 @@ def test_nec_is_not_mistaken_for_cisco():
 # ---------------------------------------------------------------------------
 
 
-def test_comware_negation_is_undo_not_no():
-    """QX は Comware なので、消すのは `no` ではなく `undo`。"""
+def test_necqx_negation_is_undo_not_no():
+    """QX は、消すのは `no` ではなく `undo`。"""
     from app.services.configdiff import build
 
     current = "interface GigabitEthernet1/0/8\n description old\n port access vlan 10\n"
@@ -357,8 +358,8 @@ GigaEthernet0.0  00:11:22:33:44:55  GigabitEthernet1/0/24  aichi-sw-01
 def test_hostname_falls_back_to_the_prompt():
     """show 出力だけのファイルでも、プロンプトの機器名で台帳と結び付ける。"""
     qx = configparse.parse(
-        "<aichi-sw-01>display version\nNEC Comware Platform Software\n"
-        "Comware Software, Version 7.1.070, Release 3506P05\nNEC QX-S5528P uptime is 1 day\n"
+        "<aichi-sw-01>display version\n"
+        "Software, Version 7.1.070, Release 3506P05\nNEC QX-S5528P uptime is 1 day\n"
     )
     assert qx.hostname == "aichi-sw-01"
     assert qx.model == "QX-S5528P"
@@ -437,7 +438,7 @@ interface GigaEthernet0.0
 
 
 def test_a_vlan_taken_off_the_trunk_is_no_longer_permitted() -> None:
-    """Comware は許可を足していく形で書く。外す行は頭に undo が付く。
+    """QX は許可を足していく形で書く。外す行は頭に undo が付く。
 
     そこを読み落とすと、通していない VLAN を通していることにしてしまう。
     両端で VLAN がそろっているかの突き合わせが、そのぶん狂う。
@@ -469,7 +470,7 @@ def test_taking_everything_off_the_trunk_leaves_nothing() -> None:
 
 
 def test_a_hybrid_port_is_read_in_huaweis_word_order_too() -> None:
-    """Comware は番号の後ろに tagged を置き、ファーウェイ VRP は前に置く。
+    """QX は番号の後ろに tagged を置き、ファーウェイ VRP は前に置く。
 
     同じ意味なので、片方の並びしか読まないと、その機種だけ VLAN が空になる。
     """

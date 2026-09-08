@@ -93,7 +93,7 @@ def parse(text: str, vendor: Vendor = Vendor.CISCO_IOS) -> ParsedConfig:
     if match:
         parsed.hostname = match.group(1).strip('"')
     else:
-        # NEC QX / Comware は hostname ではなく sysname。判別できなかった
+        # NEC QX などは hostname ではなく sysname。判別できなかった
         # 抜粋でも、機器名だけは台帳と突き合わせられるように拾う
         sysname = re.search(r'^\s*sysname\s+"?([^"\n]+?)"?\s*$', text, re.IGNORECASE | re.MULTILINE)
         if sysname:

@@ -110,7 +110,7 @@ interface Vlan-interface20
 """
 
 
-def test_comware_writes_it_differently_but_means_the_same():
+def test_necqx_writes_it_differently_but_means_the_same():
     parsed = configparse.parse(QX)
     assert parsed.vendor is configparse.Vendor.NEC_QX
     assert parsed.routes[0].destination == "0.0.0.0/0"
@@ -324,7 +324,7 @@ def test_an_absurd_range_is_left_as_written():
     assert expand_range("Gi1/0/1 - 9999") == ["Gi1/0/1 - 9999"]
 
 
-COMWARE_PORT = """sysname qx-01
+NECQX_PORT = """sysname qx-01
 #
 interface GigabitEthernet1/0/1
  port link-type trunk
@@ -337,8 +337,8 @@ interface GigabitEthernet1/0/1
 """
 
 
-def test_the_same_values_are_read_from_comware():
-    parsed = configparse.parse(COMWARE_PORT)
+def test_the_same_values_are_read_from_necqx():
+    parsed = configparse.parse(NECQX_PORT)
     port = parsed.interfaces[0]
     assert port.mtu == 9000
     assert port.speed == "1000"
