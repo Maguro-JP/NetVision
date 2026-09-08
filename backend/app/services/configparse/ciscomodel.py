@@ -45,7 +45,12 @@ _TAIL_DECORATION = re.compile(
     # ISR の束（アプリ・音声・セキュリティ・DNA）と電源の違い
     r"|(?<=\d)(?:-AXV|-AX|-VSEC|-SEC|-V|-B|-DNA|-CDNA|-DC|-PM\d*|-SPM(?:-8G)?)$"
     # Nexus の気流の向き（-PE 排気 / -PI 吸気）と束の印
-    r"|(?<=[A-Z0-9])(?:-PE|-PI|-B\d|-H|-Z)$",
+    r"|(?<=[A-Z0-9])(?:-PE|-PI|-B\d|-H|-Z)$"
+    # ASA 5500-X は機器が `ASA5516` と印字し、参照データは `ASA5516-X` と書く
+    r"|(?<=^ASA55\d\d)-X$"
+    # Firepower の発注 PID は載せる像（ASA / NGFW）が付く。ハードは同じ
+    # （出典: Cisco Network Security Ordering Guide の Table 18A）
+    r"|(?<=^FPR\d{4})(?:-NGFW|-ASA)$|(?<=^FPR\d{4}E)(?:-NGFW|-ASA)$",
     re.IGNORECASE,
 )
 #: 系列の切れ目。`IE-3300-8T2S` は `IE-3300` まで、`ASR1001-X` は `ASR1001` まで
@@ -53,14 +58,14 @@ _FAMILY = re.compile(
     # 並び順に意味がある。`C9800-L` は `C9800` より先に、`SG550X` は末尾の文字まで
     r"^(?P<family>(?:C9800(?:-L)?|IE-\d{4}|IR\d{3,4}|ISR\d{4}|ASR\d{4}|C\d{4,5}[A-Z]*|"
     r"SG\d{3}[A-Z]*|SF\d{3}[A-Z]*|SX\d{3}[A-Z]*|CBS\d{3}[A-Z]*|CISCO\d{4}|ASA\d{4}|"
-    r"N\d{4}|FPR\d{4}|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
+    r"N\d{4}|FPR-?\d{4}[A-Z]?|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
     re.IGNORECASE,
 )
 #: Cisco の型番らしい並び。ここに当たらないものは、型番として扱わない
 #: （`show inventory` の DESCR や、SFP の型番 `GLC-SX-MMD` を弾くため）
 _LOOKS_LIKE_PID = re.compile(
     r"^(?:C1-|2D-|NAL-|SI-)?(?:WS-|N[23579]K-|AIR-)?"
-    r"(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR|AP|CW|MS|WLC|N)\d{3,5}"
+    r"(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR-?|AP|CW|MS|WLC|N)\d{3,5}"
     # 国別在庫の PID は `WS-C` を落として数字から始まる（`NAL-2960XR-24PD-I`）
     r"|^(?:NAL|SI|2D)-\d{4}[A-Z]*-",
     re.IGNORECASE,
@@ -107,6 +112,8 @@ def read(pid: str | None) -> CiscoModel | None:
     canonical = _HEAD_DECORATION.sub("", raw)
     if _BARE_CATALYST.match(canonical):
         canonical = "C" + canonical
+    # Firepower は機器が `FPR-1120`、発注 PID が `FPR1120-…` と書く。突き合わせは後者に寄せる
+    canonical = re.sub(r"^FPR-(?=\d)", "FPR", canonical, flags=re.IGNORECASE)
     # 尻の飾りは1つずつ外す（`-AX/K9-RF` のように重なることがある）
     for _ in range(4):
         stripped = _TAIL_DECORATION.sub("", canonical)

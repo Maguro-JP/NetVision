@@ -15,6 +15,8 @@
 - ASR 1000 データシート (datasheet-c78-731632) の Product portfolio
 - Catalyst IE3300 データシート (datasheet-c78-741759)
 - Catalyst 8300 データシート (datasheet-c78-744088)
+- Firepower 1000 データシート (datasheet-c78-742469) の Model 列と、
+  Cisco Network Security Ordering Guide (guide-c07-737902) の Table 18A
 """
 
 import pytest
@@ -179,6 +181,17 @@ OFFICIAL = [
     ("C8300-1N1S-6T", "C8300"),
     ("C8300-2N2S-4T2X", "C8300"),
     ("C8300-2N2S-6T", "C8300"),
+    # Firepower 1000（データシートは `FPR-1120`、発注表は `FPR1120-NGFW-K9`）
+    ("FPR-1010", "FPR1010"),
+    ("FPR-1120", "FPR1120"),
+    ("FPR-1140", "FPR1140"),
+    ("FPR-1150", "FPR1150"),
+    ("FPR1010-NGFW-K9", "FPR1010"),
+    ("FPR1010E-NGFW-K9", "FPR1010E"),
+    ("FPR1120-NGFW-K9", "FPR1120"),
+    ("FPR1120-ASA-K9", "FPR1120"),
+    ("FPR1140-ASA-K9", "FPR1140"),
+    ("FPR1150-NGFW-K9", "FPR1150"),
 ]
 
 
@@ -203,6 +216,9 @@ def test_the_same_hardware_with_a_different_bundle_is_the_same_model() -> None:
     assert versions.matches_model("C9300-48P", "C9300-48P-M")
     assert versions.matches_model("C2960X-24TS", "C1-C2960X-24TS-L++")
     assert versions.matches_model("C93180YC-FX", "N9K-C93180YC-FX-PE")
+    # 機器の `show version` は `FPR-1120`、参照データは発注 PID で書かれる
+    assert versions.matches_model("FPR1120-NGFW-K9", "FPR-1120")
+    assert versions.matches_model("FPR1120*", "FPR-1120")
 
 
 def test_a_different_hardware_still_does_not_hit() -> None:
@@ -214,3 +230,5 @@ def test_a_different_hardware_still_does_not_hit() -> None:
     assert not versions.matches_model("C9500*", "C9500X-28C8D")
     assert not versions.matches_model("C1111*", "C1111X-8P")
     assert not versions.matches_model("ASR1001-X", "ASR1001-HX")
+    assert not versions.matches_model("FPR1010*", "FPR1010E-NGFW-K9")
+    assert not versions.matches_model("FPR1120", "FPR1150-ASA-K9")
