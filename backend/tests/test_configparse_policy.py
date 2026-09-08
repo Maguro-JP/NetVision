@@ -129,10 +129,19 @@ def test_ipsec_is_read_down_to_the_method_and_the_range():
     assert crypto.ike_policies[0].encryption == "aes 256"
     assert crypto.ike_policies[0].group == "14"
     assert crypto.transform_sets[0].mode == "tunnel"
+    # 鍵長の数字は前の名前に付く（`256` を独立した変換にしない）
+    assert crypto.transform_sets[0].transforms == ["esp-aes 256", "esp-sha256-hmac"]
     entry = crypto.maps[0]
     assert entry.peers == ["198.51.100.1"]
     assert entry.match_address == "VPN-TRAFFIC"
     assert crypto.applied == [("GigabitEthernet0/0", "VPNMAP")]
+
+
+def test_the_abbreviated_encr_the_running_config_prints_is_read():
+    """IOS の running-config は `encryption` を `encr` と略して印字する。"""
+    text = "hostname r1\ncrypto isakmp policy 10\n encr aes 256\n hash sha256\n group 14\n"
+    crypto = configparse.parse(text).crypto
+    assert crypto.ike_policies[0].encryption == "aes 256"
 
 
 def test_a_config_without_these_features_leaves_them_empty():

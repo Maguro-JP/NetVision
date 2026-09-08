@@ -473,7 +473,7 @@ def _crypto(text: str) -> ParsedCrypto | None:
 
     for head, body in _blocks(text, _TRANSFORM_SET):
         seen = True
-        transform = ParsedTransformSet(name=head.group(1), transforms=head.group(2).split())
+        transform = ParsedTransformSet(name=head.group(1), transforms=_transforms(head.group(2)))
         for line in body:
             mode = re.match(r"^mode\s+(\S+)", line, re.IGNORECASE)
             if mode:
@@ -526,9 +526,25 @@ def _crypto(text: str) -> ParsedCrypto | None:
     return crypto if seen else None
 
 
+def _transforms(spec: str) -> list[str]:
+    """`esp-aes 256 esp-sha-hmac` を `esp-aes 256` と `esp-sha-hmac` に分ける。
+
+    鍵長の数字は前の名前に付く。空白で切るだけだと `256` が独立した
+    変換のように見えて、暗号の種類が読めなくなる。
+    """
+    items: list[str] = []
+    for token in spec.split():
+        if token.isdigit() and items:
+            items[-1] = f"{items[-1]} {token}"
+        else:
+            items.append(token)
+    return items
+
+
 def _ike_line(policy: ParsedIkePolicy, line: str) -> None:
     for pattern, name in (
-        (r"^encryption\s+(.+)$", "encryption"),
+        # IOS の running-config は `encryption` を `encr` と略して印字する
+        (r"^encr(?:yption)?\s+(.+)$", "encryption"),
         (r"^integrity\s+(.+)$", "hash"),
         (r"^hash\s+(.+)$", "hash"),
         (r"^authentication\s+(.+)$", "authentication"),
