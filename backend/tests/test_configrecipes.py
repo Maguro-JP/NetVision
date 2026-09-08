@@ -256,3 +256,51 @@ def test_the_relay_target_is_written_where_that_vendor_puts_it() -> None:
     assert " dhcp select relay" in _body(
         "dhcp_relay", Vendor.HUAWEI, vlan_id="10", server="10.10.20.5"
     )
+
+
+def test_every_vendor_the_screen_offers_can_actually_be_written() -> None:
+    """画面で選べる機種は、実際に出せる機種と一致すること。
+
+    見本の値に欄が足りないと、値が足りないだけの失敗を「機種としては出せる」と
+    数えてしまい、選んだ先で失敗する。献立を足したときに起きやすい。
+    """
+    for recipe in recipes.RECIPES:
+        for vendor in recipes.vendors_for(recipe):
+            recipes.render(recipe.name, vendor, dict(recipes._SAMPLE))
+
+
+def test_a_machine_that_cannot_do_it_per_port_says_why() -> None:
+    """ICX の MTU は機器ぜんぶで1つ。口ごとの体で出すと嘘になる。"""
+    with pytest.raises(recipes.RecipeError, match="この機種"):
+        _body("mtu", Vendor.FASTIRON, interface="1/1/1", mtu="9000")
+
+
+def test_the_root_of_the_tree_is_written_in_each_vendors_own_words() -> None:
+    assert "spanning-tree vlan 10,30 root primary" in _body(
+        "stp_root", Vendor.CISCO_IOS, vlans="10,30", role="primary"
+    )
+    assert "stp instance 0 root secondary" in _body(
+        "stp_root", Vendor.HUAWEI, vlans="10", role="secondary"
+    )
+
+
+def test_a_role_that_is_not_primary_or_secondary_is_refused() -> None:
+    with pytest.raises(recipes.RecipeError):
+        _body("stp_root", Vendor.CISCO_IOS, vlans="10", role="main")
+
+
+def test_the_same_vlan_for_phones_and_devices_is_refused() -> None:
+    """分ける意味が無い。分けたつもりで分かれていないのがいちばん困る。"""
+    with pytest.raises(recipes.RecipeError):
+        _body("voice_vlan", Vendor.CISCO_IOS, interface="Gi0/5", vlan_id="10", voice_vlan="10")
+
+
+def test_the_phone_vlan_is_tagged_and_the_device_vlan_is_not() -> None:
+    body = _body("voice_vlan", Vendor.NEC_QX, interface="Gi1/0/5", vlan_id="10", voice_vlan="20")
+    assert " port hybrid vlan 10 untagged" in body
+    assert " port hybrid vlan 20 tagged" in body
+
+
+def test_an_mtu_outside_what_a_machine_takes_is_refused() -> None:
+    with pytest.raises(recipes.RecipeError):
+        _body("mtu", Vendor.CISCO_IOS, interface="Gi0/1", mtu="99999")

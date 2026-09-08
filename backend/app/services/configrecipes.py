@@ -718,6 +718,141 @@ def _number(values: dict[str, str], key: str, label: str, *, low: int, high: int
     return number
 
 
+def _stp_root(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """この機器を木の根にする。
+
+    誰も決めていないと、根は MAC の若い順で決まる。末端の機器が根になると、
+    通信が遠回りし、その機器が落ちたときに木を作り直すことになる。
+    """
+    vlans = _vlan_list(values, "vlans", "対象の VLAN")
+    role = (values.get("role") or "primary").strip().lower()
+    if role not in ("primary", "secondary"):
+        raise RecipeError("役割は primary（主）か secondary（予備）で入れてください")
+    # 数字は機器が決める値に合わせる。低いほうが根になる
+    priority = 4096 if role == "primary" else 8192
+    comma = ",".join(str(v) for v in vlans)
+
+    if vendor in _IOS_LIKE or vendor is Vendor.ALLIED:
+        return [f"spanning-tree vlan {comma} root {role}"]
+    if vendor is Vendor.ALAXALA:
+        return [f"spanning-tree vlan {comma} priority {priority}"]
+    if vendor is Vendor.ARUBA_CX:
+        # AOS-CX は 0〜15 の段で書く。4096 刻みの何段目か
+        return [f"spanning-tree priority {priority // 4096}"]
+    if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
+        # Comware / VRP は木ごとに決める。VLAN と木の対応は現場で決まる
+        return [
+            f"stp instance 0 root {role}",
+            f"{comment_of(vendor)} この機器で使う木と VLAN の対応: {TODO}",
+        ]
+    if vendor is Vendor.FASTIRON:
+        return [f"vlan {vlans[0]}", f" spanning-tree priority {priority}"]
+    raise _unsupported(vendor, "木の根を決める設定")
+
+
+def _stp_mode(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """木の作り方をそろえる。機器ごとに違うと、そこで木が分かれる。"""
+    mode = (values.get("mode") or "rapid").strip().lower()
+    if mode not in ("rapid", "mst"):
+        raise RecipeError("方式は rapid か mst で入れてください")
+
+    if vendor is Vendor.CISCO_IOS:
+        return [f"spanning-tree mode {'rapid-pvst' if mode == 'rapid' else 'mst'}"]
+    if vendor in (Vendor.CISCO_NXOS, Vendor.ARISTA):
+        return [f"spanning-tree mode {'rapid-pvst' if mode == 'rapid' else 'mst'}"]
+    if vendor in (Vendor.ALLIED, Vendor.ALAXALA):
+        return [f"spanning-tree mode {'rstp' if mode == 'rapid' else 'mstp'}"]
+    if vendor is Vendor.ARUBA_CX:
+        return [f"spanning-tree mode {'rpvst' if mode == 'rapid' else 'mstp'}"]
+    if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
+        return [f"stp mode {'rstp' if mode == 'rapid' else 'mstp'}", "stp enable"]
+    if vendor is Vendor.FASTIRON:
+        return ["spanning-tree 802-1w" if mode == "rapid" else "spanning-tree mstp"]
+    raise _unsupported(vendor, "木の作り方の設定")
+
+
+def _voice_vlan(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """IP 電話を、端末と同じ口にタグ付きで載せる。
+
+    ここを読み落とすと、その VLAN がどこにも使われていないように見える。
+    """
+    port = _text(values, "interface", "ポート名")
+    data_vlan = _vlan(values, "vlan_id", "端末の VLAN")
+    voice = _vlan(values, "voice_vlan", "電話の VLAN")
+    if data_vlan == voice:
+        raise RecipeError("端末と電話を同じ VLAN にすると、分ける意味がありません")
+
+    if vendor in _IOS_LIKE or vendor is Vendor.ALLIED:
+        return [
+            f"interface {port}",
+            " switchport mode access",
+            f" switchport access vlan {data_vlan}",
+            f" switchport voice vlan {voice}",
+            " spanning-tree portfast",
+            " spanning-tree bpduguard enable",
+        ]
+    if vendor is Vendor.ALAXALA:
+        return [
+            f"interface {_ax_port(port)}",
+            "  switchport mode access",
+            f"  switchport access vlan {data_vlan}",
+            f"  switchport voice vlan {voice}",
+        ]
+    if vendor is Vendor.ARUBA_CX:
+        return [
+            f"interface {port}",
+            "    no shutdown",
+            "    no routing",
+            f"    vlan access {data_vlan}",
+            f"    vlan trunk allowed {voice}",
+            f"    vlan trunk native {data_vlan}",
+        ]
+    if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
+        # Comware / VRP は「電話用の VLAN」を口に足す形で書く
+        lines = [f"interface {port}", " port link-type hybrid"]
+        if vendor is Vendor.NEC_QX:
+            lines += [
+                f" port hybrid vlan {data_vlan} untagged",
+                f" port hybrid vlan {voice} tagged",
+            ]
+        else:
+            lines += [
+                f" port hybrid untagged vlan {data_vlan}",
+                f" port hybrid tagged vlan {voice}",
+            ]
+        lines += [f" port hybrid pvid vlan {data_vlan}", f" voice-vlan {voice} enable"]
+        return lines
+    raise _unsupported(vendor, "IP 電話の VLAN の設定")
+
+
+def _mtu(vendor: Vendor, values: dict[str, str]) -> list[str]:
+    """1回に送れる大きさ。両端で違うと、大きい荷物だけが通らない。
+
+    「だいたい動くのに、たまに固まる」という、いちばん厄介な形になる。
+    """
+    port = _text(values, "interface", "ポート名")
+    size = _number(values, "mtu", "大きさ（MTU）", low=576, high=9216)
+
+    if vendor in _IOS_LIKE or vendor is Vendor.ALLIED:
+        return [f"interface {port}", f" mtu {size}"]
+    if vendor is Vendor.ALAXALA:
+        return [f"interface {_ax_port(port)}", f"  mtu {size}"]
+    if vendor is Vendor.ARUBA_CX:
+        return [f"interface {port}", f"    mtu {size}"]
+    if vendor in (Vendor.NEC_QX, Vendor.HUAWEI):
+        return [f"interface {port}", f" jumboframe enable {size}"]
+    if vendor is Vendor.JUNIPER:
+        return [f"set interfaces {port} mtu {size}"]
+    if vendor is Vendor.FASTIRON:
+        # ICX は口ごとに決められない。機器ぜんぶで1つの設定なので、
+        # 口の名前を受け取っておいて口ごとの体で出すと嘘になる
+        raise RecipeError(
+            "この機種（fastiron）は、口ごとではなく機器ぜんぶで1つの設定です"
+            "（jumbo を入れて再起動すると、全ポートが 10240 になります）"
+        )
+    raise _unsupported(vendor, "1回に送れる大きさ（MTU）の設定")
+
+
 RECIPES: tuple[Recipe, ...] = (
     Recipe(
         name="vlan",
@@ -835,6 +970,63 @@ RECIPES: tuple[Recipe, ...] = (
         render=_dhcp_relay,
     ),
     Recipe(
+        name="stp_root",
+        label="この機器を木の根にする",
+        why="誰も決めていないと、根は MAC の若い順で決まる。末端の機器が根になると、"
+        "通信が遠回りし、その機器が落ちるたびに木を作り直すことになる。",
+        fields=(
+            Field("vlans", "対象の VLAN", "vlan_list", placeholder="10,30,40"),
+            Field(
+                "role",
+                "役割",
+                "text",
+                required=False,
+                placeholder="primary",
+                help="primary（主）か secondary（予備）。空なら primary",
+            ),
+        ),
+        render=_stp_root,
+    ),
+    Recipe(
+        name="stp_mode",
+        label="木の作り方をそろえる",
+        why="機器ごとに方式が違うと、そこで木が分かれる。分かれた側は塞がれない。",
+        fields=(
+            Field(
+                "mode",
+                "方式",
+                "text",
+                required=False,
+                placeholder="rapid",
+                help="rapid か mst。空なら rapid",
+            ),
+        ),
+        render=_stp_mode,
+    ),
+    Recipe(
+        name="voice_vlan",
+        label="IP 電話を同じ口に載せる",
+        why="電話はタグ付き、端末はタグ無しで同じ口に載る。分けておかないと、"
+        "電話の通信が端末と同じ扱いになる。",
+        fields=(
+            Field("interface", "ポート名", "text", placeholder="GigabitEthernet0/5"),
+            Field("vlan_id", "端末の VLAN", "number", placeholder="10"),
+            Field("voice_vlan", "電話の VLAN", "number", placeholder="20"),
+        ),
+        render=_voice_vlan,
+    ),
+    Recipe(
+        name="mtu",
+        label="1回に送れる大きさを変える",
+        why="両端で違うと、大きい荷物だけが通らない。だいたい動くのにたまに固まる、"
+        "といういちばん厄介な形になる。",
+        fields=(
+            Field("interface", "ポート名", "text", placeholder="GigabitEthernet0/1"),
+            Field("mtu", "大きさ（MTU）", "number", placeholder="9000"),
+        ),
+        render=_mtu,
+    ),
+    Recipe(
         name="hardening",
         label="管理の入口を絞る",
         why="telnet が開いたままの機器が現場に残りやすい。値を入れずに出せる。",
@@ -870,18 +1062,30 @@ def vendors_for(recipe: Recipe) -> list[Vendor]:
     return found
 
 
-#: 出せる機種を数えるためだけの値。ここで出した Config は使わない
+#: 出せる機種を数えるためだけの値。ここで出した Config は使わない。
+#: 献立を足したら、その入力欄もここに足す。足さないと、値が足りないだけの
+#: 失敗を「機種としては出せる」と数えてしまい、画面に出せない機種が並ぶ
 _SAMPLE = {
     "vlan_id": "10",
+    "vlans": "10",
     "name": "SAMPLE",
     "interface": "GigabitEthernet0/1",
+    "interfaces": "GigabitEthernet0/23, GigabitEthernet0/24",
     "allowed": "10",
     "ip": "10.0.0.1",
     "prefixlen": "24",
+    "virtual_ip": "10.0.0.2",
+    "priority": "110",
+    "group": "1",
     "destination": "0.0.0.0/0",
     "next_hop": "10.0.0.254",
+    "server": "10.0.0.9",
     "syslog_host": "10.0.0.9",
     "ntp_host": "10.0.0.8",
+    "voice_vlan": "20",
+    "mtu": "9000",
+    "role": "primary",
+    "mode": "rapid",
 }
 
 
