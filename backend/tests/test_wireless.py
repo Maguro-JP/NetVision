@@ -284,3 +284,9 @@ def test_the_ap_list_of_an_aruba_controller_is_read():
     assert aps["AP-2F-01"].profile == "default"
     assert aps["AP-2F-01"].ip_address == "10.0.20.11"
     assert aps["AP-2F-02"].ip_address == "10.0.20.12"
+
+
+def test_the_9800_country_line_is_read():
+    """Catalyst 9800 は `wireless country JP` と書く（AireOS の `country JP` とは頭が違う）。"""
+    text = "hostname wlc\nwlan CORP 1 CORP\n no shutdown\nwireless country JP\n"
+    assert configparse.parse(text).wireless.country == "JP"

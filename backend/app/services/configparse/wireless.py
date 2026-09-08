@@ -29,7 +29,8 @@ _IOSXE_TAG_MAP = re.compile(
     r"^\s*wlan\s+(\S+)\s+policy\s+(\S+)\s*$",
     re.IGNORECASE,
 )
-_COUNTRY = re.compile(r"^(?:ap\s+)?(?:dot11\s+)?country\s+(\S+)", re.IGNORECASE)
+#: Catalyst 9800 は `wireless country JP`、AireOS は `country JP`、組み込みは `ap country JP`
+_COUNTRY = re.compile(r"^(?:wireless\s+|ap\s+)?(?:dot11\s+)?country\s+(\S+)", re.IGNORECASE)
 
 # --- AireOS -----------------------------------------------------------------
 _AIRE_CREATE = re.compile(r"^config\s+wlan\s+create\s+(\d+)\s+(\S+)\s+(\S+)", re.IGNORECASE)
