@@ -66,7 +66,7 @@ def test_an_unreadable_model_stays_empty_rather_than_blank() -> None:
 
 
 def test_the_vrp_address_pool_is_read() -> None:
-    # VRP は `ip pool`、NEC QX は `dhcp server ip-pool`。同じ器で読む
+    # VRP は `ip pool` と書く
     text = "\n".join(
         [
             "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
@@ -89,7 +89,7 @@ def test_the_vrp_address_pool_is_read() -> None:
 
 
 def test_eth_trunk_membership_is_read() -> None:
-    # VRP は `eth-trunk 1`、NEC QX は `port link-aggregation group 1`
+    # VRP は `eth-trunk 1` と書く
     text = "\n".join(
         [
             "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)",
@@ -120,12 +120,13 @@ def test_the_local_users_count_as_aaa() -> None:
 
 
 def test_the_vlans_a_trunk_passes_are_read_in_huaweis_words() -> None:
-    """VRP は NEC QX の `permit` と同じことを `allow-pass` と書く。
+    """VRP は通す VLAN を `allow-pass` と書く。
 
     読めていないと、両端で通す VLAN がそろっているかを比べられない。
     比べられないのに何も出ないと、そろっていると読めてしまう。
     """
     text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
         "sysname hw-01\n#\n"
         "interface 10GE1/0/1\n"
         " port link-type trunk\n"
@@ -140,6 +141,7 @@ def test_the_vlans_a_trunk_passes_are_read_in_huaweis_words() -> None:
 def test_a_vlan_taken_off_the_trunk_is_no_longer_passed() -> None:
     """この書き方は足していく形なので、外す行を読み落とすと多く見える。"""
     text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
         "sysname hw-01\n#\n"
         "interface 10GE1/0/1\n"
         " port link-type trunk\n"
@@ -153,9 +155,62 @@ def test_a_vlan_taken_off_the_trunk_is_no_longer_passed() -> None:
 def test_passing_everything_is_kept_as_everything() -> None:
     """番号に展開すると、あとで VLAN が増えたときに古い一覧が残る。"""
     text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
         "sysname hw-01\n#\n"
         "interface 10GE1/0/1\n port link-type trunk\n port trunk allow-pass vlan all\n#\n"
     )
     port = configparse.parse(text).interfaces[0]
     assert port.trunk_all is True
     assert port.trunk_vlans == []
+
+
+def test_the_reader_does_not_go_through_the_nec_reader() -> None:
+    """独立していること。NEC 側を直したときに、こちらが黙って変わらないため。"""
+    import inspect
+
+    from app.services.configparse import huawei
+
+    assert "nec." not in inspect.getsource(huawei)
+
+
+def test_a_hybrid_port_is_read_in_huaweis_word_order() -> None:
+    """VRP は tagged / untagged を番号の前に置く。"""
+    text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
+        "sysname hw-01\n#\n"
+        "interface 10GE1/0/1\n"
+        " port link-type hybrid\n"
+        " port hybrid tagged vlan 10 20\n"
+        " port hybrid untagged vlan 999\n"
+        " port hybrid pvid vlan 999\n"
+        "#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.trunk_vlans == [10, 20, 999]
+    assert port.native_vlan == 999
+
+
+def test_an_access_port_written_as_default_vlan_is_read() -> None:
+    """VRP のアクセス VLAN は `port default vlan`。"""
+    text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
+        "sysname hw-01\n#\n"
+        "interface GigabitEthernet0/0/5\n port link-type access\n port default vlan 10\n#\n"
+    )
+    port = configparse.parse(text).interfaces[0]
+    assert port.mode == "access"
+    assert port.vlan == 10
+
+
+def test_vlan_batch_and_the_rd_under_ipv4_family_are_read() -> None:
+    text = (
+        "VRP (R) software, Version 8.180 (S5735 V200R019C10SPC500)\n"
+        "sysname hw-01\n#\n"
+        "vlan batch 10 20 30 to 32\n#\n"
+        "ip vpn-instance CUST\n ipv4-family\n  route-distinguisher 65000:1\n#\n"
+        "interface Eth-Trunk1\n mode lacp-static\n#\n"
+    )
+    parsed = configparse.parse(text)
+    assert set(parsed.vlans) == {10, 20, 30, 31, 32}
+    assert [(v.name, v.rd) for v in parsed.vrfs] == [("CUST", "65000:1")]
+    assert parsed.interfaces[0].lag_mode == "active"

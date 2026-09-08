@@ -87,26 +87,20 @@ _QX_VLAN = re.compile(r"^\s*vlan\s+(\d+)\s*$", re.IGNORECASE)
 # `vlan 20 to 22` / `vlan 10 20 30` のまとめ書き
 _QX_VLAN_RANGE = re.compile(r"^\s*vlan\s+(\d[\d\s]*(?:to\s+\d+)?[\d\s]*)$", re.IGNORECASE)
 # LAG（QX では Bridge-Aggregation）への所属
-# QX は `port link-aggregation group 1`、VRP は `eth-trunk 1`。同じ意味
-_QX_LAG_MEMBER = re.compile(
-    r"^\s*(?:port\s+link-aggregation\s+group|eth-trunk)\s+(\d+)", re.IGNORECASE
-)
+_QX_LAG_MEMBER = re.compile(r"^\s*port\s+link-aggregation\s+group\s+(\d+)", re.IGNORECASE)
 _QX_ACCESS_VLAN = re.compile(r"^\s*port\s+access\s+vlan\s+(\d+)", re.IGNORECASE)
 _QX_LINK_TYPE = re.compile(r"^\s*port\s+link-type\s+(\S+)", re.IGNORECASE)
 # `port trunk permit vlan 10 20 30 to 40` / `port trunk permit vlan all`。
-# ファーウェイ VRP は同じことを `allow-pass` と書く。語が違うだけで意味は同じで、
-# どちらも「足す」書き方（同じ口に何行も並ぶ）。外すときは頭に undo を付ける
+# 「足す」書き方（同じ口に何行も並ぶ）。外すときは頭に undo を付ける
 _QX_TRUNK_PERMIT = re.compile(
-    r"^\s*(undo\s+)?port\s+trunk\s+(?:permit|allow-pass)\s+vlan\s*(.*?)\s*$",
+    r"^\s*(undo\s+)?port\s+trunk\s+permit\s+vlan\s*(.*?)\s*$",
     re.IGNORECASE,
 )
 # ネイティブ VLAN にあたるのが PVID
 _QX_PVID = re.compile(r"^\s*port\s+(?:trunk|hybrid)\s+pvid\s+vlan\s+(\d+)", re.IGNORECASE)
-# hybrid ポートは tagged / untagged を並べて書く。QX は番号の後ろに、
-# ファーウェイ VRP は前に置く。同じ意味なので、どちらの並びでも読む
+# hybrid ポートは tagged / untagged を、番号の後ろに置いて書く
 _QX_HYBRID_VLAN = re.compile(
-    r"^\s*port\s+hybrid\s+vlan\s+(?P<vlans>.+?)\s+(?P<how>tagged|untagged)\s*$"
-    r"|^\s*port\s+hybrid\s+(?P<how2>tagged|untagged)\s+vlan\s+(?P<vlans2>.+?)\s*$",
+    r"^\s*port\s+hybrid\s+vlan\s+(?P<vlans>.+?)\s+(?P<how>tagged|untagged)\s*$",
     re.IGNORECASE,
 )
 # VRF にあたるのが VPN インスタンス
@@ -664,8 +658,7 @@ def _parse_qx(text: str) -> ParsedConfig:
         hybrid = _QX_HYBRID_VLAN.match(raw)
         if hybrid:
             permitted.add(current.key)
-            written = hybrid.group("vlans") or hybrid.group("vlans2") or ""
-            values = vlanlist.parse_ranges(written)
+            values = vlanlist.parse_ranges(hybrid.group("vlans"))
             current.trunk_vlans = sorted(set(current.trunk_vlans) | set(values))
             continue
         pvid = _QX_PVID.match(raw)
@@ -728,17 +721,11 @@ _QX_NAT_SERVER = re.compile(
     r"(?:\s+(?P<gport>\S+))?\s+inside\s+(?P<inside>\S+)(?:\s+(?P<iport>\S+))?",
     re.IGNORECASE,
 )
-# VRP は `ip pool NAME`、QX は `dhcp server ip-pool NAME`。同じ器で読む
-_QX_DHCP_POOL = re.compile(r"^(?:dhcp server ip-pool|ip pool)\s+(\S+)", re.IGNORECASE)
+_QX_DHCP_POOL = re.compile(r"^dhcp server ip-pool\s+(\S+)", re.IGNORECASE)
 _QX_CLASSIFIER = re.compile(r"^traffic classifier\s+(\S+)", re.IGNORECASE)
 _QX_BEHAVIOR = re.compile(r"^traffic behavior\s+(\S+)", re.IGNORECASE)
-# QX は `qos policy` と `qos apply policy`、VRP は `traffic policy` と
-# `traffic-policy`。中身（classifier / behavior）は同じ書き方なので、
-# 見出しと当て方だけ両方を見る
-_QX_POLICY = re.compile(r"^(?:qos policy|traffic policy)\s+(\S+)", re.IGNORECASE)
-_QX_APPLY = re.compile(
-    r"^\s*(?:qos apply policy|traffic-policy)\s+(\S+)\s+(inbound|outbound)", re.IGNORECASE
-)
+_QX_POLICY = re.compile(r"^qos policy\s+(\S+)", re.IGNORECASE)
+_QX_APPLY = re.compile(r"^\s*qos apply policy\s+(\S+)\s+(inbound|outbound)", re.IGNORECASE)
 
 
 def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
@@ -814,10 +801,7 @@ def _parse_qx_nat(text: str, parsed: ParsedConfig) -> None:
 
 
 _QX_IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
-# QX は `ipsec transform-set`、VRP は `ipsec proposal`。同じもの
-_QX_TRANSFORM = re.compile(r"^ipsec (?:transform-set|proposal)\s+(\S+)", re.IGNORECASE)
-# VRP は相手を `ike peer 名前` の塊にまとめて書く
-_QX_IKE_PEER = re.compile(r"^ike peer\s+(\S+)", re.IGNORECASE)
+_QX_TRANSFORM = re.compile(r"^ipsec transform-set\s+(\S+)", re.IGNORECASE)
 _QX_IPSEC_POLICY = re.compile(r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
 _QX_IPSEC_APPLY = re.compile(r"^\s+(?:ipsec apply policy|ipsec policy)\s+(\S+)\s*$", re.IGNORECASE)
 _QX_IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:address|hostname)\s+(\S+)", re.IGNORECASE)
@@ -835,10 +819,6 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
     transform: ParsedTransformSet | None = None
     entry: ParsedCryptoMapEntry | None = None
     interface: str | None = None
-    # VRP は相手を `ike peer 名前` の塊にまとめ、policy 側からその名前を指す。
-    # 名前だけでは相手が分からないので、塊の中の宛先を覚えておいて後で渡す
-    peer_name: str | None = None
-    peers: dict[str, str] = {}
 
     for raw in text.splitlines():
         head = _QX_IKE_PROPOSAL.match(raw)
@@ -863,21 +843,16 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
             crypto.maps.append(entry)
             ike = transform = interface = None
             continue
-        head = _QX_IKE_PEER.match(raw)
-        if head:
-            peer_name = head.group(1)
-            ike = transform = entry = interface = None
-            continue
         head = _QX_INTERFACE.match(raw)
         if head:
             interface = head.group(1)
-            ike = transform = entry = peer_name = None
+            ike = transform = entry = None
             continue
 
         if raw and not raw.startswith((" ", "\t")):
             # 見出しの行だが、こちらで扱うものではない（ike keychain など）。
             # 前の塊のままにしておくと、その中身として読んでしまう
-            ike = transform = entry = peer_name = None
+            ike = transform = entry = None
             if not _QX_INTERFACE.match(raw):
                 interface = None
 
@@ -887,11 +862,6 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
             continue
         if transform is not None:
             _qx_transform_detail(transform, body)
-            continue
-        if peer_name is not None:
-            found = re.match(r"^remote-address\s+(\S+)", body, re.IGNORECASE)
-            if found:
-                peers[peer_name] = found.group(1)
             continue
         if entry is not None:
             _qx_policy_detail(entry, body)
@@ -903,12 +873,6 @@ def _parse_qx_ipsec(text: str, parsed: ParsedConfig) -> None:
         key = _QX_IKE_KEY.match(raw)
         if key:
             crypto.keyed_peers.append(key.group(1))
-
-    # `ike-peer 名前` で指してある相手を、実際の宛先に置き換える
-    for item in crypto.maps:
-        address = peers.get(item.profile or "")
-        if address and address not in item.peers:
-            item.peers.append(address)
 
     if crypto.maps or crypto.ike_policies:
         parsed.crypto = crypto
@@ -957,7 +921,7 @@ def _qx_transform_detail(transform: ParsedTransformSet, body: str) -> None:
 
 
 def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
-    found = re.match(r"^(?:transform-set|proposal)\s+(.+)$", body, re.IGNORECASE)
+    found = re.match(r"^transform-set\s+(.+)$", body, re.IGNORECASE)
     if found:
         entry.transform_sets.extend(found.group(1).split())
         return
@@ -969,7 +933,7 @@ def _qx_policy_detail(entry: ParsedCryptoMapEntry, body: str) -> None:
     if found:
         entry.peers.append(found.group(1))
         return
-    found = re.match(r"^(?:ike-profile|ike-peer)\s+(\S+)", body, re.IGNORECASE)
+    found = re.match(r"^ike-profile\s+(\S+)", body, re.IGNORECASE)
     if found:
         entry.profile = found.group(1)
         return
@@ -1015,9 +979,7 @@ def _parse_qx_dhcp(text: str, parsed: ParsedConfig) -> None:
         if found:
             current.domain = found.group(1)
             continue
-        found = re.match(
-            r"^(?:forbidden-ip|excluded-ip-address)\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE
-        )
+        found = re.match(r"^forbidden-ip\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE)
         if found:
             # 配らないアドレス。Cisco の excluded-address と同じ扱いにする
             dhcp.excluded.append((found.group(1), found.group(2) or found.group(1)))
