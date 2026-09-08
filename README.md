@@ -281,7 +281,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 
 | ベンダー | 系統 | 備考 |
 |---|---|---|
-| Cisco | IOS / IOS-XE / NX-OS | Catalyst 2960 / 2960-X / 3850 / 9300 / 9500 などを確認済み |
+| Cisco | IOS / IOS-XE / NX-OS | 型番は一覧ではなく命名規則で読むので、Catalyst 1000 / 2960-X / 9200 / 9300 / 9500、ISR 1000 / 4000、ASR 1000、Catalyst 8300、IE3300、Nexus 9300 など、Cisco の公式データシート・EoL 通知に載る 140 超の型番で確かめています。`WS-`・`/K9`・ライセンスの `-A` / `-E` の飾りを外して EoL・脆弱性に当て、`C9200*` のような系列指定は `C9200L` のような別系列に当たりません |
 | Juniper | Junos / SRX | ルーターとファイアウォール。`firewall filter` に加え、SRX の `security policies`（ゾーンごとの許否）・アドレス帳・source NAT を読みます |
 | Fortinet | FortiOS | |
 | NEC | IX シリーズ | IX2000 / IX3000。`device-name`、`GigaEthernet0.0` 形式、拠点間 IPsec（`ike proposal` / `ipsec autokey-map`）を読みます |

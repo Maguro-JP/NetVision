@@ -51,7 +51,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Fortinet・NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・"
         "Aruba AOS-S（ProCurve）・アライドテレシス・アラクサラ・ファーウェイ・"
         "FastIron・Extreme EXOS・Dell OS10・VyOS / EdgeOS・MikroTik RouterOS・"
-        "H3C の 23 機種です。",
+        "H3C の 23 機種です。Cisco の型番は一覧ではなく命名規則で読むので、"
+        "公式の型番表に載る 140 超の PID（Catalyst 1000〜9500 / ISR / ASR / Nexus 9300 など）"
+        "で確かめています。",
     ),
     Capability(
         area="土台",
