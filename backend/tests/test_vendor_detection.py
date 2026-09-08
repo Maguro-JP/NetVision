@@ -100,6 +100,21 @@ hostname rtr-xr-01
 interface GigabitEthernet0/0/0/0
  ipv4 address 10.0.0.1 255.255.255.0
 """,
+    Vendor.CISCO_SB: """config-file-header
+sg350-01
+v2.5.8.15 / RCBS3.1_930_412_016
+CLI v1.0
+unit-type-control-start
+unit-type unit 1 network gi uplink te
+unit-type-control-end
+vlan database
+vlan 10,20
+exit
+hostname sg350-01
+interface GigabitEthernet1/0/1
+ switchport mode trunk
+ switchport trunk allowed vlan add 10,20
+""",
     Vendor.ARUBA_OS: """hostname "sw-aoss-01"
 module 1 type jl253a
 vlan 10

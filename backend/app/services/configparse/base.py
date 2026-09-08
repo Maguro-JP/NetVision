@@ -33,6 +33,7 @@ class Vendor(enum.StrEnum):
     VYOS = "vyos"
     ROUTEROS = "routeros"
     H3C = "h3c"
+    CISCO_SB = "cisco_sb"
     UNKNOWN = "unknown"
 
 

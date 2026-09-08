@@ -288,6 +288,7 @@ running-config や show 出力を読み込み、機器情報・インターフ�
 | NEC | QX シリーズ | QX-S。`sysname`・`port link-type`・`Vlan-interface` を読みます。否定は `undo` |
 | ヤマハ | RTX / NVR / FWX | 拠点ルーター。`ip lan1 address`・`pp select`・`nat descriptor`・`ip filter`・`tunnel select`（IPsec）を読みます |
 | Cisco | ASA / FTD | ファイアウォール。`nameif`・`security-level`・`access-list`・object NAT / twice NAT を読みます |
+| Cisco | Cisco Business（SG / SF / CBS） | Catalyst とは別の系統。`config-file-header` と `v2.5.8.15 / R…` の版数、`vlan database` の VLAN、`interface vlan 10` の名前、`gi1` / `te1/0/1` の略記、`show system` の型番（`System Description: SG350-28P`）を読みます。OS 名は機器が印字しないので入れません |
 | Palo Alto | PAN-OS | ファイアウォール。`set` 形式と XML（`export configuration`）。ゾーン・セキュリティポリシー・NAT を読みます。投入コマンドも `set` / `delete` で出します（commit するまで反映されない点を注意に付けます） |
 | Arista | EOS | 見た目は IOS 風。長さ付きのアドレスと経路、BGP の `maximum-routes`（既定で上限あり）を EOS として読みます |
 | アライドテレシス | AlliedWare Plus | x230 / x530 など。`port1.0.1` 形式のポート、`vlan database` の VLAN 名、長さ付きのアドレスと経路、ハードウェア ACL（3000 番台と `access-list hardware`）を読みます |

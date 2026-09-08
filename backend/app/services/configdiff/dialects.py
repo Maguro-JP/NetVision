@@ -572,6 +572,7 @@ _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.CISCO_ASA: _CISCO_ASA,
     # XR も消し方は no。囲みの畳み方も IOS と同じ規則で扱える
     Vendor.CISCO_XR: _CISCO,
+    Vendor.CISCO_SB: _CISCO,
     # 消し方（no）とブロックの畳み方が IOS と同じ機種。書き方の細部は違うが、
     # 差分の作り方として同じ規則で扱える
     Vendor.ARISTA: _CISCO,

@@ -16,6 +16,7 @@ from app.services.configparse import (
     asa,
     banners,
     cisco,
+    ciscosb,
     dellos10,
     exos,
     fastiron,
@@ -80,6 +81,9 @@ _DETECTORS = (
     # 読めた形で通って住所も経路も抜ける
     iosxr.detect,
     arista.detect,
+    # Cisco Business（SG / CBS）は `config-file-header` と `vlan database` を書く。
+    # アライドテレシスより先に見ないと、`vlan database` で取り違える
+    ciscosb.detect,
     # アライドテレシスの目印（port1.0.1 / vlan database）は Aruba CX より強い。
     # vrrp の書き方が似ているので、先に見ないと取り違える
     allied.detect,
@@ -108,6 +112,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.CISCO_NXOS: "Cisco NX-OS",
     Vendor.CISCO_ASA: "Cisco ASA / FTD",
     Vendor.CISCO_XR: "Cisco IOS-XR",
+    Vendor.CISCO_SB: "Cisco Business（SG / SF / CBS）",
     Vendor.JUNIPER: "Juniper Junos",
     Vendor.FORTINET: "Fortinet FortiOS",
     Vendor.NEC_IX: "NEC IX シリーズ",
@@ -135,6 +140,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.CISCO_NXOS: "Cisco",
     Vendor.CISCO_ASA: "Cisco",
     Vendor.CISCO_XR: "Cisco",
+    Vendor.CISCO_SB: "Cisco",
     Vendor.JUNIPER: "Juniper",
     Vendor.FORTINET: "Fortinet",
     Vendor.NEC_IX: "NEC",
@@ -188,6 +194,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = asa.parse(text)
     elif vendor is Vendor.CISCO_XR:
         parsed = iosxr.parse(text)
+    elif vendor is Vendor.CISCO_SB:
+        parsed = ciscosb.parse(text)
     elif vendor is Vendor.PALO_ALTO:
         parsed = panos.parse(text)
     elif vendor is Vendor.ARISTA:

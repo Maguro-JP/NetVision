@@ -177,6 +177,7 @@ export type ConfigVendor =
   | "aruba_cx"
   | "aruba_os"
   | "cisco_xr"
+  | "cisco_sb"
   | "exos"
   | "dell_os10"
   | "vyos"
