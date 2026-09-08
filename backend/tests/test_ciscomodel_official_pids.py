@@ -17,6 +17,10 @@
 - Catalyst 8300 データシート (datasheet-c78-744088)
 - Firepower 1000 データシート (datasheet-c78-742469) の Model 列と、
   Cisco Network Security Ordering Guide (guide-c07-737902) の Table 18A
+- Catalyst 3560-X / 3750-X EoL 通知 (eos-eol-notice-c51-736139) Table 2
+- Catalyst 9400 発注ガイド (nb-06-cat9400-swit-ser-cte-en) Table 3
+- Catalyst 2960-L データシート (nb-06-cat2960-l-ser-data-sheet-cte-en) Table 6
+- Catalyst 9105 / 9120AX / 9130AX AP データシートの Part numbers（x = 規制域）
 """
 
 import pytest
@@ -192,7 +196,56 @@ OFFICIAL = [
     ("FPR1120-ASA-K9", "FPR1120"),
     ("FPR1140-ASA-K9", "FPR1140"),
     ("FPR1150-NGFW-K9", "FPR1150"),
+    # Catalyst 3560-X / 3750-X（EoL 通知 Table 2）
+    ("WS-C3560X-24P-E", "C3560X"),
+    ("WS-C3560X-24P-L", "C3560X"),
+    ("WS-C3560X-24T-L", "C3560X"),
+    ("WS-C3750X-24P-E", "C3750X"),
+    ("WS-C3750X-24P-L", "C3750X"),
+    ("WS-C3750X-24T-L", "C3750X"),
+    ("WS-C3750X-48P-S", "C3750X"),
+    ("WS-C3750X-48T-L", "C3750X"),
+    # Catalyst 9400 の筐体（発注ガイド Table 3）
+    ("C9404R", "C9404R"),
+    ("C9407R", "C9407R"),
+    ("C9410R", "C9410R"),
+    # Catalyst 2960-L（データシート Table 6）
+    ("WS-C2960L-8TS-LL", "C2960L"),
+    ("WS-C2960L-16PS-LL", "C2960L"),
+    ("WS-C2960L-24TS-LL", "C2960L"),
+    ("WS-C2960L-48PQ-LL", "C2960L"),
+    ("WS-C2960L-SM-24TS", "C2960L"),
+    ("WS-C2960L-SM-48PQ", "C2960L"),
+    # Catalyst 9100 の AP（x は規制域。-E / -B / -Q などが入る）
+    ("C9105AXI-x", "C9105AXI"),
+    ("C9105AXW-E", "C9105AXW"),
+    ("C9105AXIT-B", "C9105AXIT"),
+    ("C9120AXI-x", "C9120AXI"),
+    ("C9120AXI-Q", "C9120AXI"),
+    ("C9120AXE-E", "C9120AXE"),
+    ("C9130AXI-EWC-E", "C9130AXI"),
+    ("C9130AXE-STA-B", "C9130AXE"),
 ]
+
+#: 筐体ではない型番（発注ガイド Table 3 のスーパーバイザ・ラインカード・電源・取付具）
+NOT_CHASSIS = [
+    "C9400-SUP-1",
+    "C9400-SUP-1XL-Y",
+    "C9400X-SUP-2XL",
+    "C9400-LC-48P",
+    "C9400-LC-24XS",
+    "C9400-LC-12QC",
+    "C9400-PWR-3200AC",
+    "C9400-SSD-240GB",
+    "C9407-FAN=",
+    "C9404-ACC-KIT=",
+    "C9410-RACK-19-KIT=",
+]
+
+
+@pytest.mark.parametrize("pid", NOT_CHASSIS)
+def test_the_parts_inside_a_chassis_are_not_taken_as_the_chassis(pid: str) -> None:
+    assert not ciscomodel.is_chassis_pid(pid), pid
 
 
 @pytest.mark.parametrize(("pid", "family"), OFFICIAL)
@@ -219,6 +272,9 @@ def test_the_same_hardware_with_a_different_bundle_is_the_same_model() -> None:
     # 機器の `show version` は `FPR-1120`、参照データは発注 PID で書かれる
     assert versions.matches_model("FPR1120-NGFW-K9", "FPR-1120")
     assert versions.matches_model("FPR1120*", "FPR-1120")
+    # AP の規制域の文字は、ハードの違いではない
+    assert versions.matches_model("C9120AXI-x", "C9120AXI-Q")
+    assert versions.matches_model("C9130AXI-EWC-x", "C9130AXI-EWC-E")
 
 
 def test_a_different_hardware_still_does_not_hit() -> None:
@@ -232,3 +288,5 @@ def test_a_different_hardware_still_does_not_hit() -> None:
     assert not versions.matches_model("ASR1001-X", "ASR1001-HX")
     assert not versions.matches_model("FPR1010*", "FPR1010E-NGFW-K9")
     assert not versions.matches_model("FPR1120", "FPR1150-ASA-K9")
+    assert not versions.matches_model("C9120AXI-x", "C9120AXE-E")
+    assert not versions.matches_model("C9407R", "C9410R")

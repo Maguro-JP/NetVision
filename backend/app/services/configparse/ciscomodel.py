@@ -56,7 +56,7 @@ _TAIL_DECORATION = re.compile(
 #: 系列の切れ目。`IE-3300-8T2S` は `IE-3300` まで、`ASR1001-X` は `ASR1001` まで
 _FAMILY = re.compile(
     # 並び順に意味がある。`C9800-L` は `C9800` より先に、`SG550X` は末尾の文字まで
-    r"^(?P<family>(?:C9800(?:-L)?|IE-\d{4}|IR\d{3,4}|ISR\d{4}|ASR\d{4}|C\d{4,5}[A-Z]*|"
+    r"^(?P<family>(?:C9800(?:-L)?|C9\d{3}AX[A-Z]*|IE-\d{4}|IR\d{3,4}|ISR\d{4}|ASR\d{4}|C\d{4,5}[A-Z]*|"
     r"SG\d{3}[A-Z]*|SF\d{3}[A-Z]*|SX\d{3}[A-Z]*|CBS\d{3}[A-Z]*|CISCO\d{4}|ASA\d{4}|"
     r"N\d{4}|FPR-?\d{4}[A-Z]?|NCS-?\d{3,4}|ASR-?9\d{3}|ASR9K|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
     re.IGNORECASE,
@@ -79,9 +79,17 @@ _BARE_CATALYST = re.compile(r"^\d{4}[A-Z]*-", re.IGNORECASE)
 _NOT_CHASSIS = re.compile(
     r"^(?:GLC-|SFP-|QSFP-|CAB-|PWR-|C\d{4}-NM-|C\d{4}-PWR|C\d{4}-FAN|C9K-PWR|C9K-FAN|"
     r"NIM-|SM-|EHWIC|HWIC|VWIC|PVDM|STACK-|C3850-NM|C9300-NM|C9500-NM|N9K-PAC|N9K-C9300-FAN|"
-    r"UCS|MEM-|FLASH|USB|ACS-)",
+    r"UCS|MEM-|FLASH|USB|ACS-|"
+    # 筐体型（Catalyst 9400 / 9600）の中身。スーパーバイザ・ラインカード・電源・
+    # ファン・取付具は筐体ではない（出典: Catalyst 9400 発注ガイド Table 3）
+    r"C9[46]00X?-(?:SUP|LC|PWR|SSD|S-BLANK)|C9[46]\d{2}-(?:FAN|ACC-KIT|RACK)|"
+    r"C\d{4}-(?:RACK|ACC|BLANK|STACK|SPARE))",
     re.IGNORECASE,
 )
+#: 無線 AP の型番。末尾の1〜2文字は電波の規制域（`-E` 欧州、`-B` 米国、`-Q` 日本…）で、
+#: ハードの違いではない。参照データは `C9120AXI-x` のように x で書く
+#: （出典: Catalyst 9120AX / 9130AX / 9105 データシートの Part numbers）
+_ACCESS_POINT = re.compile(r"^(C9\d{3}AX[A-Z]*(?:-EWC|-STA)?)-[A-Z]{1,2}$", re.IGNORECASE)
 
 
 @dataclass(frozen=True)
@@ -117,6 +125,10 @@ def read(pid: str | None) -> CiscoModel | None:
         canonical = "C" + canonical
     # Firepower は機器が `FPR-1120`、発注 PID が `FPR1120-…` と書く。突き合わせは後者に寄せる
     canonical = re.sub(r"^FPR-(?=\d)", "FPR", canonical, flags=re.IGNORECASE)
+    # 無線 AP は規制域の文字を外す（`C9120AXI-Q` と `C9120AXI-E` は同じハード）
+    access_point = _ACCESS_POINT.match(canonical)
+    if access_point:
+        canonical = access_point.group(1)
     # 尻の飾りは1つずつ外す（`-AX/K9-RF` のように重なることがある）
     for _ in range(4):
         stripped = _TAIL_DECORATION.sub("", canonical)
