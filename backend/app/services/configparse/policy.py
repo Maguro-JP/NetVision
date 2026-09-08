@@ -40,12 +40,13 @@ from app.services.configparse.ifname import expand, normalize
 
 
 def parse_cisco_crypto(text: str, parsed: ParsedConfig) -> None:
-    """拠点間の暗号化だけを読む。
-
-    ASA は ACL も NAT も書き方が違うが、VPN のところは IOS と同じ書き方に
-    なっている。そこだけ切り出して使えるようにしておく。
-    """
+    """拠点間の暗号化だけを読む（IOS の書き方）。"""
     parsed.crypto = _crypto(text)
+
+
+def parse_asa_crypto(text: str, parsed: ParsedConfig) -> None:
+    """ASA の拠点間の暗号化を読む。"""
+    parsed.crypto = _asa_crypto(text)
 
 
 def parse_cisco(text: str, parsed: ParsedConfig) -> None:
@@ -535,6 +536,100 @@ def _crypto(text: str) -> ParsedCrypto | None:
             if match:
                 seen = True
                 crypto.applied.append((interface, match.group(1) or match.group(2)))
+
+    return crypto if seen else None
+
+
+# ASA は方針を `crypto ikev1 policy 10` / `crypto ikev2 policy 10` に、
+# IPsec の方式を `crypto ipsec ikev1 transform-set` / `crypto ipsec ikev2 ipsec-proposal` に、
+# crypto map を1行ずつ書き、相手と合言葉は `tunnel-group` に書く
+_ASA_IKE_POLICY = re.compile(r"^crypto ikev([12]) policy\s+(\S+)", re.IGNORECASE)
+_ASA_TRANSFORM_SET = re.compile(r"^crypto ipsec ikev1 transform-set\s+(\S+)\s+(.+)$", re.IGNORECASE)
+_ASA_IPSEC_PROPOSAL = re.compile(r"^crypto ipsec ikev2 ipsec-proposal\s+(\S+)", re.IGNORECASE)
+_ASA_MAP_LINE = re.compile(
+    r"^crypto map\s+(?P<name>\S+)\s+(?P<seq>\d+)\s+(?P<rest>.+)$", re.IGNORECASE
+)
+_ASA_MAP_INTERFACE = re.compile(r"^crypto map\s+(?P<name>\S+)\s+interface\s+(?P<nameif>\S+)")
+_ASA_TUNNEL_GROUP = re.compile(r"^tunnel-group\s+(\S+)\s+type\s+ipsec-l2l", re.IGNORECASE)
+
+
+def _asa_crypto(text: str) -> ParsedCrypto | None:
+    crypto = ParsedCrypto()
+    seen = False
+
+    for head, body in _blocks(text, _ASA_IKE_POLICY):
+        seen = True
+        policy = ParsedIkePolicy(number=head.group(2), version=int(head.group(1)))
+        for line in body:
+            _ike_line(policy, line)
+        crypto.ike_policies.append(policy)
+
+    for head, body in _blocks(text, _ASA_TRANSFORM_SET):
+        seen = True
+        transform = ParsedTransformSet(name=head.group(1), transforms=_transforms(head.group(2)))
+        for line in body:
+            mode = re.match(r"^mode\s+(\S+)", line, re.IGNORECASE)
+            if mode:
+                transform.mode = mode.group(1).lower()
+        crypto.transform_sets.append(transform)
+
+    for head, body in _blocks(text, _ASA_IPSEC_PROPOSAL):
+        seen = True
+        transforms = []
+        for line in body:
+            # `protocol esp encryption aes-256` / `protocol esp integrity sha-256`
+            found = re.match(r"^protocol\s+(\S+)\s+(encryption|integrity)\s+(.+)$", line, re.I)
+            if found:
+                transforms.append(f"{found.group(1)}-{found.group(3).strip()}")
+        crypto.transform_sets.append(ParsedTransformSet(name=head.group(1), transforms=transforms))
+
+    entries: dict[tuple[str, str], ParsedCryptoMapEntry] = {}
+    for raw in text.splitlines():
+        line = raw.strip()
+        applied = _ASA_MAP_INTERFACE.match(line)
+        if applied:
+            seen = True
+            crypto.applied.append((applied.group("nameif"), applied.group("name")))
+            continue
+        found = _ASA_MAP_LINE.match(line)
+        if not found:
+            continue
+        seen = True
+        key = (found.group("name"), found.group("seq"))
+        entry = entries.get(key)
+        if entry is None:
+            entry = ParsedCryptoMapEntry(name=key[0], seq=key[1], kind="ipsec-isakmp")
+            entries[key] = entry
+            crypto.maps.append(entry)
+        rest = found.group("rest")
+        peer = re.match(r"^set peer\s+(.+)$", rest, re.IGNORECASE)
+        if peer:
+            entry.peers.extend(peer.group(1).split())
+            continue
+        method = re.match(
+            r"^set (?:ikev1 transform-set|ikev2 ipsec-proposal)\s+(.+)$", rest, re.IGNORECASE
+        )
+        if method:
+            entry.transform_sets.extend(method.group(1).split())
+            continue
+        address = re.match(r"^match address\s+(\S+)", rest, re.IGNORECASE)
+        if address:
+            entry.match_address = address.group(1)
+            continue
+        pfs = re.match(r"^set pfs(?:\s+(\S+))?", rest, re.IGNORECASE)
+        if pfs:
+            entry.pfs = (pfs.group(1) or "group2").lower()
+            continue
+        dynamic = re.match(r"^ipsec-isakmp dynamic\s+(\S+)", rest, re.IGNORECASE)
+        if dynamic:
+            entry.kind = "ipsec-isakmp dynamic"
+            entry.profile = dynamic.group(1)
+
+    for line in text.splitlines():
+        group = _ASA_TUNNEL_GROUP.match(line.strip())
+        if group and group.group(1) not in crypto.keyed_peers:
+            seen = True
+            crypto.keyed_peers.append(group.group(1))
 
     return crypto if seen else None
 

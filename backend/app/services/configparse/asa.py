@@ -12,7 +12,9 @@
 - `object network` / `object-group` … ACL が名前で指しているものの実体
 - NAT（object の中の `nat`、および行で書く twice NAT）
 
-VPN（`crypto`）は IOS と同じ書き方なので、そちらの読み手をそのまま使う。
+VPN（`crypto`）は IOS と似ているが、crypto map を1行ずつ書く・ikev1 / ikev2
+の方針を `crypto ikev2 policy` に書く・相手を `tunnel-group` に書く、という
+違いがある。ASA の書き方で読む。
 """
 
 from __future__ import annotations
@@ -105,9 +107,8 @@ def parse(text: str) -> ParsedConfig:
     _parse_acls(text, parsed)
     _parse_nat(text, parsed)
     _parse_routes(text, parsed)
-    # トンネルと VPN は IOS と同じ書き方なので、そのまま任せる
     tunnels.parse_block_style(text, parsed)
-    policy.parse_cisco_crypto(text, parsed)
+    policy.parse_asa_crypto(text, parsed)
     return parsed
 
 
@@ -362,7 +363,7 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
 
         line = _NAT_LINE.match(raw.strip())
         if line:
-            rest = line.group(3).split()
+            rest = _without_leading_options(line.group(3).split())
             matched = _twice_nat_source(rest)
             nat.rules.append(
                 _nat_rule(
@@ -373,6 +374,18 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
 
     if nat.rules:
         parsed.nat = nat
+
+
+def _without_leading_options(words: list[str]) -> list[str]:
+    """`after-auto` と行番号は並び順の指定で、変換の中身ではない。
+
+    `nat (in,out) after-auto source dynamic LAN interface` の `source` より
+    前を落とす。落とさないと、`LAN` が変換先に見える。
+    """
+    for index, word in enumerate(words):
+        if word.lower() in {"source", "destination"}:
+            return words[index:]
+    return words
 
 
 def _twice_nat_source(words: list[str]) -> str | None:
@@ -390,7 +403,7 @@ def _twice_nat_source(words: list[str]) -> str | None:
 
 def _nat_rule(found: re.Match[str], *, matched: str, matched_is_name: bool) -> ParsedNatRule:
     rest = found.group(3)
-    words = rest.split()
+    words = _without_leading_options(rest.split())
     lowered = [w.lower() for w in words]
     kind = "dynamic" if "dynamic" in lowered else "static"
     translated = None

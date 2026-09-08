@@ -195,3 +195,71 @@ def test_the_written_description_is_kept_next_to_nameif() -> None:
     assert "本社WAN" in port.description
     assert asa.nameif_of(port) == "outside"
     assert asa.security_level_of(port) == 0
+
+
+ASA_VPN = """\
+ASA Version 9.16(4)
+hostname fw-01
+interface Ethernet1/1
+ nameif outside
+ security-level 0
+ ip address 198.51.100.2 255.255.255.248
+object network LAN
+ subnet 192.168.1.0 255.255.255.0
+nat (inside,outside) after-auto source dynamic LAN interface
+crypto ikev2 policy 10
+ encryption aes-256
+ integrity sha256
+ group 14
+crypto ipsec ikev2 ipsec-proposal AES256
+ protocol esp encryption aes-256
+ protocol esp integrity sha-256
+crypto map OUTSIDE_MAP 10 match address VPN_ACL
+crypto map OUTSIDE_MAP 10 set peer 203.0.113.1
+crypto map OUTSIDE_MAP 10 set ikev2 ipsec-proposal AES256
+crypto map OUTSIDE_MAP interface outside
+tunnel-group 203.0.113.1 type ipsec-l2l
+tunnel-group 203.0.113.1 ipsec-attributes
+ ikev2 remote-authentication pre-shared-key *****
+failover
+failover lan unit primary
+ssh 192.168.1.0 255.255.255.0 inside
+"""
+
+
+def test_the_one_line_crypto_map_of_asa_is_read_as_one_entry():
+    """ASA は crypto map を1行ずつ書く。IOS の塊として読むと行ごとに別物になる。"""
+    crypto = configparse.parse(ASA_VPN).crypto
+    assert len(crypto.maps) == 1
+    entry = crypto.maps[0]
+    assert (entry.name, entry.seq) == ("OUTSIDE_MAP", "10")
+    assert entry.peers == ["203.0.113.1"]
+    assert entry.transform_sets == ["AES256"]
+    assert entry.match_address == "VPN_ACL"
+    assert crypto.applied == [("outside", "OUTSIDE_MAP")]
+    assert crypto.keyed_peers == ["203.0.113.1"]
+
+
+def test_the_ikev2_policy_and_proposal_of_asa_are_read():
+    crypto = configparse.parse(ASA_VPN).crypto
+    policy = crypto.ike_policies[0]
+    assert (policy.version, policy.encryption, policy.hash, policy.group) == (
+        2,
+        "aes-256",
+        "sha256",
+        "14",
+    )
+    assert crypto.transform_sets[0].transforms == ["esp-aes-256", "esp-sha-256"]
+
+
+def test_after_auto_is_an_order_and_not_the_thing_translated():
+    rule = configparse.parse(ASA_VPN).nat.rules[0]
+    assert (rule.kind, rule.matched, rule.overload) == ("dynamic", "LAN", True)
+    assert rule.translated == "出口のアドレス（interface）"
+
+
+def test_asa_nat_ssh_and_failover_show_up_as_features():
+    names = {(f.category, f.name) for f in configparse.parse(ASA_VPN).features}
+    assert ("nat", "NAT") in names
+    assert ("management", "SSH") in names
+    assert ("high_availability", "フェイルオーバー") in names

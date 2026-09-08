@@ -104,6 +104,8 @@ _RULES: tuple[_Rule, ...] = (
     _rule(ACCESS_CONTROL, "ゾーン", r"^\s*config\s+system\s+zone\s*$"),
     # アドレス変換
     _rule(NAT, "NAT", r"^\s*ip\s+nat\s+(?:inside|outside|source|pool)\b"),
+    # ASA は `nat (inside,outside) …`
+    _rule(NAT, "NAT", r"^\s*nat\s+\(\S+,\S+\)\s"),
     _rule(NAT, "NAT", r"^\s*nat\s+(?:outbound|server|address-group)\b"),
     _rule(NAT, "NAT", r"^\s*set\s+security\s+nat\b"),
     _rule(NAT, "NAT", r"^\s*set\s+nat\s+(?:enable|disable)\b"),
@@ -191,6 +193,8 @@ _RULES: tuple[_Rule, ...] = (
     _rule(MANAGEMENT, "AAA", r"^\s*hwtacacs-server\s"),
     _rule(MANAGEMENT, "AAA", r"^\s*(?:radius|tacacs)-server\s"),
     _rule(MANAGEMENT, "SSH", r"^\s*transport\s+input\s+ssh\b"),
+    # ASA は `ssh 192.168.1.0 255.255.255.0 inside`（許す元と口）
+    _rule(MANAGEMENT, "SSH", r"^ssh\s+\d+\.\d+\.\d+\.\d+\s+\S+\s+\S+\s*$"),
     _rule(MANAGEMENT, "SSH", r"^\s*protocol\s+inbound\s+ssh\b"),
     # 拠点間の暗号化
     _rule(VPN, "IPsec", r"^\s*crypto\s+(?:isakmp|ikev2|map|ipsec)\b"),
@@ -216,6 +220,7 @@ _RULES: tuple[_Rule, ...] = (
     _rule(HIGH_AVAILABILITY, "VRRP", r"^\s*vrrp\s+(?:vrid\s+)?\d+\s+(?:ip|virtual-ip)\b"),
     _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:switch\s+\d+\s+provision|stack-port|irf-port)\b"),
     _rule(HIGH_AVAILABILITY, "機器間の同期", r"^\s*config\s+system\s+ha\s*$"),
+    _rule(HIGH_AVAILABILITY, "フェイルオーバー", r"^failover\s+lan\s+unit\s+"),
     # Aruba CX は VSX、Arista は MLAG で2台を1台に見せる。
     # どちらも「片方を落としても通る」ことの前提になるので、入っていることを残す
     _rule(HIGH_AVAILABILITY, "VSX", r"^vsx\s*$"),
