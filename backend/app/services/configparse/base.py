@@ -180,6 +180,9 @@ class ParsedNeighbor:
 class ParsedConfig:
     vendor: Vendor = Vendor.UNKNOWN
     hostname: str | None = None
+    #: OS の名前。機器が印字した名前か、そのメーカーが自分の OS をそう呼んでいる名前だけを
+    #: 入れる。こちらの記憶で付けた名前は入れない（別のメーカーの名前を当てて黙って通る
+    #: ことがあった）。読めていなければ None のまま。無いのと読めていないのを混ぜない
     os_name: str | None = None
     os_version: str | None = None
     model: str | None = None

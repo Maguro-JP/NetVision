@@ -27,7 +27,8 @@ def test_ix_is_detected_and_read():
     assert parsed.vendor is Vendor.NEC_IX
     assert parsed.hostname == "ix-rt-01"
     assert parsed.model == "IX2215"
-    assert parsed.os_name == "IX"
+    # 名乗りに OS の名前は無いので空。型番から付けた名前は入れない
+    assert parsed.os_name is None
     assert parsed.os_version == "10.6.21"
     assert parsed.serial_number == "2215X0012345"
 

@@ -36,6 +36,10 @@ _JUNOS = re.compile(
 _HOSTNAME = re.compile(
     r"^\s*set\s+system\s+host-name\s+'?([^'\s]+)'?", re.IGNORECASE | re.MULTILINE
 )
+#: 名乗り。設定の先頭に小文字で `vyos version: 1.4` と印字されることがある。
+#: 同じ語なので大文字小文字は区別せず、持つときはその製品自身の綴りにする
+_OS_NAME = re.compile(r"\b(vyos|edgeos)\b", re.IGNORECASE)
+_OS_SPELLING = {"vyos": "VyOS", "edgeos": "EdgeOS"}
 _VERSION = re.compile(
     r"^\s*//\s*(?:vyos|Release)\s*version\s*:?\s*(\S+)", re.IGNORECASE | re.MULTILINE
 )
@@ -75,7 +79,12 @@ def detect(text: str) -> Vendor | None:
 
 
 def parse(text: str) -> ParsedConfig:
-    parsed = ParsedConfig(vendor=Vendor.VYOS, os_name="VyOS / EdgeOS")
+    # VyOS と EdgeOS は別の製品。どちらかは機器の印字（名乗り）で決め、無ければ空にする。
+    # 2つを混ぜた名前を入れると、どちらでもない名前が台帳に載る
+    parsed = ParsedConfig(vendor=Vendor.VYOS)
+    named = _OS_NAME.search(text)
+    if named:
+        parsed.os_name = _OS_SPELLING[named.group(1).lower()]
     text = _flatten(text)
 
     found = _HOSTNAME.search(text)

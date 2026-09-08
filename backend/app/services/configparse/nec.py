@@ -189,7 +189,9 @@ def parse(text: str, vendor: Vendor) -> ParsedConfig:
 
 
 def _parse_ix(text: str) -> ParsedConfig:
-    parsed = ParsedConfig(vendor=Vendor.NEC_IX, os_name="IX")
+    # 名乗り（`IX Series IX2215 (...) Software, Version 10.x`）に OS の名前は無い。
+    # 型番から付けた名前は入れない。読めていないものは空のまま
+    parsed = ParsedConfig(vendor=Vendor.NEC_IX)
 
     banner = _IX_BANNER.search(text)
     if banner:

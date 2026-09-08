@@ -28,6 +28,7 @@ _STRONG = (
 )
 
 _VERSION = re.compile(r"OS10\s+Enterprise.*?Version\s+([\d.]+\S*)", re.IGNORECASE | re.DOTALL)
+_OS_NAME = re.compile(r"\bDell\s+EMC\s+Networking\s+OS10\b|\bOS10\s+Enterprise\b", re.IGNORECASE)
 _MODEL = re.compile(r"^\s*!\s*Model:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _INTERFACE = re.compile(r"^interface\s+(?P<kind>[A-Za-z-]+)\s+(?P<number>[\d/:.]+)\s*$", re.I)
 _DESCRIPTION = re.compile(r"^\s+description\s+(.+?)\s*$", re.IGNORECASE)
@@ -60,7 +61,8 @@ def parse(text: str) -> ParsedConfig:
     """IOS の読み手に任せてから、OS10 の書き方で口を入れ直す。"""
     parsed = cisco.parse(text, Vendor.CISCO_IOS)
     parsed.vendor = Vendor.DELL_OS10
-    parsed.os_name = "Dell OS10"
+    # OS の名前は機器の印字（`Dell EMC Networking OS10` / `OS10 Enterprise`）から読む
+    parsed.os_name = "OS10" if _OS_NAME.search(text) else None
     parsed.model = None
     parsed.interfaces = []
 

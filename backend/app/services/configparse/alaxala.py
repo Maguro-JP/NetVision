@@ -20,6 +20,8 @@ from app.services.configparse.base import ParsedConfig, Vendor
 
 #: `show version` の型番と版数。AX は S/W と H/W を分けて出す
 _SW_VERSION = re.compile(r"^\s*S/W\s*:\s*\S+\s+Ver\.\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+#: 同じ行の、版の前に出る OS の名前（`OS-L3SA` など）
+_SW_NAME = re.compile(r"^\s*S/W\s*:\s*(OS-\S+)\s+Ver\.", re.IGNORECASE | re.MULTILINE)
 _HW_MODEL = re.compile(
     r"^\s*(?:H/W|Model)\s*:?\s*(AX\d{3,4}S?[\w-]*)", re.IGNORECASE | re.MULTILINE
 )
@@ -96,7 +98,11 @@ def parse(text: str) -> ParsedConfig:
     """IOS の読み手に任せてから、AX だけの書き方を上から直す。"""
     parsed = cisco.parse(_to_ios(text), Vendor.CISCO_IOS)
     parsed.vendor = Vendor.ALAXALA
-    parsed.os_name = "AX-OS"
+    # OS の名前は機器の印字（`S/W: OS-L3SA Ver. 12.1`）から読む。印字が無ければ空
+    parsed.os_name = None
+    found = _SW_NAME.search(text)
+    if found:
+        parsed.os_name = found.group(1)
     parsed.os_version = None
     parsed.model = None
 

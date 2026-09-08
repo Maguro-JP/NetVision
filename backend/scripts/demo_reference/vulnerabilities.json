@@ -112,7 +112,7 @@
       {
         "vendor": "NEC",
         "model": "IX2215",
-        "os_name": "IX",
+        "os_name": null,
         "version_end_including": "10.6.22",
         "fixed_version": "10.6.23"
       }

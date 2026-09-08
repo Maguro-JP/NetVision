@@ -261,7 +261,7 @@ def seed_wan(db: Session, core_router: Device) -> dict[str, int]:
                     vendor="NEC",
                     model="IX2215",
                     device_type=DeviceType.ROUTER,
-                    os_name="IX",
+                    os_name=None,
                     os_version="10.6.21",
                     site_id=branch_office.id,
                     mgmt_ip=f"10.{100 + region_index}.{pref_index}.1",

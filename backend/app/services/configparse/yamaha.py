@@ -94,7 +94,8 @@ def detect(text: str) -> Vendor | None:
 
 
 def parse(text: str) -> ParsedConfig:
-    parsed = ParsedConfig(vendor=Vendor.YAMAHA, os_name="Yamaha RT")
+    # 1行目（`# RTX830 Rev.15.02.28`）に OS の名前は無い。こちらで付けない
+    parsed = ParsedConfig(vendor=Vendor.YAMAHA)
 
     header = _HEADER.search(text)
     if header:
