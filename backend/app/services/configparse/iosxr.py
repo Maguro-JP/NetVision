@@ -9,8 +9,12 @@ IOS の読み手が「読めた」形で通してしまい、抜けたことに�
   `宛先/長さ ネクストホップ` だけを並べる。`ip route` という語が出てこない
 - OSPF は `router ospf 1` の下に `area 0` の囲みがあり、その中に口を並べる
 - 束ねるのは `Bundle-Ether1`
+- VRF は `vrf NAME` の囲み（IOS の `vrf definition`）、口には `vrf NAME`
+- BGP は相手ごとに `neighbor 10.0.0.1` の囲みを作り、その中に `remote-as` や
+  `address-family` を並べる（IOS は `neighbor 10.0.0.1 remote-as 65000` と1行）。
+  VRF ごとの部分も `vrf NAME` の囲みで、`rd` はそこに書く
 
-VLAN や ACL、BGP は IOS の読み手でそのまま読めるので、上の4つだけ直す。
+VLAN や ACL は IOS の読み手でそのまま読めるので、上の分だけ直す。
 """
 
 from __future__ import annotations
@@ -18,11 +22,13 @@ from __future__ import annotations
 import ipaddress
 import re
 
-from app.services.configparse import cisco
+from app.services.configparse import cisco, routing
 from app.services.configparse.base import (
+    ParsedBgp,
     ParsedConfig,
     ParsedOspfArea,
     ParsedRoute,
+    ParsedVrf,
     Vendor,
 )
 
@@ -73,9 +79,106 @@ def parse(text: str) -> ParsedConfig:
     parsed.os_version = found.group(1) if found else parsed.os_version
 
     _read_addresses(text, parsed)
+    _read_vrfs(text, parsed)
     _read_static(text, parsed)
     _read_ospf_areas(text, parsed)
+    _read_bgp(text, parsed)
     return parsed
+
+
+_VRF_HEAD = re.compile(r"^vrf\s+(\S+)\s*$", re.IGNORECASE)
+_INTERFACE_VRF = re.compile(r"^\s+vrf\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def _read_vrfs(text: str, parsed: ParsedConfig) -> None:
+    """`vrf NAME` の囲みと、口の `vrf NAME`。IOS の読み手は `vrf definition` しか見ない。"""
+    by_name = {port.name: port for port in parsed.interfaces}
+    current = None
+    for raw in text.splitlines():
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            head = _VRF_HEAD.match(raw)
+            if head:
+                parsed.add_vrf(ParsedVrf(name=head.group(1)))
+            port = _INTERFACE.match(raw)
+            current = by_name.get(port.group(1)) if port else None
+            continue
+        if current is None:
+            continue
+        found = _INTERFACE_VRF.match(raw)
+        if found and current.vrf is None:
+            current.vrf = found.group(1)
+
+
+_BGP_HEAD = re.compile(r"^router\s+bgp\s+(\S+)\s*$", re.IGNORECASE)
+
+
+def _read_bgp(text: str, parsed: ParsedConfig) -> None:
+    """`router bgp` の中の、相手ごとの囲み。
+
+    行の深さ（字下げ）で、どの囲みの中にいるかを判断する。
+    `neighbor 10.0.0.2` の下の `remote-as` はその相手のもの、`vrf CUST-A` の
+    下の `neighbor` はその VRF の相手、`address-family` は直上の相手の家族。
+    """
+    lines = text.splitlines()
+    starts = [i for i, raw in enumerate(lines) if _BGP_HEAD.match(raw)]
+    if not starts:
+        return
+    bgp = parsed.bgp or ParsedBgp()
+    bgp.local_as = bgp.local_as or _BGP_HEAD.match(lines[starts[0]]).group(1)
+
+    for start in starts:
+        neighbor: str | None = None
+        neighbor_depth = 0
+        vrf: str | None = None
+        vrf_depth = 0
+        for raw in lines[start + 1 :]:
+            stripped = raw.strip()
+            if not stripped or stripped == "!":
+                continue
+            depth = len(raw) - len(raw.lstrip())
+            if depth == 0:
+                break
+            if neighbor is not None and depth <= neighbor_depth:
+                neighbor = None
+            if vrf is not None and depth <= vrf_depth:
+                vrf = None
+                if depth <= vrf_depth:
+                    neighbor = None
+
+            router_id = re.match(r"^bgp router-id\s+(\S+)", stripped, re.IGNORECASE)
+            if router_id and vrf is None:
+                bgp.router_id = router_id.group(1)
+                continue
+            head = re.match(r"^vrf\s+(\S+)\s*$", stripped, re.IGNORECASE)
+            if head:
+                vrf, vrf_depth = head.group(1), depth
+                continue
+            rd = re.match(r"^rd\s+(\S+)", stripped, re.IGNORECASE)
+            if rd and vrf is not None:
+                found = parsed.add_vrf(ParsedVrf(name=vrf))
+                found.rd = found.rd or rd.group(1)
+                continue
+            head = re.match(r"^neighbor\s+(\S+)\s*$", stripped, re.IGNORECASE)
+            if head:
+                neighbor, neighbor_depth = head.group(1), depth
+                routing._add_neighbor(bgp, neighbor, "")
+                continue
+            if neighbor is None:
+                continue
+            family = re.match(r"^address-family\s+(.+)$", stripped, re.IGNORECASE)
+            if family:
+                routing._add_neighbor(bgp, neighbor, "activate", family.group(1).strip().lower())
+                continue
+            # XR は route-policy を in / out に当てる（IOS の route-map と同じ役目）
+            policy = re.match(r"^route-policy\s+(\S+)\s+(in|out)\b", stripped, re.IGNORECASE)
+            if policy:
+                routing._add_neighbor(
+                    bgp, neighbor, f"route-map {policy.group(1)} {policy.group(2)}"
+                )
+                continue
+            routing._add_neighbor(bgp, neighbor, stripped)
+
+    parsed.bgp = bgp
 
 
 def _read_addresses(text: str, parsed: ParsedConfig) -> None:

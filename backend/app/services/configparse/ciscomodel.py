@@ -58,7 +58,7 @@ _FAMILY = re.compile(
     # 並び順に意味がある。`C9800-L` は `C9800` より先に、`SG550X` は末尾の文字まで
     r"^(?P<family>(?:C9800(?:-L)?|IE-\d{4}|IR\d{3,4}|ISR\d{4}|ASR\d{4}|C\d{4,5}[A-Z]*|"
     r"SG\d{3}[A-Z]*|SF\d{3}[A-Z]*|SX\d{3}[A-Z]*|CBS\d{3}[A-Z]*|CISCO\d{4}|ASA\d{4}|"
-    r"N\d{4}|FPR-?\d{4}[A-Z]?|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
+    r"N\d{4}|FPR-?\d{4}[A-Z]?|NCS-?\d{3,4}|ASR-?9\d{3}|ASR9K|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
     re.IGNORECASE,
 )
 #: Cisco の型番らしい並び。ここに当たらないものは、型番として扱わない
@@ -66,6 +66,9 @@ _FAMILY = re.compile(
 _LOOKS_LIKE_PID = re.compile(
     r"^(?:C1-|2D-|NAL-|SI-)?(?:WS-|N[23579]K-|AIR-)?"
     r"(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR-?|AP|CW|MS|WLC|N)\d{3,5}"
+    # IOS XR の機種。`show version` は `cisco NCS-5500 () processor` と印字する
+    # （出典: NCS 5500 の System Setup ガイドの show version 例）
+    r"|^(?:NCS-?\d{3,4}|ASR-?9\d{3}|ASR9K)\b"
     # 国別在庫の PID は `WS-C` を落として数字から始まる（`NAL-2960XR-24PD-I`）
     r"|^(?:NAL|SI|2D)-\d{4}[A-Z]*-",
     re.IGNORECASE,
