@@ -125,6 +125,11 @@ def _read_bgp(text: str, parsed: ParsedConfig) -> None:
         return
     bgp = parsed.bgp or ParsedBgp()
     bgp.local_as = bgp.local_as or _BGP_HEAD.match(lines[starts[0]]).group(1)
+    # XR は相手の上げ下げを既定で記録する。止めるときだけ
+    # `bgp log neighbor changes disable` と書く（IOS は入れないと記録しない）
+    bgp.log_neighbor_changes = not re.search(
+        r"^\s+bgp log neighbor changes disable\s*$", text, re.IGNORECASE | re.MULTILINE
+    )
 
     for start in starts:
         neighbor: str | None = None

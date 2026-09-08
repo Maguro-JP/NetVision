@@ -131,6 +131,34 @@ def test_a_segment_nobody_advertises_is_flagged(db_session):
     assert any("10.10.20.0/24" in line for line in finding.evidence)
 
 
+def test_a_segment_carried_by_eigrp_or_isis_counts_as_advertised(db_session):
+    """OSPF と BGP だけ見ていると、EIGRP や IS-IS で広告している口を入れ忘れと言ってしまう。"""
+    device = _device(db_session, "rt-03b")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-03b\n!\ninterface Vlan10\n ip address 10.10.10.1 255.255.255.0\n!\n"
+        "interface Vlan20\n ip address 10.10.20.1 255.255.255.0\n!\n"
+        "router eigrp 100\n network 10.10.10.0 0.0.0.255\n network 10.10.20.0 0.0.0.255\n",
+        "e" * 63 + "1",
+    )
+    report = l3review.review(db_session, device)
+    assert not any("広告されていない" in f.title for f in report.findings)
+
+    xr = _device(db_session, "pe-xr")
+    _snapshot(
+        db_session,
+        xr,
+        "RP/0/RP0/CPU0:pe1#show running-config\nhostname pe-xr\n"
+        "interface HundredGigE0/0/0/0\n ipv4 address 10.1.1.0 255.255.255.254\n"
+        "router isis CORE\n net 49.0001.0000.0000.0001.00\n interface HundredGigE0/0/0/0\n"
+        "  address-family ipv4 unicast\n",
+        "e" * 63 + "2",
+    )
+    report = l3review.review(db_session, xr)
+    assert not any("広告されていない" in f.title for f in report.findings)
+
+
 def test_a_static_only_config_is_not_nagged_about_advertising(db_session):
     """静的で回している構成では、載っていないのが普通。"""
     device = _device(db_session, "rt-04")

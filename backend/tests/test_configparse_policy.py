@@ -144,6 +144,26 @@ def test_the_abbreviated_encr_the_running_config_prints_is_read():
     assert crypto.ike_policies[0].encryption == "aes 256"
 
 
+def test_the_zone_based_firewall_policy_map_is_not_read_as_qos():
+    """`policy-map type inspect` は優先制御ではない。
+
+    読むと「どの口にも当たっていない」と言ってしまう。
+    """
+    text = (
+        "hostname r1\nclass-map type inspect match-any CM-IN\n match protocol https\n"
+        "policy-map type inspect PM\n class type inspect CM-IN\n  inspect\n"
+    )
+    assert configparse.parse(text).qos is None
+    # NX-OS の `type qos` は優先制御。名前だけ読む
+    nx = (
+        "hostname n9k\nclass-map type qos match-any VOICE\n  match dscp ef\n"
+        "policy-map type qos PM\n  class VOICE\n"
+    )
+    qos = configparse.parse(nx).qos
+    assert [c.name for c in qos.classes] == ["VOICE"]
+    assert [p.name for p in qos.policies] == ["PM"]
+
+
 def test_a_config_without_these_features_leaves_them_empty():
     """無いものを、読めていないだけかもしれないのに埋めない。"""
     text = "hostname sw-01\ninterface Vlan10\n ip address 10.0.0.1 255.255.255.0"

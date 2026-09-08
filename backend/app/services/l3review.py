@@ -468,25 +468,27 @@ def _same_destination_twice(parsed: ParsedConfig) -> list[Finding]:
 def _segments_nobody_advertises(
     parsed: ParsedConfig, local: list[ipaddress.IPv4Network]
 ) -> list[Finding]:
-    """IP は振ってあるのに、OSPF にも BGP にも載っていないセグメント。
+    """IP は振ってあるのに、どの経路プロトコルにも載っていないセグメント。
 
     その機器の中では通じるが、外からは届かない。増やしたときの入れ忘れ。
+    OSPF・BGP のほか、EIGRP・IS-IS・RIP（protocols）に載っていれば広告されている。
     """
-    if parsed.ospf is None and parsed.bgp is None:
+    others = [p for p in parsed.protocols if p.name in {"eigrp", "isis", "rip", "ospfv3"}]
+    if parsed.ospf is None and parsed.bgp is None and not others:
         return []  # 静的で回している構成では、載っていないのが普通
 
     advertised: set[str] = set()
+    interfaces: set[str] = set()
+    listed: list[str] = []
     if parsed.ospf is not None:
-        for area in parsed.ospf.areas:
-            advertised |= {n for n in area.networks if not n.startswith("interface ")}
-        interfaces = {
-            n.removeprefix("interface ")
-            for area in parsed.ospf.areas
-            for n in area.networks
-            if n.startswith("interface ")
-        }
-    else:
-        interfaces = set()
+        listed += [n for area in parsed.ospf.areas for n in area.networks]
+    for protocol in others:
+        listed += protocol.networks
+    for entry in listed:
+        if entry.startswith("interface "):
+            interfaces.add(entry.removeprefix("interface "))
+        else:
+            advertised.add(entry)
     if parsed.bgp is not None:
         advertised |= set(parsed.bgp.networks)
 
@@ -515,7 +517,7 @@ def _segments_nobody_advertises(
         Finding(
             level=MEDIUM,
             title="外へ広告されていないセグメントがあります",
-            why="IP は振ってあるのに、OSPF にも BGP にも載っていません。"
+            why="IP は振ってあるのに、OSPF にも BGP にも（EIGRP / IS-IS にも）載っていません。"
             "この機器の中では通じますが、外からは届きません。"
             "セグメントを増やしたときの入れ忘れでよく起きます。"
             "管理用など、わざと広告していないなら問題ありません。",

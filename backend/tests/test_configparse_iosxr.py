@@ -158,3 +158,22 @@ def test_the_nested_bgp_neighbors_of_xr_are_read():
     )
     ce = by_address["192.168.100.2"]
     assert (ce.remote_as, ce.address_families) == ("65100", ["ipv4 unicast"])
+
+
+def test_isis_lists_the_interfaces_it_carries():
+    text = (
+        "RP/0/RP0/CPU0:pe1#show running-config\nhostname pe1\n"
+        "router isis CORE\n net 49.0001.0000.0000.0001.00\n"
+        " interface HundredGigE0/0/0/0\n  address-family ipv4 unicast\n"
+    )
+    isis = configparse.parse(text).protocols[0]
+    assert (isis.name, isis.networks) == ("isis", ["interface HundredGigE0/0/0/0"])
+
+
+def test_xr_records_bgp_neighbor_changes_unless_told_not_to():
+    """XR は既定で記録する。IOS と同じ「入れていない」扱いにすると、無い指摘が出る。"""
+    head = "RP/0/RP0/CPU0:pe1#show running-config\nhostname pe1\nrouter bgp 65000\n"
+    body = " neighbor 10.0.0.2\n  remote-as 65000\n"
+    assert configparse.parse(head + body).bgp.log_neighbor_changes is True
+    off = head + " bgp log neighbor changes disable\n" + body
+    assert configparse.parse(off).bgp.log_neighbor_changes is False

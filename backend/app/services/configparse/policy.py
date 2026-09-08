@@ -398,8 +398,15 @@ def _dhcp(text: str) -> ParsedDhcp | None:
 # 優先制御（QoS）
 # ---------------------------------------------------------------------------
 
-_CLASS_MAP = re.compile(r"^class-map\s+(?:(match-all|match-any)\s+)?(\S+)", re.IGNORECASE)
-_POLICY_MAP = re.compile(r"^policy-map\s+(\S+)", re.IGNORECASE)
+# `type inspect` はゾーンベースファイアウォールで、優先制御ではない。
+# NX-OS の `type qos` / `type queuing` / `type network-qos` は優先制御なので名前だけ読む
+_CLASS_MAP = re.compile(
+    r"^class-map\s+(?!type\s+inspect\b)(?:type\s+\S+\s+)?(?:(match-all|match-any)\s+)?(\S+)",
+    re.IGNORECASE,
+)
+_POLICY_MAP = re.compile(
+    r"^policy-map\s+(?!type\s+inspect\b)(?:type\s+\S+\s+)?(\S+)", re.IGNORECASE
+)
 
 
 def _qos(text: str) -> ParsedQos | None:

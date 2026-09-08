@@ -865,6 +865,13 @@ def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRouti
         if passive:
             protocol.passive_interfaces.append(expand(passive.group(1)))
             continue
+        # IOS XR の IS-IS は、載せる口を `interface X` で囲みに並べる（OSPF のエリアと同じ形）
+        port = re.match(r"^interface\s+(\S+)\s*$", line, re.IGNORECASE)
+        if port:
+            entry = f"interface {expand(port.group(1))}"
+            if entry not in protocol.networks:
+                protocol.networks.append(entry)
+            continue
         version = re.match(r"^version\s+(\S+)", line, re.IGNORECASE)
         if version:
             protocol.version = version.group(1)
