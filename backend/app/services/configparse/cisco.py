@@ -31,7 +31,8 @@ _CHASSIS = re.compile(r"^\s*cisco\s+(\S+)\s*\(", re.MULTILINE)
 #: Nexus の show version は `cisco Nexus9000 C93180YC-EX Chassis` の形で、
 #: 括弧が無い。ここを読めないと型番が空になり、EoL も弱点も引けない
 _NEXUS_CHASSIS = re.compile(
-    r"^\s*cisco\s+Nexus\S*\s+(\S+)\s+(?:Chassis|chassis)", re.MULTILINE | re.IGNORECASE
+    r"^\s*cisco\s+Nexus\s*\S*\s+(\S+)\s+(?:\(\d+\s+Slot\)\s+)?(?:Chassis|chassis)",
+    re.MULTILINE | re.IGNORECASE,
 )
 #: IOS は `System serial number:`、NX-OS は `Processor Board ID`。
 #: 保守契約の照合に使う値なので、どちらの書き方でも拾う
@@ -39,6 +40,18 @@ _SERIAL = re.compile(
     r"^\s*(?:System [Ss]erial [Nn]umber\s*:|Processor Board ID)\s*(\S+)", re.MULTILINE
 )
 _PID_SN = re.compile(r"PID:\s*(\S+)\s*,.*?SN:\s*(\S+)")
+#: `show inventory` の1項目。NAME と DESCR の行の次に PID / SN の行が来る
+_INVENTORY_ITEM = re.compile(
+    r'NAME:\s*"(?P<name>[^"]*)"\s*,\s*DESCR:\s*"(?P<descr>[^"]*)"\s*\n\s*'
+    r"PID:\s*(?P<pid>\S*)\s*,.*?SN:\s*(?P<sn>\S*)",
+    re.IGNORECASE,
+)
+#: スタックの `show version` の表。`*  1 52    WS-C2960X-48FPD-L  15.2(7)E7  ...`。
+#: 混在スタックが分かる唯一の場所
+_STACK_ROW = re.compile(
+    r"^\*?\s*(?P<number>\d+)\s+(?P<ports>\d+)\s+(?P<model>[A-Z][\w/-]+)\s+\S+\s+\S+",
+    re.MULTILINE,
+)
 
 #: 末尾に何も続かない形だけ。show の見出し（Interface  IP-Address …）を取り違えない
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
@@ -142,9 +155,21 @@ _STACK_PROVISION = re.compile(r"^switch\s+\d+\s+provision\s+(\S+)\s*$", re.IGNOR
 
 
 def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
+    from app.services.configparse import ciscomodel
+
     match = _MODEL_NUMBER.search(text) or _NEXUS_CHASSIS.search(text) or _CHASSIS.search(text)
-    if match:
+    if match and ciscomodel.looks_like_pid(match.group(1)):
         parsed.model = match.group(1)
+
+    if not parsed.model:
+        # スタックの表（1台目の行を代表にする。混在は台ごとの行に残る）
+        rows = [
+            row
+            for row in _STACK_ROW.finditer(text)
+            if ciscomodel.is_chassis_pid(row.group("model"))
+        ]
+        if rows:
+            parsed.model = rows[0].group("model")
 
     if not parsed.model:
         provisioned = _STACK_PROVISION.findall(text)
@@ -155,14 +180,46 @@ def _parse_inventory(text: str, parsed: ParsedConfig) -> None:
     match = _SERIAL.search(text)
     if match:
         parsed.serial_number = match.group(1)
-        return
 
-    # show inventory の最初のエントリ（シャーシ）を採用する
-    match = _PID_SN.search(text)
-    if match:
+    # show inventory。シャーシの項目を選ぶ。最初の項目を採ると、貼り方に
+    # よってはモジュールや SFP の型番がシャーシの型番になる
+    chassis = _chassis_item(text)
+    if chassis is not None:
+        pid, serial = chassis
         if not parsed.model:
-            parsed.model = match.group(1)
-        parsed.serial_number = match.group(2)
+            parsed.model = pid
+        if not parsed.serial_number and serial:
+            parsed.serial_number = serial
+
+
+def _chassis_item(text: str) -> tuple[str, str] | None:
+    """`show inventory` からシャーシの (PID, SN) を選ぶ。
+
+    NAME が Chassis / 1 / Switch 1、または DESCR に Chassis とあるものを先に、
+    無ければ、モジュールや光ではない最初の項目を採る。
+    """
+    from app.services.configparse import ciscomodel
+
+    items = list(_INVENTORY_ITEM.finditer(text))
+    if not items:
+        # NAME / DESCR の行が無い貼り方。PID / SN の行だけで、シャーシらしいものを採る
+        for found in _PID_SN.finditer(text):
+            if ciscomodel.is_chassis_pid(found.group(1)):
+                return found.group(1), found.group(2)
+        return None
+
+    def is_named_chassis(item: re.Match[str]) -> bool:
+        name = item.group("name").strip().lower()
+        descr = item.group("descr").lower()
+        return name in ("chassis", "1", "switch 1", "switch1") or "chassis" in descr
+
+    for item in items:
+        if is_named_chassis(item) and ciscomodel.is_chassis_pid(item.group("pid")):
+            return item.group("pid"), item.group("sn")
+    for item in items:
+        if ciscomodel.is_chassis_pid(item.group("pid")):
+            return item.group("pid"), item.group("sn")
+    return None
 
 
 def expand_range(spec: str) -> list[str]:

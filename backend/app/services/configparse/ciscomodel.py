@@ -1,0 +1,126 @@
+"""Cisco の型番（PID）を、命名規則で読む。
+
+型番は EoL・脆弱性・保守契約を引く鍵になる。ここが弱いと、現場で一番多い
+機種が何にも引っかからない。実際に起きていたのは次の3つ。
+
+- 参照データの `C2960X*` が、実機の `WS-C2960X-48FPD-L` に当たらない
+  （素朴な前方一致では `wsc2960x…` は `c2960x` で始まらない）
+- `ISR4331` と `ISR4331/K9`、`C9300-48P` と `C9300-48P-A` が別物になる
+  （`/K9` は暗号の有無、末尾の `-A` / `-E` はライセンスの束で、ハードは同じ）
+- `show inventory` の最初の `PID:` を採るので、貼り方によってはモジュールや
+  SFP の型番がシャーシの型番になる
+
+型番の一覧を持って当てるのではなく、命名規則をほどく。一覧に無い型番でも
+読めるようにするため。ただし規則から外れる書き方は、そのまま持つ（推測で
+直さない）。
+
+### 用語
+
+- pid … 機器が印字したままの型番（`WS-C2960X-48FPD-L`）
+- canonical … 突き合わせ用に、ハードを変えない飾りを外したもの（`C2960X-48FPD-L`）
+- family … 系列（`C2960X`）。参照データが系列単位で書かれることが多い
+"""
+
+from __future__ import annotations
+
+import re
+from dataclasses import dataclass
+
+#: ハードを変えない頭の飾り。旧 Catalyst の `WS-`、Nexus の `N9K-` など、
+#: 無線 AP の `AIR-`。参照データではこれ無しで書かれることが多い
+_HEAD_DECORATION = re.compile(r"^(?:WS-|N[3579]K-|N2K-|AIR-|CISCO)", re.IGNORECASE)
+#: ハードを変えない尻の飾り。`/K9`・`-K9` は暗号の有無、`-A` / `-E` / `-S` / `-L` は
+#: ライセンスの束（Catalyst 9000 は -A / -E、2960 は -L / -S）。`=` はスペア品。
+#: 末尾の `-RF` は再生品
+_TAIL_DECORATION = re.compile(
+    r"(?:/K9|-K9|=|-RF|-WS)$|(?<=[A-Z0-9])(?:-A|-E)$|(?<=[A-Z0-9])(?:-L|-S)$",
+    re.IGNORECASE,
+)
+#: 系列の切れ目。`IE-3300-8T2S` は `IE-3300` まで、`ASR1001-X` は `ASR1001` まで
+_FAMILY = re.compile(
+    # 並び順に意味がある。`C9800-L` は `C9800` より先に、`SG550X` は末尾の文字まで
+    r"^(?P<family>(?:C9800(?:-L)?|IE-\d{4}|IR\d{3,4}|ISR\d{4}|ASR\d{4}|C\d{4,5}[A-Z]*|"
+    r"SG\d{3}[A-Z]*|SF\d{3}[A-Z]*|SX\d{3}[A-Z]*|CBS\d{3}[A-Z]*|CISCO\d{4}|ASA\d{4}|"
+    r"N\d{4}|FPR\d{4}|AP\d{4}[A-Z]*|CW\d{4}[A-Z]*|MS\d{3}|WLC\d{4})|[A-Z]+\d+[A-Z]*)",
+    re.IGNORECASE,
+)
+#: Cisco の型番らしい並び。ここに当たらないものは、型番として扱わない
+#: （`show inventory` の DESCR や、SFP の型番 `GLC-SX-MMD` を弾くため）
+_LOOKS_LIKE_PID = re.compile(
+    r"^(?:WS-|N[23579]K-|AIR-)?(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR|AP|CW|MS|WLC|N)"
+    r"\d{3,5}",
+    re.IGNORECASE,
+)
+#: モジュール・光・電源・ファンの型番。シャーシとして採らない
+_NOT_CHASSIS = re.compile(
+    r"^(?:GLC-|SFP-|QSFP-|CAB-|PWR-|C\d{4}-NM-|C\d{4}-PWR|C\d{4}-FAN|C9K-PWR|C9K-FAN|"
+    r"NIM-|SM-|EHWIC|HWIC|VWIC|PVDM|STACK-|C3850-NM|C9300-NM|C9500-NM|N9K-PAC|N9K-C9300-FAN|"
+    r"UCS|MEM-|FLASH|USB|ACS-)",
+    re.IGNORECASE,
+)
+
+
+@dataclass(frozen=True)
+class CiscoModel:
+    pid: str
+    canonical: str
+    family: str
+
+    def keys(self) -> set[str]:
+        """突き合わせに使う鍵。印字のまま・飾りを外したもの・系列。"""
+        return {_key(self.pid), _key(self.canonical), _key(self.family)}
+
+
+def looks_like_pid(value: str | None) -> bool:
+    """Cisco の型番らしいか。DESCR の文や SFP の型番を型番として採らないため。"""
+    return bool(value) and bool(_LOOKS_LIKE_PID.match(value.strip()))
+
+
+def is_chassis_pid(value: str | None) -> bool:
+    """シャーシの型番か。モジュール・光・電源・ファンは違う。"""
+    return looks_like_pid(value) and not _NOT_CHASSIS.match((value or "").strip())
+
+
+def read(pid: str | None) -> CiscoModel | None:
+    """型番をほどく。規則に当たらなければ None（推測で直さない）。"""
+    if not pid:
+        return None
+    raw = pid.strip()
+    if not looks_like_pid(raw):
+        return None
+    canonical = _HEAD_DECORATION.sub("", raw)
+    # 尻の飾りは1つずつ外す（`-A/K9` のように重なることがある）
+    for _ in range(3):
+        stripped = _TAIL_DECORATION.sub("", canonical)
+        if stripped == canonical:
+            break
+        canonical = stripped
+    found = _FAMILY.match(canonical)
+    family = found.group("family") if found else canonical
+    return CiscoModel(pid=raw, canonical=canonical.upper(), family=family.upper())
+
+
+def matches(pattern: str | None, model: str | None) -> bool:
+    """参照データの型番指定（末尾 `*` で前方一致）と、機器の型番を突き合わせる。
+
+    どちらも飾りを外してから比べる。`C2960X*` が `WS-C2960X-48FPD-L` に、
+    `ISR4331` が `ISR4331/K9` に、`C9300-48P` が `C9300-48P-A` に当たる。
+    飾りの無い名前どうしでは、今までどおり印字のままでも当たる。
+    """
+    if not pattern:
+        return True
+    if not model:
+        return False
+    prefix = pattern.endswith("*")
+    wanted = pattern.rstrip("*")
+    mine = read(model)
+    theirs = read(wanted)
+    left_keys = {_key(wanted)} | ({_key(theirs.canonical)} if theirs else set())
+    right_keys = {_key(model)} | ({_key(mine.canonical)} if mine else set())
+    if prefix:
+        return any(right.startswith(left) for left in left_keys for right in right_keys if left)
+    return any(left == right for left in left_keys for right in right_keys if left)
+
+
+def _key(value: str) -> str:
+    return re.sub(r"[^a-z0-9]", "", value.lower())
