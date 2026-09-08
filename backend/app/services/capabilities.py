@@ -52,8 +52,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         "Aruba AOS-S（ProCurve）・アライドテレシス・アラクサラ・ファーウェイ・"
         "FastIron・Extreme EXOS・Dell OS10・VyOS / EdgeOS・MikroTik RouterOS・"
         "H3C の 24 機種です。Cisco の型番は一覧ではなく命名規則で読むので、"
-        "公式の型番表に載る 140 超の PID（Catalyst 1000〜9500 / ISR / ASR / Nexus 9300 など）"
-        "で確かめています。",
+        "公式の型番表に載る 170 超の PID（Catalyst 2960〜9500 / ISR / ASR / Nexus / "
+        "Firepower / AP）で確かめています。",
     ),
     Capability(
         area="土台",
