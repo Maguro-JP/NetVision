@@ -189,3 +189,65 @@ def test_a_global_route_is_not_pulled_into_a_vrf() -> None:
     routes = {route.destination: route.vrf for route in configparse.parse(text).routes}
     assert routes["10.1.0.0/16"] is None
     assert routes["0.0.0.0/0"] == "MGMT"
+
+
+def test_the_nested_hsrp_block_is_read_whatever_order_its_lines_come_in():
+    """`preempt` や `timers` が先に来ても、仮想アドレスと優先度を読む。
+
+    塊の行は字下げを落として渡ってくるので、知らない行で塊を閉じると、
+    その後ろの `ip` が読めない。`ip address`（口自身のアドレス）は読まない。
+    """
+    text = "\n".join(
+        [
+            "hostname n9k",
+            "interface Vlan10",
+            "  hsrp version 2",
+            "  hsrp 10",
+            "    preempt",
+            "    timers 1 3",
+            "    priority 110",
+            "    ip 10.10.0.1",
+            "  ip address 10.10.0.2/24",
+            "  no shutdown",
+        ]
+    )
+    parsed = configparse.parse(text)
+    entry = parsed.redundancy[0]
+    assert (entry.virtual_ip, entry.priority) == ("10.10.0.1", 110)
+    assert parsed.interfaces[0].ip_address == "10.10.0.2/24"
+    assert [f.name for f in parsed.features if f.category == "high_availability"] == ["HSRP"]
+
+
+def test_the_address_family_nested_under_a_neighbor_belongs_to_that_neighbor():
+    """NX-OS は相手ごとに `address-family ipv4 unicast` を入れ子で書く。"""
+    text = "\n".join(
+        [
+            "hostname n9k",
+            "feature bgp",
+            "router bgp 65000",
+            "  router-id 10.255.0.1",
+            "  neighbor 10.1.1.0 remote-as 65100",
+            "    address-family ipv4 unicast",
+            "  neighbor 10.1.1.2 remote-as 65100",
+            "    address-family ipv4 unicast",
+            "    address-family ipv6 unicast",
+        ]
+    )
+    bgp = configparse.parse(text).bgp
+    first, second = bgp.neighbors
+    assert (first.address_families, first.activated) == (["ipv4 unicast"], True)
+    assert second.address_families == ["ipv4 unicast", "ipv6 unicast"]
+
+
+def test_vpc_is_listed_as_a_high_availability_feature():
+    text = "\n".join(
+        [
+            "hostname n9k",
+            "vpc domain 10",
+            "  peer-keepalive destination 10.0.0.2 source 10.0.0.1",
+            "interface port-channel1",
+            "  vpc peer-link",
+        ]
+    )
+    names = [f.name for f in configparse.parse(text).features if f.category == "high_availability"]
+    assert names == ["vPC"]

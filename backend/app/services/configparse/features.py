@@ -207,12 +207,15 @@ _RULES: tuple[_Rule, ...] = (
     _rule(LOAD_BALANCE, "サーバー負荷分散", r"^\s*virtual-server\s+"),
     # 機器の冗長
     _rule(HIGH_AVAILABILITY, "HSRP", r"^\s*standby\s+\d+\s+ip\b"),
+    # NX-OS は `hsrp 10` の下に字下げで仮想アドレスを書く
+    _rule(HIGH_AVAILABILITY, "HSRP", r"^\s*hsrp\s+\d+(?:\s+ipv[46])?\s*$"),
     _rule(HIGH_AVAILABILITY, "VRRP", r"^\s*vrrp\s+(?:vrid\s+)?\d+\s+(?:ip|virtual-ip)\b"),
     _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:switch\s+\d+\s+provision|stack-port|irf-port)\b"),
     _rule(HIGH_AVAILABILITY, "機器間の同期", r"^\s*config\s+system\s+ha\s*$"),
     # Aruba CX は VSX、Arista は MLAG で2台を1台に見せる。
     # どちらも「片方を落としても通る」ことの前提になるので、入っていることを残す
     _rule(HIGH_AVAILABILITY, "VSX", r"^vsx\s*$"),
+    _rule(HIGH_AVAILABILITY, "vPC", r"^vpc\s+domain\s+\d+\s*$"),
     _rule(HIGH_AVAILABILITY, "MLAG", r"^mlag\s+configuration\s*$"),
 )
 

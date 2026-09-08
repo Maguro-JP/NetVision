@@ -27,6 +27,7 @@ from app.services.configparse.base import (
     ParsedRedundancy,
     ParsedRoute,
     ParsedRoutingProtocol,
+    Vendor,
 )
 from app.services.configparse.ifname import expand
 
@@ -292,10 +293,17 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
         bgp = parsed.bgp or ParsedBgp()
         bgp.local_as = bgp.local_as or head.group(1)
         family: str | None = None
+        last_neighbor: str | None = None
+        nxos = parsed.vendor is Vendor.CISCO_NXOS
         for line in body:
             found = re.match(r"^address-family\s+(.+)$", line, re.IGNORECASE)
             if found:
                 family = found.group(1).strip().lower()
+                # NX-OS は相手ごとに `address-family ipv4 unicast` を入れ子で書く
+                # （IOS のように router 直下で家族を分けて、その中で activate しない）。
+                # 字下げは落ちて渡ってくるので、直前の相手に付くものとして読む
+                if nxos and last_neighbor:
+                    _add_neighbor(bgp, last_neighbor, "activate", family)
                 continue
             if re.match(r"^exit-address-family\b", line, re.IGNORECASE):
                 family = None
@@ -309,6 +317,7 @@ def _cisco_bgp(text: str, parsed: ParsedConfig) -> None:
             neighbor = re.match(r"^neighbor\s+(\S+)\s+(.+)$", line, re.IGNORECASE)
             if neighbor:
                 _add_neighbor(bgp, neighbor.group(1), neighbor.group(2), family)
+                last_neighbor = neighbor.group(1)
                 continue
             network = re.match(r"^network\s+(\S+)(?:\s+mask\s+(\S+))?", line, re.IGNORECASE)
             if network:
@@ -492,17 +501,22 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
                 continue
             if nested is None:
                 continue
-            value_line = re.match(r"^(ip|address|priority)\s+(\S+)", line.strip(), re.IGNORECASE)
+            # 塊の行は字下げを落として渡ってくるので、深さでは切れない。`ip` の
+            # 後にアドレスが続く行だけを仮想アドレスとして読み、`ip address`
+            # （インターフェース自身のアドレス）は読まない。preempt や timers の
+            # ような他の行は、塊を閉じずに読み飛ばす
+            value_line = re.match(
+                r"^(ip|address)\s+(\d[\d.]*|[0-9a-f:]*:[0-9a-f:]*)(?:\s|$)"
+                r"|^(priority)\s+(\d+)",
+                line.strip(),
+                re.IGNORECASE,
+            )
             if value_line is None:
-                # 字下げの外に出たら、その塊はおしまい
-                if line.strip() and not line.startswith((" ", "\t")):
-                    nested = None
                 continue
-            keyword, value = value_line.group(1).lower(), value_line.group(2)
-            if keyword in {"ip", "address"}:
-                nested.virtual_ip = value
-            elif value.isdigit():
-                nested.priority = int(value)
+            if value_line.group(1):
+                nested.virtual_ip = nested.virtual_ip or value_line.group(2)
+            else:
+                nested.priority = int(value_line.group(4))
 
         parsed.redundancy.extend(groups.values())
 
