@@ -21,6 +21,11 @@ from app.services.configparse.base import (
 from app.services.configparse.ifname import expand
 
 _HOSTNAME = re.compile(r"^hostname\s+(\S+)", re.IGNORECASE | re.MULTILINE)
+#: `sw-01#show version` / `sw-01(config)#` のプロンプト。IOS / NX-OS / ASA で同じ形
+_PROMPT = re.compile(
+    r"^([A-Za-z0-9][\w.-]*)(?:\([\w-]+\))?[#>]\s*(?:show|sh|display)\b", re.MULTILINE
+)
+_UPTIME = re.compile(r"^([A-Za-z0-9][\w.-]*)\s+uptime is\s", re.MULTILINE)
 _VERSION_LINE = re.compile(r"^version\s+(\S+)", re.IGNORECASE)
 _SHOW_VERSION = re.compile(
     r"(?:IOS[- ]XE Software.*?|IOS Software.*?),?\s*Version\s+([\w.()]+)", re.I
@@ -111,6 +116,12 @@ def parse(text: str, vendor: Vendor = Vendor.CISCO_IOS) -> ParsedConfig:
         sysname = re.search(r'^\s*sysname\s+"?([^"\n]+?)"?\s*$', text, re.IGNORECASE | re.MULTILINE)
         if sysname:
             parsed.hostname = sysname.group(1).strip()
+    if parsed.hostname is None:
+        # show の出力だけを貼られたときは、プロンプト（`sw-01#show version`）か
+        # `sw-01 uptime is …` の行に機器名が出ている。台帳と突き合わせる鍵なので拾う
+        prompt = _PROMPT.search(text) or _UPTIME.search(text)
+        if prompt:
+            parsed.hostname = prompt.group(1)
 
     _parse_version(text, parsed)
     _parse_inventory(text, parsed)

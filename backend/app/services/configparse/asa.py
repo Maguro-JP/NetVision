@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import policy, tunnels
+from app.services.configparse import cisco, policy, tunnels
 from app.services.configparse.base import (
     ParsedAcl,
     ParsedAclEntry,
@@ -92,6 +92,11 @@ def parse(text: str) -> ParsedConfig:
     found = _HOSTNAME.search(text)
     if found:
         parsed.hostname = found.group(1).strip('"')
+    else:
+        # show の出力だけを貼られたときは、プロンプト（`fw-01# show version`）に機器名が出ている
+        prompt = cisco._PROMPT.search(text)
+        if prompt:
+            parsed.hostname = prompt.group(1)
     found = _VERSION.search(text) or _SHOW_VERSION.search(text) or _FTD_VERSION.search(text)
     if found:
         parsed.os_version = found.group(1)
