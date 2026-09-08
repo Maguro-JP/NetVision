@@ -564,8 +564,9 @@ _FASTIRON = dataclasses.replace(
 _BY_VENDOR: dict[Vendor, Dialect] = {
     Vendor.NEC_IX: _NEC_IX,
     Vendor.NEC_QX: _NEC_QX,
-    # VRP は Comware と同じで、消すときに undo を使う
+    # VRP と H3C は Comware と同じで、消すときに undo を使う
     Vendor.HUAWEI: _NEC_QX,
+    Vendor.H3C: _NEC_QX,
     Vendor.CISCO_IOS: _CISCO,
     Vendor.CISCO_NXOS: _CISCO,
     Vendor.CISCO_ASA: _CISCO_ASA,

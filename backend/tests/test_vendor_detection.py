@@ -73,6 +73,12 @@ vlan trunk allowed 10,20
 interface vlan 20
     ip address 10.0.20.2/24
 """,
+    Vendor.H3C: """ version 7.1.070, Release 6127P02
+ sysname h3c-sw-01
+vlan 10
+ name USERS
+ H3C S5560X-30C-EI
+""",
     Vendor.VYOS: """set system host-name 'rt-vyos-01'
 set interfaces ethernet eth0 address '10.0.0.1/24'
 """,

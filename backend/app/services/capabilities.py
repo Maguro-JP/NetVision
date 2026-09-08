@@ -50,7 +50,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         "読めるのは Cisco（IOS / IOS-XE / NX-OS / ASA / IOS-XR / AireOS）・Juniper・"
         "Fortinet・NEC（IX / QX）・ヤマハ・Palo Alto・Arista・Aruba CX・"
         "Aruba AOS-S（ProCurve）・アライドテレシス・アラクサラ・ファーウェイ・"
-        "FastIron・Extreme EXOS・Dell OS10・VyOS / EdgeOS・MikroTik RouterOS の 22 機種です。",
+        "FastIron・Extreme EXOS・Dell OS10・VyOS / EdgeOS・MikroTik RouterOS・"
+        "H3C の 23 機種です。",
     ),
     Capability(
         area="土台",

@@ -21,6 +21,7 @@ from app.services.configparse import (
     fastiron,
     features,
     fortinet,
+    h3c,
     hapair,
     huawei,
     inputtext,
@@ -96,6 +97,8 @@ _DETECTORS = (
     # ファーウェイ VRP は Comware と書き方が重なる。名乗りが出ているうちに拾わないと
     # NEC QX として読んでしまう
     huawei.detect,
+    # H3C も Comware。名乗りが出ているうちに拾わないと NEC として読んでしまう
+    h3c.detect,
     nec.detect,
     cisco.detect,
 )
@@ -117,6 +120,7 @@ VENDOR_LABELS: dict[Vendor, str] = {
     Vendor.ALLIED: "アライドテレシス AlliedWare Plus",
     Vendor.ALAXALA: "アラクサラ AX シリーズ",
     Vendor.HUAWEI: "ファーウェイ VRP",
+    Vendor.H3C: "H3C（Comware）",
     Vendor.CISCO_WLC: "Cisco AireOS 無線コントローラ",
     Vendor.FASTIRON: "Ruckus / Brocade FastIron（ICX）",
     Vendor.EXOS: "Extreme EXOS",
@@ -143,6 +147,7 @@ VENDOR_NAMES: dict[Vendor, str] = {
     Vendor.ALLIED: "アライドテレシス",
     Vendor.ALAXALA: "アラクサラ",
     Vendor.HUAWEI: "ファーウェイ",
+    Vendor.H3C: "H3C",
     Vendor.CISCO_WLC: "Cisco",
     Vendor.FASTIRON: "Ruckus",
     Vendor.EXOS: "Extreme Networks",
@@ -197,6 +202,8 @@ def parse(text: str, vendor: Vendor | None = None) -> ParsedConfig:
         parsed = alaxala.parse(text)
     elif vendor is Vendor.HUAWEI:
         parsed = huawei.parse(text)
+    elif vendor is Vendor.H3C:
+        parsed = h3c.parse(text)
     elif vendor is Vendor.CISCO_WLC:
         parsed = aireos.parse(text)
     elif vendor is Vendor.FASTIRON:
@@ -250,6 +257,7 @@ _MULTICAST_STYLE = {
     Vendor.JUNIPER: "juniper",
     Vendor.NEC_QX: "comware",
     Vendor.HUAWEI: "comware",
+    Vendor.H3C: "comware",
     Vendor.ARUBA_CX: "aruba",
 }
 

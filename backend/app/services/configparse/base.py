@@ -32,6 +32,7 @@ class Vendor(enum.StrEnum):
     DELL_OS10 = "dell_os10"
     VYOS = "vyos"
     ROUTEROS = "routeros"
+    H3C = "h3c"
     UNKNOWN = "unknown"
 
 

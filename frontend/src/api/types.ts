@@ -181,6 +181,7 @@ export type ConfigVendor =
   | "dell_os10"
   | "vyos"
   | "routeros"
+  | "h3c"
   | "allied"
   | "alaxala"
   | "huawei"
