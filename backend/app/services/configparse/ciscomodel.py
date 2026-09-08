@@ -27,13 +27,25 @@ import re
 from dataclasses import dataclass
 
 #: ハードを変えない頭の飾り。旧 Catalyst の `WS-`、Nexus の `N9K-` など、
-#: 無線 AP の `AIR-`。参照データではこれ無しで書かれることが多い
-_HEAD_DECORATION = re.compile(r"^(?:WS-|N[3579]K-|N2K-|AIR-|CISCO)", re.IGNORECASE)
+#: 無線 AP の `AIR-`、Cisco ONE 束の `C1-`、2D バーコード品の `2D-`、
+#: 国別在庫の `NAL-` / `SI-`。参照データではこれ無しで書かれることが多い
+#: （出典: Cisco の EoL 通知と発注表に載る PID の並び）
+_HEAD_DECORATION = re.compile(
+    r"^(?:C1-|2D-|NAL-|SI-)?(?:WS-|N[3579]K-|N2K-|AIR-|CISCO)?", re.IGNORECASE
+)
 #: ハードを変えない尻の飾り。`/K9`・`-K9` は暗号の有無、`-A` / `-E` / `-S` / `-L` は
 #: ライセンスの束（Catalyst 9000 は -A / -E、2960 は -L / -S）。`=` はスペア品。
 #: 末尾の `-RF` は再生品
 _TAIL_DECORATION = re.compile(
-    r"(?:/K9|-K9|=|-RF|-WS)$|(?<=[A-Z0-9])(?:-A|-E)$|(?<=[A-Z0-9])(?:-L|-S)$",
+    # 暗号の有無・スペア・再生品・保守在庫・特価
+    r"(?:/K9|-K9|=|\+\+|-RF|-WS|-PK)$"
+    # ライセンスの束（Catalyst 9000 は -A / -E / -M、2960 は -L / -S / -I / -LL / -LB、
+    # 国別の -IN / -BR、まとめ買いの -HC）
+    r"|(?<=[A-Z0-9])(?:-A|-E|-M|-L|-S|-I|-LL|-LB|-IN|-BR|-HC)$"
+    # ISR の束（アプリ・音声・セキュリティ・DNA）と電源の違い
+    r"|(?<=\d)(?:-AXV|-AX|-VSEC|-SEC|-V|-B|-DNA|-CDNA|-DC|-PM\d*|-SPM(?:-8G)?)$"
+    # Nexus の気流の向き（-PE 排気 / -PI 吸気）と束の印
+    r"|(?<=[A-Z0-9])(?:-PE|-PI|-B\d|-H|-Z)$",
     re.IGNORECASE,
 )
 #: 系列の切れ目。`IE-3300-8T2S` は `IE-3300` まで、`ASR1001-X` は `ASR1001` まで
@@ -47,10 +59,14 @@ _FAMILY = re.compile(
 #: Cisco の型番らしい並び。ここに当たらないものは、型番として扱わない
 #: （`show inventory` の DESCR や、SFP の型番 `GLC-SX-MMD` を弾くため）
 _LOOKS_LIKE_PID = re.compile(
-    r"^(?:WS-|N[23579]K-|AIR-)?(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR|AP|CW|MS|WLC|N)"
-    r"\d{3,5}",
+    r"^(?:C1-|2D-|NAL-|SI-)?(?:WS-|N[23579]K-|AIR-)?"
+    r"(?:C|IE-|IR|ISR|ASR|SG|SF|SX|CBS|CISCO|ASA|FPR|AP|CW|MS|WLC|N)\d{3,5}"
+    # 国別在庫の PID は `WS-C` を落として数字から始まる（`NAL-2960XR-24PD-I`）
+    r"|^(?:NAL|SI|2D)-\d{4}[A-Z]*-",
     re.IGNORECASE,
 )
+#: 頭の飾りを外したあと、数字から始まる Catalyst。`C` を戻して読む
+_BARE_CATALYST = re.compile(r"^\d{4}[A-Z]*-", re.IGNORECASE)
 #: モジュール・光・電源・ファンの型番。シャーシとして採らない
 _NOT_CHASSIS = re.compile(
     r"^(?:GLC-|SFP-|QSFP-|CAB-|PWR-|C\d{4}-NM-|C\d{4}-PWR|C\d{4}-FAN|C9K-PWR|C9K-FAN|"
@@ -89,8 +105,10 @@ def read(pid: str | None) -> CiscoModel | None:
     if not looks_like_pid(raw):
         return None
     canonical = _HEAD_DECORATION.sub("", raw)
-    # 尻の飾りは1つずつ外す（`-A/K9` のように重なることがある）
-    for _ in range(3):
+    if _BARE_CATALYST.match(canonical):
+        canonical = "C" + canonical
+    # 尻の飾りは1つずつ外す（`-AX/K9-RF` のように重なることがある）
+    for _ in range(4):
         stripped = _TAIL_DECORATION.sub("", canonical)
         if stripped == canonical:
             break
@@ -115,11 +133,30 @@ def matches(pattern: str | None, model: str | None) -> bool:
     wanted = pattern.rstrip("*")
     mine = read(model)
     theirs = read(wanted)
+    if prefix and mine and theirs:
+        # 系列の境で切る。`C2960X*` は `C2960XR-…` に当たらない
+        return _starts_at_a_boundary(theirs.canonical, mine.canonical)
     left_keys = {_key(wanted)} | ({_key(theirs.canonical)} if theirs else set())
     right_keys = {_key(model)} | ({_key(mine.canonical)} if mine else set())
     if prefix:
         return any(right.startswith(left) for left in left_keys for right in right_keys if left)
     return any(left == right for left in left_keys for right in right_keys if left)
+
+
+def _starts_at_a_boundary(head: str, whole: str) -> bool:
+    """`head*` が `whole` に当たるか。文字の並びの途中では切らない。
+
+    `C2960X` は `C2960X-48FPD-L` に当たり、`C2960XR-24PD-I` には当たらない
+    （X の後に R が続くのは別の系列）。`C9300-48` は `C9300-48P-A` に当たる
+    （数字の後に文字が続くのはポートの種類で、同じ系列）。
+    """
+    head, whole = head.upper(), whole.upper()
+    if not whole.startswith(head):
+        return False
+    rest = whole[len(head) :]
+    if not rest or not rest[0].isalnum():
+        return True
+    return head[-1].isdigit() and rest[0].isalpha()
 
 
 def _key(value: str) -> str:
