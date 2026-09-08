@@ -134,7 +134,10 @@ def matches(pattern: str | None, model: str | None) -> bool:
     mine = read(model)
     theirs = read(wanted)
     if prefix and mine and theirs:
-        # 系列の境で切る。`C2960X*` は `C2960XR-…` に当たらない
+        # 系列だけの指定（`C9200*`）は系列どうしで比べる。`C9200L` は別の系列
+        if theirs.family == theirs.canonical:
+            return mine.family == theirs.family
+        # それより細かい指定は、文字の並びの境で切る（`C2960X*` は `C2960XR-…` に当たらない）
         return _starts_at_a_boundary(theirs.canonical, mine.canonical)
     left_keys = {_key(wanted)} | ({_key(theirs.canonical)} if theirs else set())
     right_keys = {_key(model)} | ({_key(mine.canonical)} if mine else set())

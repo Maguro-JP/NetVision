@@ -9,6 +9,12 @@
 - Catalyst 9300 発注ガイド (nb-06-cat9300-swit-ser-cte-en)
 - ISR 4331 製品ページの Primary PIDs、ISR 4000 発注ガイド
 - Nexus 9300-FX / FX2 データシートの発注表、Nexus 93180YC-FX 製品ページの PIDs
+- Catalyst 9200 データシート (nb-06-cat9200-ser-data-sheet-cte-en)
+- Catalyst 9500 データシート (nb-06-cat9500-ser-data-sheet-cte-en)
+- ISR 1000 データシート (datasheet-c78-739512)
+- ASR 1000 データシート (datasheet-c78-731632) の Product portfolio
+- Catalyst IE3300 データシート (datasheet-c78-741759)
+- Catalyst 8300 データシート (datasheet-c78-744088)
 """
 
 import pytest
@@ -114,6 +120,65 @@ OFFICIAL = [
     ("N9K-C93240YC-FX2", "C93240YC"),
     ("N9K-C93360YC-FX2", "C93360YC"),
     ("N9K-C93216TC-FX2", "C93216TC"),
+    # Catalyst 9200 / 9200L / 9200CX（データシート。ライセンスの -A / -E は後ろに付く）
+    ("C9200-24P", "C9200"),
+    ("C9200-24PB-A", "C9200"),
+    ("C9200-24PXG", "C9200"),
+    ("C9200-48PL", "C9200"),
+    ("C9200-48PXG", "C9200"),
+    ("C9200-48T-E", "C9200"),
+    ("C9200L-24P-4G", "C9200L"),
+    ("C9200L-24T-4G-E", "C9200L"),
+    ("C9200L-48P-4X3", "C9200L"),
+    ("C9200L-48PXG-2Y", "C9200L"),
+    ("C9200L-48PL-4X-A", "C9200L"),
+    ("C9200CX-12P-2X2G", "C9200CX"),
+    ("C9200CX-8PT-2G", "C9200CX"),
+    ("C9200CX-8UXG-2XH", "C9200CX"),
+    # Catalyst 9500 / 9500X（データシート）
+    ("C9500-12Q", "C9500"),
+    ("C9500-16X", "C9500"),
+    ("C9500-24Y4C", "C9500"),
+    ("C9500-32C", "C9500"),
+    ("C9500-32QC", "C9500"),
+    ("C9500-40X", "C9500"),
+    ("C9500-48Y4C-A", "C9500"),
+    ("C9500X-28C8D", "C9500X"),
+    ("C9500X-60L4D-E", "C9500X"),
+    # ISR 1000（データシートの発注情報）
+    ("C1101-4P", "C1101"),
+    ("C1101-4PLTEP", "C1101"),
+    ("C1109-2PLTEVZ", "C1109"),
+    ("C1111-8P", "C1111"),
+    ("C1111-8PLTEEAW", "C1111"),
+    ("C1111X-8P", "C1111X"),
+    ("C1112-8PWE", "C1112"),
+    ("C1116-4PLTEEAWE", "C1116"),
+    ("C1117-4PLTELAW", "C1117"),
+    ("C1121X-8PLTEPW", "C1121X"),
+    ("C1127X-8PLTEP", "C1127X"),
+    ("C1131X-8", "C1131X"),
+    ("C1161X-8PLTEP", "C1161X"),
+    # ASR 1000（データシートの Product portfolio）
+    ("ASR1001-X", "ASR1001"),
+    ("ASR1001-HX", "ASR1001"),
+    ("ASR1002-X", "ASR1002"),
+    ("ASR1002-HX", "ASR1002"),
+    ("ASR1004", "ASR1004"),
+    ("ASR1006", "ASR1006"),
+    ("ASR1006-X", "ASR1006"),
+    ("ASR1009-X", "ASR1009"),
+    ("ASR1013", "ASR1013"),
+    # Catalyst IE3300（データシート）
+    ("IE-3300-8P2S", "IE-3300"),
+    ("IE-3300-8T2S-E", "IE-3300"),
+    ("IE-3300-8T2X-E", "IE-3300"),
+    ("IE-3300-8U2X-E", "IE-3300"),
+    # Catalyst 8300（データシート）
+    ("C8300-1N1S-4T2X", "C8300"),
+    ("C8300-1N1S-6T", "C8300"),
+    ("C8300-2N2S-4T2X", "C8300"),
+    ("C8300-2N2S-6T", "C8300"),
 ]
 
 
@@ -145,3 +210,7 @@ def test_a_different_hardware_still_does_not_hit() -> None:
     assert not versions.matches_model("C9300-48P", "C9300-48U-A")
     assert not versions.matches_model("ISR4331", "ISR4351/K9")
     assert not versions.matches_model("C2960X*", "WS-C2960XR-24PD-I")
+    assert not versions.matches_model("C9200*", "C9200L-24T-4G-E")
+    assert not versions.matches_model("C9500*", "C9500X-28C8D")
+    assert not versions.matches_model("C1111*", "C1111X-8P")
+    assert not versions.matches_model("ASR1001-X", "ASR1001-HX")

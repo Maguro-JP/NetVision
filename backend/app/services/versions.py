@@ -89,11 +89,14 @@ def matches_model(pattern: str | None, model: str | None) -> bool:
     if model is None:
         return False
 
+    # Cisco は同じハードを `WS-` や `/K9`、ライセンスの束（-A / -E）で飾って印字する。
+    # 参照データは飾り無しで書かれることが多いので、飾りを外して比べる。
+    # 両方が Cisco の型番として読めるなら、系列の境も見る（`C9200*` は `C9200L` に当たらない）
+    from app.services.configparse import ciscomodel
+
+    if ciscomodel.read(pattern.rstrip("*")) and ciscomodel.read(model):
+        return ciscomodel.matches(pattern, model)
     left, right = normalize_name(pattern.rstrip("*")), normalize_name(model)
     if right.startswith(left) if pattern.endswith("*") else left == right:
         return True
-    # Cisco は同じハードを `WS-` や `/K9`、ライセンスの束（-A / -E）で飾って印字する。
-    # 参照データは飾り無しで書かれることが多いので、飾りを外しても比べる
-    from app.services.configparse import ciscomodel
-
     return ciscomodel.matches(pattern, model)
