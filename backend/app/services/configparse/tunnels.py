@@ -57,6 +57,10 @@ def parse_block_style(text: str, parsed: ParsedConfig) -> None:
             current.description = body[len("description ") :].strip()
         elif body.lower().startswith(("vrf forwarding ", "ip vrf forwarding ")):
             current.vrf = body.rsplit(maxsplit=1)[-1]
+        elif body.lower().startswith("tunnel vrf "):
+            # 外側（トンネルの通り道）の VRF。内側の `vrf forwarding` とは別で、
+            # 両方書いてあれば内側を優先して持つ（経路の帰属は内側で決まる）
+            current.vrf = current.vrf or body.rsplit(maxsplit=1)[-1]
 
 
 _SET_TUNNEL = re.compile(

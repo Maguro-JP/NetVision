@@ -95,6 +95,8 @@ _RULES: tuple[_Rule, ...] = (
     _rule(ACCESS_CONTROL, "ACL", r"^\s*(?:ip\s+|ipv6\s+|mac\s+)?access-list\s+"),
     _rule(ACCESS_CONTROL, "ACL", r"^\s*acl\s+(?:number|name|advanced|basic)\s"),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*ip\s+access-group\s"),
+    # IOS のゾーンベースファイアウォール。ゾーンの対に inspect のポリシーを当てる
+    _rule(ACCESS_CONTROL, "ゾーン間ポリシー（ZBFW）", r"^\s*zone-pair\s+security\s+"),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*packet-filter\s"),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*traffic-filter\s+(?:inbound|outbound)\s"),
     _rule(ACCESS_CONTROL, "フィルター", r"^\s*set\s+firewall\s+family\s"),
@@ -140,9 +142,11 @@ _RULES: tuple[_Rule, ...] = (
     _rule(AGGREGATION, "LAG", r"^\s+lag\s+(\d+)\s*$", "グループ"),
     _rule(AGGREGATION, "LAG", r"^\s*static-channel-group\s+(\d+)", "グループ"),
     # 優先制御
-    _rule(QOS, "QoS", r"^\s*(?:policy-map|class-map)\s+"),
+    # `class-map type inspect` / `service-policy type inspect` は QoS ではなく
+    # ゾーン間の許否（ZBFW）。同じ語で始まるので、type inspect を先に除ける
+    _rule(QOS, "QoS", r"^\s*(?:policy-map|class-map)\s+(?!type\s+inspect\b)"),
     _rule(QOS, "QoS", r"^\s*qos\s+(?:policy|apply|trust)\b"),
-    _rule(QOS, "QoS", r"^\s*service-policy\s+"),
+    _rule(QOS, "QoS", r"^\s*service-policy\s+(?!type\s+inspect\b)"),
     # 端末の認証
     _rule(AUTHENTICATION, "802.1X", r"^\s*dot1x\s+(?:system-auth-control|pae|port-control)\b"),
     _rule(AUTHENTICATION, "802.1X", r"^\s*aaa\s+authentication\s+port-access\s+dot1x\b"),

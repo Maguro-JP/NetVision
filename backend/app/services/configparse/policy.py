@@ -446,6 +446,7 @@ def _qos(text: str) -> ParsedQos | None:
 
 _ISAKMP_POLICY = re.compile(r"^crypto isakmp policy\s+(\S+)", re.IGNORECASE)
 _IKEV2_PROPOSAL = re.compile(r"^crypto ikev2 proposal\s+(\S+)", re.IGNORECASE)
+_IKEV2_KEYRING = re.compile(r"^crypto ikev2 keyring\s+(\S+)", re.IGNORECASE)
 _TRANSFORM_SET = re.compile(r"^crypto ipsec transform-set\s+(\S+)\s+(.+)$", re.IGNORECASE)
 _CRYPTO_MAP = re.compile(
     r"^crypto map\s+(?P<name>\S+)\s+(?P<seq>\d+)\s+(?P<kind>\S+)", re.IGNORECASE
@@ -515,13 +516,25 @@ def _crypto(text: str) -> ParsedCrypto | None:
             seen = True
             crypto.keyed_peers.append(key.group(1))
 
+    # IKEv2 は合言葉を keyring の中に相手ごとに書く。相手のアドレスだけ持つ
+    for _head, body in _blocks(text, _IKEV2_KEYRING):
+        for line in body:
+            peer = re.match(r"^address\s+(\S+)", line, re.IGNORECASE)
+            if peer and peer.group(1) not in crypto.keyed_peers:
+                seen = True
+                crypto.keyed_peers.append(peer.group(1))
+
     for head, body in _blocks(text, _INTERFACE):
         interface = expand(head.group(1))
         for line in body:
-            match = re.match(r"^crypto map\s+(\S+)\s*$", line, re.IGNORECASE)
+            match = re.match(
+                r"^crypto map\s+(\S+)\s*$|^tunnel protection ipsec profile\s+(\S+)",
+                line,
+                re.IGNORECASE,
+            )
             if match:
                 seen = True
-                crypto.applied.append((interface, match.group(1)))
+                crypto.applied.append((interface, match.group(1) or match.group(2)))
 
     return crypto if seen else None
 
