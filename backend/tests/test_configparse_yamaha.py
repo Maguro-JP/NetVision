@@ -174,3 +174,70 @@ def test_port_description_is_read() -> None:
     parsed = configparse.parse(text)
     found = {item.name: item.description for item in parsed.interfaces}
     assert found["LAN1"] == "事務所側"
+
+
+OFFICIAL_ROUTES = """\
+# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)
+ip lan1 address 192.168.100.1/24
+ip route default gateway 192.168.0.1
+ip route 192.168.1.0/24 gateway pp 1
+ip route default gateway pp 1 weight 2 hide gateway pp 2 weight 1 hide
+ip route 172.16.0.1 gateway tunnel 1
+ip route 10.8.0.0/16 gateway dhcp lan2
+"""
+
+
+def test_two_gateways_on_one_line_become_two_routes():
+    """出典: ヤマハ コマンドリファレンス 8.1.7「IP の静的経路情報の設定」。
+
+    `ip route network gateway gateway1 [parameter] [gateway gateway2 …]` と
+    書けるので、2本目を落とすと回線を2本持つ拠点の経路が資料から消える。
+    設定例「マルチホーミングによる負荷分散」がこの形。
+    """
+    routes = configparse.parse(OFFICIAL_ROUTES).routes
+    defaults = [r for r in routes if r.destination == "0.0.0.0/0"]
+    assert [r.next_hop or r.interface for r in defaults] == ["192.168.0.1", "PP1", "PP2"]
+    # weight / hide は器が無いので持たない。次の相手や距離として読まない
+    assert all(r.distance is None for r in defaults)
+
+
+def test_the_gateway_forms_of_the_manual_are_read():
+    """8.1.7 の gateway は、アドレス・`pp N`・`tunnel N`・`dhcp インタフェース`。"""
+    routes = {r.destination: r for r in configparse.parse(OFFICIAL_ROUTES).routes}
+    assert routes["192.168.1.0/24"].interface == "PP1"
+    # マスクを省いたら1台ぶん（/32）。他ベンダーと同じ形にそろえる
+    assert routes["172.16.0.1/32"].interface == "TUNNEL1"
+    assert routes["10.8.0.0/16"].interface == "LAN2"
+
+
+OFFICIAL_SCOPE = """\
+# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)
+ip lan1 address 192.168.100.1/24
+dhcp service server
+dhcp scope 1 192.168.100.2-192.168.100.191/255.255.255.0 \
+except 192.168.100.10 192.168.100.20-192.168.100.29 gateway 192.168.100.1 \
+expire 12:00 maxexpire 72:00
+dhcp scope 2 10.9.0.2-10.9.0.100/0xffffff00
+dhcp scope option 1 router=192.168.100.1 dns=192.168.100.1
+"""
+
+
+def test_the_scope_line_is_read_down_to_what_it_keeps_back():
+    """出典: ヤマハ コマンドリファレンス 12.1.4「DHCP スコープの定義」。
+
+    `dhcp scope N 開始-終了/netmask [except …] [gateway …] [expire …] [maxexpire …]`。
+    netmask はマスクビット数・`255.255.255.0`・`0x` の十六進数のどれでも書ける。
+    """
+    dhcp = configparse.parse(OFFICIAL_SCOPE).dhcp
+    first = dhcp.pools[0]
+    assert first.network == "192.168.100.0/24"
+    assert (first.range_start, first.range_end) == ("192.168.100.2", "192.168.100.191")
+    assert first.default_routers == ["192.168.100.1"]
+    # 要求が無いときのリース期間。maxexpire は上限なので混ぜない
+    assert first.lease == "12:00"
+    assert dhcp.excluded == [
+        ("192.168.100.10", "192.168.100.10"),
+        ("192.168.100.20", "192.168.100.29"),
+    ]
+    # 十六進のマスクも同じ帯として読む
+    assert dhcp.pools[1].network == "10.9.0.0/24"

@@ -38,6 +38,7 @@ from app.services.configparse.base import (
     ParsedTunnel,
     Vendor,
 )
+from app.services.configparse.routing import to_prefix
 
 #: 1行目の見出し。`# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)`
 #: show environment に出るときは頭の `#` が付かないので、無くても読む
@@ -58,6 +59,10 @@ _PP_SECURE = re.compile(r"^\s*ip\s+pp\s+secure\s+filter\s+(in|out)\s+(.+)$", re.
 _PP_NAT = re.compile(r"^\s*ip\s+pp\s+nat\s+descriptor\s+(\d+)", re.IGNORECASE)
 _PPPOE_USE = re.compile(r"^\s*pppoe\s+use\s+(lan\d+)", re.IGNORECASE)
 _PP_ADDRESS = re.compile(r"^\s*ip\s+pp\s+address\s+(\S+)", re.IGNORECASE)
+#: 出典: ヤマハ コマンドリファレンス 8.1.7「IP の静的経路情報の設定」
+#: `ip route network gateway gateway1 [parameter] [gateway gateway2 [parameter]...]`
+#: ゲートウェイは1行に複数書ける（回線を2本持つ拠点のマルチホーミング）。
+#: parameter は filter / dpi / metric / hide / weight / keepalive
 _ROUTE = re.compile(
     r"^ip\s+route\s+(default|\S+)\s+gateway\s+(.+)$",
     re.IGNORECASE,
@@ -68,7 +73,15 @@ _NAT_INNER = re.compile(r"^nat\s+descriptor\s+address\s+inner\s+(\d+)\s+(.+)$", 
 _NAT_STATIC = re.compile(
     r"^nat\s+descriptor\s+masquerade\s+static\s+(\d+)\s+\d+\s+(\S+)\s+(.+)$", re.IGNORECASE
 )
-_DHCP_SCOPE = re.compile(r"^dhcp\s+scope\s+(\d+)\s+(\S+?)-(\S+?)/(\d+)", re.IGNORECASE)
+#: 出典: ヤマハ コマンドリファレンス 12.1.4「DHCP スコープの定義」
+#: `dhcp scope scope_num ip_address-ip_address/netmask [except ex_ip ...]
+#:  [gateway gw_ip] [expire time] [maxexpire time]`
+#: netmask はマスクビット数・`255.255.255.0`・`0x` に続く十六進数の3通り
+_DHCP_SCOPE = re.compile(
+    r"^dhcp\s+scope\s+(?P<num>\d+)\s+(?P<start>[\d.]+)-(?P<end>[\d.]+)/(?P<mask>\S+)"
+    r"(?P<rest>.*)$",
+    re.IGNORECASE,
+)
 _DHCP_OPTION = re.compile(r"^dhcp\s+scope\s+option\s+(\d+)\s+(.+)$", re.IGNORECASE)
 #: `pass` / `reject` / `restrict` に、記録の有無（-log / -nolog）が付く。
 #: 長いほうから並べないと、`reject-log` の `-log` が条件の側へ流れ込む
@@ -175,16 +188,52 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
         found = _ROUTE.match(raw.strip())
         if not found:
             continue
-        destination = "0.0.0.0/0" if found.group(1).lower() == "default" else found.group(1)
-        rest = found.group(2).split()
-        # `gateway pp 1` のように、次の相手がポートのことがある
-        if rest and rest[0].lower() in ("pp", "tunnel", "dhcp"):
-            next_hop = f"{rest[0].upper()}{rest[1]}" if len(rest) > 1 else rest[0].upper()
-            parsed.routes.append(ParsedRoute(destination=destination, interface=next_hop))
+        target = found.group(1)
+        if target.lower() == "default":
+            destination = "0.0.0.0/0"
+        else:
+            # マスクを省くと1台ぶん（/32）の意味になる。他ベンダーと同じ形にそろえる
+            destination = to_prefix(target) or target
+        for gateway in _gateways(found.group(2)):
+            parsed.routes.append(_route(destination, gateway))
+
+
+def _gateways(rest: str) -> list[list[str]]:
+    """`gateway` の語で切り分ける。1行に複数書ける（8.1.7）。
+
+    2本目を落とすと、回線を2本持つ拠点で片方の経路が資料から消える。
+    """
+    found: list[list[str]] = []
+    current: list[str] = []
+    for token in rest.split():
+        if token.lower() == "gateway":
+            if current:
+                found.append(current)
+            current = []
             continue
-        parsed.routes.append(
-            ParsedRoute(destination=destination, next_hop=rest[0] if rest else None)
-        )
+        current.append(token)
+    if current:
+        found.append(current)
+    return found
+
+
+def _route(destination: str, gateway: list[str]) -> ParsedRoute:
+    """ゲートウェイの指定を読む。
+
+    後ろに続く parameter（metric / weight / hide / keepalive / filter）は
+    持たない。ヤマハの metric は経路のメトリックで、Cisco の距離とは別物
+    なので、同じ器に入れると意味が変わる。
+    """
+    head = gateway[0].lower() if gateway else ""
+    if head in {"pp", "tunnel"} and len(gateway) > 1:
+        return ParsedRoute(destination=destination, interface=f"{head.upper()}{gateway[1]}")
+    if head == "dhcp" and len(gateway) > 1:
+        # DHCP で貰った既定ゲートウェイを使う。出ていく口はその LAN 側
+        return ParsedRoute(destination=destination, interface=gateway[1].upper())
+    if head in {"null", "loopback"}:
+        name = f"{head.upper()}{gateway[1]}" if len(gateway) > 1 else head.upper()
+        return ParsedRoute(destination=destination, interface=name)
+    return ParsedRoute(destination=destination, next_hop=gateway[0] if gateway else None)
 
 
 # ---------------------------------------------------------------------------
@@ -413,12 +462,13 @@ def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
         found = _DHCP_SCOPE.match(line)
         if found:
             pool = ParsedDhcpPool(
-                name=f"dhcp scope {found.group(1)}",
-                network=_network_of(found.group(2), found.group(4)),
-                range_start=found.group(2),
-                range_end=found.group(3),
+                name=f"dhcp scope {found.group('num')}",
+                network=_network_of(found.group("start"), found.group("mask")),
+                range_start=found.group("start"),
+                range_end=found.group("end"),
             )
-            pools[found.group(1)] = pool
+            _scope_detail(pool, dhcp, found.group("rest"))
+            pools[found.group("num")] = pool
             dhcp.pools.append(pool)
             continue
         found = _DHCP_OPTION.match(line)
@@ -426,9 +476,41 @@ def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
             _dhcp_option(pools[found.group(1)], found.group(2))
 
     if dhcp.pools:
-        # 既定ゲートウェイを書いていない機種の既定は「配った本人」。
-        # 読み取れないものを埋めると嘘になるので、ここでは足さない
+        # 書いていないときの既定は「配った本人のアドレス」。読み取れないものを
+        # 埋めると嘘になるので、`gateway` と書いてある分だけ持つ
         parsed.dhcp = dhcp
+
+
+def _scope_detail(pool: ParsedDhcpPool, dhcp: ParsedDhcp, rest: str) -> None:
+    """スコープの行に続けて書く指定を読む（12.1.4）。
+
+    `except` は配らないアドレス（`-` で範囲も書ける）、`gateway` は配る
+    既定ゲートウェイ、`expire` は要求が無いときのリース期間。
+    `maxexpire` は要求があったときの上限で、実際のリース期間ではないので
+    読まない（混ぜると「何分で切れるか」を取り違える）。
+    """
+    words = rest.split()
+    keywords = {"except", "gateway", "expire", "maxexpire"}
+    index = 0
+    while index < len(words):
+        keyword = words[index].lower()
+        if keyword == "except":
+            index += 1
+            while index < len(words) and words[index].lower() not in keywords:
+                low, _, high = words[index].partition("-")
+                dhcp.excluded.append((low, high or low))
+                index += 1
+            continue
+        if keyword == "gateway" and index + 1 < len(words):
+            if words[index + 1] not in pool.default_routers:
+                pool.default_routers.append(words[index + 1])
+            index += 2
+            continue
+        if keyword == "expire" and index + 1 < len(words):
+            pool.lease = words[index + 1]
+            index += 2
+            continue
+        index += 1
 
 
 def _network_of(address: str, prefix: str) -> str:
@@ -436,10 +518,13 @@ def _network_of(address: str, prefix: str) -> str:
 
     書いてあるのは範囲の始まり（`192.168.100.2-...`）なので、そのまま
     ネットワークとして持つと、既定ゲートウェイの検算がずれる。
+    長さはマスクビット数・`255.255.255.0`・`0x` の十六進数のどれでも書ける（12.1.4）。
     """
     import ipaddress
 
     try:
+        if prefix.lower().startswith("0x"):
+            prefix = str(ipaddress.IPv4Address(int(prefix, 16)))
         return str(ipaddress.ip_network(f"{address}/{prefix}", strict=False))
     except ValueError:
         return f"{address}/{prefix}"
@@ -451,7 +536,10 @@ def _dhcp_option(pool: ParsedDhcpPool, rest: str) -> None:
         if not value:
             continue
         if key.lower() == "router":
-            pool.default_routers.extend(value.split(","))
+            # スコープの行に `gateway` と書いてあると同じ値が二度出る
+            pool.default_routers.extend(
+                v for v in value.split(",") if v not in pool.default_routers
+            )
         elif key.lower() in ("dns", "dns_server", "dns-server"):
             pool.dns_servers.extend(value.split(","))
         elif key.lower() == "domain":
