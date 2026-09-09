@@ -112,3 +112,50 @@ def test_the_official_show_version_sample_is_read():
     parsed = configparse.parse(text)
     assert parsed.vendor is Vendor.ALAXALA
     assert (parsed.model, parsed.os_name, parsed.os_version) == ("AX3630S-24T", "OS-L3L-A", "10.0")
+
+
+OFFICIAL_RANGE = """\
+! AX3650S
+hostname "ax-core-01"
+S/W: OS-L3A Ver. 12.1.A
+vlan 100,200
+!
+interface range gigabitethernet 0/1-2
+  switchport mode trunk
+  switchport trunk allowed vlan 100,200
+!
+interface range gigabitethernet 0/11-13, gigabitethernet 0/21-22
+  switchport mode access
+  switchport access vlan 100
+!
+interface gigabitethernet 0/24
+  switchport mode trunk
+  switchport trunk allowed vlan add 100,200-210
+"""
+
+
+def test_a_range_written_once_gives_every_port_the_same_allowed_vlans():
+    """出典: アラクサラ「Simple Configuration Examples for the AX Series」の設定例
+    （`interface range gigabitethernet 0/1-2` に `switchport trunk allowed vlan 100,200`）と、
+    Configuration Command Reference Vol.1 の「add/remove specification」
+    （`interface range gigabitethernet 0/1-3, gigabitethernet 0/11-13`）。
+
+    まとめて書いた2つ目以降を「許可 VLAN の指定なし」と読むと、
+    絞ってあるトランクを「全部通す」と言ってしまう。
+    """
+    ports = {p.name: p for p in configparse.parse(OFFICIAL_RANGE).interfaces}
+    for name in ("GigabitEthernet0/1", "GigabitEthernet0/2"):
+        assert ports[name].trunk_vlans == [100, 200], name
+        assert ports[name].trunk_all is False, name
+    # 種別を要素ごとに書く並びも、そのまま全部のポートに行き渡る
+    for name in ("GigabitEthernet0/11", "GigabitEthernet0/13", "GigabitEthernet0/22"):
+        assert (ports[name].mode, ports[name].vlan) == ("access", 100), name
+
+
+def test_the_range_does_not_raise_a_finding_about_unrestricted_trunks():
+    """読み違いのままだと、直す必要の無いものを直させてしまう。"""
+    from app.services import policyreview
+
+    parsed = configparse.parse(OFFICIAL_RANGE)
+    titles = [f.title for f in policyreview.review(parsed, OFFICIAL_RANGE)]
+    assert not any("許可 VLAN を絞っていない" in title for title in titles), titles

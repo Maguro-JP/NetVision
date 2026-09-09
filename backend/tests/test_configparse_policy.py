@@ -175,3 +175,24 @@ def test_a_config_without_these_features_leaves_them_empty():
     assert parsed.nat is None
     assert parsed.dhcp is None
     assert parsed.crypto is None
+
+
+def test_an_ios_interface_range_keeps_the_allowed_vlans_on_every_port():
+    """`interface range` は Catalyst でも普通に使う。
+
+    まとめて書いた2つ目以降を「指定なし＝全部通す」と読むと、
+    絞ってあるトランクに「許可 VLAN を絞っていません」と言ってしまう。
+    """
+    text = (
+        "hostname sw\nvlan 10,20\n"
+        "interface range GigabitEthernet1/0/1 - 3\n"
+        " switchport mode trunk\n"
+        " switchport trunk allowed vlan 10,20\n"
+    )
+    ports = configparse.parse(text).interfaces
+    assert [p.name for p in ports] == [
+        "GigabitEthernet1/0/1",
+        "GigabitEthernet1/0/2",
+        "GigabitEthernet1/0/3",
+    ]
+    assert all(p.trunk_vlans == [10, 20] and p.trunk_all is False for p in ports)

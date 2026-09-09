@@ -327,7 +327,10 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         elif body.startswith("switchport trunk native vlan "):
             current.native_vlan = int(body.rsplit(maxsplit=1)[-1])
         elif body.startswith("switchport trunk allowed vlan"):
+            # 範囲でまとめて書いたときは、その範囲の全部が「書いてある」。
+            # 1つ目だけを覚えると、2つ目以降が「指定なし＝全部通す」になる
             allowed_written.add(current.key)
+            allowed_written.update(port.key for port in group)
             _apply_allowed_vlan(current, body)
         elif body.startswith("switchport mode "):
             current.mode = body.rsplit(maxsplit=1)[-1]
