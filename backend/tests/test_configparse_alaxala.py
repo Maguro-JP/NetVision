@@ -93,3 +93,22 @@ def test_a_port_named_inside_a_command_is_read_whole() -> None:
     parsed = configparse.parse(text)
     assert parsed.nat is not None
     assert parsed.nat.rules[0].translated == "GigabitEthernet0/1"
+
+
+def test_the_official_show_version_sample_is_read():
+    """公式の出力例をそのまま読む。
+
+    出典: AX3800S/AX3650S ソフトウェアアップグレードガイド（alaxala.com）の
+    `show version` 例。Model / S/W / H/W の3行。
+    """
+    text = (
+        "> show version\n"
+        "Date 20XX/12/19 11:21:01 UTC\n"
+        "Model: AX3630S-24T\n"
+        "S/W: OS-L3L-A Ver. 10.0\n"
+        "H/W: AX-3630S-24T-ZX [TA036L24P000S03015AD004:80320101:1183:2B504]\n"
+        ">\n"
+    )
+    parsed = configparse.parse(text)
+    assert parsed.vendor is Vendor.ALAXALA
+    assert (parsed.model, parsed.os_name, parsed.os_version) == ("AX3630S-24T", "OS-L3L-A", "10.0")
