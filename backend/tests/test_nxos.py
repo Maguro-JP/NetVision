@@ -194,6 +194,9 @@ def test_a_global_route_is_not_pulled_into_a_vrf() -> None:
 def test_the_nested_hsrp_block_is_read_whatever_order_its_lines_come_in():
     """`preempt` や `timers` が先に来ても、仮想アドレスと優先度を読む。
 
+    出典: Nexus 9000 NX-OS Unicast Routing Configuration Guide「Configuring HSRP」の例は
+    `hsrp 0` → `preempt` → `priority` → `ip` の順で書かれている。
+
     塊の行は字下げを落として渡ってくるので、知らない行で塊を閉じると、
     その後ろの `ip` が読めない。`ip address`（口自身のアドレス）は読まない。
     """

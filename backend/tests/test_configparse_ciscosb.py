@@ -2,6 +2,10 @@
 
 `vlan database` の行でアライドテレシスと取り違えていた。機器が印字する
 `config-file-header` と版数の行、`show system` の型番から読む。
+
+出典: Cisco Business 350 Series CLI Guide「Stack Commands」（unit-type が config の頭に
+保存される）、「Interface Naming Conventions」（gi / tw / fi / po / tu の略記）、
+実機の running-config（SG350 / CBS350）。
 """
 
 from app.services import configparse
@@ -96,3 +100,19 @@ def test_the_model_comes_from_show_system():
 def test_a_config_without_the_header_is_still_told_by_the_unit_type_line():
     text = "\n".join(["unit-type unit 1 network gi uplink none", "hostname sw", "interface gi1"])
     assert configparse.detect_vendor(text) is Vendor.CISCO_SB
+
+
+def test_the_other_short_port_names_from_the_cli_guide_are_read():
+    """CLI ガイドの略記: tw（2.5G）、fi（5G）、ge（gi と同じ）、tu（トンネル）。"""
+    text = (
+        "config-file-header\nsw\nv3.4.0.17 / RCBS3.4_950_377_325\nCLI v1.0\n"
+        "interface tw1/0/1\n switchport access vlan 10\n"
+        "interface fi1/0/2\n switchport access vlan 10\n"
+        "interface ge3\n switchport access vlan 10\n"
+    )
+    names = [p.name for p in configparse.parse(text).interfaces]
+    assert names == [
+        "TwoPointFiveGigabitEthernet1/0/1",
+        "FiveGigabitEthernet1/0/2",
+        "GigabitEthernet3",
+    ]

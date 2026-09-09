@@ -116,6 +116,8 @@ def _read_bgp(text: str, parsed: ParsedConfig) -> None:
     """`router bgp` の中の、相手ごとの囲み。
 
     行の深さ（字下げ）で、どの囲みの中にいるかを判断する。
+    出典: BGP Configuration Guide for Cisco NCS 5500「Implementing BGP」の
+    running configuration 例（neighbor → remote-as → address-family → route-policy … in）。
     `neighbor 10.0.0.2` の下の `remote-as` はその相手のもの、`vrf CUST-A` の
     下の `neighbor` はその VRF の相手、`address-family` は直上の相手の家族。
     """
@@ -127,6 +129,7 @@ def _read_bgp(text: str, parsed: ParsedConfig) -> None:
     bgp.local_as = bgp.local_as or _BGP_HEAD.match(lines[starts[0]]).group(1)
     # XR は相手の上げ下げを既定で記録する。止めるときだけ
     # `bgp log neighbor changes disable` と書く（IOS は入れないと記録しない）
+    # （出典: BGP Command Reference for Cisco NCS 5500「bgp log neighbor changes disable」）
     bgp.log_neighbor_changes = not re.search(
         r"^\s+bgp log neighbor changes disable\s*$", text, re.IGNORECASE | re.MULTILINE
     )

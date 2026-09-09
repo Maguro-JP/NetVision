@@ -478,7 +478,9 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
             elif keyword == "priority" and value.isdigit():
                 entry.priority = int(value)
 
-        # NX-OS は入れ子で書く。`hsrp 10` のあとに ip / priority が字下げで続く。
+        # NX-OS は入れ子で書く。`hsrp 10` のあとに preempt / priority / ip が字下げで続く
+        # （出典: Nexus 9000 NX-OS Unicast Routing Configuration Guide「Configuring HSRP」の
+        # 例。preempt が ip より先に来る）。
         # IOS の新しい VRRP（VRRPv3）も同じ形で、頭に address-family が付く
         nested: ParsedRedundancy | None = None
         for line in body:

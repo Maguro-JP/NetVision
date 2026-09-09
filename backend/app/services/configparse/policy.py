@@ -550,6 +550,7 @@ def _crypto(text: str) -> ParsedCrypto | None:
 # ASA は方針を `crypto ikev1 policy 10` / `crypto ikev2 policy 10` に、
 # IPsec の方式を `crypto ipsec ikev1 transform-set` / `crypto ipsec ikev2 ipsec-proposal` に、
 # crypto map を1行ずつ書き、相手と合言葉は `tunnel-group` に書く
+# （出典: CLI Book 3 ASA VPN CLI Configuration Guide 9.24 第8章、Cisco 文書 221560 の例）
 _ASA_IKE_POLICY = re.compile(r"^crypto ikev([12]) policy\s+(\S+)", re.IGNORECASE)
 _ASA_TRANSFORM_SET = re.compile(r"^crypto ipsec ikev1 transform-set\s+(\S+)\s+(.+)$", re.IGNORECASE)
 _ASA_IPSEC_PROPOSAL = re.compile(r"^crypto ipsec ikev2 ipsec-proposal\s+(\S+)", re.IGNORECASE)
@@ -659,6 +660,8 @@ def _transforms(spec: str) -> list[str]:
 def _ike_line(policy: ParsedIkePolicy, line: str) -> None:
     for pattern, name in (
         # IOS の running-config は `encryption` を `encr` と略して印字する
+        # （出典: Cisco 文書 43069「Configuring IOS-to-IOS IPSec Using AES」の show run、
+        # ASR 901 設定ガイド「IP Security」の例）
         (r"^encr(?:yption)?\s+(.+)$", "encryption"),
         (r"^integrity\s+(.+)$", "hash"),
         (r"^hash\s+(.+)$", "hash"),

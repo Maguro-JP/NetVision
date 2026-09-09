@@ -145,7 +145,10 @@ def test_the_vrf_block_and_the_interface_vrf_are_read():
 
 
 def test_the_nested_bgp_neighbors_of_xr_are_read():
-    """XR は相手ごとの囲みに remote-as や address-family を書く。IOS の1行書きではない。"""
+    """XR は相手ごとの囲みに remote-as や address-family を書く。IOS の1行書きではない。
+
+    出典: BGP Configuration Guide for Cisco NCS 5500「Implementing BGP」の running configuration。
+    """
     bgp = configparse.parse(XR_PE).bgp
     assert (bgp.local_as, bgp.router_id) == ("65000", "10.255.0.1")
     by_address = {n.address: n for n in bgp.neighbors}
@@ -171,7 +174,10 @@ def test_isis_lists_the_interfaces_it_carries():
 
 
 def test_xr_records_bgp_neighbor_changes_unless_told_not_to():
-    """XR は既定で記録する。IOS と同じ「入れていない」扱いにすると、無い指摘が出る。"""
+    """XR は既定で記録する。IOS と同じ「入れていない」扱いにすると、無い指摘が出る。
+
+    出典: BGP Command Reference for Cisco NCS 5500「bgp log neighbor changes disable」。
+    """
     head = "RP/0/RP0/CPU0:pe1#show running-config\nhostname pe1\nrouter bgp 65000\n"
     body = " neighbor 10.0.0.2\n  remote-as 65000\n"
     assert configparse.parse(head + body).bgp.log_neighbor_changes is True

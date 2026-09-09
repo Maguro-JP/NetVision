@@ -228,7 +228,10 @@ ssh 192.168.1.0 255.255.255.0 inside
 
 
 def test_the_one_line_crypto_map_of_asa_is_read_as_one_entry():
-    """ASA は crypto map を1行ずつ書く。IOS の塊として読むと行ごとに別物になる。"""
+    """ASA は crypto map を1行ずつ書く。IOS の塊として読むと行ごとに別物になる。
+
+    出典: CLI Book 3 ASA VPN CLI Configuration Guide 9.24 第8章、Cisco 文書 221560。
+    """
     crypto = configparse.parse(ASA_VPN).crypto
     assert len(crypto.maps) == 1
     entry = crypto.maps[0]

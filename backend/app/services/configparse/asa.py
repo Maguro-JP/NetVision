@@ -15,6 +15,13 @@
 VPN（`crypto`）は IOS と似ているが、crypto map を1行ずつ書く・ikev1 / ikev2
 の方針を `crypto ikev2 policy` に書く・相手を `tunnel-group` に書く、という
 違いがある。ASA の書き方で読む。
+
+出典（公式）:
+- NAT の構文 `nat [(real_ifc,mapped_ifc)] [line | after-auto [line]] source dynamic …`
+  … CLI Book 2: Cisco Secure Firewall ASA Firewall CLI Configuration Guide 9.22、
+  「Network Address Translation (NAT)」。after-auto は section 3 への並び順の指定
+- crypto map の1行書き・`tunnel-group … type ipsec-l2l`・`crypto ipsec ikev2 ipsec-proposal`
+  … CLI Book 3: ASA VPN CLI Configuration Guide 9.24、第8章「LAN-to-LAN IPsec VPNs」
 """
 
 from __future__ import annotations
@@ -383,6 +390,8 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
 
 def _without_leading_options(words: list[str]) -> list[str]:
     """`after-auto` と行番号は並び順の指定で、変換の中身ではない。
+
+    出典: CLI Book 2（ASA 9.22）NAT 章の構文 `[line | after-auto [line]]`。
 
     `nat (in,out) after-auto source dynamic LAN interface` の `source` より
     前を落とす。落とさないと、`LAN` が変換先に見える。

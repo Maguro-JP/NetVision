@@ -17,6 +17,15 @@ IOS の読み手に任せると、`vlan database` の行でアライドテレシ
 - 出口は `ip default-gateway`
 
 OS の名前は機器が印字しないので入れない。
+
+出典（公式）:
+- `unit-type unit X network … uplink …` が config の頭に保存される
+  … Cisco Business 350 Series CLI Guide「Stack Commands」set stack unit-type
+- 口の略記（GigabitEthernet / gi / GE、TwoPointFiveGigabitEthernet / tw、
+  FiveGigabitEthernet / fi、Port-Channel / po、tunnel / tu、スタックの `GigabitEthernetX/0/Z`）
+  … 同ガイド「Interface Naming Conventions」
+- `config-file-header` → 機器名 → `v2.4.5.71 / RTESLA…` → `CLI v1.0`、`vlan database` の
+  `vlan 10,60-70`、`interface vlan 10` の `name "…"` … 実機の running-config（SG350 / CBS350）
 """
 
 from __future__ import annotations
@@ -47,13 +56,17 @@ _DEFAULT_GATEWAY = re.compile(
     r"^ip default-gateway\s+(\d+\.\d+\.\d+\.\d+)", re.IGNORECASE | re.MULTILINE
 )
 #: 略記の口名。`gi1` `te1/0/1` `po1`
-_SHORT_PORT = re.compile(r"^(gi|te|fa|xg|po)(\d+(?:/\d+)*)$", re.IGNORECASE)
+_SHORT_PORT = re.compile(r"^(gi|ge|te|fa|xg|tw|fi|po|tu)(\d+(?:/\d+)*)$", re.IGNORECASE)
 _SHORT_FULL = {
     "gi": "GigabitEthernet",
+    "ge": "GigabitEthernet",
     "te": "TenGigabitEthernet",
     "fa": "FastEthernet",
     "xg": "TenGigabitEthernet",
+    "tw": "TwoPointFiveGigabitEthernet",
+    "fi": "FiveGigabitEthernet",
     "po": "Port-channel",
+    "tu": "Tunnel",
 }
 
 

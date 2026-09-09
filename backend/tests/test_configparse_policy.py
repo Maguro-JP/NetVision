@@ -138,7 +138,10 @@ def test_ipsec_is_read_down_to_the_method_and_the_range():
 
 
 def test_the_abbreviated_encr_the_running_config_prints_is_read():
-    """IOS の running-config は `encryption` を `encr` と略して印字する。"""
+    """IOS の running-config は `encryption` を `encr` と略して印字する。
+
+    出典: Cisco 文書 43069 の show run、ASR 901 設定ガイド「IP Security」の例。
+    """
     text = "hostname r1\ncrypto isakmp policy 10\n encr aes 256\n hash sha256\n group 14\n"
     crypto = configparse.parse(text).crypto
     assert crypto.ike_policies[0].encryption == "aes 256"
