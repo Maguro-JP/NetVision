@@ -52,7 +52,8 @@ def parse_block_style(text: str, parsed: ParsedConfig) -> None:
         elif body.lower().startswith(("tunnel source ", "source ")):
             current.source = body.split(maxsplit=2)[-1]
         elif body.lower().startswith(("tunnel destination ", "destination ")):
-            current.destination = body.split(maxsplit=2)[-1]
+            # NEC IX は名前で書くとき `tunnel destination fqdn 名前`（出典: IX-R/IX-V 12.1）
+            current.destination = body.split(maxsplit=2)[-1].removeprefix("fqdn ").strip()
         elif body.lower().startswith("description "):
             current.description = body[len("description ") :].strip()
         elif body.lower().startswith(("vrf forwarding ", "ip vrf forwarding ")):

@@ -50,7 +50,13 @@ _IX_SERIAL = re.compile(
     r"^\s*(?:System\s+)?[Ss]erial\s*(?:number|No\.?)\s*[:=]?\s*(\S+)", re.MULTILINE
 )
 _IX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
-_IX_IP = re.compile(r"^\s*ip\s+address\s+(\d+\.\d+\.\d+\.\d+(?:/\d+)?)", re.IGNORECASE)
+_IX_IP = re.compile(
+    r"^\s*ip\s+address\s+(\d+\.\d+\.\d+\.\d+(?:/\d+)?)(?P<secondary>\s+secondary)?", re.IGNORECASE
+)
+#: 出どころが決まるアドレス。`dhcp` は貰う、`ipcp` は PPP の相手と決める、
+#: `map-e` / `v6pv` はトンネルの仕組みが決める（出典: IX-R/IX-V コマンドリファレンス 9.1.1）
+_IX_IP_SOURCE = re.compile(r"^\s*ip\s+address\s+(dhcp|ipcp|map-e|v6pv)\b", re.IGNORECASE)
+_IX_UNNUMBERED = re.compile(r"^\s*ip\s+unnumbered\s+(\S+)", re.IGNORECASE)
 # 回線から貰う設定。アドレスは決め打ちできないが、使っているポートだとは分かる
 _IX_IP_LEARNED = re.compile(r"^\s*ip\s+address\s+(dhcp|ipcp)\b", re.IGNORECASE)
 _IX_NO_SHUTDOWN = re.compile(r"^\s*no\s+shutdown\s*$", re.IGNORECASE)
@@ -235,8 +241,17 @@ def _parse_ix(text: str) -> ParsedConfig:
             current.description = description.group(1)
             continue
         ip = _IX_IP.match(raw)
-        if ip and current.ip_address is None:
-            current.ip_address = ip.group(1)
+        if ip:
+            # 2つ目以降（secondary）は別に持つ。上書きすると本来のアドレスが消える
+            if ip.group("secondary") or current.ip_address is not None:
+                if ip.group(1) not in current.extra_addresses:
+                    current.extra_addresses.append(ip.group(1))
+            else:
+                current.ip_address = ip.group(1)
+            continue
+        borrowed = _IX_UNNUMBERED.match(raw)
+        if borrowed:
+            current.address_source = f"unnumbered {borrowed.group(1)}"
             continue
         # IX はサブインターフェースにタグを載せる（GigaEthernet0.1 に VLAN 10 など）
         tag = _IX_VLAN_TAG.match(raw)
@@ -248,8 +263,11 @@ def _parse_ix(text: str) -> ParsedConfig:
         if vrf:
             current.vrf = vrf.group(1)
             continue
-        if _IX_IP_LEARNED.match(raw) and current.ip_address is None:
-            current.ip_address = None  # 貰うアドレスなので台帳には書かない
+        source = _IX_IP_SOURCE.match(raw)
+        if source and current.ip_address is None:
+            # 貰う・相手と決めるアドレスは台帳に書かない。ただし「無い」ではないので出どころを残す
+            kind = source.group(1).lower()
+            current.address_source = {"dhcp": "dhcp", "ipcp": "negotiated"}.get(kind, kind)
             current.mode = current.mode or "routed"
             continue
         if _IX_NO_SHUTDOWN.match(raw):
@@ -266,6 +284,9 @@ def _parse_ix(text: str) -> ParsedConfig:
     _parse_ix_lldp(text, parsed)
     tunnels.parse_block_style(text, parsed)
     routing.parse_ix(text, parsed)
+    # VRRP は `vrrp 1 ip 172.16.0.254` / `vrrp 1 priority 254` と1行ずつ書く
+    # （出典: IX-R/IX-V コマンドリファレンス 16.1.3 / 16.1.6）。IOS と同じ形
+    routing._cisco_fhrp(text, parsed)
     policy.parse_ix(text, parsed)
     _parse_ix_napt(text, parsed)
     _parse_ix_dhcp(text, parsed)
@@ -282,8 +303,21 @@ def _parse_ix(text: str) -> ParsedConfig:
 
 _IX_NAPT_ENABLE = re.compile(r"^\s*ip\s+napt\s+enable\s*$", re.IGNORECASE)
 _IX_NAPT_STATIC = re.compile(r"^\s*ip\s+napt\s+static\s+(.+)$", re.IGNORECASE)
+#: 変換する内側の範囲（出典: 9.4.9 `ip napt inside list ACCESSLIST-NAME [ outside OUTSIDE-ADDR ]`）
+_IX_NAPT_INSIDE = re.compile(
+    r"^\s*ip\s+napt\s+inside\s+list\s+(\S+)(?:\s+outside\s+(\S+))?", re.IGNORECASE
+)
+#: 外から受ける口を内側のサーバーへ回す（出典: 9.4.10 `ip napt service NAME SERVER-ADDR …`）
+_IX_NAPT_SERVICE = re.compile(
+    r"^\s*ip\s+napt\s+service\s+(?P<name>\S+)\s+(?P<server>\d+\.\d+\.\d+\.\d+)"
+    r"(?:\s+(?P<rest>.+))?$",
+    re.IGNORECASE,
+)
 _IX_DHCP_PROFILE = re.compile(r"^ip\s+dhcp\s+profile\s+(\S+)", re.IGNORECASE)
 _IX_DHCP_BINDING = re.compile(r"^\s*ip\s+dhcp\s+binding\s+(\S+)", re.IGNORECASE)
+#: 配らない範囲と、他所のサーバーへ回す先（出典: 9.5.10 / 9.5.15）
+_IX_DHCP_EXCLUDED = re.compile(r"^\s*ip\s+dhcp\s+excluded-address\s+(\S+)\s+(\S+)", re.IGNORECASE)
+_IX_DHCP_RELAY_SERVER = re.compile(r"^\s*ip\s+dhcp-relay\s+server\s+(\S+)", re.IGNORECASE)
 _IPV4 = re.compile(r"\b\d{1,3}(?:\.\d{1,3}){3}\b")
 
 
@@ -291,6 +325,7 @@ def _parse_ix_napt(text: str, parsed: ParsedConfig) -> None:
     """NAPT を読む。IX は変換をポートごとに有効にする。"""
     nat = ParsedNat()
     interface: str | None = None
+    dynamic_by_port: dict[str, ParsedNatRule] = {}
 
     for raw in text.splitlines():
         head = _IX_INTERFACE.match(raw)
@@ -299,32 +334,72 @@ def _parse_ix_napt(text: str, parsed: ParsedConfig) -> None:
             continue
         if _IX_NAPT_ENABLE.match(raw):
             # 出口のアドレスに束ねる。Cisco の overload と同じ
-            nat.rules.append(
-                ParsedNatRule(
-                    kind="dynamic",
-                    direction="inside",
-                    matched="内側から出る通信",
-                    translated=interface or "出口のアドレス",
-                    overload=True,
-                    matched_is_name=False,
-                    raw=f"interface {interface} ip napt enable",
-                )
+            rule = ParsedNatRule(
+                kind="dynamic",
+                direction="inside",
+                matched="内側から出る通信",
+                translated=interface or "出口のアドレス",
+                overload=True,
+                matched_is_name=False,
+                raw=f"interface {interface} ip napt enable",
             )
+            nat.rules.append(rule)
+            if interface:
+                dynamic_by_port[interface] = rule
             if interface and interface not in nat.outside_interfaces:
                 nat.outside_interfaces.append(interface)
             continue
-        static = _IX_NAPT_STATIC.match(raw)
-        if static:
-            # 引数の並びは版で違うので、順番には頼らない。読み取れるのは
-            # 「外側と内側のアドレス」までにして、原文をそのまま残す
-            addresses = _IPV4.findall(static.group(1))
+        inside = _IX_NAPT_INSIDE.match(raw)
+        if inside and interface:
+            # 変換する内側をアクセスリストで絞っている。名前なので「無い」と言える
+            rule = dynamic_by_port.get(interface)
+            if rule is None:
+                rule = ParsedNatRule(
+                    kind="dynamic",
+                    direction="inside",
+                    matched=inside.group(1),
+                    translated=interface,
+                    overload=True,
+                    raw=raw.strip(),
+                )
+                nat.rules.append(rule)
+                dynamic_by_port[interface] = rule
+            rule.matched, rule.matched_is_name = inside.group(1), True
+            if inside.group(2):
+                rule.translated = inside.group(2)
+                rule.raw = f"{rule.raw} / {raw.strip()}"
+            continue
+        service = _IX_NAPT_SERVICE.match(raw)
+        if service:
+            rest = (service.group("rest") or "").split()
+            protocol = next((t for t in rest if t.lower() in {"tcp", "udp", "icmp"}), None)
             nat.rules.append(
                 ParsedNatRule(
                     kind="static-port",
                     direction="outside",
-                    matched=addresses[0] if addresses else None,
+                    matched=service.group("server"),
+                    translated=interface,
+                    matched_is_name=False,
+                    protocol=protocol,
+                    raw=raw.strip(),
+                )
+            )
+            continue
+        static = _IX_NAPT_STATIC.match(raw)
+        if static:
+            # 公式の形は `ip napt static { INSIDE-ADDR | INTERFACE } PROTOCOL PORT-RANGE`
+            # （9.4.11）。版によって引数が増えることがあるので、原文もそのまま残す
+            words = static.group(1).split()
+            addresses = _IPV4.findall(static.group(1))
+            protocol = next((t for t in words if t.lower() in {"tcp", "udp", "icmp"}), None)
+            nat.rules.append(
+                ParsedNatRule(
+                    kind="static-port",
+                    direction="outside",
+                    matched=addresses[0] if addresses else (words[0] if words else None),
                     translated=addresses[1] if len(addresses) > 1 else None,
                     matched_is_name=False,
+                    protocol=protocol,
                     raw=raw.strip(),
                 )
             )
@@ -361,12 +436,20 @@ def _parse_ix_dhcp(text: str, parsed: ParsedConfig) -> None:
         if current is not None:
             _ix_dhcp_detail(current, body)
             continue
+        excluded = _IX_DHCP_EXCLUDED.match(raw)
+        if excluded:
+            dhcp.excluded.append((excluded.group(1), excluded.group(2)))
+            continue
+        relay = _IX_DHCP_RELAY_SERVER.match(raw)
+        if relay and interface:
+            dhcp.relays.append((interface, relay.group(1)))
+            continue
         bound = _IX_DHCP_BINDING.match(raw)
         if bound and bound.group(1) in pools and interface:
             pool = pools[bound.group(1)]
             pool.name = f"{pool.name}（{interface}）"
 
-    if dhcp.pools:
+    if dhcp.pools or dhcp.excluded or dhcp.relays:
         parsed.dhcp = dhcp
 
 

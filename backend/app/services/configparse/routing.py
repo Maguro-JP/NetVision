@@ -625,13 +625,21 @@ def parse_undoform(text: str, parsed: ParsedConfig) -> None:
 # NEC IX
 # ---------------------------------------------------------------------------
 
+#: 出典: IX-R/IX-V コマンドリファレンス 9.1.15
+#: `ip route [ vrf VRF-NAME ] { ADDRESS/MASKLENGTH | default }
+#:  { NEXTHOP [ INTERFACE ] | INTERFACE [ NEXTHOP | dhcp ] }
+#:  [ connected ] [ metric METRIC ] [ distance DISTANCE ] [ tag TAG ]`
 _IX_ROUTE = re.compile(
-    r"^ip route\s+(?P<dest>\d+\.\d+\.\d+\.\d+)/(?P<length>\d+)\s+(?P<rest>.+)$",
+    r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?"
+    r"(?P<dest>\d+\.\d+\.\d+\.\d+)/(?P<length>\d+)\s+(?P<rest>.+)$",
     re.IGNORECASE,
 )
+_IX_OSPF = re.compile(r"^ip router ospf\s+(\S+)\s*$", re.IGNORECASE)
 #: IX の既定経路は宛先を書かず `default` と書く。支店のルーターでいちばん
 #: 大事な1本なので、読めないと「既定の経路が見当たりません」を全台に出す
-_IX_DEFAULT_ROUTE = re.compile(r"^ip route\s+default\s+(?P<rest>.+)$", re.IGNORECASE)
+_IX_DEFAULT_ROUTE = re.compile(
+    r"^ip route\s+(?:vrf\s+(?P<vrf>\S+)\s+)?default\s+(?P<rest>.+)$", re.IGNORECASE
+)
 _IX_DEFAULT_ROUTE6 = re.compile(r"^ipv6 route\s+default\s+(?P<rest>.+)$", re.IGNORECASE)
 
 
@@ -654,14 +662,58 @@ def parse_ix(text: str, parsed: ParsedConfig) -> None:
             continue
 
         route = ParsedRoute(destination=destination)
-        for token in rest.split():
-            if _is_ip(token):
+        if match is not None or default is not None:
+            route.vrf = (match or default).group("vrf")
+        # metric / distance / tag は値を伴う語。値を口の名前や距離と取り違えない
+        words = rest.split()
+        skip = False
+        for index, token in enumerate(words):
+            if skip:
+                skip = False
+                continue
+            lowered = token.lower()
+            if lowered in {"metric", "tag"}:
+                skip = True
+            elif lowered == "distance" and index + 1 < len(words) and words[index + 1].isdigit():
+                route.distance = int(words[index + 1])
+                skip = True
+            elif lowered in {"connected", "dhcp"}:
+                continue
+            elif _is_ip(token):
                 route.next_hop = token
-            elif token.isdigit():
-                route.distance = int(token)
             elif re.match(r"^[A-Za-z]", token):
                 route.interface = expand(token)
         parsed.routes.append(route)
+
+    _ix_ospf(text, parsed)
+
+
+def _ix_ospf(text: str, parsed: ParsedConfig) -> None:
+    """`ip router ospf PID` の囲み（出典: 11.2.21 / 11.2.22 / 11.2.25 / 11.2.28）。
+
+    `network { A.B.C.D/<0-32> | INTERFACE } area AID` は、帯でも口でも書ける。
+    """
+    for head, body in _blocks(text, _IX_OSPF):
+        ospf = parsed.ospf or ParsedOspf(process_id=head.group(1))
+        for line in body:
+            router_id = re.match(r"^router-id\s+(\S+)", line, re.IGNORECASE)
+            if router_id:
+                ospf.router_id = router_id.group(1)
+                continue
+            network = re.match(r"^network\s+(\S+)\s+area\s+(\S+)", line, re.IGNORECASE)
+            if network:
+                target = network.group(1)
+                prefix = to_prefix(target) if "/" in target else None
+                _add_area(ospf, network.group(2), prefix or f"interface {expand(target)}")
+                continue
+            passive = re.match(r"^passive-interface\s+(\S+)", line, re.IGNORECASE)
+            if passive:
+                ospf.passive_interfaces.append(expand(passive.group(1)))
+                continue
+            redistribute = re.match(r"^redistribute\s+(\S+)", line, re.IGNORECASE)
+            if redistribute:
+                ospf.redistributes.append(redistribute.group(1).lower())
+        parsed.ospf = ospf
 
 
 # ---------------------------------------------------------------------------

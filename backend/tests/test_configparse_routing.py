@@ -167,7 +167,7 @@ def test_fortios_edit_blocks_are_read():
 
 IX = """device-name branch-rt-01
 ip route 0.0.0.0/0 192.0.2.254
-ip route 10.40.0.0/16 192.0.2.253 200
+ip route 10.40.0.0/16 192.0.2.253 distance 200
 """
 
 
