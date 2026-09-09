@@ -927,8 +927,9 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
             continue
         name, value = setting.group(1).lower(), setting.group(2)
         if name in ("srcintf", "dstintf"):
-            first = value.replace('"', "").split()
-            side = first[0] if first else "any"
+            # 口も複数書ける（`set srcintf <name1>, <name2>, ...`）。
+            # 1つ目だけを読むと、2つの口から入る許可が片方だけに見える
+            side = _fortios_many(_fortios_values(value))
             source, target = interfaces[current.seq or ""]
             interfaces[current.seq or ""] = (side, target) if name == "srcintf" else (source, side)
             continue
@@ -966,13 +967,28 @@ def _fortios_addresses(text: str) -> dict[str, str]:
     return values
 
 
-def _fortios_many(cleaned: str) -> str:
+def _fortios_values(value: str) -> list[str]:
+    """FortiOS の値を、引用符を尊重して切り分ける。
+
+    `set srcintf "port1" "port2"` は2つの口、`set name "allow web"` は
+    空白を含む1つの名前。空白だけで切ると、どちらも取り違える。
+    （出典: FortiOS CLI リファレンス `config firewall policy` の
+    `set srcintf <name1>, <name2>, ...` と `set name {string}`）
+    """
+    import shlex
+
+    try:
+        return shlex.split(value)
+    except ValueError:
+        return value.replace('"', "").split()
+
+
+def _fortios_many(values: list[str]) -> str:
     """複数書ける欄。1つ目までを読み、残りは数で示す（PAN-OS と同じ）。
 
     まとめて1つの名前にすると、中身を解決したときに1つ目だけで
     「覆っている」と言ってしまう。2つ以上あるときは解決しない。
     """
-    values = cleaned.split()
     if not values:
         return "any"
     head = "any" if values[0].lower() == "all" else values[0]
@@ -995,24 +1011,29 @@ def _fortios_resolved(side: str, address: str | None, values: dict[str, str]) ->
 
 
 def _fortios_setting(entry: ParsedAclEntry, name: str, value: str) -> None:
-    cleaned = value.replace('"', "").strip()
-    first = cleaned.split()[0] if cleaned.split() else cleaned
+    values = _fortios_values(value)
+    first = values[0] if values else value.strip()
     if name == "action":
         entry.action = "permit" if first.lower() == "accept" else "deny"
     elif name == "status" and first.lower() == "disable":
         # 止めたままの行。効いていないので、並びの検算からは外す
         entry.action = "disabled"
     elif name == "srcaddr":
-        entry.source = _fortios_many(cleaned)
+        entry.source = _fortios_many(values)
     elif name == "dstaddr":
-        entry.destination = _fortios_many(cleaned)
+        entry.destination = _fortios_many(values)
     elif name == "service":
-        entry.destination_port = None if first.upper() == "ALL" else f"サービス {first}"
+        # サービスも複数書ける。1つでも ALL があれば、全部が通る意味になる
+        if any(item.upper() == "ALL" for item in values):
+            entry.destination_port = None
+        else:
+            entry.destination_port = f"サービス {_fortios_many(values)}"
     elif name == "name":
+        # 名前は空白を含むことがある。切ると別の名前になる
         entry.remark = first
     elif name == "logtraffic" and first.lower() != "disable":
         entry.log = True
-    entry.raw = f"{entry.raw} {name} {first}".strip()
+    entry.raw = f"{entry.raw} {name} {' '.join(values) or value.strip()}".strip()
 
 
 # ---------------------------------------------------------------------------
