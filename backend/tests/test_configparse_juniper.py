@@ -75,3 +75,67 @@ def test_unit_description_is_read() -> None:
     assert found["ge-0/0/0"] == "WAN"
     assert found["ge-0/0/1"] == "to core"
     assert found["ge-0/0/2.10"] == "sub"
+
+
+OFFICIAL_POLICIES = """\
+set system host-name srx-01
+set security zones security-zone trust address-book address NW1 192.168.1.0/24
+set security zones security-zone trust address-book address NW2 192.168.2.0/24
+set security policies from-zone trust to-zone untrust policy trust-to-untrust \
+match source-address any
+set security policies from-zone trust to-zone untrust policy trust-to-untrust \
+match destination-address any
+set security policies from-zone trust to-zone untrust policy trust-to-untrust \
+match application junos-http
+set security policies from-zone trust to-zone untrust policy trust-to-untrust \
+match application junos-https
+set security policies from-zone trust to-zone untrust policy trust-to-untrust \
+match application junos-ping
+set security policies from-zone trust to-zone untrust policy trust-to-untrust then permit
+set security policies from-zone untrust to-zone trust policy pol_1 \
+match source-address [ NW1 NW2 ] destination-address NW1 application [ junos-http junos-https ]
+set security policies from-zone untrust to-zone trust policy pol_1 then deny
+set security policies from-zone trust to-zone dmz policy pol_2 \
+match destination-address srv1 srv2
+set security policies from-zone trust to-zone dmz policy pol_2 then permit
+"""
+
+
+def _official_policies():
+    parsed = configparse.parse(OFFICIAL_POLICIES)
+    acl = next(a for a in parsed.acls if a.kind == "policy")
+    return {entry.remark or entry.seq: entry for entry in acl.entries}, acl
+
+
+def test_an_application_written_on_several_lines_is_not_overwritten():
+    """出典: Juniper のブランチ SRX 導入ガイドの設定例。
+
+    `match application junos-http` と `junos-https` と `junos-ping` を
+    行ごとに分けて書く。最後の行で上書きすると、開けている口が資料から消える。
+    """
+    _, acl = _official_policies()
+    first = acl.entries[0]
+    assert first.destination_port == "アプリ junos-http ほか2件"
+    assert first.action == "permit"
+
+
+def test_values_in_square_brackets_are_read_as_the_names_they_hold():
+    """出典: Junos の設定例（1行に項目を並べ、値を角括弧でまとめる形）
+    `match source-address [ n_1 n_2 ] destination-address as_1
+    application [ junos-http junos-https ]`。
+
+    1語しか読まないと、角括弧そのものをアドレスの名前として読んでしまう。
+    1行に並んだ他の項目（destination-address / application）も読み落とす。
+    """
+    _, acl = _official_policies()
+    second = acl.entries[1]
+    assert second.source == "untrust:NW1 ほか1件"
+    assert second.destination == "trust:NW1"
+    assert second.destination_port == "アプリ junos-http ほか1件"
+    # アドレス帳の中身は、1つに絞れているときだけ解決する
+    assert second.destination_value == "trust:192.168.1.0/24"
+
+
+def test_two_values_on_one_line_without_brackets_are_both_counted():
+    _, acl = _official_policies()
+    assert acl.entries[2].destination == "dmz:srv1 ほか1件"

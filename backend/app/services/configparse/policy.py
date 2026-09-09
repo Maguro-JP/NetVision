@@ -1159,15 +1159,18 @@ def _srx_policy_option(entry: ParsedAclEntry, rest: str) -> None:
     head = words[0].lower()
 
     if head == "match" and len(words) >= 3:
-        what, value = words[1].lower(), words[2]
-        if what == "source-address":
-            entry.source = _srx_more(entry.source, value)
-        elif what == "destination-address":
-            entry.destination = _srx_more(entry.destination, value)
-        elif what == "application":
-            entry.destination_port = f"アプリ {value}"
-        elif what == "source-identity":
-            entry.remark = f"利用者 {value}"
+        for what, values in _srx_match_values(words[1:]):
+            for value in values:
+                if what == "source-address":
+                    entry.source = _srx_more(entry.source, value)
+                elif what == "destination-address":
+                    entry.destination = _srx_more(entry.destination, value)
+                elif what in ("application", "dynamic-application"):
+                    entry.destination_port = _srx_more(
+                        entry.destination_port, value, prefix="アプリ "
+                    )
+                elif what == "source-identity":
+                    entry.remark = f"利用者 {value}"
         return
 
     if head == "then" and len(words) >= 2:
@@ -1182,13 +1185,50 @@ def _srx_policy_option(entry: ParsedAclEntry, rest: str) -> None:
         entry.remark = " ".join(words[1:])
 
 
-def _srx_more(current: str | None, value: str) -> str:
-    """同じ欄に2行目以降が来たら、1つ目までを読み、残りは数で示す。
+#: `match` に並べられる項目。値はこの語の後ろに続く
+#: （出典: Junos の設定例
+#: `set ... policy P match source-address [ a b ] destination-address c application [ d e ]`、
+#: および同じ項目を行ごとに分けて書く形）
+_SRX_MATCH_KEYS = (
+    "source-address",
+    "destination-address",
+    "application",
+    "dynamic-application",
+    "source-identity",
+    "url-category",
+)
 
-    最後の行で上書きすると、先に書いた条件が消える。PAN-OS と同じ形にする。
+
+def _srx_match_values(words: list[str]) -> list[tuple[str, list[str]]]:
+    """`match` に続く並びを、項目ごとの値に切り分ける。
+
+    値は3通りの書き方がある。`[ a b ]` とまとめる、`a b` と並べる、
+    同じ項目を行ごとに分けて書く。1語しか読まないと、角括弧そのものを
+    アドレスの名前として読んだり、2つ目以降の許可が資料から消えたりする。
+    """
+    found: list[tuple[str, list[str]]] = []
+    current: str | None = None
+    for word in words:
+        key = word.lower()
+        if key in _SRX_MATCH_KEYS:
+            current = key
+            found.append((key, []))
+            continue
+        if current is None:
+            continue
+        cleaned = word.strip("[]")
+        if cleaned:
+            found[-1][1].append(cleaned)
+    return [(key, values) for key, values in found if values]
+
+
+def _srx_more(current: str | None, value: str, *, prefix: str = "") -> str:
+    """同じ欄に2つ目以降が来たら、1つ目までを読み、残りは数で示す。
+
+    最後の値で上書きすると、先に書いた条件が消える。PAN-OS と同じ形にする。
     """
     if current is None:
-        return value
+        return f"{prefix}{value}"
     head, _, rest = current.partition(" ほか")
     count = int(rest.rstrip("件")) if rest else 0
     return f"{head} ほか{count + 1}件"
