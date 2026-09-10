@@ -273,7 +273,8 @@ def _parse_rules(lines: list[list[str]], parsed: ParsedConfig, values: dict[str,
             )
             order.append(name)
             zones[name] = ([], [])
-        _rule_option(rules[name], zones[name], rest[1:])
+        for part in _rule_parts(rest[1:]):
+            _rule_option(rules[name], zones[name], part)
 
     if not rules:
         return
@@ -301,6 +302,66 @@ def _parse_rules(lines: list[list[str]], parsed: ParsedConfig, values: dict[str,
     )
 
 
+#: 1つの規則に書ける項目。1行にまとめても、行ごとに分けても書ける
+#: （出典: Palo Alto の KB「How to View Security Policies from the CLI」の
+#: set 形式の出力（項目ごとに1行）と、同 KB の
+#: `set rulebase security rules <name> from <zone> to <zone> destination <ip>
+#:  application <app> service <svc> action <allow|deny>`）
+_RULE_KEYS = (
+    "from",
+    "to",
+    "source",
+    "destination",
+    "source-user",
+    "category",
+    "application",
+    "service",
+    "hip-profiles",
+    "action",
+    "disabled",
+    "log-start",
+    "log-end",
+    "description",
+    "negate-source",
+    "negate-destination",
+    "rule-type",
+    "tag",
+    "group-tag",
+    "profile-setting",
+    "option",
+    "schedule",
+    "icmp-unreachable",
+    "uuid",
+)
+
+
+def _rule_parts(body: list[str]) -> list[list[str]]:
+    """1行にまとめて書いた項目を、項目ごとに切り分ける。
+
+    値は `[ ssl web-browsing ]` とまとめて書ける。切り分けないと、
+    後ろの `action deny` まで最初の項目の値になり、落とす行を
+    通す行として読んでしまう。
+    """
+    parts: list[list[str]] = []
+    index = 0
+    while index < len(body):
+        word = body[index]
+        key = word.lower()
+        if key in _RULE_KEYS:
+            if key == "description":
+                # 説明文の中に項目の名前が出てきても、そこで切らない
+                parts.append([key, *(w.strip('"') for w in body[index + 1 :])])
+                break
+            parts.append([key])
+            index += 1
+            continue
+        cleaned = word.strip("[]")
+        if parts and cleaned:
+            parts[-1].append(cleaned)
+        index += 1
+    return [part for part in parts if len(part) > 1]
+
+
 def _rule_option(
     entry: ParsedAclEntry, zones: tuple[list[str], list[str]], body: list[str]
 ) -> None:
@@ -317,11 +378,14 @@ def _rule_option(
     elif key == "destination":
         entry.destination = _one(values, entry.destination)
     elif key == "service":
-        if values and values[0].lower() not in ("any", "application-default"):
-            entry.destination_port = f"サービス {values[0]}"
+        named = [v for v in values if v.lower() not in ("any", "application-default")]
+        if named:
+            merged = _one(named, _label(entry.destination_port, "サービス "))
+            entry.destination_port = f"サービス {merged}" if merged else None
     elif key == "application":
-        if values and values[0].lower() != "any":
-            entry.protocol = values[0].lower()
+        named = [v.lower() for v in values if v.lower() != "any"]
+        if named:
+            entry.protocol = _one(named, entry.protocol)
     elif key == "action":
         if values:
             # allow 以外（deny / drop / reset-both）は落とす側
@@ -360,13 +424,28 @@ def _resolved(zone: str, scoped: str, values: dict[str, str]) -> str | None:
 
 
 def _one(values: list[str], current: str | None) -> str | None:
-    """複数書ける欄。読めるのは1つ目までにして、残りは数で示す。"""
-    if not values:
-        return current
-    head = "any" if values[0].lower() == "any" else values[0]
-    if len(values) > 1:
-        return f"{head} ほか{len(values) - 1}件"
-    return head
+    """複数書ける欄。読めるのは1つ目までにして、残りは数で示す。
+
+    項目は1行にまとめても、行ごとに分けても書ける（出典: 上記の KB）。
+    行ごとに書いたときに上書きすると、先に書いた条件が消える。
+    """
+    for value in values:
+        if current is None:
+            current = "any" if value.lower() == "any" else value
+        else:
+            current = _more(current)
+    return current
+
+
+def _more(current: str) -> str:
+    head, _, rest = current.partition(" ほか")
+    count = int(rest.rstrip("件")) if rest else 0
+    return f"{head} ほか{count + 1}件"
+
+
+def _label(current: str | None, prefix: str) -> str | None:
+    """`サービス X` の形で持っている値を、足し込みのために素の形へ戻す。"""
+    return current.removeprefix(prefix) if current else current
 
 
 # ---------------------------------------------------------------------------

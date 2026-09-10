@@ -174,3 +174,57 @@ def test_a_broken_xml_does_not_raise():
     from app.services.configparse import panos
 
     assert panos.to_set_format("<config><devices>") == ""
+
+
+OFFICIAL_RULES = """\
+set deviceconfig system hostname pa-01
+set address SRV1 ip-netmask 10.0.1.10/32
+set address SRV2 ip-netmask 10.0.1.11/32
+set rulebase security rules Allow-Web from trust to untrust source any destination any \
+application [ ssl web-browsing ] service application-default action allow
+set rulebase security rules Deny-All from any to any source any destination any \
+application any service any action deny log-end yes
+set rulebase security rules rashi from trust-vwire
+set rulebase security rules rashi from untrust-vwire
+set rulebase security rules rashi to trust-vwire
+set rulebase security rules rashi source 10.16.0.21
+set rulebase security rules rashi destination any
+set rulebase security rules rashi application adobe-meeting
+set rulebase security rules rashi application adobe-online-office
+set rulebase security rules rashi action deny
+set rulebase security rules rashi disabled yes
+"""
+
+
+def _official_rules():
+    acl = next(a for a in configparse.parse(OFFICIAL_RULES).acls if a.kind == "policy")
+    return {entry.remark: entry for entry in acl.entries}
+
+
+def test_a_rule_written_on_one_line_is_split_into_its_parts():
+    """出典: Palo Alto の KB「How to View Security Policies from the CLI」の
+    `set rulebase security rules <name> from <zone> to <zone> destination <ip>
+    application <app> service <svc> action <allow|deny>`。
+
+    切り分けないと、後ろの `action deny` まで最初の項目の値になり、
+    落とす行を通す行として読んでしまう。
+    """
+    rules = _official_rules()
+    assert rules["Deny-All"].action == "deny"
+    assert rules["Deny-All"].log is True
+    allow = rules["Allow-Web"]
+    assert (allow.action, allow.source, allow.destination) == ("permit", "trust:any", "untrust:any")
+    # `[ ssl web-browsing ]` の2つ目も数に入れる
+    assert allow.protocol == "ssl ほか1件"
+
+
+def test_items_written_line_by_line_are_added_up_not_overwritten():
+    """同じ KB の set 形式の出力は、項目を行ごとに分けて書く。
+
+    最後の行で上書きすると、先に書いた条件が消える。
+    """
+    rashi = _official_rules()["rashi"]
+    assert rashi.protocol == "adobe-meeting ほか1件"
+    assert rashi.source == "trust-vwire untrust-vwire:10.16.0.21"
+    # `disabled yes` は止めてある行。並びの検算からは外す
+    assert rashi.action == "disabled"
