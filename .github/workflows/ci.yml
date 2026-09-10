@@ -129,7 +129,8 @@ jobs:
         if: steps.touched.outputs.backend == 'true'
         working-directory: backend
         run: |
-          pip install -e ".[dev]"
+          # -q で導入のログを抑える。Actions のストレージはログも数える
+          pip install -q -e ".[dev]"
           ruff check .
           ruff format --check .
           pytest -q
@@ -144,7 +145,8 @@ jobs:
         if: steps.touched.outputs.frontend == 'true'
         working-directory: frontend
         run: |
-          npm ci
+          # 監査・寄付の案内・詳細ログを止める。ログもストレージを食う
+          npm ci --no-audit --no-fund --loglevel=error
           npm run typecheck
           npm test
           npm run build

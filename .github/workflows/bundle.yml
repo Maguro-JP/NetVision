@@ -14,6 +14,9 @@ on:
 jobs:
   bundle:
     runs-on: ubuntu-latest
+    # リリースへの添付に要る。既定は読み取りだけ
+    permissions:
+      contents: write
     # 詰まったまま回り続けたら止める（無料枠は時間で減る）
     timeout-minutes: 30
     steps:
@@ -55,12 +58,25 @@ jobs:
           print(f"{len(names)} 個のファイルを確認しました")
           PY
 
+      # リリースから走ったときは、リリースの添付ファイルとして置く。
+      # 添付ファイルは Actions のストレージ枠を使わないので、ここが本命。
+      - name: リリースに添付する
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.find.outputs.zip }}" --clobber
+
+      # 手で走らせたときの受け取り口。ZIP は 1 個で約 19 MB あり、
+      # Actions のストレージ枠（無料は 0.5 GB）を直に削る。落としたら
+      # 用は済むので、置いておくのは 3 日で足りる
+      #
       # v7 は単一ファイルをそのまま置く形に変わり、成果物の入れ子が
       # 変わる（＝手順書の記述が合わなくなる）。ここで変えたいのは
       # Node 20 の非推奨警告を消すことだけなので、同じ node24 で
       # 挙動の変わらない v6 に留める
       - uses: actions/upload-artifact@v6
+        if: github.event_name != 'release'
         with:
           name: NetVision-windows
           path: dist/NetVision-*-windows.zip
-          retention-days: 30
+          retention-days: 3
