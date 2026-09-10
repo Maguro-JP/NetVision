@@ -513,6 +513,37 @@ def test_dot1x_enabled_but_applied_nowhere_is_mentioned(db_session):
     assert any("どの口にも当てていません" in title for title in titles)
 
 
+def test_dot1x_on_the_port_without_the_global_switch_is_the_heaviest(db_session):
+    """Cisco は全体の dot1x system-auth-control が無いと、口の設定が効かない。
+
+    出典: 802.1X Authentication Services Configuration Guide, Cisco IOS
+    Release 15SY「Enabling 802.1X Authentication」手順 5（Globally enables
+    802.1X port-based authentication）、および Catalyst 3750-X 設定ガイド
+    「the dot1x system-auth-control global configuration command only
+    globally enables or disables 802.1x authentication」。
+    """
+    text = ADMISSION.replace("dot1x system-auth-control\n", "")
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "全体で有効にしていません" in f.title)
+    assert finding.level == HIGH
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+
+
+def test_the_global_switch_is_not_asked_for_when_the_port_is_written_another_way(db_session):
+    """他社の書き方（Aruba CX の port-access）に、Cisco の行を求めない。"""
+    text = """
+hostname sw-cx
+aaa authentication port-access dot1x authenticator
+radius-server host 10.0.0.53 key secret
+!
+interface 1/1/1
+ aaa authentication port-access dot1x authenticator
+!
+"""
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "全体で有効にしていません" in t]
+
+
 def test_port_security_without_a_violation_action_is_mentioned(db_session):
     result = configcheck.check(db_session, ADMISSION)
     finding = next(f for f in result.findings if "破ったときの動き" in f.title)

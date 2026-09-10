@@ -655,6 +655,39 @@ def _port_admission(text: str) -> list[Finding]:
             )
         )
 
+    # Cisco は口の設定だけでは動かない。全体で `dot1x system-auth-control` を
+    # 入れて初めて効く（出典: 802.1X Authentication Services Configuration Guide,
+    # Cisco IOS Release 15SY「Enabling 802.1X Authentication」手順 5、
+    # および Catalyst 3750-X 設定ガイド「dot1x system-auth-control global
+    # configuration command only globally enables or disables 802.1x」）。
+    # 口の書き方が Cisco の形（authentication / dot1x / access-session
+    # port-control auto）のときだけ見る
+    cisco_controlled = [
+        name
+        for name, body in ports
+        if any(
+            re.match(
+                r"^(?:authentication|dot1x|access-session)\s+port-control\s+auto\b",
+                line.strip(),
+                re.IGNORECASE,
+            )
+            for line in body
+        )
+    ]
+    system_auth = any(line.startswith("dot1x system-auth-control") for line in lowered)
+    if cisco_controlled and not system_auth:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="802.1X を口に当てていますが、全体で有効にしていません",
+                why="この機種は、口の設定だけでは本人確認をしません。"
+                "全体に dot1x system-auth-control が要ります。"
+                "設定は入っているのに、誰でもつなげる状態のまま残ります。",
+                evidence=[f"{name}: port-control auto" for name in cisco_controlled[:5]]
+                + ["dot1x system-auth-control の行なし"],
+            )
+        )
+
     dot1x_on = any(
         line.startswith(
             (

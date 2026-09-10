@@ -292,6 +292,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="当てている口まで読み、問い合わせ先（RADIUS）が無い、"
+        "口には当てたのに全体で有効にしていない（Cisco の "
+        "dot1x system-auth-control の書き忘れ）、"
         "仕組みは入れたのにどの口にも当てていない、破ったときの動きを"
         "決めていない、黙って落とす設定になっている、を指摘します。"
         "誰を通すべきかという方針そのものは、要件が要るので言いません。",
