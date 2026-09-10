@@ -593,6 +593,11 @@ class ParsedQos:
     policies: list[ParsedQosPolicy] = field(default_factory=list)
     #: 当てている場所（"interface GigabitEthernet0/0 output" の形）
     applied: list[tuple[str, str, str]] = field(default_factory=list)
+    #: 当てるだけでは効かず、ポート側で別に有効にする必要がある書き方か
+    #: （NEC IX の `service-policy enable`）。この形の機種でだけ True
+    needs_enable: bool = False
+    #: 有効にしてあるポート。`needs_enable` が True のときだけ意味を持つ
+    enabled_on: list[str] = field(default_factory=list)
 
 
 @dataclass

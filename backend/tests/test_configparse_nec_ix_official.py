@@ -140,3 +140,95 @@ def test_vrrp_and_the_tunnel_destination_by_name():
     )
     tunnel = next(t for t in parsed.tunnels if t.name == "Tunnel0.0")
     assert (tunnel.kind, tunnel.destination) == ("ipsec", "domain.co.jp")
+
+
+# --- QoS -------------------------------------------------------------------
+#
+# 別の設定にしてあるのは、上の設定が「読めるか」を見るためのもので、
+# 有効化の書き忘れを混ぜると読み分けが見えなくなるため。
+
+QOS_CONFIG = """\
+device-name ix-qos
+ip access-list pq-list permit ip src 192.168.1.1/32 dest any
+class-map match-any class-pq
+  match ip access-list pq-list high
+  match local-generate-packet medium
+  match any low
+class-map match-all class-cbq
+  match ip access-list pq-list normal
+policy-map outmap
+  class class-pq
+    bandwidth percent 70
+  class class-cbq
+    shape 5000000
+  class class-default
+policy-map colour
+  class class-pq
+    set ip dscp 46
+interface GigaEthernet0.0
+  ip address 192.168.1.254/24
+  service-policy output outmap
+  no shutdown
+interface GigaEthernet1.0
+  ip address 192.168.2.254/24
+  service-policy enable
+  service-policy output outmap
+  no shutdown
+interface GigaEthernet2.0
+  ip address 192.168.3.254/24
+  service-policy output colour
+  no shutdown
+"""
+
+
+def _qos_parsed():
+    parsed = configparse.parse(QOS_CONFIG)
+    assert parsed.vendor is Vendor.NEC_IX
+    return parsed
+
+
+def test_qos_reads_the_classes_the_policies_and_where_they_are_attached():
+    """12. QoS編 ポリシーマップ `policy-map POLICYMAP-NAME` / `class CLASS-NAME`。
+
+    match の行には条件ごとの優先度（high / medium / normal / low）が付く。
+    出典: UNIVERGE IX シリーズ 障害切り分けガイドライン 2章（match-any の例）。
+    """
+    qos = _qos_parsed().qos
+    classes = {entry.name: entry for entry in qos.classes}
+    assert classes["class-pq"].match_type == "match-any"
+    assert classes["class-pq"].matches == [
+        "match ip access-list pq-list high",
+        "match local-generate-packet medium",
+        "match any low",
+    ]
+    assert classes["class-cbq"].match_type == "match-all"
+    outmap = next(entry for entry in qos.policies if entry.name == "outmap")
+    assert [entry.class_name for entry in outmap.classes] == [
+        "class-pq",
+        "class-cbq",
+        "class-default",
+    ]
+    assert outmap.classes[0].actions == ["bandwidth percent 70"]
+    assert ("GigaEthernet0.0", "output", "outmap") in qos.applied
+
+
+def test_qos_keeps_which_ports_were_enabled():
+    """`service-policy enable` を書いたポートを控える。
+
+    出典: UNIVERGE IX シリーズ 障害切り分けガイドライン
+    「QoS で使用するコマンド / 設定を忘れやすいコマンド」。
+    """
+    qos = _qos_parsed().qos
+    assert qos.needs_enable is True
+    assert qos.enabled_on == ["GigaEthernet1.0"]
+
+
+def test_qos_says_when_the_policy_is_attached_but_not_enabled():
+    """当てただけで有効にしていないポートを指摘する。色を付けるだけなら言わない。"""
+    from app.services import policyreview
+
+    titles = [note.title for note in policyreview.review(_qos_parsed())]
+    assert any("GigaEthernet0.0" in title and "有効にしていない" in title for title in titles)
+    # 有効にしてあるポートと、マーキングだけのポートは言わない
+    assert not any("GigaEthernet1.0" in title for title in titles)
+    assert not any("GigaEthernet2.0" in title and "有効" in title for title in titles)

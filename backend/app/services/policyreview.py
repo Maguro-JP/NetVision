@@ -1530,6 +1530,55 @@ def _qos(parsed: ParsedConfig) -> list[Finding]:
                     [f"policy-map {policy.name}", f"class {entry.class_name}"],
                 )
             )
+    findings.extend(_qos_not_enabled(parsed))
+    return findings
+
+
+#: 溜めて出す動作。これがあると、当てるだけでは効かない機種がある
+_QUEUEING_ACTION = re.compile(r"^(?:bandwidth|shape|priority|queue-limit|fair-queue)\b", re.I)
+#: 有効化を書けない仮想のポート。書けないものを指摘しない
+_VIRTUAL_PORT = re.compile(r"^(?:Tunnel|BVI|Loopback|Null)", re.I)
+
+
+def _qos_not_enabled(parsed: ParsedConfig) -> list[Finding]:
+    """当ててあるのに、ポート側で有効にしていない優先制御を言う。
+
+    NEC IX は `service-policy output` で当てるだけでは動かず、同じポートに
+    `service-policy enable` が要る。現場でいちばん多い取りこぼしで、設定は
+    入っているように見えるのに順番が変わらない。
+
+    ただし色を付けるだけ（set ip dscp などのマーキング）なら有効化は要らず、
+    トンネルなどの仮想のポートには書けない。どちらも指摘しない。
+
+    出典: UNIVERGE IX シリーズ 障害切り分けガイドライン
+    「QoS で使用するコマンド / 設定を忘れやすいコマンド」
+    """
+    qos = parsed.qos
+    if qos is None or not qos.needs_enable:
+        return []
+    queueing = {
+        policy.name
+        for policy in qos.policies
+        for entry in policy.classes
+        if any(_QUEUEING_ACTION.match(action) for action in entry.actions)
+    }
+    enabled = {normalize(name) for name in qos.enabled_on}
+    findings: list[Finding] = []
+    for interface, _direction, name in qos.applied:
+        if name not in queueing or normalize(interface) in enabled:
+            continue
+        if _VIRTUAL_PORT.match(interface):
+            continue
+        findings.append(
+            _note(
+                HIGH,
+                f"{interface} の優先制御 {name} は、有効にしていないので効きません",
+                "この機種は、当てるだけでは溜めて出す動作（優先・帯域）が動きません。"
+                "同じポートに service-policy enable が要ります。"
+                "設定は入っているのに順番が変わらない、という形で出ます。",
+                [f"interface {interface}", "service-policy enable"],
+            )
+        )
     return findings
 
 

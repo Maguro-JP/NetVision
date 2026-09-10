@@ -266,9 +266,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="区分と動作、当てているポートまで読み、どこにも当たっていないものを"
         "指摘します。読めるのは Cisco IOS の policy-map、FortiGate の shaper、"
-        "Junos の scheduler-map、NEC QX の qos policy、ファーウェイの traffic policy です"
-        "（NEC IX は"
-        "確かめられる設定が無いので読んでいません）。帯域の配分が妥当かどうかは、"
+        "Junos の scheduler-map、NEC QX の qos policy、ファーウェイの traffic policy、"
+        "NEC IX の class-map / policy-map です。IX は当てるだけでは効かず"
+        "（service-policy enable が要る）、書き忘れも指摘します。"
+        "帯域の配分が妥当かどうかは、"
         "実際に通る量が分からないので言いません。",
     ),
     Capability(
