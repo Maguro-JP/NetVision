@@ -19,6 +19,7 @@ from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
     ParsedNeighbor,
+    ParsedRedundancy,
     ParsedRoute,
     Vendor,
 )
@@ -85,8 +86,48 @@ def parse(text: str) -> ParsedConfig:
 
     _parse_routes(text, parsed)
     _maximum_routes(text, parsed)
+    _parse_varp(text, parsed)
     _parse_lldp_table(text, parsed)
     return parsed
+
+
+#: 出典: Arista の公式ラボガイド（Layer 3 Leaf-Spine）の設定例。
+#: グローバルに `ip virtual-router mac-address 00:1c:73:00:00:99` を置き、
+#: SVI に `ip virtual-router address 10.3.10.1` を書く
+_VARP_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+_VARP_ADDRESS = re.compile(r"^ip\s+virtual-router\s+address\s+(\S+)", re.IGNORECASE)
+
+
+def _parse_varp(text: str, parsed: ParsedConfig) -> None:
+    """VARP（仮想ルーター）を、出口の冗長として読む。
+
+    2台とも同じ仮想アドレスで同時に応答する仕組みで、VRRP のように
+    主と待機を決めない（グループ番号も持たない）。読まないと、端末の
+    出口がどこにあるのかが資料から丸ごと消える。
+    """
+    current: str | None = None
+    for raw in text.splitlines():
+        line = raw.rstrip()
+        if not line:
+            continue
+        head = _VARP_INTERFACE.match(line.strip())
+        if head and not line.startswith((" ", "\t")):
+            current = expand(head.group(1))
+            continue
+        if not line.startswith((" ", "\t")):
+            current = None
+            continue
+        if current is None:
+            continue
+        found = _VARP_ADDRESS.match(line.strip())
+        if found:
+            parsed.redundancy.append(
+                ParsedRedundancy(
+                    interface=current,
+                    virtual_ip=found.group(1),
+                    protocol="varp",
+                )
+            )
 
 
 def _parse_routes(text: str, parsed: ParsedConfig) -> None:

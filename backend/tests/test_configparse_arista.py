@@ -103,3 +103,49 @@ def test_a_static_route_is_not_counted_twice() -> None:
     )
     parsed = configparse.parse(text)
     assert len(parsed.routes) == 1
+
+
+OFFICIAL_VARP = """\
+! device: leaf-3a (DCS-7050SX3-48YC8, EOS-4.28.3M)
+hostname leaf-3a
+!
+ip virtual-router mac-address 00:1c:73:00:00:99
+!
+interface Vlan310
+    description Access_Pod3-Data
+    no autostate
+    ip address 10.3.10.2/24
+    ip virtual-router address 10.3.10.1
+    ip helper-address 10.100.0.0
+!
+interface Vlan320
+    description Access_Pod3-Voice
+    ip address 10.3.20.2/24
+    ip virtual-router address 10.3.20.1
+"""
+
+
+def test_varp_is_read_as_the_gateway_redundancy_it_is():
+    """出典: Arista の公式ラボガイド（Layer 3 Leaf-Spine）の設定例。
+
+    グローバルに `ip virtual-router mac-address` を置き、SVI に
+    `ip virtual-router address 10.3.10.1` を書く。2台とも同じ仮想アドレスで
+    同時に応答するので、VRRP と違って主と待機もグループ番号も無い。
+    読まないと、端末の出口が資料から丸ごと消える。
+    """
+    parsed = configparse.parse(OFFICIAL_VARP)
+    entries = {entry.interface: entry for entry in parsed.redundancy}
+    assert set(entries) == {"Vlan310", "Vlan320"}
+    assert entries["Vlan310"].protocol == "varp"
+    assert entries["Vlan310"].virtual_ip == "10.3.10.1"
+    assert entries["Vlan310"].group is None
+
+
+def test_a_varp_address_outside_the_segment_is_caught():
+    from app.services import policyreview
+
+    text = OFFICIAL_VARP.replace(
+        "ip virtual-router address 10.3.10.1", "ip virtual-router address 10.9.9.1"
+    )
+    titles = [f.title for f in policyreview.review(configparse.parse(text), text)]
+    assert any("VARP の仮想アドレス 10.9.9.1" in title for title in titles), titles
