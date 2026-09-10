@@ -725,7 +725,9 @@ def _virtual_gateways(parsed: ParsedConfig) -> list[Finding]:
             virtual = ipaddress.ip_address(entry.virtual_ip)
         except ValueError:
             continue
-        name = f"{entry.protocol.upper()} グループ {entry.group}"
+        label = entry.protocol.upper()
+        # グループ番号を持たない仕組み（AOS-CX の active-gateway）もある
+        name = f"{label} グループ {entry.group}" if entry.group else label
         network = next((n for n in networks if virtual in n), None)
         if network is None:
             # どの帯にも入っていない。比べた先は、同じ種別の帯だけを挙げる

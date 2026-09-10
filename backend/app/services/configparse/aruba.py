@@ -27,6 +27,7 @@ from app.services.configparse.base import (
     ParsedConfig,
     ParsedInterface,
     ParsedNeighbor,
+    ParsedRedundancy,
     ParsedRoute,
     Vendor,
 )
@@ -112,9 +113,18 @@ def parse(text: str) -> ParsedConfig:
     return parsed
 
 
+#: 出典: AOS-CX の「VRRP with VSX configuration」の設定例。
+#: `vrrp 1 address-family ipv4` の下に `address 192.168.1.253 primary` が字下げで続く
+_VRRP_HEAD = re.compile(r"^vrrp\s+(\d+)\s+address-family\s+\S+\s*$", re.IGNORECASE)
+#: 出典: AOS-CX の VSX ガイド。
+#: `active-gateway ip 192.168.100.2 mac 00:00:00:00:00:01`
+_ACTIVE_GATEWAY = re.compile(r"^active-gateway\s+(?:ip|ipv6)\s+(\S+)\s+mac\s+\S+", re.IGNORECASE)
+
+
 def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     """ポート。既定で落ちている前提で読む。"""
     current: ParsedInterface | None = None
+    group: ParsedRedundancy | None = None
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -128,15 +138,64 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             # 見たときだけ上げる。VLAN の口（interface vlan N）は作った時点で上がる
             svi = name.lower().startswith("vlan")
             current = parsed.add_interface(ParsedInterface(name=name, enabled=svi))
+            group = None
             continue
 
         if current is None:
             continue
         if not line.startswith(" "):
-            current = None
+            current, group = None, None
             continue
 
-        _interface_option(current, line.strip())
+        body = line.strip()
+        handled, group = _redundancy_option(parsed, current, group, body)
+        if handled:
+            continue
+        _interface_option(current, body)
+
+
+def _redundancy_option(
+    parsed: ParsedConfig,
+    interface: ParsedInterface,
+    group: ParsedRedundancy | None,
+    body: str,
+) -> tuple[bool, ParsedRedundancy | None]:
+    """既定ゲートウェイの冗長を読む。
+
+    VRRP は `vrrp N address-family ipv4` の下に字下げで続く（出典: AOS-CX の
+    「VRRP with VSX configuration」）。VSX の active-gateway は2台とも同時に
+    既定ゲートウェイとして振る舞う形で、VRRP の代わりに使う（出典: VSX ガイド。
+    同じ SVI に両方は書けない）。どちらも「端末の出口がどこにあるか」なので、
+    同じ器に入れる。読まないと、出口の冗長が資料から丸ごと消える。
+    """
+    head = _VRRP_HEAD.match(body)
+    if head:
+        entry = ParsedRedundancy(interface=interface.name, group=head.group(1), protocol="vrrp")
+        parsed.redundancy.append(entry)
+        return True, entry
+
+    gateway = _ACTIVE_GATEWAY.match(body)
+    if gateway:
+        parsed.redundancy.append(
+            ParsedRedundancy(
+                interface=interface.name,
+                virtual_ip=gateway.group(1),
+                protocol="active-gateway",
+            )
+        )
+        return True, group
+
+    if group is None:
+        return False, group
+    address = re.match(r"^address\s+(\S+)(?:\s+primary)?\s*$", body, re.IGNORECASE)
+    if address:
+        group.virtual_ip = group.virtual_ip or address.group(1)
+        return True, group
+    priority = re.match(r"^priority\s+(\d+)\s*$", body, re.IGNORECASE)
+    if priority:
+        group.priority = int(priority.group(1))
+        return True, group
+    return False, group
 
 
 def _interface_option(interface: ParsedInterface, body: str) -> None:

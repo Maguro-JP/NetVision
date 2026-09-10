@@ -112,3 +112,57 @@ def test_the_lldp_table_gives_the_lines_for_the_diagram(parsed):
     pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors]
     assert ("1/1/1", "core-aruba-01", "1/1/24") in pairs
     assert ("1/1/2", "core-sw-01", "GigabitEthernet1/0/1") in pairs
+
+
+OFFICIAL_REDUNDANCY = """\
+hostname aruba-cx-01
+vlan 10
+    name USERS
+vlan 20
+    name SERVERS
+interface vlan 10
+    ip address 192.168.1.253/16
+    no shutdown
+    vrrp 1 address-family ipv4
+        address 192.168.1.250 primary
+        priority 110
+        no shutdown
+interface vlan 20
+    ip address 192.168.100.5/16
+    active-gateway ip 192.168.100.2 mac 00:00:00:00:00:01
+"""
+
+
+def test_the_gateway_redundancy_of_aos_cx_is_read():
+    """出典: AOS-CX の「VRRP with VSX configuration」の設定例
+    （`vrrp 1 address-family ipv4` の下に `address … primary`）と、
+    VSX ガイドの `active-gateway ip 192.168.100.2 mac 00:00:00:00:00:01`。
+
+    どちらも端末の出口を冗長にする仕組み。読まないと、出口の冗長が
+    資料から丸ごと消える。
+    """
+    parsed = configparse.parse(OFFICIAL_REDUNDANCY)
+    entries = {entry.protocol: entry for entry in parsed.redundancy}
+    vrrp = entries["vrrp"]
+    assert (vrrp.interface, vrrp.group, vrrp.virtual_ip, vrrp.priority) == (
+        "Vlan10",
+        "1",
+        "192.168.1.250",
+        110,
+    )
+    gateway = entries["active-gateway"]
+    # active-gateway はグループ番号を持たない
+    assert (gateway.interface, gateway.group, gateway.virtual_ip) == (
+        "Vlan20",
+        None,
+        "192.168.100.2",
+    )
+
+
+def test_a_virtual_address_outside_the_segment_is_still_caught():
+    """読めるようになった以上、判定も効く。"""
+    from app.services import policyreview
+
+    text = OFFICIAL_REDUNDANCY.replace("address 192.168.1.250 primary", "address 10.9.9.1 primary")
+    titles = [f.title for f in policyreview.review(configparse.parse(text), text)]
+    assert any("VRRP グループ 1 の仮想アドレス 10.9.9.1" in title for title in titles), titles
