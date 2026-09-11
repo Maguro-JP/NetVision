@@ -583,6 +583,58 @@ def _stp(text: str) -> list[Finding]:
             )
         )
 
+    # 口ごとの BPDU フィルタは、その口の STP を止めるのと同じ
+    # （出典: Layer 2 Configuration Guide, Cisco IOS XE 17.18.x（Catalyst 9400）
+    # 「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
+    # interface is the same as disabling spanning tree on it and can result in
+    # spanning-tree loops。Nexus 9000 の同節も同じ注意を書いている）
+    filtered: list[tuple[str, bool]] = []
+    for name, body in ports:
+        if not any(
+            re.match(r"^spanning-tree\s+bpdufilter\s+enable\b", line.strip(), re.IGNORECASE)
+            for line in body
+        ):
+            continue
+        uplink = any(line.lower().strip().startswith("switchport mode trunk") for line in body)
+        filtered.append((name, uplink))
+    if filtered:
+        out.append(
+            Finding(
+                level=HIGH if any(uplink for _, uplink in filtered) else MEDIUM,
+                title="BPDU フィルタを口ごとに入れています（その口の STP が止まります）",
+                why="この口は BPDU を送りも受けもしません。相手が機器だと、輪ができても"
+                "誰も気づかないまま通し続けます。端末だけをつなぐ口でなければ外して、"
+                "BPDU guard（挿されたら落とす）に替えてください。",
+                evidence=[
+                    f"{name}: spanning-tree bpdufilter enable" + ("（trunk の口）" if up else "")
+                    for name, up in filtered[:5]
+                ],
+            )
+        )
+
+    # loop guard は portfast の口には効かない（出典: Catalyst 6500
+    # 「Configuring Optional STP Features」Loop Guard の使用上の注意:
+    # You cannot enable loop guard on PortFast-enabled ports）
+    loop_on_edge = [
+        name
+        for name, body in ports
+        if any(_EDGE_PORT.match(line.strip()) for line in body)
+        and any(
+            re.match(r"^spanning-tree\s+guard\s+loop\b", line.strip(), re.IGNORECASE)
+            for line in body
+        )
+    ]
+    if loop_on_edge:
+        out.append(
+            Finding(
+                level=LOW,
+                title="端末用の口に loop guard を入れています（効きません）",
+                why="loop guard は、根へ向かう口と塞いである口で効く仕組みです。"
+                "つないだ瞬間に通す口では働きません。入れたつもりのまま残ります。",
+                evidence=[f"{name}: portfast と guard loop の同居" for name in loop_on_edge[:5]],
+            )
+        )
+
     lines = [line.strip() for line in text.splitlines()]
     if any(line.lower().startswith("spanning-tree ") for line in lines) and not any(
         line.lower().startswith("spanning-tree mode ") for line in lines

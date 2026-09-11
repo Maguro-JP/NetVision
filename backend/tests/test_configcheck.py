@@ -462,6 +462,55 @@ def test_portfast_on_a_trunk_is_called_out(db_session):
     assert any("GigabitEthernet1/0/24" in line for line in finding.evidence)
 
 
+def test_a_per_port_bpdu_filter_is_called_out(db_session):
+    """口ごとの BPDU フィルタは、その口の STP を止めるのと同じ。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 17.18.x（Catalyst 9400）
+    「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
+    interface is the same as disabling spanning tree on it and can result in
+    spanning-tree loops.
+    """
+    text = """
+hostname sw-filter
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/24
+ switchport mode trunk
+ spanning-tree bpdufilter enable
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "BPDU フィルタ" in f.title)
+    assert finding.level == HIGH
+    assert any("trunk の口" in line for line in finding.evidence)
+
+
+def test_loop_guard_on_an_edge_port_is_mentioned(db_session):
+    """loop guard は portfast の口には掛けられない。
+
+    出典: Catalyst 6500「Configuring Optional STP Features」Loop Guard:
+    You cannot enable loop guard on PortFast-enabled ports.
+    """
+    text = """
+hostname sw-loop
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ spanning-tree guard loop
+!
+"""
+    titles = _titles(configcheck.check(db_session, text))
+    assert any("loop guard" in title for title in titles)
+
+
+def test_a_tidy_stp_config_says_nothing_about_the_new_checks(db_session):
+    titles = _titles(configcheck.check(db_session, STP_TIDY))
+    assert not [t for t in titles if "BPDU フィルタ" in t or "loop guard" in t]
+
+
 def test_a_missing_stp_mode_is_mentioned(db_session):
     text = STP_LOOSE.replace("spanning-tree mode rapid-pvst\n", "")
     titles = _titles(configcheck.check(db_session, text))
