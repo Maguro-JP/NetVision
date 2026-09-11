@@ -231,6 +231,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_broken_lines(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
+    found.extend(_hsrp_version(text))
     return _sorted(found)
 
 
@@ -647,6 +648,46 @@ def _stp(text: str) -> list[Finding]:
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
                 evidence=["spanning-tree mode の行なし"],
+            )
+        )
+    return out
+
+
+def _hsrp_version(text: str) -> list[Finding]:
+    """HSRP の版と、グループ番号の食い違い。
+
+    既定は版1で、そのときのグループ番号は 0〜255 までしか使えない。
+    VLAN 番号に合わせて 300 番のような番号を書くと、版2を指定していない
+    かぎり成り立たない。設定を貼った先で弾かれるか、その組だけ動かない。
+
+    出典: Network Services Configuration Guide, Cisco IOS XE 17.x「HSRP
+    Version 2」（In HSRP version 1, group numbers are restricted to the range
+    from 0 to 255. HSRP version 2 expands the group number range from 0 to
+    4095）、Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby ip（The group number range is from 0 to 255 for HSRP version 1）
+    """
+    out: list[Finding] = []
+    too_big: list[str] = []
+    for name, body in _interface_blocks(text):
+        version_two = any(
+            re.match(r"^standby\s+version\s+2\b", line.strip(), re.IGNORECASE) for line in body
+        )
+        if version_two:
+            continue
+        for line in body:
+            found = re.match(r"^standby\s+(\d+)\s+", line.strip(), re.IGNORECASE)
+            if found and int(found.group(1)) > 255:
+                too_big.append(f"{name}: standby {found.group(1)}（版の指定なし）")
+                break
+    if too_big:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="HSRP のグループ番号が、版1で使える範囲を超えています",
+                why="既定の版1で使えるグループ番号は 0〜255 までです。"
+                "256 以上を使うなら、そのポートに standby version 2 が要ります。"
+                "VLAN 番号に合わせて番号を振ったときに起きます。",
+                evidence=too_big[:5],
             )
         )
     return out

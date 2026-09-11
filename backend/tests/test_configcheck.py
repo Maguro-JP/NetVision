@@ -522,6 +522,34 @@ def test_a_tidy_stp_config_says_nothing_about_stp(db_session):
     assert not [t for t in titles if "BPDU guard" in t or "portfast" in t or "STP の" in t]
 
 
+def test_an_hsrp_group_beyond_version_one_is_called_out(db_session):
+    """既定の版1では 0〜255 まで。VLAN 番号に合わせると超える。
+
+    出典: Network Services Configuration Guide, Cisco IOS XE 17.x
+    「HSRP Version 2」（In HSRP version 1, group numbers are restricted to the
+    range from 0 to 255）。
+    """
+    text = """
+hostname dist-sw-31
+!
+interface Vlan300
+ ip address 10.0.30.2 255.255.255.0
+ standby 300 ip 10.0.30.1
+ standby 300 priority 110
+!
+interface Vlan350
+ ip address 10.0.35.2 255.255.255.0
+ standby version 2
+ standby 350 ip 10.0.35.1
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "版1で使える範囲" in f.title)
+    assert finding.level == HIGH
+    assert any("Vlan300" in line for line in finding.evidence)
+    assert not any("Vlan350" in line for line in finding.evidence)
+
+
 # ---------------------------------------------------------------------------
 # 口に誰を入れるか（802.1X / ポートセキュリティ）
 # ---------------------------------------------------------------------------
