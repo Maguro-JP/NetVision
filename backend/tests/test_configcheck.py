@@ -551,6 +551,60 @@ def test_port_security_without_a_violation_action_is_mentioned(db_session):
     assert any("GigabitEthernet1/0/2" in line for line in finding.evidence)
 
 
+def test_port_security_on_a_dynamic_port_is_mentioned(db_session):
+    """公式の制限。静的な access / trunk の口にしか掛けられない。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Port Security Configuration Guidelines」: Port security can only be
+    configured on static access ports or trunk ports.
+    """
+    text = """
+hostname sw-dtp
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/9
+ switchport mode dynamic auto
+ switchport port-security
+ switchport port-security violation restrict
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "動的な口" in f.title)
+    assert any("GigabitEthernet1/0/9" in line for line in finding.evidence)
+
+
+def test_a_phone_port_that_can_only_learn_one_mac_is_mentioned(db_session):
+    """電話と PC で MAC が2つ出る。既定の1のままだと口が落ちる。
+
+    出典: 同ガイドライン: When you enable port security on an interface that is
+    also configured with a voice VLAN, set the maximum allowed secure addresses
+    on the port to two.
+    """
+    text = """
+hostname sw-voice
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/10
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security violation restrict
+!
+interface GigabitEthernet1/0/11
+ switchport mode access
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security maximum 3
+ switchport port-security violation restrict
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "覚えられる数が足りません" in f.title)
+    assert any("GigabitEthernet1/0/10" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/11" in line for line in finding.evidence)
+
+
 def test_protect_leaves_no_trace_and_is_mentioned(db_session):
     result = configcheck.check(db_session, ADMISSION)
     finding = next(f for f in result.findings if "黙って落とす" in f.title)

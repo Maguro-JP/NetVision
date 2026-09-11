@@ -729,6 +729,65 @@ def _port_admission(text: str) -> list[Finding]:
             )
         )
 
+    # 公式の制限。動的な口（DTP まかせ）には掛けられない
+    # （出典: Security Configuration Guide, Cisco IOS XE 17.17.x
+    # Catalyst 9300「Port Security Configuration Guidelines」：
+    # Port security can only be configured on static access ports or trunk ports）
+    dynamic_security = [
+        name
+        for name, body in ports
+        if any(line.lower().startswith("switchport port-security") for line in body)
+        and any(
+            re.match(r"^switchport\s+mode\s+dynamic\b", line.strip(), re.IGNORECASE)
+            for line in body
+        )
+    ]
+    if dynamic_security:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="ポートセキュリティを、動的な口に掛けています",
+                why="この機種は、口の形が決まっていない（DTP まかせの）ところには"
+                "ポートセキュリティを掛けられません。switchport mode access か "
+                "trunk に決めてください。書いてあっても効きません。",
+                evidence=[f"{name}: switchport mode dynamic" for name in dynamic_security[:5]],
+            )
+        )
+
+    # 電話と PC を数珠つなぎにする口は、MAC が2つ出る。既定の1では口が落ちる
+    # （出典: 同ガイドライン：When you enable port security on an interface that
+    # is also configured with a voice VLAN, set the maximum allowed secure
+    # addresses on the port to two）
+    voice_one = []
+    for name, body in ports:
+        lowered_body = [line.lower().strip() for line in body]
+        if not any(line.startswith("switchport port-security") for line in lowered_body):
+            continue
+        if not any(line.startswith("switchport voice vlan") for line in lowered_body):
+            continue
+        maximum = next(
+            (
+                line.split()[-1]
+                for line in lowered_body
+                if line.startswith("switchport port-security maximum")
+            ),
+            "1",
+        )
+        if maximum.isdigit() and int(maximum) < 2:
+            voice_one.append((name, maximum))
+    if voice_one:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="電話をつなぐ口で、覚えられる数が足りません",
+                why="電話と、その先の PC で MAC が2つ出ます。覚えられる数が1のままだと、"
+                "つないだ瞬間に口が落ちます。電話を置く口は2つ以上にしてください。",
+                evidence=[
+                    f"{name}: maximum {value}（voice vlan あり）" for name, value in voice_one[:5]
+                ],
+            )
+        )
+
     protect_only = [
         name for name, body in ports if any("violation protect" in line.lower() for line in body)
     ]
