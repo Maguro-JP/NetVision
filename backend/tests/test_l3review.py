@@ -245,6 +245,48 @@ def test_the_same_priority_on_both_sides_is_flagged_too(db_session):
     assert any("優先度が同じ" in f.title for f in report.findings)
 
 
+def test_a_higher_priority_without_preempt_never_takes_the_role_back(db_session):
+    """HSRP は既定で役を取り返さない。優先度だけ上げても主に戻らない。
+
+    出典: Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby preempt、First Hop Redundancy Protocols Configuration Guide,
+    Cisco IOS Release 15S「HSRP Priority and Preemption」
+    （If you do not use the standby preempt interface configuration command …
+    that router will not become the active router, even if its priority is
+    higher than all other routers）。
+    """
+    device = _device(db_session, "dist-sw-21")
+    _snapshot(db_session, device, REDUNDANT.replace("dist-sw-01", "dist-sw-21"), "6" * 64)
+    report = l3review.review(db_session, device)
+    finding = next(f for f in report.findings if "戻りません" in f.title)
+    assert any("優先度 110" in line for line in finding.evidence)
+
+
+def test_preempt_written_or_a_default_priority_says_nothing(db_session):
+    """preempt があるとき、優先度を上げていないときは言わない。"""
+    with_preempt = _device(db_session, "dist-sw-22")
+    _snapshot(
+        db_session,
+        with_preempt,
+        REDUNDANT.replace("dist-sw-01", "dist-sw-22").replace(
+            " standby 10 priority 110\n", " standby 10 priority 110\n standby 10 preempt\n"
+        ),
+        "7" * 64,
+    )
+    assert not [
+        f for f in l3review.review(db_session, with_preempt).findings if "戻りません" in f.title
+    ]
+
+    plain = _device(db_session, "dist-sw-23")
+    _snapshot(
+        db_session,
+        plain,
+        REDUNDANT.replace("dist-sw-01", "dist-sw-23").replace(" standby 10 priority 110\n", ""),
+        "8" * 64,
+    )
+    assert not [f for f in l3review.review(db_session, plain).findings if "戻りません" in f.title]
+
+
 def test_every_finding_says_why_and_shows_what_it_looked_at(db_session):
     device = _device(db_session, "rt-06")
     _snapshot(

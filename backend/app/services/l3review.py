@@ -369,6 +369,7 @@ def _findings(
     findings.extend(_same_destination_twice(parsed))
     findings.extend(_segments_nobody_advertises(parsed, local))
     findings.extend(_redundancy_only_on_one_side(db, device, parsed))
+    findings.extend(_no_taking_back(parsed))
     findings.extend(_unused_policies(parsed))
     findings.extend(policyreview.review(parsed, text))
     return findings
@@ -593,6 +594,44 @@ def _redundancy_only_on_one_side(
                 evidence=[
                     f"{device.hostname} {entry.interface}: 仮想IP {entry.virtual_ip}",
                     "つながっている機器: " + ", ".join(p.hostname for p in peers[:4]),
+                ],
+            )
+        )
+    return out
+
+
+def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
+    """主にしたい側なのに、役を取り返す設定が無い。
+
+    HSRP は既定で役を取り返さない。優先度を上げてあっても preempt を書かなければ、
+    一度切り替わったきり戻らず、主にしたかった機器が予備のまま残る。
+    落ちたときではなく「直したのに戻らない」という形で出るので、気づきにくい。
+
+    VRRP は既定で取り返すので、ここでは言わない。
+
+    出典: Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby preempt（If preemption is not configured, the local device assumes
+    control as the active device only if it receives information indicating no
+    device is in the active state）、First Hop Redundancy Protocols
+    Configuration Guide, Cisco IOS Release 15S「HSRP Priority and Preemption」
+    """
+    out: list[Finding] = []
+    for entry in parsed.redundancy:
+        if entry.protocol != "hsrp" or entry.preempt:
+            continue
+        # 既定の優先度は 100。上げていない機器は、そもそも主を狙っていない
+        if entry.priority is None or entry.priority <= 100:
+            continue
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title=f"HSRP グループ {entry.group} は、一度切り替わると戻りません",
+                why="優先度を上げて主にしてありますが、役を取り返す設定（preempt）が"
+                "ありません。この機種は既定で取り返さないので、切り替わったあとに"
+                "直しても予備のままです。主を決めた側には preempt を入れてください。",
+                evidence=[
+                    f"{entry.interface}: 優先度 {entry.priority}",
+                    f"standby {entry.group} preempt の行なし",
                 ],
             )
         )

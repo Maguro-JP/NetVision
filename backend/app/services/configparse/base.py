@@ -740,3 +740,5 @@ class ParsedRedundancy:
     virtual_ip: str | None = None
     priority: int | None = None
     protocol: str = "hsrp"  # hsrp / vrrp
+    #: 優先度が高い側が、復旧したときに役を取り返すか（HSRP は既定で取り返さない）
+    preempt: bool = False
