@@ -232,6 +232,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_stp(text))
     found.extend(_port_admission(text))
     found.extend(_hsrp_version(text))
+    found.extend(_etherchannel(text))
     return _sorted(found)
 
 
@@ -648,6 +649,79 @@ def _stp(text: str) -> list[Finding]:
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
                 evidence=["spanning-tree mode の行なし"],
+            )
+        )
+    return out
+
+
+#: 束ねた線の口で、そろっていないと束にならない書き方
+#: （出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+#: 「EtherChannel Configuration Guidelines」「Layer 2 EtherChannel
+#: Configuration Guidelines」: 同じ VLAN かトランク、ネイティブ VLAN が違うと
+#: 束にならない、許可 VLAN の範囲が同じでないと束にならない、
+#: on と active/desirable を混ぜない）
+_CHANNEL_KEYS: tuple[tuple[str, str], ...] = (
+    (r"^switchport\s+mode\s+(\S+)", "口の形"),
+    (r"^switchport\s+access\s+vlan\s+(\S+)", "access VLAN"),
+    (r"^switchport\s+trunk\s+native\s+vlan\s+(\S+)", "ネイティブ VLAN"),
+    (r"^switchport\s+trunk\s+allowed\s+vlan\s+(?!add\b)(\S+)", "許可 VLAN"),
+    (r"^switchport\s+trunk\s+encapsulation\s+(\S+)", "トランクの型"),
+    (r"^channel-group\s+\d+\s+mode\s+(\S+)", "束ね方"),
+)
+
+
+def _etherchannel(text: str) -> list[Finding]:
+    """同じ束（channel-group）の口で、そろえるべきものが食い違っている。
+
+    公式の制限で、そろっていない口は束に入らない。1本だけ抜けた状態で動くので、
+    帯域が出ない・片寄るという形で出て、落ちるわけではないから気づきにくい。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「EtherChannel Configuration Guidelines」および「Layer 2 EtherChannel
+    Configuration Guidelines」
+    """
+    groups: dict[str, dict[str, dict[str, list[str]]]] = {}
+    for name, body in _interface_blocks(text):
+        found = next(
+            (
+                match
+                for line in body
+                if (match := re.match(r"^channel-group\s+(\d+)\b", line.strip(), re.IGNORECASE))
+            ),
+            None,
+        )
+        if found is None:
+            continue
+        values = groups.setdefault(found.group(1), {})
+        for pattern, label in _CHANNEL_KEYS:
+            value = next(
+                (
+                    hit.group(1).lower()
+                    for line in body
+                    if (hit := re.match(pattern, line.strip(), re.IGNORECASE))
+                ),
+                "（書いていない）",
+            )
+            values.setdefault(label, {}).setdefault(value, []).append(name)
+
+    out: list[Finding] = []
+    for number, values in sorted(groups.items(), key=lambda item: int(item[0])):
+        evidence = [
+            f"{label}: "
+            + " / ".join(f"{value} → {', '.join(ports)}" for value, ports in seen.items())
+            for label, seen in values.items()
+            if len(seen) > 1
+        ]
+        if not evidence:
+            continue
+        out.append(
+            Finding(
+                level=HIGH,
+                title=f"束ね {number} の口で、そろえるべき設定が食い違っています",
+                why="この機種は、口の形・VLAN・束ね方がそろっていない口を束に入れません。"
+                "入らなかった口の分だけ帯域が出ず、落ちるわけではないので気づきにくい"
+                "形で残ります。",
+                evidence=evidence[:5],
             )
         )
     return out

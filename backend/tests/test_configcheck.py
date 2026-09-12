@@ -522,6 +522,53 @@ def test_a_tidy_stp_config_says_nothing_about_stp(db_session):
     assert not [t for t in titles if "BPDU guard" in t or "portfast" in t or "STP の" in t]
 
 
+PORTCHANNEL = """
+hostname sw-po
+!
+interface GigabitEthernet1/0/1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/2
+ switchport mode trunk
+ switchport trunk allowed vlan 10
+ channel-group 1 mode on
+!
+interface GigabitEthernet1/0/3
+ switchport mode trunk
+ switchport trunk allowed vlan 30
+ channel-group 2 mode active
+!
+interface GigabitEthernet1/0/4
+ switchport mode trunk
+ switchport trunk allowed vlan 30
+ channel-group 2 mode active
+!
+"""
+
+
+def test_a_mismatched_etherchannel_member_is_called_out(db_session):
+    """そろっていない口は束に入らない。落ちないので気づきにくい。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「Layer 2 EtherChannel Configuration Guidelines」: An EtherChannel supports
+    the same allowed range of VLANs on all the ports in a trunking Layer 2
+    EtherChannel. If the allowed range of VLANs is not the same, the ports do
+    not form an EtherChannel.
+    """
+    result = configcheck.check(db_session, PORTCHANNEL)
+    finding = next(f for f in result.findings if "束ね 1" in f.title)
+    assert finding.level == HIGH
+    assert any("許可 VLAN" in line for line in finding.evidence)
+    assert any("束ね方" in line for line in finding.evidence)
+
+
+def test_a_tidy_etherchannel_says_nothing(db_session):
+    titles = _titles(configcheck.check(db_session, PORTCHANNEL))
+    assert not [t for t in titles if "束ね 2" in t]
+
+
 def test_an_hsrp_group_beyond_version_one_is_called_out(db_session):
     """既定の版1では 0〜255 まで。VLAN 番号に合わせると超える。
 
