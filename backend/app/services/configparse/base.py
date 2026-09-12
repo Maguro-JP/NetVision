@@ -323,6 +323,9 @@ class ParsedOspf:
     areas: list[ParsedOspfArea] = field(default_factory=list)
     passive_interfaces: list[str] = field(default_factory=list)
     passive_default: bool = False
+    #: `no passive-interface X` で、passive の既定から外したポート。
+    #: 既定を passive にしたときは、ここに挙げた口だけが隣を作る
+    active_interfaces: list[str] = field(default_factory=list)
     redistributes: list[str] = field(default_factory=list)
 
     def area_of(self, network: str) -> str | None:

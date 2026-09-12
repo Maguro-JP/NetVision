@@ -59,7 +59,12 @@ def test_ospf_keeps_which_area_each_network_is_in():
     assert parsed.ospf.router_id == "10.0.0.1"
     assert parsed.ospf.area_of("10.10.10.0/24") == "0"
     assert parsed.ospf.passive_default is True
-    assert "Vlan10" in parsed.ospf.passive_interfaces
+    # `no passive-interface Vlan10` は「passive から外す」。逆の意味なので別に持つ
+    # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    # Interfaces」: no passive-interface … Activates only those interfaces that
+    # need adjacencies）
+    assert parsed.ospf.passive_interfaces == []
+    assert "Vlan10" in parsed.ospf.active_interfaces
     assert parsed.ospf.redistributes == ["static"]
 
 

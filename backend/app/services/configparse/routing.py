@@ -258,9 +258,18 @@ def _cisco_ospf(text: str, parsed: ParsedConfig) -> None:
             if re.match(r"^passive-interface\s+default", line, re.IGNORECASE):
                 ospf.passive_default = True
                 continue
-            passive = re.match(r"^(?:no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
+            # `no passive-interface X` は逆の意味（既定 passive から外す）。
+            # 同じ入れ物に入れると、隣を作る口を「作らない口」と読んでしまう
+            # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default
+            # Passive Interfaces」: no passive-interface … Activates only those
+            # interfaces that need adjacencies）
+            passive = re.match(r"^(no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
             if passive:
-                ospf.passive_interfaces.append(expand(passive.group(1)))
+                port = expand(passive.group(2))
+                if passive.group(1):
+                    ospf.active_interfaces.append(port)
+                else:
+                    ospf.passive_interfaces.append(port)
                 continue
             redistribute = re.match(r"^redistribute\s+(\S+)", line, re.IGNORECASE)
             if redistribute:

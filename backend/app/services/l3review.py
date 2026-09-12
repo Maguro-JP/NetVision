@@ -125,6 +125,7 @@ def _ospf_read(parsed: ParsedConfig) -> dict | None:
         "areas": [{"area": area.area, "networks": area.networks} for area in parsed.ospf.areas],
         "passive_default": parsed.ospf.passive_default,
         "passive_interfaces": parsed.ospf.passive_interfaces,
+        "active_interfaces": parsed.ospf.active_interfaces,
         "redistributes": parsed.ospf.redistributes,
     }
 
@@ -370,6 +371,7 @@ def _findings(
     findings.extend(_segments_nobody_advertises(parsed, local))
     findings.extend(_redundancy_only_on_one_side(db, device, parsed))
     findings.extend(_no_taking_back(parsed))
+    findings.extend(_ospf_all_passive(parsed))
     findings.extend(_unused_policies(parsed))
     findings.extend(policyreview.review(parsed, text))
     return findings
@@ -636,6 +638,39 @@ def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
             )
         )
     return out
+
+
+def _ospf_all_passive(parsed: ParsedConfig) -> list[Finding]:
+    """OSPF の口を全部 passive にしたまま、どれも戻していない。
+
+    passive にした口では hello を出さないので、隣ができない。全部 passive の
+    ままだと、OSPF は書いてあるのに1つも隣を作らず、経路を1本も覚えない。
+    設定としては立派に見えるので、疑われにくい。
+
+    出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    Interfaces」（passive-interface default … Sets all interfaces as passive
+    by default / no passive-interface … Activates only those interfaces that
+    need adjacencies。In OSPF, hello packets are not sent on an interface that
+    is specified as passive. Hence, the device is not able to discover any
+    neighbors）
+    """
+    ospf = parsed.ospf
+    if ospf is None or not ospf.passive_default or ospf.active_interfaces:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="OSPF の口が全部 passive のままです（隣ができません）",
+            why="既定を passive にしたあと、隣を作る口を戻していません。"
+            "passive の口では hello を出さないので、隣が1つもできず、"
+            "OSPF で覚える経路も1本もありません。"
+            "隣を作る口に no passive-interface を入れてください。",
+            evidence=[
+                f"router ospf {ospf.process_id or ''}".strip(),
+                "passive-interface default はあるが no passive-interface が無い",
+            ],
+        )
+    ]
 
 
 def _unused_policies(parsed: ParsedConfig) -> list[Finding]:
