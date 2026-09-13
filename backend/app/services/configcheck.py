@@ -427,6 +427,46 @@ def _broken_lines(parsed: ParsedConfig) -> list[Finding]:
     ]
 
 
+#: Cisco で、番号として使えない帯。1002〜1005 は Token Ring / FDDI に取ってあり、
+#: 消すことも使うこともできない。1〜4094 の外も番号にならない
+#: （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+#: 「Configuring VLANs」: VLANs are identified by a number from 1 to 4094.
+#: VLAN IDs 1002 through 1005 are reserved for Token Ring and FDDI VLANs.
+#: All of the VLANs except 1002 to 1005 are available for user configuration）
+_CISCO_VENDORS = {Vendor.CISCO_IOS, Vendor.CISCO_NXOS, Vendor.CISCO_SB}
+
+
+def _vlan_numbers(parsed: ParsedConfig) -> list[Finding]:
+    """使えない番号を VLAN に当てている。
+
+    他社では使える帯なので、Cisco の書き方として読めたときだけ言う。
+    """
+    if parsed.vendor not in _CISCO_VENDORS:
+        return []
+    seen: dict[int, list[str]] = {}
+    for interface in parsed.interfaces:
+        for vlan in sorted(interface.carried_vlans()):
+            if 1002 <= vlan <= 1005 or vlan < 1 or vlan > 4094:
+                seen.setdefault(vlan, []).append(interface.name)
+    for vlan in sorted(parsed.vlans):
+        if 1002 <= vlan <= 1005 or vlan < 1 or vlan > 4094:
+            seen.setdefault(vlan, []).append("vlan の定義")
+    if not seen:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="使えない番号を VLAN に当てています",
+            why="この機種で使えるのは 1〜4094 で、1002〜1005 は古い媒体"
+            "（Token Ring / FDDI）に取ってあります。当てても通りません。"
+            "他社から移してきた設計で、そのまま番号が残っていることがあります。",
+            evidence=[
+                f"VLAN {vlan}: {', '.join(names[:3])}" for vlan, names in sorted(seen.items())
+            ][:5],
+        )
+    ]
+
+
 def _layer2(parsed: ParsedConfig) -> list[Finding]:
     """VLAN の切り方で、あとから効いてくるもの。
 
@@ -493,6 +533,8 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                     ][:5],
                 )
             )
+
+    out.extend(_vlan_numbers(parsed))
 
     # 口が1つも見えていないなら、使っているかどうかは分からない
     idle = sorted(v for v in parsed.vlans if v not in used and v != 1)

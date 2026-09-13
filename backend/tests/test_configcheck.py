@@ -548,6 +548,36 @@ interface GigabitEthernet1/0/4
 """
 
 
+def test_a_reserved_vlan_number_is_called_out(db_session):
+    """1002〜1005 は古い媒体に取ってある帯。当てても通らない。
+
+    出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「Configuring VLANs」: VLANs are identified by a number from 1 to 4094.
+    VLAN IDs 1002 through 1005 are reserved for Token Ring and FDDI VLANs.
+    """
+    text = """
+hostname sw-vlan
+vlan 10
+ name USERS
+vlan 1003
+ name OLD
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 1003
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "使えない番号" in f.title)
+    assert finding.level == HIGH
+    assert any("VLAN 1003" in line for line in finding.evidence)
+    assert not any("VLAN 10:" in line for line in finding.evidence)
+
+
 def test_a_mismatched_etherchannel_member_is_called_out(db_session):
     """そろっていない口は束に入らない。落ちないので気づきにくい。
 
