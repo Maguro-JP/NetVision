@@ -633,6 +633,36 @@ interface Ethernet1/1
     assert any("使えない番号" in f.title for f in result.findings)
 
 
+def test_the_same_vlan_for_voice_and_data_is_called_out(db_session):
+    """公式が「同時に同じ番号にするな」と書いている。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9200）
+    「Configuring IEEE 802.1x Port-Based Authentication」: Do not configure the
+    same VLAN ID for both voice VLAN and access VLAN at the same time, because
+    it may cause authentication failures.
+    """
+    text = """
+hostname sw-voice2
+vlan 10
+vlan 20
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 10
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "電話用と端末用" in f.title)
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/2" in line for line in finding.evidence)
+
+
 def test_a_mismatched_etherchannel_member_is_called_out(db_session):
     """そろっていない口は束に入らない。落ちないので気づきにくい。
 

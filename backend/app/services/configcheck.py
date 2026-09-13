@@ -533,6 +533,29 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
             )
         )
 
+    # 電話用と端末用に同じ番号を当てている口。公式が「同時に同じ番号にするな」と
+    # 書いている（出典: Security Configuration Guide, Cisco IOS XE 17.16.x
+    # （Catalyst 9200）「Configuring IEEE 802.1x Port-Based Authentication」:
+    # Do not configure the same VLAN ID for both voice VLAN and access VLAN at
+    # the same time, because it may cause authentication failures）
+    voice_same = [
+        i for i in parsed.interfaces if i.voice_vlan and i.vlan and i.voice_vlan == i.vlan
+    ]
+    if voice_same:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="電話用と端末用に、同じ VLAN を当てています",
+                why="同じ番号にすると、電話と端末を分ける意味が無くなるうえ、"
+                "本人確認（802.1X）が通らなくなることがあります。"
+                "電話用は別の番号にしてください。",
+                evidence=[
+                    f"{i.name}: access vlan {i.vlan} / voice vlan {i.voice_vlan}"
+                    for i in voice_same[:5]
+                ],
+            )
+        )
+
     wide_open = [i for i in trunks if i.trunk_all and not i.trunk_excluded]
     if wide_open:
         out.append(
