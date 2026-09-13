@@ -258,9 +258,18 @@ def _cisco_ospf(text: str, parsed: ParsedConfig) -> None:
             if re.match(r"^passive-interface\s+default", line, re.IGNORECASE):
                 ospf.passive_default = True
                 continue
-            passive = re.match(r"^(?:no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
+            # `no passive-interface X` は逆の意味（既定 passive から外す）。
+            # 同じ入れ物に入れると、隣を作る口を「作らない口」と読んでしまう
+            # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default
+            # Passive Interfaces」: no passive-interface … Activates only those
+            # interfaces that need adjacencies）
+            passive = re.match(r"^(no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
             if passive:
-                ospf.passive_interfaces.append(expand(passive.group(1)))
+                port = expand(passive.group(2))
+                if passive.group(1):
+                    ospf.active_interfaces.append(port)
+                else:
+                    ospf.passive_interfaces.append(port)
                 continue
             redistribute = re.match(r"^redistribute\s+(\S+)", line, re.IGNORECASE)
             if redistribute:
@@ -457,13 +466,31 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
         interface = expand(head.group(1))
         groups: dict[tuple[str, str | None, str], ParsedRedundancy] = {}
         for line in body:
+            # `standby 1 preempt`（値を取らない）は別に見る。HSRP は既定で
+            # 役を取り返さないので、書いてあるかどうかが意味を持つ
+            # （出典: Cisco IOS First Hop Redundancy Protocols Command
+            # Reference の standby preempt、および First Hop Redundancy
+            # Protocols Configuration Guide「HSRP Priority and Preemption」）
+            taking_back = re.match(r"^(standby|vrrp)\s+(?:(\d+)\s+)?preempt\b", line, re.IGNORECASE)
             match = re.match(
                 r"^(standby|vrrp)\s+(?:(\d+)\s+)?(ip|priority|address)\s+(\S+)",
                 line,
                 re.IGNORECASE,
             )
-            if not match:
+            if not match and not taking_back:
                 continue
+            if taking_back:
+                protocol = "hsrp" if taking_back.group(1).lower() == "standby" else "vrrp"
+                key = (protocol, taking_back.group(2), "")
+                entry = groups.get(key)
+                if entry is None:
+                    entry = ParsedRedundancy(
+                        interface=interface, group=taking_back.group(2), protocol=protocol
+                    )
+                    groups[key] = entry
+                entry.preempt = True
+                continue
+            assert match is not None
             protocol = "hsrp" if match.group(1).lower() == "standby" else "vrrp"
             key = (protocol, match.group(2), "")
             entry = groups.get(key)
@@ -507,6 +534,9 @@ def _cisco_fhrp(text: str, parsed: ParsedConfig) -> None:
             # 後にアドレスが続く行だけを仮想アドレスとして読み、`ip address`
             # （インターフェース自身のアドレス）は読まない。preempt や timers の
             # ような他の行は、塊を閉じずに読み飛ばす
+            if re.match(r"^preempt\b", line.strip(), re.IGNORECASE):
+                nested.preempt = True
+                continue
             value_line = re.match(
                 r"^(ip|address)\s+(\d[\d.]*|[0-9a-f:]*:[0-9a-f:]*)(?:\s|$)"
                 r"|^(priority)\s+(\d+)",
@@ -915,9 +945,22 @@ def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRouti
             if prefix and prefix not in protocol.networks:
                 protocol.networks.append(prefix)
             continue
-        passive = re.match(r"^passive-interface\s+(\S+)", line, re.IGNORECASE)
+        # `default` は口の名前ではなく「全部の口」を指す。口として数えない。
+        # `no passive-interface X` は逆の意味（既定から外す）
+        # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+        # Interfaces」: passive-interface default … Sets all interfaces as
+        # passive by default / no passive-interface … Activates only those
+        # interfaces that need adjacencies）
+        if re.match(r"^passive-interface\s+default\s*$", line, re.IGNORECASE):
+            protocol.passive_default = True
+            continue
+        passive = re.match(r"^(no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
         if passive:
-            protocol.passive_interfaces.append(expand(passive.group(1)))
+            port = expand(passive.group(2))
+            if passive.group(1):
+                protocol.active_interfaces.append(port)
+            else:
+                protocol.passive_interfaces.append(port)
             continue
         # IOS XR の IS-IS は、載せる口を `interface X` で囲みに並べる（OSPF のエリアと同じ形）
         port = re.match(r"^interface\s+(\S+)\s*$", line, re.IGNORECASE)

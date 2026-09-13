@@ -59,7 +59,12 @@ def test_ospf_keeps_which_area_each_network_is_in():
     assert parsed.ospf.router_id == "10.0.0.1"
     assert parsed.ospf.area_of("10.10.10.0/24") == "0"
     assert parsed.ospf.passive_default is True
-    assert "Vlan10" in parsed.ospf.passive_interfaces
+    # `no passive-interface Vlan10` は「passive から外す」。逆の意味なので別に持つ
+    # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    # Interfaces」: no passive-interface … Activates only those interfaces that
+    # need adjacencies）
+    assert parsed.ospf.passive_interfaces == []
+    assert "Vlan10" in parsed.ospf.active_interfaces
     assert parsed.ospf.redistributes == ["static"]
 
 
@@ -230,6 +235,20 @@ def test_the_protocols_still_running_in_the_field_are_read():
     assert found["eigrp"].identifier == "100"
     assert found["eigrp"].networks == ["10.10.0.0/16"]
     assert found["eigrp"].passive_interfaces == ["Vlan10"]
+    # `default` は口の名前ではない。口として数えない
+    # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    # Interfaces」: passive-interface default … Sets all interfaces as passive
+    # by default）
+    eigrp_default = configparse.parse(
+        "hostname rt\nrouter eigrp 100\n network 10.0.0.0\n passive-interface default\n"
+        " no passive-interface GigabitEthernet0/1\n"
+    )
+    entry = eigrp_default.protocols[0]
+    assert (entry.passive_default, entry.passive_interfaces, entry.active_interfaces) == (
+        True,
+        [],
+        ["GigabitEthernet0/1"],
+    )
     assert found["eigrp"].redistributes == ["static"]
     assert found["isis"].router_id == "49.0001.0000.0000.0001.00"
 

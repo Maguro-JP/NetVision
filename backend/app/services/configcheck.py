@@ -231,6 +231,8 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_broken_lines(parsed))
     found.extend(_stp(text))
     found.extend(_port_admission(text))
+    found.extend(_hsrp_version(text))
+    found.extend(_etherchannel(text))
     return _sorted(found)
 
 
@@ -583,6 +585,58 @@ def _stp(text: str) -> list[Finding]:
             )
         )
 
+    # 口ごとの BPDU フィルタは、その口の STP を止めるのと同じ
+    # （出典: Layer 2 Configuration Guide, Cisco IOS XE 17.18.x（Catalyst 9400）
+    # 「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
+    # interface is the same as disabling spanning tree on it and can result in
+    # spanning-tree loops。Nexus 9000 の同節も同じ注意を書いている）
+    filtered: list[tuple[str, bool]] = []
+    for name, body in ports:
+        if not any(
+            re.match(r"^spanning-tree\s+bpdufilter\s+enable\b", line.strip(), re.IGNORECASE)
+            for line in body
+        ):
+            continue
+        uplink = any(line.lower().strip().startswith("switchport mode trunk") for line in body)
+        filtered.append((name, uplink))
+    if filtered:
+        out.append(
+            Finding(
+                level=HIGH if any(uplink for _, uplink in filtered) else MEDIUM,
+                title="BPDU フィルタを口ごとに入れています（その口の STP が止まります）",
+                why="この口は BPDU を送りも受けもしません。相手が機器だと、輪ができても"
+                "誰も気づかないまま通し続けます。端末だけをつなぐ口でなければ外して、"
+                "BPDU guard（挿されたら落とす）に替えてください。",
+                evidence=[
+                    f"{name}: spanning-tree bpdufilter enable" + ("（trunk の口）" if up else "")
+                    for name, up in filtered[:5]
+                ],
+            )
+        )
+
+    # loop guard は portfast の口には効かない（出典: Catalyst 6500
+    # 「Configuring Optional STP Features」Loop Guard の使用上の注意:
+    # You cannot enable loop guard on PortFast-enabled ports）
+    loop_on_edge = [
+        name
+        for name, body in ports
+        if any(_EDGE_PORT.match(line.strip()) for line in body)
+        and any(
+            re.match(r"^spanning-tree\s+guard\s+loop\b", line.strip(), re.IGNORECASE)
+            for line in body
+        )
+    ]
+    if loop_on_edge:
+        out.append(
+            Finding(
+                level=LOW,
+                title="端末用の口に loop guard を入れています（効きません）",
+                why="loop guard は、根へ向かう口と塞いである口で効く仕組みです。"
+                "つないだ瞬間に通す口では働きません。入れたつもりのまま残ります。",
+                evidence=[f"{name}: portfast と guard loop の同居" for name in loop_on_edge[:5]],
+            )
+        )
+
     lines = [line.strip() for line in text.splitlines()]
     if any(line.lower().startswith("spanning-tree ") for line in lines) and not any(
         line.lower().startswith("spanning-tree mode ") for line in lines
@@ -595,6 +649,119 @@ def _stp(text: str) -> list[Finding]:
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
                 evidence=["spanning-tree mode の行なし"],
+            )
+        )
+    return out
+
+
+#: 束ねた線の口で、そろっていないと束にならない書き方
+#: （出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+#: 「EtherChannel Configuration Guidelines」「Layer 2 EtherChannel
+#: Configuration Guidelines」: 同じ VLAN かトランク、ネイティブ VLAN が違うと
+#: 束にならない、許可 VLAN の範囲が同じでないと束にならない、
+#: on と active/desirable を混ぜない）
+_CHANNEL_KEYS: tuple[tuple[str, str], ...] = (
+    (r"^switchport\s+mode\s+(\S+)", "口の形"),
+    (r"^switchport\s+access\s+vlan\s+(\S+)", "access VLAN"),
+    (r"^switchport\s+trunk\s+native\s+vlan\s+(\S+)", "ネイティブ VLAN"),
+    (r"^switchport\s+trunk\s+allowed\s+vlan\s+(?!add\b)(\S+)", "許可 VLAN"),
+    (r"^switchport\s+trunk\s+encapsulation\s+(\S+)", "トランクの型"),
+    (r"^channel-group\s+\d+\s+mode\s+(\S+)", "束ね方"),
+)
+
+
+def _etherchannel(text: str) -> list[Finding]:
+    """同じ束（channel-group）の口で、そろえるべきものが食い違っている。
+
+    公式の制限で、そろっていない口は束に入らない。1本だけ抜けた状態で動くので、
+    帯域が出ない・片寄るという形で出て、落ちるわけではないから気づきにくい。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「EtherChannel Configuration Guidelines」および「Layer 2 EtherChannel
+    Configuration Guidelines」
+    """
+    groups: dict[str, dict[str, dict[str, list[str]]]] = {}
+    for name, body in _interface_blocks(text):
+        found = next(
+            (
+                match
+                for line in body
+                if (match := re.match(r"^channel-group\s+(\d+)\b", line.strip(), re.IGNORECASE))
+            ),
+            None,
+        )
+        if found is None:
+            continue
+        values = groups.setdefault(found.group(1), {})
+        for pattern, label in _CHANNEL_KEYS:
+            value = next(
+                (
+                    hit.group(1).lower()
+                    for line in body
+                    if (hit := re.match(pattern, line.strip(), re.IGNORECASE))
+                ),
+                "（書いていない）",
+            )
+            values.setdefault(label, {}).setdefault(value, []).append(name)
+
+    out: list[Finding] = []
+    for number, values in sorted(groups.items(), key=lambda item: int(item[0])):
+        evidence = [
+            f"{label}: "
+            + " / ".join(f"{value} → {', '.join(ports)}" for value, ports in seen.items())
+            for label, seen in values.items()
+            if len(seen) > 1
+        ]
+        if not evidence:
+            continue
+        out.append(
+            Finding(
+                level=HIGH,
+                title=f"束ね {number} の口で、そろえるべき設定が食い違っています",
+                why="この機種は、口の形・VLAN・束ね方がそろっていない口を束に入れません。"
+                "入らなかった口の分だけ帯域が出ず、落ちるわけではないので気づきにくい"
+                "形で残ります。",
+                evidence=evidence[:5],
+            )
+        )
+    return out
+
+
+def _hsrp_version(text: str) -> list[Finding]:
+    """HSRP の版と、グループ番号の食い違い。
+
+    既定は版1で、そのときのグループ番号は 0〜255 までしか使えない。
+    VLAN 番号に合わせて 300 番のような番号を書くと、版2を指定していない
+    かぎり成り立たない。設定を貼った先で弾かれるか、その組だけ動かない。
+
+    出典: Network Services Configuration Guide, Cisco IOS XE 17.x「HSRP
+    Version 2」（In HSRP version 1, group numbers are restricted to the range
+    from 0 to 255. HSRP version 2 expands the group number range from 0 to
+    4095）、Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby ip（The group number range is from 0 to 255 for HSRP version 1）
+    """
+    out: list[Finding] = []
+    too_big: list[str] = []
+    for name, body in _interface_blocks(text):
+        version_two = any(
+            re.match(r"^standby\s+version\s+2\b", line.strip(), re.IGNORECASE) for line in body
+        )
+        if version_two:
+            continue
+        for line in body:
+            found = re.match(r"^standby\s+(\d+)\s+", line.strip(), re.IGNORECASE)
+            if found and int(found.group(1)) > 255:
+                too_big.append(f"{name}: standby {found.group(1)}（版の指定なし）")
+                break
+    if too_big:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="HSRP のグループ番号が、版1で使える範囲を超えています",
+                why="既定の版1で使えるグループ番号は 0〜255 までです。"
+                "256 以上を使うなら、そのポートに standby version 2 が要ります。"
+                "VLAN 番号に合わせて番号を振ったときに起きます。",
+                evidence=too_big[:5],
             )
         )
     return out
@@ -655,6 +822,39 @@ def _port_admission(text: str) -> list[Finding]:
             )
         )
 
+    # Cisco は口の設定だけでは動かない。全体で `dot1x system-auth-control` を
+    # 入れて初めて効く（出典: 802.1X Authentication Services Configuration Guide,
+    # Cisco IOS Release 15SY「Enabling 802.1X Authentication」手順 5、
+    # および Catalyst 3750-X 設定ガイド「dot1x system-auth-control global
+    # configuration command only globally enables or disables 802.1x」）。
+    # 口の書き方が Cisco の形（authentication / dot1x / access-session
+    # port-control auto）のときだけ見る
+    cisco_controlled = [
+        name
+        for name, body in ports
+        if any(
+            re.match(
+                r"^(?:authentication|dot1x|access-session)\s+port-control\s+auto\b",
+                line.strip(),
+                re.IGNORECASE,
+            )
+            for line in body
+        )
+    ]
+    system_auth = any(line.startswith("dot1x system-auth-control") for line in lowered)
+    if cisco_controlled and not system_auth:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="802.1X を口に当てていますが、全体で有効にしていません",
+                why="この機種は、口の設定だけでは本人確認をしません。"
+                "全体に dot1x system-auth-control が要ります。"
+                "設定は入っているのに、誰でもつなげる状態のまま残ります。",
+                evidence=[f"{name}: port-control auto" for name in cisco_controlled[:5]]
+                + ["dot1x system-auth-control の行なし"],
+            )
+        )
+
     dot1x_on = any(
         line.startswith(
             (
@@ -693,6 +893,65 @@ def _port_admission(text: str) -> list[Finding]:
                 "決めていないと、端末を入れ替えただけで口が落ちて、"
                 "現場では原因の分からない不通になります。",
                 evidence=[f"{name}: violation の指定なし" for name in quiet_security[:5]],
+            )
+        )
+
+    # 公式の制限。動的な口（DTP まかせ）には掛けられない
+    # （出典: Security Configuration Guide, Cisco IOS XE 17.17.x
+    # Catalyst 9300「Port Security Configuration Guidelines」：
+    # Port security can only be configured on static access ports or trunk ports）
+    dynamic_security = [
+        name
+        for name, body in ports
+        if any(line.lower().startswith("switchport port-security") for line in body)
+        and any(
+            re.match(r"^switchport\s+mode\s+dynamic\b", line.strip(), re.IGNORECASE)
+            for line in body
+        )
+    ]
+    if dynamic_security:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="ポートセキュリティを、動的な口に掛けています",
+                why="この機種は、口の形が決まっていない（DTP まかせの）ところには"
+                "ポートセキュリティを掛けられません。switchport mode access か "
+                "trunk に決めてください。書いてあっても効きません。",
+                evidence=[f"{name}: switchport mode dynamic" for name in dynamic_security[:5]],
+            )
+        )
+
+    # 電話と PC を数珠つなぎにする口は、MAC が2つ出る。既定の1では口が落ちる
+    # （出典: 同ガイドライン：When you enable port security on an interface that
+    # is also configured with a voice VLAN, set the maximum allowed secure
+    # addresses on the port to two）
+    voice_one = []
+    for name, body in ports:
+        lowered_body = [line.lower().strip() for line in body]
+        if not any(line.startswith("switchport port-security") for line in lowered_body):
+            continue
+        if not any(line.startswith("switchport voice vlan") for line in lowered_body):
+            continue
+        maximum = next(
+            (
+                line.split()[-1]
+                for line in lowered_body
+                if line.startswith("switchport port-security maximum")
+            ),
+            "1",
+        )
+        if maximum.isdigit() and int(maximum) < 2:
+            voice_one.append((name, maximum))
+    if voice_one:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="電話をつなぐ口で、覚えられる数が足りません",
+                why="電話と、その先の PC で MAC が2つ出ます。覚えられる数が1のままだと、"
+                "つないだ瞬間に口が落ちます。電話を置く口は2つ以上にしてください。",
+                evidence=[
+                    f"{name}: maximum {value}（voice vlan あり）" for name, value in voice_one[:5]
+                ],
             )
         )
 

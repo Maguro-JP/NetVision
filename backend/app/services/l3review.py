@@ -65,6 +65,8 @@ def review(db: Session, device: Device) -> L3Report:
             "router_id": protocol.router_id,
             "networks": protocol.networks,
             "passive_interfaces": protocol.passive_interfaces,
+            "passive_default": protocol.passive_default,
+            "active_interfaces": protocol.active_interfaces,
             "redistributes": protocol.redistributes,
         }
         for protocol in parsed.protocols
@@ -125,6 +127,7 @@ def _ospf_read(parsed: ParsedConfig) -> dict | None:
         "areas": [{"area": area.area, "networks": area.networks} for area in parsed.ospf.areas],
         "passive_default": parsed.ospf.passive_default,
         "passive_interfaces": parsed.ospf.passive_interfaces,
+        "active_interfaces": parsed.ospf.active_interfaces,
         "redistributes": parsed.ospf.redistributes,
     }
 
@@ -369,6 +372,8 @@ def _findings(
     findings.extend(_same_destination_twice(parsed))
     findings.extend(_segments_nobody_advertises(parsed, local))
     findings.extend(_redundancy_only_on_one_side(db, device, parsed))
+    findings.extend(_no_taking_back(parsed))
+    findings.extend(_ospf_all_passive(parsed))
     findings.extend(_unused_policies(parsed))
     findings.extend(policyreview.review(parsed, text))
     return findings
@@ -597,6 +602,84 @@ def _redundancy_only_on_one_side(
             )
         )
     return out
+
+
+def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
+    """主にしたい側なのに、役を取り返す設定が無い。
+
+    HSRP は既定で役を取り返さない。優先度を上げてあっても preempt を書かなければ、
+    一度切り替わったきり戻らず、主にしたかった機器が予備のまま残る。
+    落ちたときではなく「直したのに戻らない」という形で出るので、気づきにくい。
+
+    VRRP は既定で取り返すので、ここでは言わない。
+
+    出典: Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby preempt（If preemption is not configured, the local device assumes
+    control as the active device only if it receives information indicating no
+    device is in the active state）、First Hop Redundancy Protocols
+    Configuration Guide, Cisco IOS Release 15S「HSRP Priority and Preemption」
+    """
+    out: list[Finding] = []
+    for entry in parsed.redundancy:
+        if entry.protocol != "hsrp" or entry.preempt:
+            continue
+        # 既定の優先度は 100。上げていない機器は、そもそも主を狙っていない
+        if entry.priority is None or entry.priority <= 100:
+            continue
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title=f"HSRP グループ {entry.group} は、一度切り替わると戻りません",
+                why="優先度を上げて主にしてありますが、役を取り返す設定（preempt）が"
+                "ありません。この機種は既定で取り返さないので、切り替わったあとに"
+                "直しても予備のままです。主を決めた側には preempt を入れてください。",
+                evidence=[
+                    f"{entry.interface}: 優先度 {entry.priority}",
+                    f"standby {entry.group} preempt の行なし",
+                ],
+            )
+        )
+    return out
+
+
+def _ospf_all_passive(parsed: ParsedConfig) -> list[Finding]:
+    """OSPF の口を全部 passive にしたまま、どれも戻していない。
+
+    passive にした口では hello を出さないので、隣ができない。全部 passive の
+    ままだと、OSPF は書いてあるのに1つも隣を作らず、経路を1本も覚えない。
+    設定としては立派に見えるので、疑われにくい。
+
+    出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    Interfaces」（passive-interface default … Sets all interfaces as passive
+    by default / no passive-interface … Activates only those interfaces that
+    need adjacencies。In OSPF, hello packets are not sent on an interface that
+    is specified as passive. Hence, the device is not able to discover any
+    neighbors）
+    """
+    out: list[Finding] = []
+    ospf = parsed.ospf
+    if ospf is not None and ospf.passive_default and not ospf.active_interfaces:
+        out.append(_all_passive(f"router ospf {ospf.process_id or ''}".strip(), "OSPF"))
+    for protocol in parsed.protocols:
+        # IS-IS は passive の意味が違う（口を載せたまま隣だけ作らない）ので外す
+        if protocol.name.lower() == "isis":
+            continue
+        if protocol.passive_default and not protocol.active_interfaces:
+            head = f"router {protocol.name} {protocol.identifier or ''}".strip()
+            out.append(_all_passive(head, protocol.name.upper()))
+    return out
+
+
+def _all_passive(head: str, label: str) -> Finding:
+    return Finding(
+        level=HIGH,
+        title=f"{label} の口が全部 passive のままです（隣ができません）",
+        why="既定を passive にしたあと、隣を作る口を戻していません。"
+        "passive の口では隣を探す挨拶を出さないので、隣が1つもできず、"
+        "そのプロトコルで覚える経路も1本もありません。"
+        "隣を作る口に no passive-interface を入れてください。",
+        evidence=[head, "passive-interface default はあるが no passive-interface が無い"],
+    )
 
 
 def _unused_policies(parsed: ParsedConfig) -> list[Finding]:

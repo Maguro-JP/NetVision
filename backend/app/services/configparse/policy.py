@@ -724,6 +724,38 @@ def parse_undoform(text: str, parsed: ParsedConfig) -> None:
     parsed.acls.extend(acls.values())
 
 
+#: 溜めて出す動作。これがあるポートは `service-policy enable` が要る
+#: （出典: IX 障害切り分けガイドライン「QoS で使用するコマンド」。
+#: マーキング・カラーリングだけなら不要と明記されている）
+_IX_QUEUEING = re.compile(r"^(?:bandwidth|shape|priority|queue-limit|fair-queue)\b", re.IGNORECASE)
+#: 仮想のポートには有効化を書けない（同ガイドライン）。書けないものを指摘しない
+_IX_VIRTUAL = re.compile(r"^(?:Tunnel|BVI|Loopback|Null)", re.IGNORECASE)
+
+
+def _ix_qos(text: str) -> ParsedQos | None:
+    """NEC IX の優先制御を読む。
+
+    区分（class-map）と動作（policy-map）の書き方は IOS と同じ形で、
+    `match` にポートごとの優先度（high / medium / normal / low）が付く
+    ところだけ違う。優先度は `match` の行ごと持つので、そのまま入る。
+
+    IX だけの作法として、当てたポートで `service-policy enable` を別に
+    書かないと、溜めて出す動作（PQ / CBQ / シェーピング）が効かない。
+    どのポートで有効にしてあるかを控えて、判定層で言えるようにする。
+
+    出典: IX-R/IX-V コマンドリファレンス「12. QoS編」ポリシーマップ、
+    UNIVERGE IX シリーズ 障害切り分けガイドライン「QoS で使用するコマンド」
+    """
+    qos = _qos(text)
+    if qos is None:
+        return None
+    qos.needs_enable = True
+    for head, body in _blocks(text, _INTERFACE):
+        if any(re.match(r"^service-policy\s+enable\s*$", line, re.IGNORECASE) for line in body):
+            qos.enabled_on.append(expand(head.group(1)))
+    return qos
+
+
 def _undoform_entry(rule: re.Match[str], raw: str) -> ParsedAclEntry:
     """`rule 5 permit tcp source 10.0.0.0 0.0.0.255 destination-port eq 80` を読む。
 
@@ -779,6 +811,7 @@ def parse_ix(text: str, parsed: ParsedConfig) -> None:
                 acls[match.group(1)].applied_to.append(f"interface {interface} {direction}")
 
     parsed.acls.extend(acls.values())
+    parsed.qos = _ix_qos(text)
 
 
 def _ix_entry(match: re.Match[str], raw: str) -> ParsedAclEntry:

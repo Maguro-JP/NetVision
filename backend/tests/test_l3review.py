@@ -245,6 +245,87 @@ def test_the_same_priority_on_both_sides_is_flagged_too(db_session):
     assert any("優先度が同じ" in f.title for f in report.findings)
 
 
+def test_a_higher_priority_without_preempt_never_takes_the_role_back(db_session):
+    """HSRP は既定で役を取り返さない。優先度だけ上げても主に戻らない。
+
+    出典: Cisco IOS First Hop Redundancy Protocols Command Reference の
+    standby preempt、First Hop Redundancy Protocols Configuration Guide,
+    Cisco IOS Release 15S「HSRP Priority and Preemption」
+    （If you do not use the standby preempt interface configuration command …
+    that router will not become the active router, even if its priority is
+    higher than all other routers）。
+    """
+    device = _device(db_session, "dist-sw-21")
+    _snapshot(db_session, device, REDUNDANT.replace("dist-sw-01", "dist-sw-21"), "6" * 64)
+    report = l3review.review(db_session, device)
+    finding = next(f for f in report.findings if "戻りません" in f.title)
+    assert any("優先度 110" in line for line in finding.evidence)
+
+
+def test_preempt_written_or_a_default_priority_says_nothing(db_session):
+    """preempt があるとき、優先度を上げていないときは言わない。"""
+    with_preempt = _device(db_session, "dist-sw-22")
+    _snapshot(
+        db_session,
+        with_preempt,
+        REDUNDANT.replace("dist-sw-01", "dist-sw-22").replace(
+            " standby 10 priority 110\n", " standby 10 priority 110\n standby 10 preempt\n"
+        ),
+        "7" * 64,
+    )
+    assert not [
+        f for f in l3review.review(db_session, with_preempt).findings if "戻りません" in f.title
+    ]
+
+    plain = _device(db_session, "dist-sw-23")
+    _snapshot(
+        db_session,
+        plain,
+        REDUNDANT.replace("dist-sw-01", "dist-sw-23").replace(" standby 10 priority 110\n", ""),
+        "8" * 64,
+    )
+    assert not [f for f in l3review.review(db_session, plain).findings if "戻りません" in f.title]
+
+
+def test_all_passive_ospf_never_gets_a_neighbour(db_session):
+    """既定を passive にしたまま、どの口も戻していない。
+
+    出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+    Interfaces」（In OSPF, hello packets are not sent on an interface that is
+    specified as passive. Hence, the device is not able to discover any
+    neighbors。no passive-interface … Activates only those interfaces that
+    need adjacencies）。
+    """
+    device = _device(db_session, "rt-31")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-31\n!\ninterface Vlan10\n ip address 10.31.0.1 255.255.255.0\n!\n"
+        "router ospf 1\n router-id 10.31.0.1\n network 10.31.0.0 0.0.255.255 area 0\n"
+        " passive-interface default\n",
+        "9" * 64,
+    )
+    report = l3review.review(db_session, device)
+    assert any("全部 passive" in f.title for f in report.findings)
+
+
+def test_a_port_taken_out_of_passive_is_not_counted_as_passive(db_session):
+    """`no passive-interface X` を passive の側に数えない（逆の意味）。"""
+    device = _device(db_session, "rt-32")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-32\n!\ninterface Vlan10\n ip address 10.32.0.1 255.255.255.0\n!\n"
+        "router ospf 1\n router-id 10.32.0.1\n network 10.32.0.0 0.0.255.255 area 0\n"
+        " passive-interface default\n no passive-interface Vlan10\n",
+        "a" * 64,
+    )
+    report = l3review.review(db_session, device)
+    assert not [f for f in report.findings if "全部 passive" in f.title]
+    assert report.ospf["passive_interfaces"] == []
+    assert report.ospf["active_interfaces"] == ["Vlan10"]
+
+
 def test_every_finding_says_why_and_shows_what_it_looked_at(db_session):
     device = _device(db_session, "rt-06")
     _snapshot(

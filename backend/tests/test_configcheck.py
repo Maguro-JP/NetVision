@@ -462,6 +462,55 @@ def test_portfast_on_a_trunk_is_called_out(db_session):
     assert any("GigabitEthernet1/0/24" in line for line in finding.evidence)
 
 
+def test_a_per_port_bpdu_filter_is_called_out(db_session):
+    """口ごとの BPDU フィルタは、その口の STP を止めるのと同じ。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 17.18.x（Catalyst 9400）
+    「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
+    interface is the same as disabling spanning tree on it and can result in
+    spanning-tree loops.
+    """
+    text = """
+hostname sw-filter
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/24
+ switchport mode trunk
+ spanning-tree bpdufilter enable
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "BPDU フィルタ" in f.title)
+    assert finding.level == HIGH
+    assert any("trunk の口" in line for line in finding.evidence)
+
+
+def test_loop_guard_on_an_edge_port_is_mentioned(db_session):
+    """loop guard は portfast の口には掛けられない。
+
+    出典: Catalyst 6500「Configuring Optional STP Features」Loop Guard:
+    You cannot enable loop guard on PortFast-enabled ports.
+    """
+    text = """
+hostname sw-loop
+spanning-tree mode rapid-pvst
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ spanning-tree portfast
+ spanning-tree bpduguard enable
+ spanning-tree guard loop
+!
+"""
+    titles = _titles(configcheck.check(db_session, text))
+    assert any("loop guard" in title for title in titles)
+
+
+def test_a_tidy_stp_config_says_nothing_about_the_new_checks(db_session):
+    titles = _titles(configcheck.check(db_session, STP_TIDY))
+    assert not [t for t in titles if "BPDU フィルタ" in t or "loop guard" in t]
+
+
 def test_a_missing_stp_mode_is_mentioned(db_session):
     text = STP_LOOSE.replace("spanning-tree mode rapid-pvst\n", "")
     titles = _titles(configcheck.check(db_session, text))
@@ -471,6 +520,81 @@ def test_a_missing_stp_mode_is_mentioned(db_session):
 def test_a_tidy_stp_config_says_nothing_about_stp(db_session):
     titles = _titles(configcheck.check(db_session, STP_TIDY))
     assert not [t for t in titles if "BPDU guard" in t or "portfast" in t or "STP の" in t]
+
+
+PORTCHANNEL = """
+hostname sw-po
+!
+interface GigabitEthernet1/0/1
+ switchport mode trunk
+ switchport trunk allowed vlan 10,20
+ channel-group 1 mode active
+!
+interface GigabitEthernet1/0/2
+ switchport mode trunk
+ switchport trunk allowed vlan 10
+ channel-group 1 mode on
+!
+interface GigabitEthernet1/0/3
+ switchport mode trunk
+ switchport trunk allowed vlan 30
+ channel-group 2 mode active
+!
+interface GigabitEthernet1/0/4
+ switchport mode trunk
+ switchport trunk allowed vlan 30
+ channel-group 2 mode active
+!
+"""
+
+
+def test_a_mismatched_etherchannel_member_is_called_out(db_session):
+    """そろっていない口は束に入らない。落ちないので気づきにくい。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「Layer 2 EtherChannel Configuration Guidelines」: An EtherChannel supports
+    the same allowed range of VLANs on all the ports in a trunking Layer 2
+    EtherChannel. If the allowed range of VLANs is not the same, the ports do
+    not form an EtherChannel.
+    """
+    result = configcheck.check(db_session, PORTCHANNEL)
+    finding = next(f for f in result.findings if "束ね 1" in f.title)
+    assert finding.level == HIGH
+    assert any("許可 VLAN" in line for line in finding.evidence)
+    assert any("束ね方" in line for line in finding.evidence)
+
+
+def test_a_tidy_etherchannel_says_nothing(db_session):
+    titles = _titles(configcheck.check(db_session, PORTCHANNEL))
+    assert not [t for t in titles if "束ね 2" in t]
+
+
+def test_an_hsrp_group_beyond_version_one_is_called_out(db_session):
+    """既定の版1では 0〜255 まで。VLAN 番号に合わせると超える。
+
+    出典: Network Services Configuration Guide, Cisco IOS XE 17.x
+    「HSRP Version 2」（In HSRP version 1, group numbers are restricted to the
+    range from 0 to 255）。
+    """
+    text = """
+hostname dist-sw-31
+!
+interface Vlan300
+ ip address 10.0.30.2 255.255.255.0
+ standby 300 ip 10.0.30.1
+ standby 300 priority 110
+!
+interface Vlan350
+ ip address 10.0.35.2 255.255.255.0
+ standby version 2
+ standby 350 ip 10.0.35.1
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "版1で使える範囲" in f.title)
+    assert finding.level == HIGH
+    assert any("Vlan300" in line for line in finding.evidence)
+    assert not any("Vlan350" in line for line in finding.evidence)
 
 
 # ---------------------------------------------------------------------------
@@ -513,11 +637,96 @@ def test_dot1x_enabled_but_applied_nowhere_is_mentioned(db_session):
     assert any("どの口にも当てていません" in title for title in titles)
 
 
+def test_dot1x_on_the_port_without_the_global_switch_is_the_heaviest(db_session):
+    """Cisco は全体の dot1x system-auth-control が無いと、口の設定が効かない。
+
+    出典: 802.1X Authentication Services Configuration Guide, Cisco IOS
+    Release 15SY「Enabling 802.1X Authentication」手順 5（Globally enables
+    802.1X port-based authentication）、および Catalyst 3750-X 設定ガイド
+    「the dot1x system-auth-control global configuration command only
+    globally enables or disables 802.1x authentication」。
+    """
+    text = ADMISSION.replace("dot1x system-auth-control\n", "")
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "全体で有効にしていません" in f.title)
+    assert finding.level == HIGH
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+
+
+def test_the_global_switch_is_not_asked_for_when_the_port_is_written_another_way(db_session):
+    """他社の書き方（Aruba CX の port-access）に、Cisco の行を求めない。"""
+    text = """
+hostname sw-cx
+aaa authentication port-access dot1x authenticator
+radius-server host 10.0.0.53 key secret
+!
+interface 1/1/1
+ aaa authentication port-access dot1x authenticator
+!
+"""
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "全体で有効にしていません" in t]
+
+
 def test_port_security_without_a_violation_action_is_mentioned(db_session):
     result = configcheck.check(db_session, ADMISSION)
     finding = next(f for f in result.findings if "破ったときの動き" in f.title)
     assert finding.level == LOW
     assert any("GigabitEthernet1/0/2" in line for line in finding.evidence)
+
+
+def test_port_security_on_a_dynamic_port_is_mentioned(db_session):
+    """公式の制限。静的な access / trunk の口にしか掛けられない。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Port Security Configuration Guidelines」: Port security can only be
+    configured on static access ports or trunk ports.
+    """
+    text = """
+hostname sw-dtp
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/9
+ switchport mode dynamic auto
+ switchport port-security
+ switchport port-security violation restrict
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "動的な口" in f.title)
+    assert any("GigabitEthernet1/0/9" in line for line in finding.evidence)
+
+
+def test_a_phone_port_that_can_only_learn_one_mac_is_mentioned(db_session):
+    """電話と PC で MAC が2つ出る。既定の1のままだと口が落ちる。
+
+    出典: 同ガイドライン: When you enable port security on an interface that is
+    also configured with a voice VLAN, set the maximum allowed secure addresses
+    on the port to two.
+    """
+    text = """
+hostname sw-voice
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/10
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security violation restrict
+!
+interface GigabitEthernet1/0/11
+ switchport mode access
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security maximum 3
+ switchport port-security violation restrict
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "覚えられる数が足りません" in f.title)
+    assert any("GigabitEthernet1/0/10" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/11" in line for line in finding.evidence)
 
 
 def test_protect_leaves_no_trace_and_is_mentioned(db_session):

@@ -88,6 +88,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         note="エリアと載せているネットワークに加え、ポートごとの決めごと"
         "（エリア・hello / dead・線の見立て・合言葉の掛け方）まで読みます。"
         "結線が入っていれば、両端で食い違っているところを指摘します。"
+        "既定を passive にしたまま、隣を作る口を1つも戻していない"
+        "（隣が1つもできない）ことも指摘します。"
         "コスト設計や再配布の妥当性は見ていません。",
     ),
     Capability(
@@ -108,7 +110,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=PARTIAL,
         generate=NONE,
-        note="流している範囲・passive・再配布まで読みます。IS-IS の NET が無い、"
+        note="流している範囲・passive（既定 passive と、そこから外した口）・"
+        "再配布まで読みます。IS-IS の NET が無い、"
         "RIP の版を書いていない、流す範囲が空、EIGRP の番号が分かれている、"
         "絞り込み無しで他から取り込んでいる、を指摘します。"
         "設計そのもの（メトリックの置き方など）は要件が要るので言いません。",
@@ -153,7 +156,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         read=FULL,
         review=FULL,
         generate=FULL,
-        note="片側だけ・優先度が同じに加えて、仮想アドレスの検算までします。"
+        note="片側だけ・優先度が同じ・優先度を上げたのに役を取り返す設定"
+        "（HSRP の preempt）が無い・版1のままグループ番号が 255 を超えている"
+        "ことに加えて、仮想アドレスの検算までします。"
         "そのポートの帯の外、この機器自身のアドレスと同じ、端末に配れない"
         "アドレス（ネットワーク／ブロードキャスト）を指摘します。"
         "端末はこの仮想アドレスを出口として使うので、外れていると"
@@ -170,6 +175,8 @@ CAPABILITIES: tuple[Capability, ...] = (
         "（帯域がその分だけ出ていない）を指摘します。"
         "結線が入っていれば両端で突き合わせます。"
         "片側だけ束ねている、方式が違う（LACP と決め打ち）を指摘します。"
+        "同じ束の口どうしで、口の形・VLAN・許可 VLAN・束ね方が食い違っている"
+        "（その口が束に入らない）ことも指摘します。"
         "束ねた線の負荷の分かれ方は、通る量が分からないので見ていません。",
     ),
     Capability(
@@ -239,7 +246,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="モードと優先度まで読み、端末用の口に BPDU guard が無い、"
-        "スイッチをつなぐ口に portfast が入っている、モードを決めていない、"
+        "スイッチをつなぐ口に portfast が入っている、口ごとの BPDU フィルタで"
+        "その口の STP が止まっている、端末用の口に loop guard を入れていて効かない、"
+        "モードを決めていない、"
         "ポートで使っているのに定義が無い VLAN、を指摘します。"
         "木の根（ルート）の位置は機器をまたいで見ます。誰も優先度を決めていない、"
         "VLAN によって根が違う、予備が無い、末端の機器が根になっている、"
@@ -266,9 +275,10 @@ CAPABILITIES: tuple[Capability, ...] = (
         generate=NONE,
         note="区分と動作、当てているポートまで読み、どこにも当たっていないものを"
         "指摘します。読めるのは Cisco IOS の policy-map、FortiGate の shaper、"
-        "Junos の scheduler-map、NEC QX の qos policy、ファーウェイの traffic policy です"
-        "（NEC IX は"
-        "確かめられる設定が無いので読んでいません）。帯域の配分が妥当かどうかは、"
+        "Junos の scheduler-map、NEC QX の qos policy、ファーウェイの traffic policy、"
+        "NEC IX の class-map / policy-map です。IX は当てるだけでは効かず"
+        "（service-policy enable が要る）、書き忘れも指摘します。"
+        "帯域の配分が妥当かどうかは、"
         "実際に通る量が分からないので言いません。",
     ),
     Capability(
@@ -291,8 +301,11 @@ CAPABILITIES: tuple[Capability, ...] = (
         review=PARTIAL,
         generate=NONE,
         note="当てている口まで読み、問い合わせ先（RADIUS）が無い、"
+        "口には当てたのに全体で有効にしていない（Cisco の "
+        "dot1x system-auth-control の書き忘れ）、"
         "仕組みは入れたのにどの口にも当てていない、破ったときの動きを"
-        "決めていない、黙って落とす設定になっている、を指摘します。"
+        "決めていない、黙って落とす設定になっている、動的な口に掛けていて効かない、"
+        "電話をつなぐ口で覚えられる数が1のまま、を指摘します。"
         "誰を通すべきかという方針そのものは、要件が要るので言いません。",
     ),
     Capability(

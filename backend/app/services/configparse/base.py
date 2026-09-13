@@ -323,6 +323,9 @@ class ParsedOspf:
     areas: list[ParsedOspfArea] = field(default_factory=list)
     passive_interfaces: list[str] = field(default_factory=list)
     passive_default: bool = False
+    #: `no passive-interface X` で、passive の既定から外したポート。
+    #: 既定を passive にしたときは、ここに挙げた口だけが隣を作る
+    active_interfaces: list[str] = field(default_factory=list)
     redistributes: list[str] = field(default_factory=list)
 
     def area_of(self, network: str) -> str | None:
@@ -409,6 +412,10 @@ class ParsedRoutingProtocol:
     router_id: str | None = None
     networks: list[str] = field(default_factory=list)
     passive_interfaces: list[str] = field(default_factory=list)
+    #: `passive-interface default`（全部の口を既定で passive にする）
+    passive_default: bool = False
+    #: `no passive-interface X`（既定の passive から外して、隣を作る口）
+    active_interfaces: list[str] = field(default_factory=list)
     redistributes: list[str] = field(default_factory=list)
     #: RIP の版。v1 と v2 が混ざると経路が消えるので、書いてあるかを持つ
     version: str | None = None
@@ -593,6 +600,11 @@ class ParsedQos:
     policies: list[ParsedQosPolicy] = field(default_factory=list)
     #: 当てている場所（"interface GigabitEthernet0/0 output" の形）
     applied: list[tuple[str, str, str]] = field(default_factory=list)
+    #: 当てるだけでは効かず、ポート側で別に有効にする必要がある書き方か
+    #: （NEC IX の `service-policy enable`）。この形の機種でだけ True
+    needs_enable: bool = False
+    #: 有効にしてあるポート。`needs_enable` が True のときだけ意味を持つ
+    enabled_on: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -735,3 +747,5 @@ class ParsedRedundancy:
     virtual_ip: str | None = None
     priority: int | None = None
     protocol: str = "hsrp"  # hsrp / vrrp
+    #: 優先度が高い側が、復旧したときに役を取り返すか（HSRP は既定で取り返さない）
+    preempt: bool = False
