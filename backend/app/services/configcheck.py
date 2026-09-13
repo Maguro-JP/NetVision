@@ -441,15 +441,27 @@ def _vlan_numbers(parsed: ParsedConfig) -> list[Finding]:
 
     他社では使える帯なので、Cisco の書き方として読めたときだけ言う。
     """
-    if parsed.vendor not in _CISCO_VENDORS:
+    if parsed.vendor not in _CISCO_VENDORS and parsed.vendor is not Vendor.CISCO_NXOS:
         return []
+
+    def unusable(vlan: int) -> bool:
+        if vlan < 1 or vlan > 4094:
+            return True
+        # NX-OS は 3968〜4047 を装置の中で使う（出典: Cisco Nexus 9000 Series
+        # NX-OS Interfaces Configuration Guide「Configuring the Allowed VLANs
+        # for Trunking Ports」: VLANs 3968 to 4047 are the default VLANs
+        # reserved for internal use by default）
+        if parsed.vendor is Vendor.CISCO_NXOS:
+            return 3968 <= vlan <= 4047
+        return 1002 <= vlan <= 1005
+
     seen: dict[int, list[str]] = {}
     for interface in parsed.interfaces:
         for vlan in sorted(interface.carried_vlans()):
-            if 1002 <= vlan <= 1005 or vlan < 1 or vlan > 4094:
+            if unusable(vlan):
                 seen.setdefault(vlan, []).append(interface.name)
     for vlan in sorted(parsed.vlans):
-        if 1002 <= vlan <= 1005 or vlan < 1 or vlan > 4094:
+        if unusable(vlan):
             seen.setdefault(vlan, []).append("vlan の定義")
     if not seen:
         return []
@@ -457,8 +469,9 @@ def _vlan_numbers(parsed: ParsedConfig) -> list[Finding]:
         Finding(
             level=HIGH,
             title="使えない番号を VLAN に当てています",
-            why="この機種で使えるのは 1〜4094 で、1002〜1005 は古い媒体"
-            "（Token Ring / FDDI）に取ってあります。当てても通りません。"
+            why="この機種で使えるのは 1〜4094 で、そのうち取ってある帯"
+            "（IOS は 1002〜1005 の古い媒体用、NX-OS は 3968〜4047 の装置内部用）は"
+            "当てても通りません。"
             "他社から移してきた設計で、そのまま番号が残っていることがあります。",
             evidence=[
                 f"VLAN {vlan}: {', '.join(names[:3])}" for vlan, names in sorted(seen.items())
@@ -487,6 +500,35 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                 "使っていない番号を決めて、両端で同じにしてください。",
                 evidence=[
                     f"{i.name}: native vlan {i.native_vlan or 1}" for i in default_native[:5]
+                ],
+            )
+        )
+
+    # タグ無しの VLAN を、許可の一覧から外しているトランク。タグ無しの通信だけが落ちる
+    # （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+    # 「Configuring VLAN Trunks」: A trunk port can become a member of a VLAN
+    # if the VLAN is enabled, if VTP knows of the VLAN, and if the VLAN is in
+    # the allowed list for the port）
+    native_dropped = [
+        i
+        for i in trunks
+        if i.native_vlan
+        and i.trunk_vlans
+        and not i.trunk_all
+        and i.native_vlan not in i.trunk_vlans
+    ]
+    if native_dropped:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="タグ無しの VLAN を、許可の一覧から外しています",
+                why="その口はタグ無しの VLAN の一員になれないので、タグ無しで来た通信だけが"
+                "落ちます。タグ付きは通るので、一部だけつながらないという形で出ます。"
+                "許可の一覧にその番号を足すか、タグ無しの番号を変えてください。",
+                evidence=[
+                    f"{i.name}: native vlan {i.native_vlan} / 許可 "
+                    + ",".join(str(v) for v in sorted(i.trunk_vlans)[:6])
+                    for i in native_dropped[:5]
                 ],
             )
         )

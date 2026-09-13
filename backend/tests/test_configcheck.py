@@ -578,6 +578,61 @@ interface GigabitEthernet1/0/2
     assert not any("VLAN 10:" in line for line in finding.evidence)
 
 
+def test_a_native_vlan_left_out_of_the_allowed_list_is_called_out(db_session):
+    """タグ無しの VLAN が許可の一覧に無いと、その口はその VLAN の一員になれない。
+
+    出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+    「Configuring VLAN Trunks」: A trunk port can become a member of a VLAN if
+    the VLAN is enabled, if VTP knows of the VLAN, and if the VLAN is in the
+    allowed list for the port.
+    """
+    text = """
+hostname sw-tr
+vlan 10
+vlan 20
+vlan 99
+!
+interface GigabitEthernet1/0/24
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20
+!
+interface GigabitEthernet1/0/23
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,99
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "許可の一覧から外して" in f.title)
+    assert finding.level == HIGH
+    assert any("GigabitEthernet1/0/24" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/23" in line for line in finding.evidence)
+
+
+def test_an_nxos_internal_vlan_is_called_out(db_session):
+    """NX-OS は 3968〜4047 を装置の中で使う。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+    「Configuring the Allowed VLANs for Trunking Ports」: VLANs 3968 to 4047
+    are the default VLANs reserved for internal use by default.
+    """
+    text = """
+hostname nx-01
+version 9.3(10) Bios:version
+feature interface-vlan
+vlan 4000
+  name INTERNAL
+!
+interface Ethernet1/1
+  switchport
+  switchport mode access
+  switchport access vlan 4000
+"""
+    result = configcheck.check(db_session, text)
+    assert any("使えない番号" in f.title for f in result.findings)
+
+
 def test_a_mismatched_etherchannel_member_is_called_out(db_session):
     """そろっていない口は束に入らない。落ちないので気づきにくい。
 
