@@ -65,6 +65,8 @@ def review(db: Session, device: Device) -> L3Report:
             "router_id": protocol.router_id,
             "networks": protocol.networks,
             "passive_interfaces": protocol.passive_interfaces,
+            "passive_default": protocol.passive_default,
+            "active_interfaces": protocol.active_interfaces,
             "redistributes": protocol.redistributes,
         }
         for protocol in parsed.protocols
@@ -654,23 +656,30 @@ def _ospf_all_passive(parsed: ParsedConfig) -> list[Finding]:
     is specified as passive. Hence, the device is not able to discover any
     neighbors）
     """
+    out: list[Finding] = []
     ospf = parsed.ospf
-    if ospf is None or not ospf.passive_default or ospf.active_interfaces:
-        return []
-    return [
-        Finding(
-            level=HIGH,
-            title="OSPF の口が全部 passive のままです（隣ができません）",
-            why="既定を passive にしたあと、隣を作る口を戻していません。"
-            "passive の口では hello を出さないので、隣が1つもできず、"
-            "OSPF で覚える経路も1本もありません。"
-            "隣を作る口に no passive-interface を入れてください。",
-            evidence=[
-                f"router ospf {ospf.process_id or ''}".strip(),
-                "passive-interface default はあるが no passive-interface が無い",
-            ],
-        )
-    ]
+    if ospf is not None and ospf.passive_default and not ospf.active_interfaces:
+        out.append(_all_passive(f"router ospf {ospf.process_id or ''}".strip(), "OSPF"))
+    for protocol in parsed.protocols:
+        # IS-IS は passive の意味が違う（口を載せたまま隣だけ作らない）ので外す
+        if protocol.name.lower() == "isis":
+            continue
+        if protocol.passive_default and not protocol.active_interfaces:
+            head = f"router {protocol.name} {protocol.identifier or ''}".strip()
+            out.append(_all_passive(head, protocol.name.upper()))
+    return out
+
+
+def _all_passive(head: str, label: str) -> Finding:
+    return Finding(
+        level=HIGH,
+        title=f"{label} の口が全部 passive のままです（隣ができません）",
+        why="既定を passive にしたあと、隣を作る口を戻していません。"
+        "passive の口では隣を探す挨拶を出さないので、隣が1つもできず、"
+        "そのプロトコルで覚える経路も1本もありません。"
+        "隣を作る口に no passive-interface を入れてください。",
+        evidence=[head, "passive-interface default はあるが no passive-interface が無い"],
+    )
 
 
 def _unused_policies(parsed: ParsedConfig) -> list[Finding]:

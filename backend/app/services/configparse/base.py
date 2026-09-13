@@ -412,6 +412,10 @@ class ParsedRoutingProtocol:
     router_id: str | None = None
     networks: list[str] = field(default_factory=list)
     passive_interfaces: list[str] = field(default_factory=list)
+    #: `passive-interface default`（全部の口を既定で passive にする）
+    passive_default: bool = False
+    #: `no passive-interface X`（既定の passive から外して、隣を作る口）
+    active_interfaces: list[str] = field(default_factory=list)
     redistributes: list[str] = field(default_factory=list)
     #: RIP の版。v1 と v2 が混ざると経路が消えるので、書いてあるかを持つ
     version: str | None = None

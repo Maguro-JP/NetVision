@@ -945,9 +945,22 @@ def _protocol(name: str, identifier: str | None, body: list[str]) -> ParsedRouti
             if prefix and prefix not in protocol.networks:
                 protocol.networks.append(prefix)
             continue
-        passive = re.match(r"^passive-interface\s+(\S+)", line, re.IGNORECASE)
+        # `default` は口の名前ではなく「全部の口」を指す。口として数えない。
+        # `no passive-interface X` は逆の意味（既定から外す）
+        # （出典: IP Routing Configuration Guide, Cisco IOS XE「Default Passive
+        # Interfaces」: passive-interface default … Sets all interfaces as
+        # passive by default / no passive-interface … Activates only those
+        # interfaces that need adjacencies）
+        if re.match(r"^passive-interface\s+default\s*$", line, re.IGNORECASE):
+            protocol.passive_default = True
+            continue
+        passive = re.match(r"^(no\s+)?passive-interface\s+(\S+)", line, re.IGNORECASE)
         if passive:
-            protocol.passive_interfaces.append(expand(passive.group(1)))
+            port = expand(passive.group(2))
+            if passive.group(1):
+                protocol.active_interfaces.append(port)
+            else:
+                protocol.passive_interfaces.append(port)
             continue
         # IOS XR の IS-IS は、載せる口を `interface X` で囲みに並べる（OSPF のエリアと同じ形）
         port = re.match(r"^interface\s+(\S+)\s*$", line, re.IGNORECASE)
