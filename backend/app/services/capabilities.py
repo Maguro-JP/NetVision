@@ -268,7 +268,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "ゲートウェイが範囲の外、ゲートウェイまで配ってしまう、配っていない、"
         "を指摘します。読めるのは Cisco IOS・FortiGate・Junos・NEC（IX / QX）・"
         "ファーウェイ VRP（ip pool）・アラクサラ・FastIron（ip helper-address）の"
-        "書き方です。",
+        "書き方です。Cisco の DHCP の見張り（snooping）は、"
+        "全体で有効にしただけで帯に掛けていない、信用する口を1つも決めていない"
+        "（配られるはずのアドレスまで落ちる）を指摘します。",
     ),
     Capability(
         area="足まわり",

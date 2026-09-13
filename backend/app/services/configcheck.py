@@ -233,6 +233,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_port_admission(text))
     found.extend(_hsrp_version(text))
     found.extend(_etherchannel(text))
+    found.extend(_dhcp_snooping(text))
     return _sorted(found)
 
 
@@ -829,6 +830,57 @@ def _etherchannel(text: str) -> list[Finding]:
                 "入らなかった口の分だけ帯域が出ず、落ちるわけではないので気づきにくい"
                 "形で残ります。",
                 evidence=evidence[:5],
+            )
+        )
+    return out
+
+
+def _dhcp_snooping(text: str) -> list[Finding]:
+    """DHCP の見張り（snooping）が、入れただけで効いていない。
+
+    全体で有効にしても、帯（VLAN）を指定するまで働かない。また、口は既定で
+    「信用しない」なので、本物の DHCP サーバーへ向かう口を信用する設定に
+    しないと、配られるはずのアドレスまで落とす。どちらも「入れてあるのに
+    アドレスが取れない／守れていない」という形で出る。
+
+    出典: Catalyst 3560 Switch Software Configuration Guide, Cisco IOS
+    Release 15.0(2)SE「Configuring DHCP Features and IP Source Guard」
+    （You must globally enable DHCP snooping on the switch. / DHCP snooping is
+    not active until DHCP snooping is enabled on a VLAN. / For DHCP snooping to
+    function properly, all DHCP servers must be connected to the switch through
+    trusted interfaces）
+    """
+    out: list[Finding] = []
+    lines = [line.strip() for line in text.splitlines()]
+    global_on = any(re.match(r"^ip dhcp snooping\s*$", line, re.IGNORECASE) for line in lines)
+    if not global_on:
+        return out
+    on_vlan = any(re.match(r"^ip dhcp snooping vlan\b", line, re.IGNORECASE) for line in lines)
+    if not on_vlan:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="DHCP の見張りを、どの VLAN にも掛けていません",
+                why="全体で有効にしても、帯（VLAN）を指定するまで働きません。"
+                "入れたつもりで、偽の DHCP サーバーを止められない状態です。",
+                evidence=["ip dhcp snooping はあるが ip dhcp snooping vlan が無い"],
+            )
+        )
+        return out
+    trusted = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^ip dhcp snooping trust\b", line.strip(), re.IGNORECASE) for line in body)
+    ]
+    if not trusted:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="DHCP の見張りで、信用する口を1つも決めていません",
+                why="口は既定で「信用しない」です。本物の DHCP サーバーへ向かう口"
+                "（上位へのトランクを含む）を信用する設定にしないと、"
+                "配られるはずのアドレスまで落ちて、端末がアドレスを取れません。",
+                evidence=["ip dhcp snooping vlan はあるが ip dhcp snooping trust が無い"],
             )
         )
     return out

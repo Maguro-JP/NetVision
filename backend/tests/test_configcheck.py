@@ -633,6 +633,31 @@ interface Ethernet1/1
     assert any("使えない番号" in f.title for f in result.findings)
 
 
+def test_dhcp_snooping_that_is_not_actually_working_is_called_out(db_session):
+    """全体で有効にしただけ／信用する口が無い、はどちらも効いていない。
+
+    出典: Catalyst 3560 Switch Software Configuration Guide, Cisco IOS Release
+    15.0(2)SE「Configuring DHCP Features and IP Source Guard」: DHCP snooping is
+    not active until DHCP snooping is enabled on a VLAN. / For DHCP snooping to
+    function properly, all DHCP servers must be connected to the switch through
+    trusted interfaces.
+    """
+    only_global = "hostname sw-sn1\nip dhcp snooping\n"
+    titles = _titles(configcheck.check(db_session, only_global))
+    assert any("どの VLAN にも掛けていません" in t for t in titles)
+
+    no_trust = only_global.replace("sw-sn1", "sw-sn2") + "ip dhcp snooping vlan 10,20\n"
+    titles = _titles(configcheck.check(db_session, no_trust))
+    assert any("信用する口を1つも決めていません" in t for t in titles)
+
+    tidy = (
+        no_trust.replace("sw-sn2", "sw-sn3")
+        + "interface GigabitEthernet1/0/24\n switchport mode trunk\n ip dhcp snooping trust\n"
+    )
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "DHCP の見張り" in t]
+
+
 def test_the_same_vlan_for_voice_and_data_is_called_out(db_session):
     """公式が「同時に同じ番号にするな」と書いている。
 
