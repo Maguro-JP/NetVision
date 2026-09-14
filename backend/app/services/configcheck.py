@@ -235,6 +235,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
     found.extend(_arp_inspection(text))
+    found.extend(_nxos_features(parsed, text))
     return _sorted(found)
 
 
@@ -943,6 +944,43 @@ def _arp_inspection(text: str) -> list[Finding]:
             )
         )
     return out
+
+
+def _nxos_features(parsed: ParsedConfig, text: str) -> list[Finding]:
+    """NX-OS で、先に有効にしていない機能を使っている。
+
+    この OS は機能ごとに `feature …` で入れてから使う。入れていないと、
+    その下の設定はそもそも作れない。他機種の設定をそのまま持ってきたときに
+    起きる。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide,
+    Release 10.6(x)「Configuring Layer 3 Interfaces」（Enable the VLAN network
+    interface feature using the feature interface-vlan configuration。手順も
+    feature interface-vlan → interface vlan number の順）
+    """
+    if parsed.vendor is not Vendor.CISCO_NXOS:
+        return []
+    lines = [line.strip() for line in text.splitlines()]
+    if any(re.match(r"^feature interface-vlan\b", line, re.IGNORECASE) for line in lines):
+        return []
+    svis = [
+        name
+        for name, _ in _interface_blocks(text)
+        if re.match(r"^vlan\d+$", name.replace(" ", ""), re.IGNORECASE)
+    ]
+    if not svis:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="VLAN の口を作る機能を、先に有効にしていません",
+            why="この OS は feature interface-vlan を入れてからでないと、"
+            "VLAN の口（SVI）を作れません。入れ忘れると、貼った設定が"
+            "そのまま入らず、その帯の出口ができません。",
+            evidence=[f"interface {name}" for name in svis[:5]]
+            + ["feature interface-vlan の行なし"],
+        )
+    ]
 
 
 def _hsrp_version(text: str) -> list[Finding]:

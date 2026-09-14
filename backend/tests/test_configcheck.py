@@ -682,6 +682,31 @@ def test_arp_inspection_that_would_break_connectivity_is_called_out(db_session):
     assert not [t for t in titles if "ARP の見張り" in t]
 
 
+def test_an_svi_without_the_feature_enabled_is_called_out(db_session):
+    """NX-OS は feature interface-vlan を入れてからでないと SVI を作れない。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide,
+    Release 10.6(x)「Configuring Layer 3 Interfaces」: Enable the VLAN network
+    interface feature using the feature interface-vlan configuration.
+    """
+    text = """
+hostname nx-01
+feature lacp
+vlan 10
+interface Vlan10
+  no shutdown
+  ip address 10.0.0.1/24
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "VLAN の口を作る機能" in f.title)
+    assert finding.level == HIGH
+    assert any("Vlan10" in line for line in finding.evidence)
+
+    tidy = text.replace("feature lacp\n", "feature lacp\nfeature interface-vlan\n")
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "VLAN の口を作る機能" in t]
+
+
 def test_the_same_vlan_for_voice_and_data_is_called_out(db_session):
     """公式が「同時に同じ番号にするな」と書いている。
 
