@@ -464,9 +464,20 @@ def _apply_allowed_vlan(interface: ParsedInterface, body: str) -> None:
     if not values:
         return
     if verb == "add":
-        interface.trunk_vlans = sorted(set(interface.trunk_vlans) | set(values))
+        if interface.trunk_all:
+            # 「全部」から引いてあったものを戻す
+            interface.trunk_excluded -= set(values)
+        else:
+            interface.trunk_vlans = sorted(set(interface.trunk_vlans) | set(values))
     elif verb == "remove":
-        interface.trunk_vlans = [v for v in interface.trunk_vlans if v not in set(values)]
+        if interface.trunk_all:
+            # 「全部」からの引き算。番号を並べ直すと 4094 個になるので、引いた分を覚える
+            # （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+            # 「Configuring VLAN Trunks」の switchport trunk allowed vlan
+            # { word | add | all | except | none | remove } vlan-list）
+            interface.trunk_excluded |= set(values)
+        else:
+            interface.trunk_vlans = [v for v in interface.trunk_vlans if v not in set(values)]
     elif verb == "except":
         # 「これ以外全部」。全部側は機器の定義 VLAN で解決するので、除外だけ覚えておく
         interface.trunk_all = True
