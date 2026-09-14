@@ -375,3 +375,28 @@ def test_allowed_vlan_remove_subtracts_from_all():
     # `except` で引いたものを `add` で戻したら、除外は残らない
     restored = ports["GigabitEthernet1/0/22"]
     assert (restored.trunk_all, restored.trunk_excluded) == (True, set())
+
+
+def test_no_switchport_drops_the_layer2_settings():
+    """L3 の口にした時点で、L2 の VLAN 設定は残らない。
+
+    残したままだと、その口がまだ VLAN を運んでいることになる。
+
+    出典: Cisco Nexus 6000 Series NX-OS Layer 2 Interfaces Command Reference
+    「no switchport」（When you configure an interface as a Layer 3 interface,
+    any configuration specific to Layer 2 on this interface is deleted）、
+    Catalyst 9200 Interface and Hardware Components Configuration Guide
+    「Configuring Interface Characteristics」
+    """
+    parsed = configparse.parse(
+        "hostname sw-l3\n"
+        "vlan 30\n"
+        "interface GigabitEthernet1/0/5\n"
+        " switchport access vlan 30\n"
+        " no switchport\n"
+        " ip address 192.168.5.1 255.255.255.0\n"
+    )
+    port = parsed.interfaces[0]
+    assert (port.mode, port.vlan, port.trunk_vlans) == ("routed", None, [])
+    assert port.carried_vlans() == set()
+    assert port.ip_address == "192.168.5.1/24"

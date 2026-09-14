@@ -356,7 +356,21 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         elif body == "shutdown":
             current.enabled = False
         elif body == "no switchport":
+            # L3 の口になった時点で、L2 の設定（access / trunk の VLAN）は無くなる。
+            # 残したままだと、その口がまだ VLAN を運んでいることになってしまう
+            # （出典: Cisco Nexus 6000 Series NX-OS Layer 2 Interfaces Command
+            # Reference「no switchport」: When you configure an interface as a
+            # Layer 3 interface, any configuration specific to Layer 2 on this
+            # interface is deleted。Catalyst 9200 の Interface and Hardware
+            # Components Configuration Guide も、L3 にすると L2 側の設定は
+            # 失われうると書いている）
             current.mode = "routed"
+            current.vlan = None
+            current.voice_vlan = None
+            current.native_vlan = None
+            current.trunk_vlans = []
+            current.trunk_all = False
+            current.trunk_excluded = set()
 
         _copy_to_group(current, group)
 
