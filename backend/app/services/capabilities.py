@@ -270,7 +270,9 @@ CAPABILITIES: tuple[Capability, ...] = (
         "ファーウェイ VRP（ip pool）・アラクサラ・FastIron（ip helper-address）の"
         "書き方です。Cisco の DHCP の見張り（snooping）は、"
         "全体で有効にしただけで帯に掛けていない、信用する口を1つも決めていない"
-        "（配られるはずのアドレスまで落ちる）を指摘します。",
+        "（配られるはずのアドレスまで落ちる）を指摘します。"
+        "ARP の見張り（dynamic ARP inspection）も、信用する口が無い・"
+        "判断のもと（DHCP の見張り／ARP ACL）が無いを指摘します。",
     ),
     Capability(
         area="足まわり",

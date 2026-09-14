@@ -234,6 +234,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hsrp_version(text))
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
+    found.extend(_arp_inspection(text))
     return _sorted(found)
 
 
@@ -881,6 +882,64 @@ def _dhcp_snooping(text: str) -> list[Finding]:
                 "（上位へのトランクを含む）を信用する設定にしないと、"
                 "配られるはずのアドレスまで落ちて、端末がアドレスを取れません。",
                 evidence=["ip dhcp snooping vlan はあるが ip dhcp snooping trust が無い"],
+            )
+        )
+    return out
+
+
+def _arp_inspection(text: str) -> list[Finding]:
+    """ARP の見張り（dynamic ARP inspection）で、通信が落ちる形。
+
+    口は既定で「信用しない」ので、上位へ向かう口を信用しないままだと、
+    そこから来た ARP まで捨てて不通になる。また、判断のもとは DHCP の
+    見張りが作る対応表なので、それが無いまま入れると、DHCP で配られた
+    アドレスの端末が ARP を通せない。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Configuring Dynamic ARP Inspection」（By default, all interfaces are
+    untrusted. / Use the trust state configuration carefully. Configuring
+    interfaces as untrusted when they should be trusted can result in a loss of
+    connectivity. / Dynamic ARP inspection depends on the entries in the DHCP
+    snooping binding database … Make sure to enable DHCP snooping。
+    DHCP を使わない場合は ARP ACL を当てる）
+    """
+    out: list[Finding] = []
+    lines = [line.strip() for line in text.splitlines()]
+    on_vlan = any(re.match(r"^ip arp inspection vlan\b", line, re.IGNORECASE) for line in lines)
+    if not on_vlan:
+        return out
+    trusted = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(
+            re.match(r"^ip arp inspection trust\b", line.strip(), re.IGNORECASE) for line in body
+        )
+    ]
+    if not trusted:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="ARP の見張りで、信用する口を1つも決めていません",
+                why="口は既定で「信用しない」です。機器どうしをつなぐ口を信用しないままだと、"
+                "そこから来た ARP まで捨てて不通になります。"
+                "上位へ向かう口に ip arp inspection trust を入れてください。",
+                evidence=["ip arp inspection vlan はあるが ip arp inspection trust が無い"],
+            )
+        )
+    snooping = any(re.match(r"^ip dhcp snooping vlan\b", line, re.IGNORECASE) for line in lines)
+    arp_acl = any(re.match(r"^ip arp inspection filter\b", line, re.IGNORECASE) for line in lines)
+    if not snooping and not arp_acl:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="ARP の見張りに、判断のもとがありません",
+                why="この仕組みは、DHCP の見張りが作る対応表を見て良し悪しを決めます。"
+                "その見張りも、代わりの ARP の許可一覧（ARP ACL）も無いと、"
+                "DHCP でアドレスを取った端末の ARP が通らず、つながらなくなります。",
+                evidence=[
+                    "ip arp inspection vlan はあるが ip dhcp snooping vlan / "
+                    "ip arp inspection filter が無い"
+                ],
             )
         )
     return out

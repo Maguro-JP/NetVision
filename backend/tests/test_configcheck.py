@@ -658,6 +658,30 @@ def test_dhcp_snooping_that_is_not_actually_working_is_called_out(db_session):
     assert not [t for t in titles if "DHCP の見張り" in t]
 
 
+def test_arp_inspection_that_would_break_connectivity_is_called_out(db_session):
+    """信用する口が無い／判断のもとが無い、はどちらも不通になる形。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Configuring Dynamic ARP Inspection」: By default, all interfaces are
+    untrusted. / Configuring interfaces as untrusted when they should be
+    trusted can result in a loss of connectivity. / Dynamic ARP inspection
+    depends on the entries in the DHCP snooping binding database.
+    """
+    bare = "hostname sw-ai1\nip arp inspection vlan 10\n"
+    titles = _titles(configcheck.check(db_session, bare))
+    assert any("ARP の見張りで、信用する口" in t for t in titles)
+    assert any("判断のもとがありません" in t for t in titles)
+
+    tidy = (
+        "hostname sw-ai2\nip dhcp snooping\nip dhcp snooping vlan 10\n"
+        "ip arp inspection vlan 10\n"
+        "interface GigabitEthernet1/0/24\n switchport mode trunk\n"
+        " ip dhcp snooping trust\n ip arp inspection trust\n"
+    )
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "ARP の見張り" in t]
+
+
 def test_the_same_vlan_for_voice_and_data_is_called_out(db_session):
     """公式が「同時に同じ番号にするな」と書いている。
 
