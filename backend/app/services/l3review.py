@@ -617,7 +617,9 @@ def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
     standby preempt（If preemption is not configured, the local device assumes
     control as the active device only if it receives information indicating no
     device is in the active state）、First Hop Redundancy Protocols
-    Configuration Guide, Cisco IOS Release 15S「HSRP Priority and Preemption」
+    Configuration Guide, Cisco IOS Release 15S「HSRP Priority and Preemption」、
+    NX-OS も同じ（Cisco Nexus 9000 Series NX-OS Unicast Routing Configuration
+    Guide「Configuring HSRP」の既定値表: Preemption … Disabled）
     """
     out: list[Finding] = []
     for entry in parsed.redundancy:

@@ -548,6 +548,195 @@ interface GigabitEthernet1/0/4
 """
 
 
+def test_a_reserved_vlan_number_is_called_out(db_session):
+    """1002〜1005 は古い媒体に取ってある帯。当てても通らない。
+
+    出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+    「Configuring VLANs」: VLANs are identified by a number from 1 to 4094.
+    VLAN IDs 1002 through 1005 are reserved for Token Ring and FDDI VLANs.
+    """
+    text = """
+hostname sw-vlan
+vlan 10
+ name USERS
+vlan 1003
+ name OLD
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 1003
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "使えない番号" in f.title)
+    assert finding.level == HIGH
+    assert any("VLAN 1003" in line for line in finding.evidence)
+    assert not any("VLAN 10:" in line for line in finding.evidence)
+
+
+def test_a_native_vlan_left_out_of_the_allowed_list_is_called_out(db_session):
+    """タグ無しの VLAN が許可の一覧に無いと、その口はその VLAN の一員になれない。
+
+    出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+    「Configuring VLAN Trunks」: A trunk port can become a member of a VLAN if
+    the VLAN is enabled, if VTP knows of the VLAN, and if the VLAN is in the
+    allowed list for the port.
+    """
+    text = """
+hostname sw-tr
+vlan 10
+vlan 20
+vlan 99
+!
+interface GigabitEthernet1/0/24
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20
+!
+interface GigabitEthernet1/0/23
+ switchport mode trunk
+ switchport trunk native vlan 99
+ switchport trunk allowed vlan 10,20,99
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "許可の一覧から外して" in f.title)
+    assert finding.level == HIGH
+    assert any("GigabitEthernet1/0/24" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/23" in line for line in finding.evidence)
+
+
+def test_an_nxos_internal_vlan_is_called_out(db_session):
+    """NX-OS は 3968〜4047 を装置の中で使う。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+    「Configuring the Allowed VLANs for Trunking Ports」: VLANs 3968 to 4047
+    are the default VLANs reserved for internal use by default.
+    """
+    text = """
+hostname nx-01
+version 9.3(10) Bios:version
+feature interface-vlan
+vlan 4000
+  name INTERNAL
+!
+interface Ethernet1/1
+  switchport
+  switchport mode access
+  switchport access vlan 4000
+"""
+    result = configcheck.check(db_session, text)
+    assert any("使えない番号" in f.title for f in result.findings)
+
+
+def test_dhcp_snooping_that_is_not_actually_working_is_called_out(db_session):
+    """全体で有効にしただけ／信用する口が無い、はどちらも効いていない。
+
+    出典: Catalyst 3560 Switch Software Configuration Guide, Cisco IOS Release
+    15.0(2)SE「Configuring DHCP Features and IP Source Guard」: DHCP snooping is
+    not active until DHCP snooping is enabled on a VLAN. / For DHCP snooping to
+    function properly, all DHCP servers must be connected to the switch through
+    trusted interfaces.
+    """
+    only_global = "hostname sw-sn1\nip dhcp snooping\n"
+    titles = _titles(configcheck.check(db_session, only_global))
+    assert any("どの VLAN にも掛けていません" in t for t in titles)
+
+    no_trust = only_global.replace("sw-sn1", "sw-sn2") + "ip dhcp snooping vlan 10,20\n"
+    titles = _titles(configcheck.check(db_session, no_trust))
+    assert any("信用する口を1つも決めていません" in t for t in titles)
+
+    tidy = (
+        no_trust.replace("sw-sn2", "sw-sn3")
+        + "interface GigabitEthernet1/0/24\n switchport mode trunk\n ip dhcp snooping trust\n"
+    )
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "DHCP の見張り" in t]
+
+
+def test_arp_inspection_that_would_break_connectivity_is_called_out(db_session):
+    """信用する口が無い／判断のもとが無い、はどちらも不通になる形。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Configuring Dynamic ARP Inspection」: By default, all interfaces are
+    untrusted. / Configuring interfaces as untrusted when they should be
+    trusted can result in a loss of connectivity. / Dynamic ARP inspection
+    depends on the entries in the DHCP snooping binding database.
+    """
+    bare = "hostname sw-ai1\nip arp inspection vlan 10\n"
+    titles = _titles(configcheck.check(db_session, bare))
+    assert any("ARP の見張りで、信用する口" in t for t in titles)
+    assert any("判断のもとがありません" in t for t in titles)
+
+    tidy = (
+        "hostname sw-ai2\nip dhcp snooping\nip dhcp snooping vlan 10\n"
+        "ip arp inspection vlan 10\n"
+        "interface GigabitEthernet1/0/24\n switchport mode trunk\n"
+        " ip dhcp snooping trust\n ip arp inspection trust\n"
+    )
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "ARP の見張り" in t]
+
+
+def test_an_svi_without_the_feature_enabled_is_called_out(db_session):
+    """NX-OS は feature interface-vlan を入れてからでないと SVI を作れない。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide,
+    Release 10.6(x)「Configuring Layer 3 Interfaces」: Enable the VLAN network
+    interface feature using the feature interface-vlan configuration.
+    """
+    text = """
+hostname nx-01
+feature lacp
+vlan 10
+interface Vlan10
+  no shutdown
+  ip address 10.0.0.1/24
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "VLAN の口を作る機能" in f.title)
+    assert finding.level == HIGH
+    assert any("Vlan10" in line for line in finding.evidence)
+
+    tidy = text.replace("feature lacp\n", "feature lacp\nfeature interface-vlan\n")
+    titles = _titles(configcheck.check(db_session, tidy))
+    assert not [t for t in titles if "VLAN の口を作る機能" in t]
+
+
+def test_the_same_vlan_for_voice_and_data_is_called_out(db_session):
+    """公式が「同時に同じ番号にするな」と書いている。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9200）
+    「Configuring IEEE 802.1x Port-Based Authentication」: Do not configure the
+    same VLAN ID for both voice VLAN and access VLAN at the same time, because
+    it may cause authentication failures.
+    """
+    text = """
+hostname sw-voice2
+vlan 10
+vlan 20
+!
+interface GigabitEthernet1/0/1
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 10
+!
+interface GigabitEthernet1/0/2
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+!
+"""
+    result = configcheck.check(db_session, text)
+    finding = next(f for f in result.findings if "電話用と端末用" in f.title)
+    assert any("GigabitEthernet1/0/1" in line for line in finding.evidence)
+    assert not any("GigabitEthernet1/0/2" in line for line in finding.evidence)
+
+
 def test_a_mismatched_etherchannel_member_is_called_out(db_session):
     """そろっていない口は束に入らない。落ちないので気づきにくい。
 

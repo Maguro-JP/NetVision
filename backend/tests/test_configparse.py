@@ -343,3 +343,60 @@ def test_port_admission_is_seen_on_every_vendor() -> None:
         found = {item.name for item in configparse.parse(text).features}
         assert "802.1X" in found, text.splitlines()[0]
         assert "ポートセキュリティ" in found, text.splitlines()[0]
+
+
+def test_allowed_vlan_remove_subtracts_from_all():
+    """`allowed vlan all` のあとの `remove` を、引き算として読む。
+
+    並べ直すと 4094 個になるので、引いた分を覚える形で持つ。足し戻す `add` も
+    同じ側で扱う。
+
+    出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+    「Configuring VLAN Trunks」の switchport trunk allowed vlan
+    { word | add | all | except | none | remove } vlan-list
+    """
+    parsed = configparse.parse(
+        "hostname sw-trunk\n"
+        "vlan 10,20,30\n"
+        "interface GigabitEthernet1/0/23\n"
+        " switchport mode trunk\n"
+        " switchport trunk allowed vlan all\n"
+        " switchport trunk allowed vlan remove 20\n"
+        "!\n"
+        "interface GigabitEthernet1/0/22\n"
+        " switchport mode trunk\n"
+        " switchport trunk allowed vlan except 999\n"
+        " switchport trunk allowed vlan add 999\n"
+    )
+    ports = {port.name: port for port in parsed.interfaces}
+    removed = ports["GigabitEthernet1/0/23"]
+    assert (removed.trunk_all, removed.trunk_excluded) == (True, {20})
+    assert removed.carried_vlans({10, 20, 30}) == {10, 30}
+    # `except` で引いたものを `add` で戻したら、除外は残らない
+    restored = ports["GigabitEthernet1/0/22"]
+    assert (restored.trunk_all, restored.trunk_excluded) == (True, set())
+
+
+def test_no_switchport_drops_the_layer2_settings():
+    """L3 の口にした時点で、L2 の VLAN 設定は残らない。
+
+    残したままだと、その口がまだ VLAN を運んでいることになる。
+
+    出典: Cisco Nexus 6000 Series NX-OS Layer 2 Interfaces Command Reference
+    「no switchport」（When you configure an interface as a Layer 3 interface,
+    any configuration specific to Layer 2 on this interface is deleted）、
+    Catalyst 9200 Interface and Hardware Components Configuration Guide
+    「Configuring Interface Characteristics」
+    """
+    parsed = configparse.parse(
+        "hostname sw-l3\n"
+        "vlan 30\n"
+        "interface GigabitEthernet1/0/5\n"
+        " switchport access vlan 30\n"
+        " no switchport\n"
+        " ip address 192.168.5.1 255.255.255.0\n"
+    )
+    port = parsed.interfaces[0]
+    assert (port.mode, port.vlan, port.trunk_vlans) == ("routed", None, [])
+    assert port.carried_vlans() == set()
+    assert port.ip_address == "192.168.5.1/24"

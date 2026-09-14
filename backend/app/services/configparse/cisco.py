@@ -356,7 +356,21 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         elif body == "shutdown":
             current.enabled = False
         elif body == "no switchport":
+            # L3 の口になった時点で、L2 の設定（access / trunk の VLAN）は無くなる。
+            # 残したままだと、その口がまだ VLAN を運んでいることになってしまう
+            # （出典: Cisco Nexus 6000 Series NX-OS Layer 2 Interfaces Command
+            # Reference「no switchport」: When you configure an interface as a
+            # Layer 3 interface, any configuration specific to Layer 2 on this
+            # interface is deleted。Catalyst 9200 の Interface and Hardware
+            # Components Configuration Guide も、L3 にすると L2 側の設定は
+            # 失われうると書いている）
             current.mode = "routed"
+            current.vlan = None
+            current.voice_vlan = None
+            current.native_vlan = None
+            current.trunk_vlans = []
+            current.trunk_all = False
+            current.trunk_excluded = set()
 
         _copy_to_group(current, group)
 
@@ -464,9 +478,20 @@ def _apply_allowed_vlan(interface: ParsedInterface, body: str) -> None:
     if not values:
         return
     if verb == "add":
-        interface.trunk_vlans = sorted(set(interface.trunk_vlans) | set(values))
+        if interface.trunk_all:
+            # 「全部」から引いてあったものを戻す
+            interface.trunk_excluded -= set(values)
+        else:
+            interface.trunk_vlans = sorted(set(interface.trunk_vlans) | set(values))
     elif verb == "remove":
-        interface.trunk_vlans = [v for v in interface.trunk_vlans if v not in set(values)]
+        if interface.trunk_all:
+            # 「全部」からの引き算。番号を並べ直すと 4094 個になるので、引いた分を覚える
+            # （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+            # 「Configuring VLAN Trunks」の switchport trunk allowed vlan
+            # { word | add | all | except | none | remove } vlan-list）
+            interface.trunk_excluded |= set(values)
+        else:
+            interface.trunk_vlans = [v for v in interface.trunk_vlans if v not in set(values)]
     elif verb == "except":
         # 「これ以外全部」。全部側は機器の定義 VLAN で解決するので、除外だけ覚えておく
         interface.trunk_all = True

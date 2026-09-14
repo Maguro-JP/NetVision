@@ -233,6 +233,9 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_port_admission(text))
     found.extend(_hsrp_version(text))
     found.extend(_etherchannel(text))
+    found.extend(_dhcp_snooping(text))
+    found.extend(_arp_inspection(text))
+    found.extend(_nxos_features(parsed, text))
     return _sorted(found)
 
 
@@ -427,6 +430,59 @@ def _broken_lines(parsed: ParsedConfig) -> list[Finding]:
     ]
 
 
+#: Cisco で、番号として使えない帯。1002〜1005 は Token Ring / FDDI に取ってあり、
+#: 消すことも使うこともできない。1〜4094 の外も番号にならない
+#: （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9500）
+#: 「Configuring VLANs」: VLANs are identified by a number from 1 to 4094.
+#: VLAN IDs 1002 through 1005 are reserved for Token Ring and FDDI VLANs.
+#: All of the VLANs except 1002 to 1005 are available for user configuration）
+_CISCO_VENDORS = {Vendor.CISCO_IOS, Vendor.CISCO_NXOS, Vendor.CISCO_SB}
+
+
+def _vlan_numbers(parsed: ParsedConfig) -> list[Finding]:
+    """使えない番号を VLAN に当てている。
+
+    他社では使える帯なので、Cisco の書き方として読めたときだけ言う。
+    """
+    if parsed.vendor not in _CISCO_VENDORS and parsed.vendor is not Vendor.CISCO_NXOS:
+        return []
+
+    def unusable(vlan: int) -> bool:
+        if vlan < 1 or vlan > 4094:
+            return True
+        # NX-OS は 3968〜4047 を装置の中で使う（出典: Cisco Nexus 9000 Series
+        # NX-OS Interfaces Configuration Guide「Configuring the Allowed VLANs
+        # for Trunking Ports」: VLANs 3968 to 4047 are the default VLANs
+        # reserved for internal use by default）
+        if parsed.vendor is Vendor.CISCO_NXOS:
+            return 3968 <= vlan <= 4047
+        return 1002 <= vlan <= 1005
+
+    seen: dict[int, list[str]] = {}
+    for interface in parsed.interfaces:
+        for vlan in sorted(interface.carried_vlans()):
+            if unusable(vlan):
+                seen.setdefault(vlan, []).append(interface.name)
+    for vlan in sorted(parsed.vlans):
+        if unusable(vlan):
+            seen.setdefault(vlan, []).append("vlan の定義")
+    if not seen:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="使えない番号を VLAN に当てています",
+            why="この機種で使えるのは 1〜4094 で、そのうち取ってある帯"
+            "（IOS は 1002〜1005 の古い媒体用、NX-OS は 3968〜4047 の装置内部用）は"
+            "当てても通りません。"
+            "他社から移してきた設計で、そのまま番号が残っていることがあります。",
+            evidence=[
+                f"VLAN {vlan}: {', '.join(names[:3])}" for vlan, names in sorted(seen.items())
+            ][:5],
+        )
+    ]
+
+
 def _layer2(parsed: ParsedConfig) -> list[Finding]:
     """VLAN の切り方で、あとから効いてくるもの。
 
@@ -447,6 +503,58 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                 "使っていない番号を決めて、両端で同じにしてください。",
                 evidence=[
                     f"{i.name}: native vlan {i.native_vlan or 1}" for i in default_native[:5]
+                ],
+            )
+        )
+
+    # タグ無しの VLAN を、許可の一覧から外しているトランク。タグ無しの通信だけが落ちる
+    # （出典: VLAN Configuration Guide, Cisco IOS XE 26.x.x（Catalyst 9300）
+    # 「Configuring VLAN Trunks」: A trunk port can become a member of a VLAN
+    # if the VLAN is enabled, if VTP knows of the VLAN, and if the VLAN is in
+    # the allowed list for the port）
+    native_dropped = [
+        i
+        for i in trunks
+        if i.native_vlan
+        and i.trunk_vlans
+        and not i.trunk_all
+        and i.native_vlan not in i.trunk_vlans
+    ]
+    if native_dropped:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="タグ無しの VLAN を、許可の一覧から外しています",
+                why="その口はタグ無しの VLAN の一員になれないので、タグ無しで来た通信だけが"
+                "落ちます。タグ付きは通るので、一部だけつながらないという形で出ます。"
+                "許可の一覧にその番号を足すか、タグ無しの番号を変えてください。",
+                evidence=[
+                    f"{i.name}: native vlan {i.native_vlan} / 許可 "
+                    + ",".join(str(v) for v in sorted(i.trunk_vlans)[:6])
+                    for i in native_dropped[:5]
+                ],
+            )
+        )
+
+    # 電話用と端末用に同じ番号を当てている口。公式が「同時に同じ番号にするな」と
+    # 書いている（出典: Security Configuration Guide, Cisco IOS XE 17.16.x
+    # （Catalyst 9200）「Configuring IEEE 802.1x Port-Based Authentication」:
+    # Do not configure the same VLAN ID for both voice VLAN and access VLAN at
+    # the same time, because it may cause authentication failures）
+    voice_same = [
+        i for i in parsed.interfaces if i.voice_vlan and i.vlan and i.voice_vlan == i.vlan
+    ]
+    if voice_same:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="電話用と端末用に、同じ VLAN を当てています",
+                why="同じ番号にすると、電話と端末を分ける意味が無くなるうえ、"
+                "本人確認（802.1X）が通らなくなることがあります。"
+                "電話用は別の番号にしてください。",
+                evidence=[
+                    f"{i.name}: access vlan {i.vlan} / voice vlan {i.voice_vlan}"
+                    for i in voice_same[:5]
                 ],
             )
         )
@@ -493,6 +601,8 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
                     ][:5],
                 )
             )
+
+    out.extend(_vlan_numbers(parsed))
 
     # 口が1つも見えていないなら、使っているかどうかは分からない
     idle = sorted(v for v in parsed.vlans if v not in used and v != 1)
@@ -725,6 +835,152 @@ def _etherchannel(text: str) -> list[Finding]:
             )
         )
     return out
+
+
+def _dhcp_snooping(text: str) -> list[Finding]:
+    """DHCP の見張り（snooping）が、入れただけで効いていない。
+
+    全体で有効にしても、帯（VLAN）を指定するまで働かない。また、口は既定で
+    「信用しない」なので、本物の DHCP サーバーへ向かう口を信用する設定に
+    しないと、配られるはずのアドレスまで落とす。どちらも「入れてあるのに
+    アドレスが取れない／守れていない」という形で出る。
+
+    出典: Catalyst 3560 Switch Software Configuration Guide, Cisco IOS
+    Release 15.0(2)SE「Configuring DHCP Features and IP Source Guard」
+    （You must globally enable DHCP snooping on the switch. / DHCP snooping is
+    not active until DHCP snooping is enabled on a VLAN. / For DHCP snooping to
+    function properly, all DHCP servers must be connected to the switch through
+    trusted interfaces）
+    """
+    out: list[Finding] = []
+    lines = [line.strip() for line in text.splitlines()]
+    global_on = any(re.match(r"^ip dhcp snooping\s*$", line, re.IGNORECASE) for line in lines)
+    if not global_on:
+        return out
+    on_vlan = any(re.match(r"^ip dhcp snooping vlan\b", line, re.IGNORECASE) for line in lines)
+    if not on_vlan:
+        out.append(
+            Finding(
+                level=MEDIUM,
+                title="DHCP の見張りを、どの VLAN にも掛けていません",
+                why="全体で有効にしても、帯（VLAN）を指定するまで働きません。"
+                "入れたつもりで、偽の DHCP サーバーを止められない状態です。",
+                evidence=["ip dhcp snooping はあるが ip dhcp snooping vlan が無い"],
+            )
+        )
+        return out
+    trusted = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^ip dhcp snooping trust\b", line.strip(), re.IGNORECASE) for line in body)
+    ]
+    if not trusted:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="DHCP の見張りで、信用する口を1つも決めていません",
+                why="口は既定で「信用しない」です。本物の DHCP サーバーへ向かう口"
+                "（上位へのトランクを含む）を信用する設定にしないと、"
+                "配られるはずのアドレスまで落ちて、端末がアドレスを取れません。",
+                evidence=["ip dhcp snooping vlan はあるが ip dhcp snooping trust が無い"],
+            )
+        )
+    return out
+
+
+def _arp_inspection(text: str) -> list[Finding]:
+    """ARP の見張り（dynamic ARP inspection）で、通信が落ちる形。
+
+    口は既定で「信用しない」ので、上位へ向かう口を信用しないままだと、
+    そこから来た ARP まで捨てて不通になる。また、判断のもとは DHCP の
+    見張りが作る対応表なので、それが無いまま入れると、DHCP で配られた
+    アドレスの端末が ARP を通せない。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Configuring Dynamic ARP Inspection」（By default, all interfaces are
+    untrusted. / Use the trust state configuration carefully. Configuring
+    interfaces as untrusted when they should be trusted can result in a loss of
+    connectivity. / Dynamic ARP inspection depends on the entries in the DHCP
+    snooping binding database … Make sure to enable DHCP snooping。
+    DHCP を使わない場合は ARP ACL を当てる）
+    """
+    out: list[Finding] = []
+    lines = [line.strip() for line in text.splitlines()]
+    on_vlan = any(re.match(r"^ip arp inspection vlan\b", line, re.IGNORECASE) for line in lines)
+    if not on_vlan:
+        return out
+    trusted = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(
+            re.match(r"^ip arp inspection trust\b", line.strip(), re.IGNORECASE) for line in body
+        )
+    ]
+    if not trusted:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="ARP の見張りで、信用する口を1つも決めていません",
+                why="口は既定で「信用しない」です。機器どうしをつなぐ口を信用しないままだと、"
+                "そこから来た ARP まで捨てて不通になります。"
+                "上位へ向かう口に ip arp inspection trust を入れてください。",
+                evidence=["ip arp inspection vlan はあるが ip arp inspection trust が無い"],
+            )
+        )
+    snooping = any(re.match(r"^ip dhcp snooping vlan\b", line, re.IGNORECASE) for line in lines)
+    arp_acl = any(re.match(r"^ip arp inspection filter\b", line, re.IGNORECASE) for line in lines)
+    if not snooping and not arp_acl:
+        out.append(
+            Finding(
+                level=HIGH,
+                title="ARP の見張りに、判断のもとがありません",
+                why="この仕組みは、DHCP の見張りが作る対応表を見て良し悪しを決めます。"
+                "その見張りも、代わりの ARP の許可一覧（ARP ACL）も無いと、"
+                "DHCP でアドレスを取った端末の ARP が通らず、つながらなくなります。",
+                evidence=[
+                    "ip arp inspection vlan はあるが ip dhcp snooping vlan / "
+                    "ip arp inspection filter が無い"
+                ],
+            )
+        )
+    return out
+
+
+def _nxos_features(parsed: ParsedConfig, text: str) -> list[Finding]:
+    """NX-OS で、先に有効にしていない機能を使っている。
+
+    この OS は機能ごとに `feature …` で入れてから使う。入れていないと、
+    その下の設定はそもそも作れない。他機種の設定をそのまま持ってきたときに
+    起きる。
+
+    出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide,
+    Release 10.6(x)「Configuring Layer 3 Interfaces」（Enable the VLAN network
+    interface feature using the feature interface-vlan configuration。手順も
+    feature interface-vlan → interface vlan number の順）
+    """
+    if parsed.vendor is not Vendor.CISCO_NXOS:
+        return []
+    lines = [line.strip() for line in text.splitlines()]
+    if any(re.match(r"^feature interface-vlan\b", line, re.IGNORECASE) for line in lines):
+        return []
+    svis = [
+        name
+        for name, _ in _interface_blocks(text)
+        if re.match(r"^vlan\d+$", name.replace(" ", ""), re.IGNORECASE)
+    ]
+    if not svis:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="VLAN の口を作る機能を、先に有効にしていません",
+            why="この OS は feature interface-vlan を入れてからでないと、"
+            "VLAN の口（SVI）を作れません。入れ忘れると、貼った設定が"
+            "そのまま入らず、その帯の出口ができません。",
+            evidence=[f"interface {name}" for name in svis[:5]]
+            + ["feature interface-vlan の行なし"],
+        )
+    ]
 
 
 def _hsrp_version(text: str) -> list[Finding]:
