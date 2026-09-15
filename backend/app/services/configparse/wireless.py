@@ -276,6 +276,21 @@ def _aireos(text: str, found: ParsedWireless) -> None:
             wlan.raw = body
             by_id[create.group(1)] = wlan
             continue
+        # `config wlan enable 1` / `config wlan disable 1` は、番号の前に何も
+        # 続かない形なので、値を取る書き方とは別に見る
+        # （出典: Cisco Wireless Controller Configuration Guide, Release 8.5
+        # 「Enabling and Disabling WLANs (CLI)」: config wlan enable
+        # { wlan_id | all } / config wlan disable { wlan_id | all }）
+        onoff = re.match(r"^config\s+wlan\s+(enable|disable)\s+(\d+|all)\s*$", body, re.IGNORECASE)
+        if onoff:
+            wanted = onoff.group(1).lower() == "enable"
+            targets = (
+                by_id.values() if onoff.group(2).lower() == "all" else [by_id.get(onoff.group(2))]
+            )
+            for wlan in targets:
+                if wlan is not None:
+                    wlan.enabled = wanted
+            continue
         item = _AIRE_SET.match(body)
         if not item:
             continue

@@ -329,3 +329,30 @@ def test_the_cipher_line_is_read_even_though_it_starts_with_the_version():
     assert wlans["old"].security == ["wpa"]
     # 版を書かない否定は素通し
     assert wlans["guest"].security == ["open"]
+
+
+def test_aireos_enable_and_disable_lines_are_read():
+    """`config wlan enable 1` のように、番号の前に値が続かない形も読む。
+
+    止めてある SSID を「動いている」と読むと、点検の前提がずれる。
+
+    出典: Cisco Wireless Controller Configuration Guide, Release 8.5
+    「Enabling and Disabling WLANs (CLI)」
+    （config wlan enable { wlan_id | all } / config wlan disable { wlan_id | all }）
+    """
+    parsed = configparse.parse(
+        "config wlan create 1 CORP CORP-SSID\n"
+        "config wlan security wpa wpa2 enable 1\n"
+        "config wlan enable 1\n"
+        "config wlan create 2 GUEST GUEST-SSID\n"
+        "config wlan security wpa disable 2\n"
+        "config wlan disable 2\n"
+    )
+    wlans = {wlan.name: wlan for wlan in parsed.wireless.wlans}
+    assert wlans["CORP"].enabled is True
+    assert wlans["GUEST"].enabled is False
+
+    everything = configparse.parse(
+        "config wlan create 1 A A-SSID\nconfig wlan create 2 B B-SSID\nconfig wlan enable all\n"
+    )
+    assert all(wlan.enabled for wlan in everything.wireless.wlans)
