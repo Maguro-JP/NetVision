@@ -682,6 +682,32 @@ def test_arp_inspection_that_would_break_connectivity_is_called_out(db_session):
     assert not [t for t in titles if "ARP の見張り" in t]
 
 
+def test_weak_password_types_are_called_out_without_showing_the_secret(db_session):
+    """type 5 / 7 は弱い。合言葉そのものは証跡に出さない。
+
+    出典: Cisco Trust Center「Protecting Secrets on Cisco Network Devices」
+    （type 0 / 4 / 5 / 7 は Secure ではない、8 / 9 / 10 は Secure）、
+    NSA「Cisco Password Types: Best Practices」（Type 8 を推奨、0・4・7 は使うな）。
+    """
+    text = (
+        "hostname sw-pw\n"
+        "enable secret 5 $1$abcd$efghijklmnop\n"
+        "username ops password 7 070C285F4D06\n"
+        "username admin secret 9 $9$abcdefghijklmn\n"
+        "interface GigabitEthernet1/0/1\n switchport mode access\n"
+    )
+    result = configcheck.check(db_session, text)
+    weak = [f for f in result.findings if "合言葉が" in f.title]
+    assert any("type 7" in f.title for f in weak)
+    assert any("type 5" in f.title for f in weak)
+    # 合言葉そのものは出さない
+    joined = " ".join(line for f in weak for line in f.evidence)
+    assert "$1$abcd" not in joined
+    assert "070C285F4D06" not in joined
+    # type 9 は言わない
+    assert "admin" not in joined
+
+
 def test_an_svi_without_the_feature_enabled_is_called_out(db_session):
     """NX-OS は feature interface-vlan を入れてからでないと SVI を作れない。
 
