@@ -356,3 +356,19 @@ def test_aireos_enable_and_disable_lines_are_read():
         "config wlan create 1 A A-SSID\nconfig wlan create 2 B B-SSID\nconfig wlan enable all\n"
     )
     assert all(wlan.enabled for wlan in everything.wireless.wlans)
+
+
+def test_a_tkip_ssid_on_a_9800_is_now_actually_flagged():
+    """暗号を読めるようになったので、TKIP の SSID が指摘に出る。
+
+    以前は `security wpa wpa2 ciphers ...` の暗号を読み落としていたため、
+    この指摘が一度も出ない状態だった。
+    """
+    parsed = configparse.parse(
+        "hostname wlc-03\n"
+        "wlan old 3 OLD\n"
+        " security wpa wpa1 ciphers tkip\n"
+        " client vlan 41\n"
+        " no shutdown\n"
+    )
+    assert any("TKIP" in finding.title for finding in wirelessreview.review(parsed))
