@@ -28,9 +28,19 @@ _STRONG = (
     re.compile(r"^\s*set\s+protocols\s+static\s+route\s+", re.IGNORECASE | re.MULTILINE),
     re.compile(r"\bVyOS\b|\bEdgeOS\b|\bVyatta\b", re.IGNORECASE),
 )
-#: Junos も set で書く。口の名前で見分ける（Junos は ge-0/0/0 の形）
+#: Junos も set で書く。口の名前で見分ける（Junos は ge-0/0/0 の形）。
+#: 囲みで書いた Junos（`show configuration` の形）も、`interfaces {` が
+#: VyOS と同じなので取り違える。Junos にしか出ない並びで先に外す
+#: （出典: Juniper「Interfaces User Guide for Switches」および Juniper の
+#: サポート記事 [EX/QFX] Example - Configuring VLAN translation by using ELS の
+#: 出力例: ge-0/0/0 { unit 0 { family ethernet-switching { interface-mode
+#: trunk; … } } }、行末に `;` が付く）
 _JUNOS = re.compile(
-    r"^\s*set\s+interfaces\s+(?:ge|xe|et|ae|irb|lo)-?\d", re.IGNORECASE | re.MULTILINE
+    r"^\s*set\s+interfaces\s+(?:ge|xe|et|ae|irb|lo)-?\d"
+    r"|^\s*(?:ge|xe|et|ae|fte|reth|fxp|em)-\d+/\d+/\d+[\d.:]*\s*\{"
+    r"|^\s*family\s+ethernet-switching\s*\{"
+    r"|^\s*host-name\s+\S+;",
+    re.IGNORECASE | re.MULTILINE,
 )
 
 _HOSTNAME = re.compile(

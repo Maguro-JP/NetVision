@@ -1,6 +1,7 @@
 """Juniper Junos の読み取り。"""
 
 from app.services import configparse
+from app.services.configparse import Vendor
 
 
 def test_a_subinterface_keeps_its_tag_and_its_address_together():
@@ -139,3 +140,73 @@ def test_values_in_square_brackets_are_read_as_the_names_they_hold():
 def test_two_values_on_one_line_without_brackets_are_both_counted():
     _, acl = _official_policies()
     assert acl.entries[2].destination == "dmz:srv1 ほか1件"
+
+
+BRACE = """system {
+    host-name ex-01;
+}
+interfaces {
+    ge-0/0/0 {
+        native-vlan-id 99;
+        unit 0 {
+            family ethernet-switching {
+                interface-mode trunk;
+                vlan {
+                    members [ USERS VOICE ];
+                }
+            }
+        }
+    }
+    ge-0/0/1 {
+        description "PC";
+        unit 0 {
+            family ethernet-switching {
+                interface-mode access;
+                vlan {
+                    members USERS;
+                }
+            }
+        }
+    }
+    irb {
+        unit 10 {
+            family inet {
+                address 10.0.10.1/24;
+            }
+        }
+    }
+}
+vlans {
+    USERS {
+        vlan-id 10;
+        l3-interface irb.10;
+    }
+    VOICE {
+        vlan-id 20;
+    }
+}
+"""
+
+
+def test_the_brace_form_is_read_like_the_set_form():
+    """囲みで書いた設定（`show configuration` の既定の形）も読む。
+
+    以前は `set` の形しか読めず、囲みの形は VyOS と取り違えたうえ、
+    ポートも VLAN も1つも読めていなかった。
+
+    出典: Juniper のサポート記事 [EX/QFX] Example - Configuring VLAN
+    translation by using ELS on Junos OS の `show configuration interfaces`
+    出力例（ge-0/0/0 { unit 0 { family ethernet-switching { interface-mode
+    trunk; vlan { members [ 10 220 ]; } } } }）、Juniper「Interfaces User
+    Guide for Switches」
+    """
+    parsed = configparse.parse(BRACE)
+    assert parsed.vendor is Vendor.JUNIPER
+    assert parsed.hostname == "ex-01"
+    assert sorted(parsed.vlans) == [10, 20]
+    ports = {port.name: port for port in parsed.interfaces}
+    trunk = ports["ge-0/0/0"]
+    assert (trunk.mode, trunk.native_vlan, sorted(trunk.trunk_vlans)) == ("trunk", 99, [10, 20])
+    access = ports["ge-0/0/1"]
+    assert (access.mode, access.vlan, access.description) == ("access", 10, "PC")
+    assert ports["irb.10"].ip_address == "10.0.10.1/24"
