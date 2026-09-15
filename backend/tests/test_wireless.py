@@ -290,3 +290,42 @@ def test_the_9800_country_line_is_read():
     """Catalyst 9800 は `wireless country JP` と書く（AireOS の `country JP` とは頭が違う）。"""
     text = "hostname wlc\nwlan CORP 1 CORP\n no shutdown\nwireless country JP\n"
     assert configparse.parse(text).wireless.country == "JP"
+
+
+def test_the_cipher_line_is_read_even_though_it_starts_with_the_version():
+    """`security wpa wpa2 ciphers aes` の暗号を読み落とさない。
+
+    版の名前で打ち切っていると、弱い tkip も見えないままになる。
+
+    出典: Cisco Catalyst 9800 Series Wireless Controller Software
+    Configuration Guide「WLAN Security」（security wpa wpa1 ciphers
+    [ aes | tkip ]、security wpa wpa2 ciphers aes、
+    no security wpa wpa1 ciphers tkip、Prerequisites for Layer 2 Security の
+    None (open WLAN)）
+    """
+    parsed = configparse.parse(
+        "hostname wlc-02\n"
+        "wlan corp 1 CORP\n"
+        " security wpa akm psk\n"
+        " security wpa wpa2\n"
+        " security wpa wpa2 ciphers aes\n"
+        " no security wpa wpa2 ciphers tkip\n"
+        " client vlan 40\n"
+        " no shutdown\n"
+        "wlan old 3 OLD\n"
+        " security wpa wpa1 ciphers tkip\n"
+        " client vlan 41\n"
+        " no shutdown\n"
+        "wlan guest 2 GUEST\n"
+        " no security wpa\n"
+        " client vlan 99\n"
+        " no shutdown\n"
+    )
+    wlans = {wlan.name: wlan for wlan in parsed.wireless.wlans}
+    assert wlans["corp"].ciphers == ["aes"]
+    assert wlans["corp"].security == ["wpa2"]
+    # 版だけの行より先に暗号を読むが、版の指定も落とさない
+    assert wlans["old"].ciphers == ["tkip"]
+    assert wlans["old"].security == ["wpa"]
+    # 版を書かない否定は素通し
+    assert wlans["guest"].security == ["open"]

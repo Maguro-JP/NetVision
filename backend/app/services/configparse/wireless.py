@@ -173,11 +173,30 @@ def _iosxe_option(wlan: ParsedWlan, body: str) -> None:
         if vlan:
             wlan.vlan = int(vlan.group(1))
         return
+    # 暗号の行は `security wpa wpa2 ciphers aes` のように版の名前から続く。
+    # 版だけ見て打ち切ると、暗号（特に弱い tkip）を読み落とす
+    # （出典: Catalyst 9800 Series Wireless Controller Software Configuration
+    # Guide「WLAN Security」の手順: security wpa wpa1 ciphers [ aes | tkip ]、
+    # security wpa wpa2 ciphers aes、no security wpa wpa1 ciphers tkip）
+    cipher = re.search(r"\bciphers?\s+(aes|ccmp|tkip|gcmp)\b", rest)
+    if cipher:
+        for version, name in (("wpa1", "wpa"), ("wpa2", "wpa2"), ("wpa3", "wpa3")):
+            if f"security wpa {version}" in rest and not negated:
+                _add(wlan.security, name)
+        kind = {"ccmp": "aes", "gcmp": "gcmp"}.get(cipher.group(1), cipher.group(1))
+        _flag(wlan, kind, negated, where="cipher")
+        return
     if rest.startswith("security wpa wpa2"):
         _flag(wlan, "wpa2", negated)
         return
     if rest.startswith("security wpa wpa3"):
         _flag(wlan, "wpa3", negated)
+        return
+    # `no security wpa`（版を書かない否定）は、その SSID を素通しにする
+    # （出典: 同ガイド「Prerequisites for Layer 2 Security」の None (open WLAN)、
+    # および no security wpa { akm | wpa1 | wpa2 }）
+    if negated and rest.strip() == "security wpa":
+        _add(wlan.security, "open")
         return
     if rest.startswith("security wpa akm"):
         for token, name in (("psk", "psk"), ("dot1x", "dot1x"), ("sae", "sae"), ("owe", "owe")):
