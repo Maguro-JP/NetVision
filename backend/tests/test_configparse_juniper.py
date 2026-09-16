@@ -210,3 +210,55 @@ def test_the_brace_form_is_read_like_the_set_form():
     access = ports["ge-0/0/1"]
     assert (access.mode, access.vlan, access.description) == ("access", 10, "PC")
     assert ports["irb.10"].ip_address == "10.0.10.1/24"
+
+
+def test_the_brace_form_also_feeds_routing_and_security():
+    """囲みの形でも、経路・OSPF・BGP・許否まで同じように読む。
+
+    入口で `set` の形にそろえているので、読み手を二重に持たずに済む。
+    """
+    parsed = configparse.parse(
+        "system {\n"
+        "    host-name srx-01;\n"
+        "}\n"
+        "routing-options {\n"
+        "    static {\n"
+        "        route 0.0.0.0/0 next-hop 203.0.113.1;\n"
+        "    }\n"
+        "}\n"
+        "protocols {\n"
+        "    ospf {\n"
+        "        area 0.0.0.0 {\n"
+        "            interface ge-0/0/0.0;\n"
+        "        }\n"
+        "    }\n"
+        "    bgp {\n"
+        "        group EDGE {\n"
+        "            peer-as 65001;\n"
+        "            neighbor 203.0.113.1;\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "security {\n"
+        "    policies {\n"
+        "        from-zone trust to-zone untrust {\n"
+        "            policy allow-web {\n"
+        "                match {\n"
+        "                    source-address any;\n"
+        "                    destination-address any;\n"
+        "                    application [ junos-http junos-https ];\n"
+        "                }\n"
+        "                then {\n"
+        "                    permit;\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    assert [(route.destination, route.next_hop) for route in parsed.routes] == [
+        ("0.0.0.0/0", "203.0.113.1")
+    ]
+    assert parsed.ospf is not None and parsed.ospf.areas[0].area == "0.0.0.0"
+    assert parsed.bgp is not None and parsed.bgp.neighbors[0].remote_as == "65001"
+    assert any(acl.entries for acl in parsed.acls)
