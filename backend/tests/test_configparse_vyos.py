@@ -90,3 +90,43 @@ def test_the_saved_shape_with_braces_reads_the_same() -> None:
     assert _port(parsed, "eth0").ip_address == "10.0.0.1/24"
     assert _port(parsed, "eth0").description == "to core"
     assert _port(parsed, "eth1").enabled is False
+
+
+def test_the_saved_form_keeps_static_routes():
+    """保存形式（config.boot）の静的経路を読み落とさない。
+
+    VyOS は `route 0.0.0.0/0 { next-hop 192.0.2.254 { } }` のように、
+    値そのものを囲みの見出しとして書く。中身が空の囲みは、それ自体が
+    1つの設定（`set protocols static route 0.0.0.0/0 next-hop 192.0.2.254`）。
+
+    出典: VyOS ドキュメント Static（set protocols static route <subnet>
+    next-hop <address> / … next-hop <address> distance <distance>）
+    """
+    parsed = configparse.parse(
+        "interfaces {\n"
+        "    ethernet eth0 {\n"
+        "        address 192.0.2.1/24\n"
+        "    }\n"
+        "}\n"
+        "protocols {\n"
+        "    static {\n"
+        "        route 0.0.0.0/0 {\n"
+        "            next-hop 192.0.2.254 {\n"
+        "            }\n"
+        "        }\n"
+        "        route 10.9.0.0/16 {\n"
+        "            next-hop 10.0.0.9 {\n"
+        "                distance 5\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "system {\n"
+        "    host-name vyos-01\n"
+        "}\n"
+    )
+    assert parsed.hostname == "vyos-01"
+    assert [(route.destination, route.next_hop) for route in parsed.routes] == [
+        ("0.0.0.0/0", "192.0.2.254"),
+        ("10.9.0.0/16", "10.0.0.9"),
+    ]

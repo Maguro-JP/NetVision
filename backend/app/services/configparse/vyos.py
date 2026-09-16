@@ -175,17 +175,30 @@ def _flatten(text: str) -> str:
 
     out: list[str] = []
     stack: list[str] = []
+    #: その段で葉を1つでも書いたか。中身の無い囲みは、それ自体が1つの設定
+    #: （`route 0.0.0.0/0 { next-hop 192.0.2.254 { } }` は
+    #: `set protocols static route 0.0.0.0/0 next-hop 192.0.2.254` と同じ）
+    filled: list[bool] = []
     for raw in text.splitlines():
         line = raw.strip()
         if not line or line.startswith(("//", "/*", "#")):
             continue
         if line.endswith("{"):
             stack.append(line[:-1].strip())
+            filled.append(False)
             continue
         if line == "}":
             if stack:
+                path = list(stack)
+                had_leaf = filled.pop()
                 stack.pop()
+                if not had_leaf:
+                    out.append("set " + " ".join(path))
+                if filled:
+                    filled[-1] = True
             continue
         # `address 10.0.0.1/24` のような葉。ここまでの入れ子と繋げて1行にする
         out.append("set " + " ".join([*stack, line.rstrip(";")]))
+        if filled:
+            filled[-1] = True
     return "\n".join(out) if out else text
