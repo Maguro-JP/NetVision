@@ -337,7 +337,13 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         elif body.startswith(("vrf forwarding ", "ip vrf forwarding ", "vrf member ")):
             # NX-OS は `vrf member NAME`
             current.vrf = body.rsplit(maxsplit=1)[-1]
-        elif body.startswith(("mtu ", "ip mtu ", "system mtu ")):
+        elif body.startswith("ip mtu "):
+            # IP パケットだけの大きさ。口そのものの大きさは変わらない
+            # （出典: Cisco IOS IP Application Services Command Reference「ip mtu」）
+            value = body.rsplit(maxsplit=1)[-1]
+            if value.isdigit():
+                current.ip_mtu = int(value)
+        elif body.startswith("mtu "):
             value = body.rsplit(maxsplit=1)[-1]
             if value.isdigit():
                 current.mtu = int(value)
@@ -432,6 +438,7 @@ def _copy_to_group(current: ParsedInterface, group: list[ParsedInterface]) -> No
             "native_vlan",
             "vrf",
             "mtu",
+            "ip_mtu",
             "speed",
             "duplex",
             "lag_group",
