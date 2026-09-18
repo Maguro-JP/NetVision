@@ -216,3 +216,38 @@ def test_the_commands_to_get_there_can_be_written() -> None:
     diff = build(H3C, future, vendor=Vendor.H3C)
     assert diff.verified
     assert "port trunk permit vlan" in diff.script
+
+
+def test_ip_mtu_is_kept_apart_from_the_size_of_the_port_itself():
+    """`ip mtu` は IPv4 だけの大きさ。口そのものの大きさ（`mtu`）とは別物。
+
+    混ぜて持つと、片側が `mtu 9198`・もう片側が `ip mtu 1500` と書いてあるだけで
+    「両端で食い違う」と言ってしまう。
+
+    出典: H3C MTU Technology White Paper「Setting an IP MTU for an interface」
+    （"If you execute both the mtu size and ip mtu size or ipv6 mtu size command
+    on an interface, the ip mtu size or ipv6 mtu size takes precedence."）
+    """
+    text = "\n".join(
+        [
+            "<h3c-sw-02>display version",
+            "H3C Comware Software, Version 7.1.070, Release 6127P02",
+            "#",
+            " sysname h3c-sw-02",
+            "#",
+            "interface GigabitEthernet1/0/1",
+            " port link-mode bridge",
+            " mtu 9198",
+            "#",
+            "interface Vlan-interface10",
+            " ip address 10.0.10.1 255.255.255.0",
+            " ip mtu 1500",
+            "#",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["GigabitEthernet1/0/1"].mtu == 9198
+    assert ports["GigabitEthernet1/0/1"].ip_mtu is None
+    assert ports["Vlan-interface10"].mtu is None
+    assert ports["Vlan-interface10"].ip_mtu == 1500
