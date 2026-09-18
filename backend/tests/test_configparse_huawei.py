@@ -241,3 +241,28 @@ def test_a_nec_config_with_its_own_forms_is_not_taken_over() -> None:
         " ip address 10.0.10.1 255.255.255.0\n#\n"
     )
     assert configparse.detect_vendor(nec) is Vendor.NEC_QX
+
+
+def test_the_size_of_the_port_is_read_from_the_mtu_line():
+    """VRP は口の大きさを `mtu` で書く。IPv6 だけの `ipv6 mtu` は別物で、混ぜない。
+
+    出典: Huawei NetEngine 8000 F8 Configuration Guide「MTU Configuration」
+    （IPv4 は `mtu mtu`、IPv6 は `ipv6 mtu mtu` と、別の命令として書かれている）
+    """
+    text = "\n".join(
+        [
+            "sysname hw2",
+            "#",
+            "interface 10GE1/0/1",
+            " mtu 9000",
+            "#",
+            "interface Vlanif10",
+            " ip address 10.0.10.1 255.255.255.0",
+            " ipv6 mtu 1280",
+            "#",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["10GE1/0/1"].mtu == 9000
+    assert ports["Vlanif10"].mtu is None

@@ -290,3 +290,85 @@ def test_the_9800_country_line_is_read():
     """Catalyst 9800 は `wireless country JP` と書く（AireOS の `country JP` とは頭が違う）。"""
     text = "hostname wlc\nwlan CORP 1 CORP\n no shutdown\nwireless country JP\n"
     assert configparse.parse(text).wireless.country == "JP"
+
+
+def test_the_cipher_line_is_read_even_though_it_starts_with_the_version():
+    """`security wpa wpa2 ciphers aes` の暗号を読み落とさない。
+
+    版の名前で打ち切っていると、弱い tkip も見えないままになる。
+
+    出典: Cisco Catalyst 9800 Series Wireless Controller Software
+    Configuration Guide「WLAN Security」（security wpa wpa1 ciphers
+    [ aes | tkip ]、security wpa wpa2 ciphers aes、
+    no security wpa wpa1 ciphers tkip、Prerequisites for Layer 2 Security の
+    None (open WLAN)）
+    """
+    parsed = configparse.parse(
+        "hostname wlc-02\n"
+        "wlan corp 1 CORP\n"
+        " security wpa akm psk\n"
+        " security wpa wpa2\n"
+        " security wpa wpa2 ciphers aes\n"
+        " no security wpa wpa2 ciphers tkip\n"
+        " client vlan 40\n"
+        " no shutdown\n"
+        "wlan old 3 OLD\n"
+        " security wpa wpa1 ciphers tkip\n"
+        " client vlan 41\n"
+        " no shutdown\n"
+        "wlan guest 2 GUEST\n"
+        " no security wpa\n"
+        " client vlan 99\n"
+        " no shutdown\n"
+    )
+    wlans = {wlan.name: wlan for wlan in parsed.wireless.wlans}
+    assert wlans["corp"].ciphers == ["aes"]
+    assert wlans["corp"].security == ["wpa2"]
+    # 版だけの行より先に暗号を読むが、版の指定も落とさない
+    assert wlans["old"].ciphers == ["tkip"]
+    assert wlans["old"].security == ["wpa"]
+    # 版を書かない否定は素通し
+    assert wlans["guest"].security == ["open"]
+
+
+def test_aireos_enable_and_disable_lines_are_read():
+    """`config wlan enable 1` のように、番号の前に値が続かない形も読む。
+
+    止めてある SSID を「動いている」と読むと、点検の前提がずれる。
+
+    出典: Cisco Wireless Controller Configuration Guide, Release 8.5
+    「Enabling and Disabling WLANs (CLI)」
+    （config wlan enable { wlan_id | all } / config wlan disable { wlan_id | all }）
+    """
+    parsed = configparse.parse(
+        "config wlan create 1 CORP CORP-SSID\n"
+        "config wlan security wpa wpa2 enable 1\n"
+        "config wlan enable 1\n"
+        "config wlan create 2 GUEST GUEST-SSID\n"
+        "config wlan security wpa disable 2\n"
+        "config wlan disable 2\n"
+    )
+    wlans = {wlan.name: wlan for wlan in parsed.wireless.wlans}
+    assert wlans["CORP"].enabled is True
+    assert wlans["GUEST"].enabled is False
+
+    everything = configparse.parse(
+        "config wlan create 1 A A-SSID\nconfig wlan create 2 B B-SSID\nconfig wlan enable all\n"
+    )
+    assert all(wlan.enabled for wlan in everything.wireless.wlans)
+
+
+def test_a_tkip_ssid_on_a_9800_is_now_actually_flagged():
+    """暗号を読めるようになったので、TKIP の SSID が指摘に出る。
+
+    以前は `security wpa wpa2 ciphers ...` の暗号を読み落としていたため、
+    この指摘が一度も出ない状態だった。
+    """
+    parsed = configparse.parse(
+        "hostname wlc-03\n"
+        "wlan old 3 OLD\n"
+        " security wpa wpa1 ciphers tkip\n"
+        " client vlan 41\n"
+        " no shutdown\n"
+    )
+    assert any("TKIP" in finding.title for finding in wirelessreview.review(parsed))

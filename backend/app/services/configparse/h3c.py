@@ -94,7 +94,13 @@ _IP_DHCP = re.compile(r"^\s+ip\s+address\s+dhcp-alloc\s*$", re.IGNORECASE)
 _BIND_VPN = re.compile(r"^\s+ip\s+binding\s+vpn-instance\s+(\S+)", re.IGNORECASE)
 _LAG_MEMBER = re.compile(r"^\s+port\s+link-aggregation\s+group\s+(\d+)", re.IGNORECASE)
 _LAG_MODE = re.compile(r"^\s+link-aggregation\s+mode\s+(dynamic|static)\s*$", re.IGNORECASE)
-_MTU = re.compile(r"^\s+(?:ip\s+)?mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: 口そのものの大きさ。IPv4 だけ・IPv6 だけの指定（ip mtu / ipv6 mtu）は別物で、
+#: そちらが書いてあると mtu より優先される
+#: 出典: H3C MTU Technology White Paper「Setting an IP MTU for an interface」
+#: （"If you execute both the mtu size and ip mtu size or ipv6 mtu size command
+#: on an interface, the ip mtu size or ipv6 mtu size takes precedence."）
+_MTU = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
+_IP_MTU = re.compile(r"^\s+ip\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 _SPEED = re.compile(r"^\s+speed\s+(\S+)\s*$", re.IGNORECASE)
 _DUPLEX = re.compile(r"^\s+duplex\s+(\S+)\s*$", re.IGNORECASE)
 _SHUTDOWN = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)
@@ -311,6 +317,10 @@ def _interface_line(port: ParsedInterface, raw: str, permitted: set[str]) -> Non
     found = _MTU.match(raw)
     if found:
         port.mtu = int(found.group(1))
+        return
+    found = _IP_MTU.match(raw)
+    if found:
+        port.ip_mtu = int(found.group(1))
         return
     found = _SPEED.match(raw)
     if found:

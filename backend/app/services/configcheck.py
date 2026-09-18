@@ -236,6 +236,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_dhcp_snooping(text))
     found.extend(_arp_inspection(text))
     found.extend(_nxos_features(parsed, text))
+    found.extend(_password_types(parsed, text))
     return _sorted(found)
 
 
@@ -941,6 +942,60 @@ def _arp_inspection(text: str) -> list[Finding]:
                     "ip arp inspection vlan はあるが ip dhcp snooping vlan / "
                     "ip arp inspection filter が無い"
                 ],
+            )
+        )
+    return out
+
+
+#: 合言葉の保存のしかた（Cisco の「タイプ」）。番号ごとに強さが違う
+#: （出典: Cisco Trust Center「Protecting Secrets on Cisco Network Devices」の表:
+#: 0 平文・4 弱い SHA256・5 MD5・7 Vigenère は安全でない、6 / 8 / 9 / 10 は安全。
+#: NSA「Cisco Password Types: Best Practices」も 0・4・7 は使うな、5 は他が
+#: 使えないときだけ、8 を推奨、としている）
+_WEAK_PASSWORD_TYPES = {
+    "0": (HIGH, "そのままの字（平文）で入っています"),
+    "4": (HIGH, "弱い作り（type 4）で入っています。公式が撤回した方式です"),
+    "5": (MEDIUM, "古い作り（type 5 / MD5）で入っています"),
+    "7": (HIGH, "元に戻せる形（type 7）で入っています。誰でも戻せます"),
+}
+_CREDENTIAL_LINE = re.compile(
+    r"^(?:username\s+\S+\s+(?:secret|password)|enable\s+(?:secret|password))\s+(\d+)\s+\S",
+    re.IGNORECASE,
+)
+
+
+def _password_types(parsed: ParsedConfig, text: str) -> list[Finding]:
+    """合言葉の保存のしかたが弱い。
+
+    Config は人手で渡ることがあるので、弱い形で入っていると、その中身が
+    そのまま鍵になる。特に type 7 は公開された鍵で戻せるだけで、守りにならない。
+
+    出典: Cisco Trust Center「Protecting Secrets on Cisco Network Devices」
+    （type 0 / 4 / 5 / 7 は Secure ではない、8 / 9 / 10 は Secure）、
+    NSA「Cisco Password Types: Best Practices」（Type 8 を推奨、0・4・7 は使うな）
+    """
+    if parsed.vendor not in _CISCO_VENDORS and parsed.vendor is not Vendor.CISCO_NXOS:
+        return []
+    seen: dict[str, list[str]] = {}
+    for line in text.splitlines():
+        found = _CREDENTIAL_LINE.match(line.strip())
+        if found and found.group(1) in _WEAK_PASSWORD_TYPES:
+            # 合言葉そのものは持たない。どの行かが分かる形だけ残す
+            head = " ".join(line.strip().split()[:3])
+            seen.setdefault(found.group(1), []).append(head)
+    out: list[Finding] = []
+    for kind, heads in sorted(seen.items()):
+        level, what = _WEAK_PASSWORD_TYPES[kind]
+        out.append(
+            Finding(
+                level=level,
+                title=f"合言葉が{what}",
+                why="Config は人手で渡ることがあります。弱い形で入っていると、"
+                "その中身がそのまま鍵になります。"
+                "type 8（または 9）で入れ直してください"
+                "（enable algorithm-type sha256 secret / "
+                "username 名前 algorithm-type sha256 secret）。",
+                evidence=[f"{head} …" for head in heads[:5]],
             )
         )
     return out

@@ -1,6 +1,7 @@
 """Juniper Junos の読み取り。"""
 
 from app.services import configparse
+from app.services.configparse import Vendor
 
 
 def test_a_subinterface_keeps_its_tag_and_its_address_together():
@@ -139,3 +140,125 @@ def test_values_in_square_brackets_are_read_as_the_names_they_hold():
 def test_two_values_on_one_line_without_brackets_are_both_counted():
     _, acl = _official_policies()
     assert acl.entries[2].destination == "dmz:srv1 ほか1件"
+
+
+BRACE = """system {
+    host-name ex-01;
+}
+interfaces {
+    ge-0/0/0 {
+        native-vlan-id 99;
+        unit 0 {
+            family ethernet-switching {
+                interface-mode trunk;
+                vlan {
+                    members [ USERS VOICE ];
+                }
+            }
+        }
+    }
+    ge-0/0/1 {
+        description "PC";
+        unit 0 {
+            family ethernet-switching {
+                interface-mode access;
+                vlan {
+                    members USERS;
+                }
+            }
+        }
+    }
+    irb {
+        unit 10 {
+            family inet {
+                address 10.0.10.1/24;
+            }
+        }
+    }
+}
+vlans {
+    USERS {
+        vlan-id 10;
+        l3-interface irb.10;
+    }
+    VOICE {
+        vlan-id 20;
+    }
+}
+"""
+
+
+def test_the_brace_form_is_read_like_the_set_form():
+    """囲みで書いた設定（`show configuration` の既定の形）も読む。
+
+    以前は `set` の形しか読めず、囲みの形は VyOS と取り違えたうえ、
+    ポートも VLAN も1つも読めていなかった。
+
+    出典: Juniper のサポート記事 [EX/QFX] Example - Configuring VLAN
+    translation by using ELS on Junos OS の `show configuration interfaces`
+    出力例（ge-0/0/0 { unit 0 { family ethernet-switching { interface-mode
+    trunk; vlan { members [ 10 220 ]; } } } }）、Juniper「Interfaces User
+    Guide for Switches」
+    """
+    parsed = configparse.parse(BRACE)
+    assert parsed.vendor is Vendor.JUNIPER
+    assert parsed.hostname == "ex-01"
+    assert sorted(parsed.vlans) == [10, 20]
+    ports = {port.name: port for port in parsed.interfaces}
+    trunk = ports["ge-0/0/0"]
+    assert (trunk.mode, trunk.native_vlan, sorted(trunk.trunk_vlans)) == ("trunk", 99, [10, 20])
+    access = ports["ge-0/0/1"]
+    assert (access.mode, access.vlan, access.description) == ("access", 10, "PC")
+    assert ports["irb.10"].ip_address == "10.0.10.1/24"
+
+
+def test_the_brace_form_also_feeds_routing_and_security():
+    """囲みの形でも、経路・OSPF・BGP・許否まで同じように読む。
+
+    入口で `set` の形にそろえているので、読み手を二重に持たずに済む。
+    """
+    parsed = configparse.parse(
+        "system {\n"
+        "    host-name srx-01;\n"
+        "}\n"
+        "routing-options {\n"
+        "    static {\n"
+        "        route 0.0.0.0/0 next-hop 203.0.113.1;\n"
+        "    }\n"
+        "}\n"
+        "protocols {\n"
+        "    ospf {\n"
+        "        area 0.0.0.0 {\n"
+        "            interface ge-0/0/0.0;\n"
+        "        }\n"
+        "    }\n"
+        "    bgp {\n"
+        "        group EDGE {\n"
+        "            peer-as 65001;\n"
+        "            neighbor 203.0.113.1;\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+        "security {\n"
+        "    policies {\n"
+        "        from-zone trust to-zone untrust {\n"
+        "            policy allow-web {\n"
+        "                match {\n"
+        "                    source-address any;\n"
+        "                    destination-address any;\n"
+        "                    application [ junos-http junos-https ];\n"
+        "                }\n"
+        "                then {\n"
+        "                    permit;\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    assert [(route.destination, route.next_hop) for route in parsed.routes] == [
+        ("0.0.0.0/0", "203.0.113.1")
+    ]
+    assert parsed.ospf is not None and parsed.ospf.areas[0].area == "0.0.0.0"
+    assert parsed.bgp is not None and parsed.bgp.neighbors[0].remote_as == "65001"
+    assert any(acl.entries for acl in parsed.acls)

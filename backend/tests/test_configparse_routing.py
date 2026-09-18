@@ -311,7 +311,25 @@ def test_the_size_speed_and_way_of_bundling_are_read():
     assert uplink.duplex == "full"
     assert uplink.lag_group == 1
     assert uplink.lag_mode == "active"
-    assert ports["Vlan10"].mtu == 1500
+    assert ports["Vlan10"].ip_mtu == 1500
+
+
+def test_ip_mtu_is_not_read_as_the_size_of_the_port_itself():
+    """`ip mtu` は IP パケットだけの大きさで、口そのものの大きさは変わらない。
+
+    混ぜて持つと、片側が `mtu 9198`・もう片側が `ip mtu 1500` と書いてあるだけで
+    「両端で食い違う」と言ってしまう。
+
+    出典: Cisco IOS IP Application Services Command Reference「ip mtu」Usage Guidelines
+    （"changing the IP MTU value has no effect on the MTU value"）
+    """
+    parsed = configparse.parse(PORTS)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["Vlan10"].mtu is None
+    assert ports["Vlan10"].ip_mtu == 1500
+    # 口そのものの大きさを書いた方は、これまでどおり mtu に入る
+    assert ports["GigabitEthernet1/0/23"].mtu == 9198
+    assert ports["GigabitEthernet1/0/23"].ip_mtu is None
 
 
 def test_ports_written_as_a_range_are_read_one_by_one():

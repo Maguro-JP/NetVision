@@ -91,6 +91,11 @@ class ParsedInterface:
     #: 1回に送れる大きさ。両端で違うと、大きい荷物だけが通らない。
     #: 「だいたい動くのに、たまに固まる」といういちばん厄介な形になる
     mtu: int | None = None
+    #: IP パケットだけの大きさ（Cisco の `ip mtu`）。口そのものの大きさ（`mtu`）とは
+    #: 別物で、`ip mtu` を変えても `mtu` は変わらない。混ぜて持つと、片側が
+    #: `mtu 9198`・もう片側が `ip mtu 1500` と書いてあるだけで食い違いに見える。
+    #: 出典: Cisco IOS IP Application Services Command Reference「ip mtu」Usage Guidelines
+    ip_mtu: int | None = None
     #: 速度と二重。片方だけ固定すると、遅くはなるが通ってしまう
     speed: str | None = None
     duplex: str | None = None

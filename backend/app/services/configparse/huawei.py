@@ -122,7 +122,10 @@ _IP_DHCP = re.compile(r"^\s+ip\s+address\s+dhcp-alloc\s*$", re.IGNORECASE)
 _BIND_VPN = re.compile(r"^\s+ip\s+binding\s+vpn-instance\s+(\S+)", re.IGNORECASE)
 _ETH_TRUNK_MEMBER = re.compile(r"^\s+eth-trunk\s+(\d+)\s*$", re.IGNORECASE)
 _ETH_TRUNK_MODE = re.compile(r"^\s+mode\s+(lacp-static|lacp|manual\s+load-balance)\s*$", re.I)
-_MTU = re.compile(r"^\s+(?:ip\s+)?mtu\s+(\d+)\s*$", re.IGNORECASE)
+#: VRP は口の大きさを `mtu` で書く。IPv6 だけの `ipv6 mtu` は別物なので入れない
+#: 出典: Huawei NetEngine 8000 F8 Configuration Guide「MTU Configuration」
+#: （IPv4 は `mtu mtu`、IPv6 は `ipv6 mtu mtu`）
+_MTU = re.compile(r"^\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 _SPEED = re.compile(r"^\s+speed\s+(\S+)\s*$", re.IGNORECASE)
 _DUPLEX = re.compile(r"^\s+duplex\s+(\S+)\s*$", re.IGNORECASE)
 _SHUTDOWN = re.compile(r"^\s+shutdown\s*$", re.IGNORECASE)

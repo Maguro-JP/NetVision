@@ -88,8 +88,51 @@ def detect(text: str) -> Vendor | None:
     return None
 
 
+def _flatten(text: str) -> str:
+    """囲みで書いた設定を、`set` の並びに直す。
+
+    Junos は同じ設定を2つの形で見せる。囲みの形（`show configuration` の既定）と、
+    `set` の形（`show configuration | display set`）である。読み手を2つ持つと
+    片方だけ直したときに食い違うので、入口で `set` の形にそろえる。
+
+    値が角括弧の並び（`members [ USERS VOICE ];`）になっている行は、そのまま
+    1行として渡す。受け取る側が括弧を開く。
+
+    出典: Juniper のサポート記事 [EX/QFX] Example - Configuring VLAN translation
+    by using ELS on Junos OS の `show configuration interfaces` 出力例
+    （ge-0/0/0 { unit 0 { family ethernet-switching { interface-mode trunk;
+    vlan { members [ 10 220 ]; } } } }）
+    """
+    if "{" not in text:
+        return text
+    out: list[str] = []
+    stack: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not line or line.startswith(("#", "/*", "*")):
+            continue
+        # `unit 0 { family inet { address 10.0.0.1/24; } }` のような1行書きは
+        # 見ない（Junos の出力では出ない）。素直に段だけ数える
+        if line.endswith("{"):
+            stack.append(line[:-1].strip())
+            continue
+        if line in ("}", "};"):
+            if stack:
+                stack.pop()
+            continue
+        if line.startswith("}"):
+            continue
+        out.append("set " + " ".join([*stack, line.rstrip(";").strip()]))
+    return "\n".join(out) if out else text
+
+
 def parse(text: str) -> ParsedConfig:
     parsed = ParsedConfig(vendor=Vendor.JUNIPER, os_name="Junos")
+    # 囲みの形で貼られたときは、先に `set` の形へそろえる。名乗り（show version）は
+    # 囲みの外に出るので、元の字も残して両方から読む
+    flattened = _flatten(text)
+    if flattened is not text:
+        text = f"{text}\n{flattened}"
 
     match = (
         _SET_HOSTNAME.search(text) or _BRACE_HOSTNAME.search(text) or _SHOW_HOSTNAME.search(text)
