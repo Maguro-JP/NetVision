@@ -94,3 +94,30 @@ def test_the_commands_to_get_there_can_be_written() -> None:
     diff = build(OS10, future, vendor=Vendor.DELL_OS10)
     assert diff.verified
     assert "switchport trunk allowed vlan 10,30,40" in diff.script
+
+
+def test_the_lldp_table_gives_the_links_and_skips_the_unnamed():
+    """`show lldp neighbors` の表から隣を読む。名乗っていない相手は作らない。
+
+    出典: Dell SmartFabric OS10 User Guide「show lldp neighbors」の出力例
+    （`Loc PortID / Rem Host Name / Rem Port Id / Rem Chassis Id`、
+    名乗らない相手は `Not Advertised`）。
+    """
+    text = "\n".join(
+        [
+            "OS10# show version",
+            "Dell EMC Networking OS10 Enterprise",
+            "OS Version: 10.5.6.2",
+            "OS10# show lldp neighbors",
+            "Loc PortID        Rem Host Name   Rem Port Id         Rem Chassis Id",
+            "----------------------------------------------------------------------",
+            "ethernet1/1/2     Not Advertised  fortyGigE 0/56      00:01:e8:8a:fd:35",
+            "ethernet1/1/53    S5248F-2        ethernet1/1/54      54:bf:64:ba:33:c0",
+            "",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
+    # 口の名前は、読み手の中でそろえた形（先頭が大文字）になる
+    assert ("Ethernet1/1/53", "S5248F-2", "Ethernet1/1/54") in found
+    assert not any(n.remote_hostname == "Not Advertised" for n in parsed.neighbors)
