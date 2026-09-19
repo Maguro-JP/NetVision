@@ -1,0 +1,55 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/lang-rule.sh"
+          },
+          {
+            "type": "command",
+            "command": "cat .claude/skills/work-style/SKILL.md 2>/dev/null || true"
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/lang-rule.sh"
+          },
+          {
+            "type": "command",
+            "command": ".claude/hooks/skill-nudge.sh"
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/lang-check.sh",
+            "timeout": 30
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Bash|mcp__github__create_pull_request",
+        "hooks": [
+          {
+            "type": "command",
+            "command": ".claude/hooks/pr-nudge.sh",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
