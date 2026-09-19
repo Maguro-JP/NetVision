@@ -1,0 +1,25 @@
+# repo-bootstrap が置いた最小の CI。PR と既定ブランチへの push で走る。
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then pip install -e . || true; fi
+          pip install pytest
+      - run: @@CHECKS@@
+      - run: @@TEST@@

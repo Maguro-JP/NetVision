@@ -1,0 +1,22 @@
+# repo-bootstrap が置いた最小の CI。PR と既定ブランチへの push で走る。
+name: test
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+concurrency:
+  group: test-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+          cache: npm
+      - run: npm ci
+      - run: @@CHECKS@@
+      - run: @@TEST@@
