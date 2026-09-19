@@ -765,6 +765,11 @@ def _parse_neighbor_table(text: str, parsed: ParsedConfig) -> None:
                 continue
 
             hostname = columns[0]
+            if hostname.startswith("["):
+                # 相手が LLDP を切っていると、名前の代わりに `[DISABLED]` が出る
+                # （出典: Cisco NCS 4000 Configure LLDP の show lldp neighbors 出力例）。
+                # 名乗っていないので、その相手は作らない。作ると台帳に居ない機器が増える
+                continue
             # 末尾2つは Port ID、その手前が Platform（CDP）。Local Intf は先頭寄り。
             local = _join_interface(columns, 1)
             remote = " ".join(columns[-2:]) if _looks_like_interface(columns[-2]) else columns[-1]
