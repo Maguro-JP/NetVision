@@ -159,3 +159,50 @@ def test_the_range_does_not_raise_a_finding_about_unrestricted_trunks():
     parsed = configparse.parse(OFFICIAL_RANGE)
     titles = [f.title for f in policyreview.review(parsed, OFFICIAL_RANGE)]
     assert not any("許可 VLAN を絞っていない" in title for title in titles), titles
+
+
+def test_the_detailed_lldp_display_gives_the_neighbours_names():
+    """`show lldp detail` から隣を読む。簡易表は相手が MAC でしか出ない。
+
+    出典: アラクサラ AX8600R 運用コマンドレファレンス Vol.2「show lldp」
+    図18-2（LLDP 設定および隣接装置情報の詳細表示）。
+    """
+    text = "\n".join(
+        [
+            "#show version",
+            "Model AX3650S-24T4XW",
+            "S/W: OS-L3A Ver. 12.1.A",
+            "H/W: AX3650S-24T4XW",
+            'hostname "ax01"',
+            "!",
+            "> show lldp detail",
+            "Date 20XX/04/01 12:00:00 UTC",
+            "Status: Enabled",
+            "Chassis ID: Type=MAC Info=0012.e2c8.3c31",
+            "System Name: LLDP1",
+            "Port Counts=3",
+            "Port 1/1 (CH: 10) Link: Up PortEnabled: TRUE",
+            "  Port ID: Type=MAC Info=0012.e238.4cc0",
+            "  Port Description: GigabitEther 1/1",
+            "  Neighbor 1 TTL: 100",
+            "    Chassis ID: Type=MAC Info=0012.e2c8.3c85",
+            "    System Name: LLDP2",
+            "    Port ID: Type=MAC Info=0012.e238.4cd1",
+            "    Port Description: GigabitEther 1/12",
+            "Port 1/2 Link: Down PortEnabled: FALSE",
+            "  Neighbor Counts: 0",
+            "Port 1/3 Link: Up PortEnabled: TRUE",
+            "  Port Description: GigabitEther 1/3",
+            "  Draft Neighbor 1 TTL: 100",
+            "    Chassis ID: Type=MAC Info=0012.e268.2c21",
+            "    System Name: LLDP3",
+            "    Port Description: GigabitEther 1/5",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
+    assert ("GigabitEthernet1/1", "LLDP2", "GigabitEther 1/12") in found
+    assert ("GigabitEthernet1/3", "LLDP3", "GigabitEther 1/5") in found
+    # 自分の名前（System Name: LLDP1）と、隣の居ない口は相手にしない
+    assert not any(n.remote_hostname == "LLDP1" for n in parsed.neighbors)
+    assert not any(n.local_interface == "GigabitEthernet1/2" for n in parsed.neighbors)
