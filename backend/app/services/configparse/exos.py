@@ -19,8 +19,10 @@ from __future__ import annotations
 import re
 
 from app.services.configparse.base import (
+    NeighborProtocol,
     ParsedConfig,
     ParsedInterface,
+    ParsedNeighbor,
     ParsedRoute,
     Vendor,
 )
@@ -169,7 +171,70 @@ def parse(text: str) -> ParsedConfig:
         else:
             port.mode = port.mode or "access"
             port.vlan = port.vlan or number
+
+    _lldp_detail(text, parsed)
     return parsed
+
+
+#: `show lldp ... neighbors detailed` の口の行
+_LLDP_PORT = re.compile(r"^\s*LLDP\s+Port\s+(\S+)\s+detected\s+\d+\s+neighbor", re.IGNORECASE)
+#: その口で見えている隣の始まり
+_LLDP_NEIGHBOR = re.compile(r"^\s*Neighbor:\s", re.IGNORECASE)
+#: 値は引用符で囲まれて出る（`System Name: "SW1"`）
+_LLDP_SYSTEM_NAME = re.compile(r'^\s*-?\s*System\s+Name\s*:\s*"?([^"]+?)"?\s*$', re.IGNORECASE)
+_LLDP_PORT_ID = re.compile(r'^\s*Port\s+ID\s*:\s*"?([^"]+?)"?\s*$', re.IGNORECASE)
+
+
+def _lldp_detail(text: str, parsed: ParsedConfig) -> None:
+    """`show lldp neighbors detailed` から隣を読む。
+
+    簡易表（`show lldp neighbors`）は相手を MAC でしか出さないので、
+    名前の出る詳細表示のほうを読む。名乗っていない相手は作らない。
+
+    出典: ExtremeXOS User Guide「show lldp neighbors」の実行例
+    （`LLDP Port 1:2 detected 1 neighbor` / `Port ID : "1:1"` /
+    `- System Name: "System name 1"`）。
+    """
+    local: str | None = None
+    host: str | None = None
+    port_id: str | None = None
+    in_neighbor = False
+
+    def flush() -> None:
+        nonlocal host, port_id, in_neighbor
+        if local and host:
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=local,
+                    remote_hostname=host,
+                    remote_interface=port_id,
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
+        host = None
+        port_id = None
+        in_neighbor = False
+
+    for raw in text.splitlines():
+        head = _LLDP_PORT.match(raw)
+        if head:
+            flush()
+            local = head.group(1)
+            continue
+        if _LLDP_NEIGHBOR.match(raw):
+            flush()
+            in_neighbor = True
+            continue
+        if not in_neighbor:
+            continue
+        name = _LLDP_SYSTEM_NAME.match(raw)
+        if name:
+            host = name.group(1).strip()
+            continue
+        found = _LLDP_PORT_ID.match(raw)
+        if found and port_id is None:
+            port_id = found.group(1).strip()
+    flush()
 
 
 def _ports(written: str) -> list[str]:
