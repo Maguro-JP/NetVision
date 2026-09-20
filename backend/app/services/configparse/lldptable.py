@@ -47,6 +47,12 @@ _ROLES: dict[str, str] = {
     "port-descr": "skip",
     "port-description": "skip",
     "hold-time": "skip",
+    # Cisco Small Business / Catalyst 1200・1300 系
+    # （出典: Catalyst 1200 Series CLI「show lldp neighbors」の出力例。
+    # Device ID は名前のことも MAC のこともあり、名前は System Name に出る）
+    "port": "local",
+    "sysname": "remote_host",
+    "capabilities": "skip",
     # Dell SmartFabric OS10（出典: OS10 User Guide「show lldp neighbors」）
     "loc portid": "local",
     "rem host name": "remote_host",

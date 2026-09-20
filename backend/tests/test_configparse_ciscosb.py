@@ -116,3 +116,34 @@ def test_the_other_short_port_names_from_the_cli_guide_are_read():
         "FiveGigabitEthernet1/0/2",
         "GigabitEthernet3",
     ]
+
+
+def test_the_lldp_table_gives_the_links():
+    """小規模機の `show lldp neighbors` は、IOS とは見出しの並びが違う。
+
+    Device ID は MAC のことがあり、名前は System Name の欄に出る。
+
+    出典: Cisco Catalyst 1200 Series Switches CLI Reference Guide
+    「show lldp neighbors」の出力例。
+    """
+    text = "\n".join(
+        [
+            "switchxxxxxx# show system",
+            "System Description: CBS350-24T-4G",
+            "!",
+            "hostname sb-sw-01",
+            "!",
+            "switchxxxxxx# show lldp neighbors",
+            "System capability legend:",
+            "B - Bridge; R - Router; W - Wlan Access Point;",
+            "",
+            "Port      Device ID         Port ID   System Name    Capabilities  TTL",
+            "--------- ----------------- --------- -------------- ------------ -----",
+            "gi1/0/2   00:00:26:08:13:24 gi1/0/3   core-sw-01     B,R           90",
+            "",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
+    # 口の名前は、読み手の中でそろえた形になる（gi1/0/2 → GigabitEthernet1/0/2）
+    assert ("GigabitEthernet1/0/2", "core-sw-01", "GigabitEthernet1/0/3") in found
