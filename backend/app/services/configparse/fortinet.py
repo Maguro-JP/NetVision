@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import fortitext, policy, routing, tunnels
+from app.services.configparse import fortitext, lldptable, policy, routing, tunnels
 from app.services.configparse.base import (
     ParsedConfig,
     ParsedCrypto,
@@ -124,6 +124,9 @@ def parse(text: str) -> ParsedConfig:
     _parse_dhcp(text, parsed)
     _parse_ipsec(text, parsed)
     _parse_qos(text, parsed)
+    # 配下の FortiSwitch の LLDP 表（diagnose switch-controller switch-info
+    # lldp neighbors-summary）。繋がっていない口は `-` で出るので、作らない
+    lldptable.parse(text, parsed)
     return parsed
 
 

@@ -53,6 +53,14 @@ _ROLES: dict[str, str] = {
     "port": "local",
     "sysname": "remote_host",
     "capabilities": "skip",
+    # FortiGate から見た FortiSwitch の表
+    # （出典: Fortinet Community KB 227554「How to display LLDP, trunk and STP
+    # information of a managed FortiSwitch from FortiGate CLI」。
+    # 文書ライブラリではなくメーカーのナレッジベース）
+    "portname": "local",
+    "device-name": "remote_host",
+    "med-type": "skip",
+    "status": "skip",
     # Dell SmartFabric OS10（出典: OS10 User Guide「show lldp neighbors」）
     "loc portid": "local",
     "rem host name": "remote_host",
