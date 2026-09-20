@@ -400,3 +400,33 @@ def test_no_switchport_drops_the_layer2_settings():
     assert (port.mode, port.vlan, port.trunk_vlans) == ("routed", None, [])
     assert port.carried_vlans() == set()
     assert port.ip_address == "192.168.5.1/24"
+
+
+def test_a_neighbour_that_turned_lldp_off_is_not_made_up():
+    """`show lldp neighbors` の `[DISABLED]` は相手の名前ではない。
+
+    相手が LLDP を切っていると、Device ID の欄に `[DISABLED]` が出る。
+    これを名前として取ると、台帳に居ない機器が1台増えて線まで引かれる。
+
+    出典: Cisco NCS 4000 Series「Configure Link Layer Discovery Protocol」
+    の show lldp neighbors 出力例（Device ID の欄が `[DISABLED]`）。
+    """
+    text = "\n".join(
+        [
+            "hostname xr-01",
+            "!",
+            "RP/0/RP0/CPU0:xr-01#show lldp neighbors",
+            "Capability codes:",
+            "    (R) Router, (B) Bridge, (T) Telephone, (C) DOCSIS Cable Device",
+            "",
+            "Device ID           Local Intf     Hold-time  Capability      Port ID",
+            "[DISABLED]          Te0/5/0/4/1    17         N/A             0123.4567.89ab",
+            "rt-02               Gi0/0/0/0      120        R               Gi0/0/0/0",
+            "",
+            "Total entries displayed: 2",
+        ]
+    )
+    parsed = configparse.parse(text)
+    names = [n.remote_hostname for n in parsed.neighbors]
+    assert "rt-02" in names
+    assert not any(name.startswith("[") for name in names)

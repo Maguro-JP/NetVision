@@ -32,7 +32,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import cisco, ciscomodel
+from app.services.configparse import cisco, ciscomodel, lldptable
 from app.services.configparse.base import ParsedConfig, ParsedInterface, ParsedRoute, Vendor
 
 #: この系統にしか出てこない書き方
@@ -100,6 +100,9 @@ def parse(text: str) -> ParsedConfig:
 
     _read_vlans(text, parsed)
     _read_default_gateway(text, parsed)
+    # 隣は `show lldp neighbors` の表から。見出しの並びが IOS とは違う
+    # （出典: Cisco Catalyst 1200 Series CLI Reference「show lldp neighbors」）
+    lldptable.parse(text, parsed)
     return parsed
 
 

@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import cisco
+from app.services.configparse import cisco, lldptable
 from app.services.configparse.base import ParsedConfig, ParsedInterface, Vendor
 
 #: OS10 にしか出てこない書き方
@@ -74,6 +74,9 @@ def parse(text: str) -> ParsedConfig:
         parsed.model = found.group(1)
 
     _read_ports(text, parsed)
+    # 隣は `show lldp neighbors` の表から。見出しは OS10 独自の並び
+    # （出典: Dell SmartFabric OS10 User Guide「show lldp neighbors」）
+    lldptable.parse(text, parsed)
     return parsed
 
 

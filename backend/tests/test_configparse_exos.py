@@ -88,3 +88,40 @@ def test_no_commands_are_offered_for_a_machine_we_cannot_write() -> None:
     diff = build(EXOS, EXOS + "configure vlan USERS add ports 22 untagged\n", vendor=Vendor.EXOS)
     assert not diff.script.strip()
     assert diff.warnings
+
+
+def test_the_detailed_lldp_display_gives_the_neighbours_names():
+    """`show lldp neighbors detailed` から隣を読む。簡易表は相手が MAC だけ。
+
+    出典: ExtremeXOS User Guide「show lldp neighbors」の実行例
+    （`LLDP Port 1:2 detected 1 neighbor` / `Port ID     : "1:1"` /
+    `- System Name: "System name 1"`）。
+    """
+    text = "\n".join(
+        [
+            "create vlan USERS",
+            "configure vlan USERS tag 10",
+            "configure snmp sysName sw-exos-01",
+            "",
+            "# show lldp all neighbors detailed",
+            "-----------------------------------------------------------------",
+            "LLDP Port 1:2 detected 1 neighbor",
+            "  Neighbor: 00:04:96:26:A4:70/1:1, age 12 seconds",
+            "    - Chassis ID type: MAC address (4)",
+            "      Chassis ID     : 00:04:96:26:A4:70",
+            "    - Port ID type: ifName (5)",
+            '      Port ID     : "1:1"',
+            "    - Time To Live: 120 seconds",
+            '    - System Name: "core-sw-01"',
+            "-----------------------------------------------------------------",
+            "LLDP Port 2:6 detected 1 neighbor",
+            "  Neighbor: (5.1)10.201.41.146/00:04:0D:EC:EA:5C, age 8 seconds",
+            "    - Time To Live: 120 seconds",
+            "-----------------------------------------------------------------",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
+    assert ("1:2", "core-sw-01", "1:1") in found
+    # 名前が出ていない相手は作らない
+    assert not any(n.local_interface == "2:6" for n in parsed.neighbors)

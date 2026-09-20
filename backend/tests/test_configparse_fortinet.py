@@ -140,3 +140,32 @@ def test_the_action_is_read_whether_or_not_it_is_quoted():
     assert _official_entries()["2"].action == "deny"
     # `service "ALL"` は全部通る意味なので、絞りとしては持たない
     assert _official_entries()["2"].destination_port is None
+
+
+def test_the_lldp_table_of_a_managed_switch_gives_the_links():
+    """FortiGate 配下の FortiSwitch の LLDP 表から隣を読む。
+
+    繋がっていない口は Device-name が `-` で出る。名前ではないので作らない。
+
+    出典: Fortinet Community KB 227554「How to display LLDP, trunk and STP
+    information of a managed FortiSwitch from FortiGate CLI」
+    （メーカーのナレッジベース。文書ライブラリ側にはこの表の記載が無い）。
+    """
+    text = "\n".join(
+        [
+            "config system global",
+            '    set hostname "fw-01"',
+            "end",
+            "",
+            "# diagnose switch-controller switch-info lldp neighbors-summary S108EPXXXXXXXXXX",
+            "Portname    Status   Device-name                 TTL   Capability  MED-type  Port-ID",
+            "__________  _______  __________________________  ____  __________  ________  _______",
+            "port1       Down     -                           -     -           -         -",
+            "port4       Up       core-sw-01                  120   BR          -         wan1",
+            "",
+        ]
+    )
+    parsed = configparse.parse(text)
+    found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
+    assert ("port4", "core-sw-01", "wan1") in found
+    assert not any(n.local_interface == "port1" for n in parsed.neighbors)

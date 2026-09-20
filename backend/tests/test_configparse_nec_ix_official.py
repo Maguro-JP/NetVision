@@ -232,3 +232,26 @@ def test_qos_says_when_the_policy_is_attached_but_not_enabled():
     # 有効にしてあるポートと、マーキングだけのポートは言わない
     assert not any("GigaEthernet1.0" in title for title in titles)
     assert not any("GigaEthernet2.0" in title and "有効" in title for title in titles)
+
+
+def test_ip_mtu_is_kept_apart_from_the_size_of_the_port_itself():
+    """IX の `ip mtu` は IPv4 だけに掛かる。口そのものの大きさではない。
+
+    「IPv4においてインタフェースのMTUより小さい値をMTUとして使用するコマンド」
+    出典: IX-R/IX-V コマンドリファレンス「MTU 変更」（ip mtu MTU）
+    """
+    text = "\n".join(
+        [
+            "hostname ix-rt-01",
+            "!",
+            "interface GigaEthernet0.0",
+            "  ip address 192.168.0.254/24",
+            "  ip mtu 1000",
+            "  no shutdown",
+            "!",
+        ]
+    )
+    parsed = configparse.parse(text)
+    port = next(i for i in parsed.interfaces if i.name == "GigaEthernet0.0")
+    assert port.ip_mtu == 1000
+    assert port.mtu is None

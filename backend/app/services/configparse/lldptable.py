@@ -47,7 +47,29 @@ _ROLES: dict[str, str] = {
     "port-descr": "skip",
     "port-description": "skip",
     "hold-time": "skip",
+    # Cisco Small Business / Catalyst 1200・1300 系
+    # （出典: Catalyst 1200 Series CLI「show lldp neighbors」の出力例。
+    # Device ID は名前のことも MAC のこともあり、名前は System Name に出る）
+    "port": "local",
+    "sysname": "remote_host",
+    "capabilities": "skip",
+    # FortiGate から見た FortiSwitch の表
+    # （出典: Fortinet Community KB 227554「How to display LLDP, trunk and STP
+    # information of a managed FortiSwitch from FortiGate CLI」。
+    # 文書ライブラリではなくメーカーのナレッジベース）
+    "portname": "local",
+    "device-name": "remote_host",
+    "med-type": "skip",
+    "status": "skip",
+    # Dell SmartFabric OS10（出典: OS10 User Guide「show lldp neighbors」）
+    "loc portid": "local",
+    "rem host name": "remote_host",
+    "rem port id": "remote_port",
+    "rem chassis id": "skip",
 }
+#: 名前の欄に出る「名乗っていない」の印。これを名前として取ると、台帳に
+#: 居ない機器が増える（出典: OS10 User Guide「show lldp neighbors」の出力例）
+_NOT_A_NAME = {"not advertised", "n/a", "-"}
 _MAC = re.compile(r"^(?:[0-9a-f]{2}[:.-]?){5}[0-9a-f]{2}$", re.IGNORECASE)
 #: 見出しの語は長いものから当てる。`port id` を `port description` より先に
 #: 当てると、桁の数え方がずれる
@@ -110,6 +132,8 @@ def _read_rows(rows: list[str], columns: list[tuple[int, str]], parsed: ParsedCo
             values[role] = raw[start:end].strip()
         local, host = values.get("local"), values.get("remote_host")
         if not local or not host or _MAC.match(host) or " " in local:
+            continue
+        if host.lower() in _NOT_A_NAME or host.startswith("["):
             continue
         port = values.get("remote_port") or None
         parsed.add_neighbor(

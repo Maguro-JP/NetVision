@@ -16,7 +16,12 @@ from __future__ import annotations
 import re
 
 from app.services.configparse import cisco, lldptable
-from app.services.configparse.base import ParsedConfig, Vendor
+from app.services.configparse.base import (
+    NeighborProtocol,
+    ParsedConfig,
+    ParsedNeighbor,
+    Vendor,
+)
 
 #: `show version` の型番と版数。AX は S/W と H/W を分けて出す
 _SW_VERSION = re.compile(r"^\s*S/W\s*:\s*\S+\s+Ver\.\s*(\S+)", re.IGNORECASE | re.MULTILINE)
@@ -120,6 +125,7 @@ def parse(text: str) -> ParsedConfig:
         parsed.model = _MODEL_ONLY.search(text).group(0)  # type: ignore[union-attr]
 
     lldptable.parse(text, parsed)
+    _lldp_detail(text, parsed)
     for neighbor in parsed.neighbors:
         # 表に出てくる `0/1` を、config 側と同じ名前にそろえる。そろって
         # いないと、隣を見つけていても口に結び付かず、図に線が出ない
@@ -132,3 +138,64 @@ def parse(text: str) -> ParsedConfig:
         if interface.description:
             interface.description = interface.description.strip('"')
     return parsed
+
+
+#: `show lldp detail` の口の行（`Port 1/1 (CH: 10) Link: Up ...`）
+_LLDP_PORT = re.compile(r"^\s*Port\s+(\d+(?:/\d+)+)\b", re.IGNORECASE)
+#: その口で見えている隣の始まり（Draft6.0 の相手も同じ扱い）
+_LLDP_NEIGHBOR = re.compile(r"^\s*(?:Draft\s+)?Neighbor\s+\d+\b", re.IGNORECASE)
+_LLDP_SYSTEM_NAME = re.compile(r"^\s*System\s+Name\s*:\s*(\S+)", re.IGNORECASE)
+_LLDP_PORT_DESCR = re.compile(r"^\s*Port\s+Description\s*:\s*(.+?)\s*$", re.IGNORECASE)
+
+
+def _lldp_detail(text: str, parsed: ParsedConfig) -> None:
+    """`show lldp detail` から隣を読む。
+
+    `show lldp neighbors` の簡易表は相手を MAC でしか出さないので、名前の付く
+    詳細表示のほうを読む。名前（System Name）が出ていない相手は作らない。
+    名乗っていない相手に MAC で名前を付けると、台帳に居ない機器が増える。
+
+    出典: アラクサラ AX8600R 運用コマンドレファレンス Vol.2「show lldp」
+    図18-2（LLDP 設定および隣接装置情報の詳細表示）。
+    """
+    local: str | None = None
+    #: いま読んでいる隣（None なら、まだ自分の口の情報を読んでいる）
+    remote_host: str | None = None
+    remote_port: str | None = None
+    in_neighbor = False
+
+    def flush() -> None:
+        nonlocal remote_host, remote_port, in_neighbor
+        if local and remote_host:
+            parsed.neighbors.append(
+                ParsedNeighbor(
+                    local_interface=local,
+                    remote_hostname=remote_host,
+                    remote_interface=remote_port,
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
+        remote_host = None
+        remote_port = None
+        in_neighbor = False
+
+    for raw in text.splitlines():
+        port = _LLDP_PORT.match(raw)
+        if port and not _LLDP_PORT_DESCR.match(raw):
+            flush()
+            local = port.group(1)
+            continue
+        if _LLDP_NEIGHBOR.match(raw):
+            flush()
+            in_neighbor = True
+            continue
+        if not in_neighbor:
+            continue
+        name = _LLDP_SYSTEM_NAME.match(raw)
+        if name:
+            remote_host = name.group(1)
+            continue
+        descr = _LLDP_PORT_DESCR.match(raw)
+        if descr and remote_port is None:
+            remote_port = descr.group(1)
+    flush()

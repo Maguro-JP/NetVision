@@ -59,6 +59,8 @@ _IX_IP_SOURCE = re.compile(r"^\s*ip\s+address\s+(dhcp|ipcp|map-e|v6pv)\b", re.IG
 _IX_UNNUMBERED = re.compile(r"^\s*ip\s+unnumbered\s+(\S+)", re.IGNORECASE)
 # 回線から貰う設定。アドレスは決め打ちできないが、使っているポートだとは分かる
 _IX_IP_LEARNED = re.compile(r"^\s*ip\s+address\s+(dhcp|ipcp)\b", re.IGNORECASE)
+#: IPv4 だけに掛かる MTU（出典: IX-R/IX-V コマンドリファレンス「MTU 変更」）
+_IX_IP_MTU = re.compile(r"^\s+ip\s+mtu\s+(\d+)\s*$", re.IGNORECASE)
 _IX_NO_SHUTDOWN = re.compile(r"^\s*no\s+shutdown\s*$", re.IGNORECASE)
 # サブインターフェースへの VLAN 割り当て。書き方が数種あるのでまとめて見る
 _IX_VLAN_TAG = re.compile(
@@ -269,6 +271,13 @@ def _parse_ix(text: str) -> ParsedConfig:
             kind = source.group(1).lower()
             current.address_source = {"dhcp": "dhcp", "ipcp": "negotiated"}.get(kind, kind)
             current.mode = current.mode or "routed"
+            continue
+        mtu = _IX_IP_MTU.match(raw)
+        if mtu:
+            # IX の `ip mtu` は「インタフェースの MTU より小さい値を IPv4 で使う」
+            # 指定で、口そのものの大きさではない（出典: IX-R/IX-V コマンドリファレンス
+            # 「MTU 変更」ip mtu MTU）。`ipv6 mtu` も同じ扱いなので、こちらは持たない
+            current.ip_mtu = int(mtu.group(1))
             continue
         if _IX_NO_SHUTDOWN.match(raw):
             started.add(current.key)
