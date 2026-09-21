@@ -1456,3 +1456,40 @@ def test_a_nat_or_policy_fragment_is_not_judged_by_what_it_cannot_show() -> None
     parsed = configparse.parse(whole)
     titles = [item.title for item in configcheck._findings(parsed, whole)]
     assert [title for title in titles if "内側のポートが決まっていません" in title]
+
+
+def test_junos_edge_ports_without_bpdu_protection_are_called_out(db_session):
+    """Junos で端末口にしてあるのに、BPDU から守っていない口を言う。
+
+    出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+    （"you must protect edge ports by enabling bpdu-block-on-edge"）、
+    CLI Reference の「edge」「bpdu-block-on-edge」。
+    """
+    text = "\n".join(
+        [
+            "set system host-name ex-01",
+            "set protocols rstp interface ge-0/0/1 edge",
+            "set protocols rstp interface ge-0/0/2 edge",
+            "set protocols layer2-control bpdu-block interface ge-0/0/2",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-01.conf")
+    titles = [f.title for f in result.findings]
+    assert any("BPDU から守る設定が入っていません" in title for title in titles)
+    evidence = [e for f in result.findings for e in f.evidence]
+    assert any("ge-0/0/1" in item for item in evidence)
+    # 口ごとに守ってある口は言わない
+    assert not any("ge-0/0/2" in item for item in evidence)
+
+
+def test_junos_bpdu_block_on_edge_covers_every_edge_port(db_session):
+    """まとめて守る書き方（bpdu-block-on-edge）が入っていれば、言わない。"""
+    text = "\n".join(
+        [
+            "set system host-name ex-02",
+            "set protocols rstp bpdu-block-on-edge",
+            "set protocols rstp interface ge-0/0/1 edge",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-02.conf")
+    assert not any("BPDU から守る設定" in f.title for f in result.findings)

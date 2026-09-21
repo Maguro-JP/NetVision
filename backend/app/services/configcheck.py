@@ -639,6 +639,55 @@ _GLOBAL_BPDU_GUARD = re.compile(
 )
 
 
+#: Junos の端末口（`set protocols rstp interface ge-0/0/1 edge`）
+#: 出典: Junos OS CLI Reference「edge (edit protocols stp)」
+_JUNOS_EDGE = re.compile(
+    r"^set\s+protocols\s+(?:rstp|mstp|vstp)\s+interface\s+(\S+)\s+edge\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: 全部の端末口をまとめて守る書き方
+#: 出典: Junos OS CLI Reference「bpdu-block-on-edge」
+_JUNOS_EDGE_GUARD = re.compile(
+    r"^set\s+protocols\s+(?:rstp|mstp|vstp)\s+bpdu-block-on-edge\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: 口ごとに守る書き方
+#: 出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+_JUNOS_BPDU_BLOCK = re.compile(
+    r"^set\s+protocols\s+layer2-control\s+bpdu-block\s+interface\s+(\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _junos_edge_without_guard(text: str) -> list[Finding]:
+    """Junos で、端末口にしてあるのに BPDU から守っていないものを言う。
+
+    端末口はつないだ瞬間に通す口なので、そこへスイッチを挿されると輪ができる。
+    `bpdu-block-on-edge`（まとめて）か `layer2-control bpdu-block`（口ごと）の
+    どちらかが要る。
+
+    出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+    （"you must protect edge ports by enabling bpdu-block-on-edge"）。
+    読むのは `set` 形だけ。囲みの形はここでは見ていない
+    """
+    if _JUNOS_EDGE_GUARD.search(text):
+        return []
+    blocked = {name.split(".")[0] for name in _JUNOS_BPDU_BLOCK.findall(text)}
+    naked = [name for name in _JUNOS_EDGE.findall(text) if name.split(".")[0] not in blocked]
+    if not naked:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="端末用の口に、BPDU から守る設定が入っていません",
+            why="端末用（edge）の口はつないだ瞬間に通します。そこへ誰かがスイッチを"
+            "挿すと、輪ができて網全体が止まります。"
+            "bpdu-block-on-edge を入れておけば、その口だけが落ちて済みます。",
+            evidence=[f"{name}: edge のみ" for name in naked[:5]],
+        )
+    ]
+
+
 def _stp(text: str) -> list[Finding]:
     """ループを止める仕組み（STP）まわりで、後から効いてくるもの。
 
@@ -650,6 +699,7 @@ def _stp(text: str) -> list[Finding]:
     優先度が分からない）ので、ここでは見ない。
     """
     out: list[Finding] = []
+    out.extend(_junos_edge_without_guard(text))
     ports = _interface_blocks(text)
 
     # 端末をつなぐ口の言い方は機種で違う。1つの書き方だけを見ていると、
