@@ -121,3 +121,41 @@ def test_the_lldp_table_gives_the_links_and_skips_the_unnamed():
     # 口の名前は、読み手の中でそろえた形（先頭が大文字）になる
     assert ("Ethernet1/1/53", "S5248F-2", "Ethernet1/1/54") in found
     assert not any(n.remote_hostname == "Not Advertised" for n in parsed.neighbors)
+
+
+def test_ports_written_as_an_interface_range_are_opened_one_by_one():
+    """`interface range ethernet 1/1/1-1/1/4` に書いた設定は、4つの口に入る。
+
+    開かないと、その設定がどの口にも入らず、口自体も台帳から落ちる。
+
+    出典: Dell SmartFabric OS10 User Guide「interface range」
+    （`OS10(config)# interface range ethernet 1/1/7-1/1/24`、
+    カンマ区切りで最大6範囲）。
+    """
+    text = "\n".join(
+        [
+            "OS10# show version",
+            "Dell EMC Networking OS10 Enterprise",
+            "OS Version: 10.5.6.2",
+            "!",
+            "interface range ethernet 1/1/1-1/1/2,1/1/5",
+            " description office",
+            " no shutdown",
+            " switchport access vlan 10",
+            "!",
+            "interface ethernet 1/1/24",
+            " no shutdown",
+            "!",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert sorted(ports) == [
+        "Ethernet1/1/1",
+        "Ethernet1/1/2",
+        "Ethernet1/1/24",
+        "Ethernet1/1/5",
+    ]
+    assert all(ports[f"Ethernet1/1/{n}"].vlan == 10 for n in (1, 2, 5))
+    assert all(ports[f"Ethernet1/1/{n}"].description == "office" for n in (1, 2, 5))
+    assert ports["Ethernet1/1/24"].vlan is None
