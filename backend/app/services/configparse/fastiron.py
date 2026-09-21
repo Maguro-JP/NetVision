@@ -50,6 +50,15 @@ _KINDS = {
     "management": "Management",
     "lag": "Lag",
 }
+#: 範囲でまとめた指定（`interface ethernet 1/1/1 to 1/1/4`）。
+#: 出典: RUCKUS FastIron Management Guide「Changing the Gbps fiber negotiation mode」
+#: （`device(config)# interface ethernet 1/1/1 to 1/1/4` /
+#: プロンプトが `config-mif-1/1/1-1/1/4` になる）
+_SPLIT_RANGE = re.compile(
+    r"^(?P<head>\s*)interface\s+(?P<kind>ethernet|ve|loopback|management|lag)\s+"
+    r"(?P<first>[\d/]+)\s+to\s+(?P<last>[\d/]+)\s*$",
+    re.IGNORECASE,
+)
 _PORT_NAME = re.compile(r"^(?P<indent>\s+)port-name\s+(?P<value>.+?)\s*$", re.IGNORECASE)
 #: 行の途中に出てくる口の名前（`ip nat inside source list 1 interface ethernet 1/1/1`）。
 #: 種別と番号が離れたままだと、種別だけを名前として拾ってしまう
@@ -109,6 +118,17 @@ def _to_ios(text: str) -> str:
     in_ntp = False
     rows: list[str] = []
     for raw in text.splitlines():
+        spread = _SPLIT_RANGE.match(raw)
+        if spread:
+            kind = _KINDS.get(spread.group("kind").lower())
+            if kind:
+                # IOS の `interface range` と同じ形にして、口ごとに開かせる。
+                # 開かないと、その範囲の口が「何も設定されていない」ことになる
+                last = spread.group("last").rsplit("/", maxsplit=1)[-1]
+                rows.append(
+                    f"{spread.group('head')}interface range {kind}{spread.group('first')} - {last}"
+                )
+                continue
         found = _SPLIT_PORT.match(raw)
         if found:
             kind = _KINDS.get(found.group("kind").lower())

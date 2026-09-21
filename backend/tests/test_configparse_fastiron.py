@@ -236,3 +236,32 @@ def test_a_port_with_only_an_untagged_vlan_is_a_port_for_a_device() -> None:
     assert port.mode == "access"
     assert port.vlan == 10
     assert port.native_vlan is None
+
+
+def test_ports_written_as_a_range_are_opened_one_by_one():
+    """`interface ethernet 1/1/1 to 1/1/4` は4つの口。開かないと全部空になる。
+
+    出典: RUCKUS FastIron Management Guide「Changing the Gbps fiber negotiation
+    mode」（`device(config)# interface ethernet 1/1/1 to 1/1/4`、プロンプトが
+    `config-mif-1/1/1-1/1/4` になる）。
+    """
+    text = "\n".join(
+        [
+            "ver 08.0.95",
+            "hostname icx-01",
+            "vlan 10 name USERS",
+            "interface ethernet 1/1/1 to 1/1/4",
+            " port-name office",
+            " enable",
+            "!",
+            "interface ethernet 1/1/24",
+            " enable",
+            "!",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert "Ethernet1/1/1" in ports
+    assert "Ethernet1/1/4" in ports
+    assert all(ports[f"Ethernet1/1/{n}"].description == "office" for n in (1, 2, 3, 4))
+    assert ports["Ethernet1/1/24"].description is None
