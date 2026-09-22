@@ -632,8 +632,11 @@ _EDGE_PORT = re.compile(
 #: 誰かがスイッチを挿したときに、その口だけ落とす仕組み
 _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
 #: 機種によっては1行で全ポートに掛ける。口ごとに書いていなくても効いている
+#: 行頭（インデント無し）だけを見る。口の中に書く `spanning-tree bpdu-guard`
+#: （Aruba CX）まで拾うと、1口守っただけで機器全体が守られていることになり、
+#: 守っていない口を見逃す
 _GLOBAL_BPDU_GUARD = re.compile(
-    r"^\s*(?:stp\s+bpdu-protection"
+    r"^(?:stp\s+bpdu-protection"
     r"|spanning-tree\s+portfast\s+bpduguard\s+default"
     r"|spanning-tree\s+bpdu-guard\s*$)",
     re.IGNORECASE | re.MULTILINE,
@@ -761,7 +764,9 @@ def _stp(text: str) -> list[Finding]:
                 "挿すと、輪ができて網全体が止まります。BPDU guard を入れておけば、"
                 "その口だけが落ちて済みます。",
                 evidence=[
-                    f"{name}: spanning-tree portfast のみ" for name in fast_without_guard[:5]
+                    # 端末口の書き方は機種で違うので、証跡では書き方を決め打ちしない
+                    f"{name}: 端末用の口の指定のみ"
+                    for name in fast_without_guard[:5]
                 ],
             )
         )

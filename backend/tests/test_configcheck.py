@@ -1517,3 +1517,32 @@ def test_a_junos_plain_text_password_in_the_config_text_is_called_out(db_session
     # 合言葉そのものは、どこにも出さない
     assert all("sample-value" not in item for item in hit.evidence)
     assert "sample-value" not in hit.why
+
+
+def test_a_port_level_bpdu_guard_is_not_read_as_a_device_wide_one(db_session):
+    """口の中に書いた bpdu-guard を、機器全体の設定と取り違えない。
+
+    Aruba CX は口の中に `spanning-tree bpdu-guard` と書く。これを全体の
+    設定として読むと、1口守っただけで残りの口を見逃す。
+
+    出典: AOS-CX の書き方（`spanning-tree port-type admin-edge` /
+    `spanning-tree bpdu-guard` を口の下に書く形）。
+    """
+    text = "\n".join(
+        [
+            "!Version ArubaOS-CX GL.10.09.0010",
+            "hostname cx-01",
+            "spanning-tree mode rpvst",
+            "interface 1/1/1",
+            "    no shutdown",
+            "    spanning-tree port-type admin-edge",
+            "interface 1/1/2",
+            "    no shutdown",
+            "    spanning-tree port-type admin-edge",
+            "    spanning-tree bpdu-guard",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="cx-01.conf")
+    hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
+    assert any("1/1/1" in item for item in hit.evidence)
+    assert not any("1/1/2" in item for item in hit.evidence)
