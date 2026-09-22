@@ -237,6 +237,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_arp_inspection(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
+    found.extend(_junos_plain_password(text))
     return _sorted(found)
 
 
@@ -684,6 +685,45 @@ def _junos_edge_without_guard(text: str) -> list[Finding]:
             "挿すと、輪ができて網全体が止まります。"
             "bpdu-block-on-edge を入れておけば、その口だけが落ちて済みます。",
             evidence=[f"{name}: edge のみ" for name in naked[:5]],
+        )
+    ]
+
+
+#: Junos の、値まで書いてある平文の合言葉。
+#: 機器に入れた時点で暗号化されるので（出典: Junos OS CLI Reference「user (Access)」
+#: "The plain text password will be automatically encrypted as soon as you
+#: configure it."）、この形が残っているのは投入前の設定文のほう。
+#: その文を誰かに渡すと、合言葉がそのまま渡る
+_JUNOS_PLAIN_PASSWORD = re.compile(
+    r"^set\s+system\s+(?:root-authentication"
+    r"|login\s+user\s+\S+\s+authentication)\s+plain-text-password\s+\S",
+    re.IGNORECASE,
+)
+
+
+def _junos_plain_password(text: str) -> list[Finding]:
+    """Junos の設定文に、合言葉が字のまま書かれているのを言う。
+
+    機器の running config には出ない形なので、これが見えているのは
+    投入用の設定文。渡した相手にそのまま合言葉が渡る。
+
+    証跡には値を出さない。どの行かが分かる形だけ残す。
+    """
+    heads = [
+        " ".join(line.strip().split()[:4])
+        for line in text.splitlines()
+        if _JUNOS_PLAIN_PASSWORD.match(line.strip())
+    ]
+    if not heads:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="設定文に、合言葉が字のまま書かれています",
+            why="Junos は入れた時点で暗号化するので、この形が残っているのは"
+            "投入前の設定文です。その文を渡すと合言葉もそのまま渡ります。"
+            "渡す前に消すか、暗号化した形（encrypted-password）に替えてください。",
+            evidence=heads[:3],
         )
     ]
 

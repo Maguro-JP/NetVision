@@ -1493,3 +1493,27 @@ def test_junos_bpdu_block_on_edge_covers_every_edge_port(db_session):
     )
     result = configcheck.check(db_session, text, filename="ex-02.conf")
     assert not any("BPDU から守る設定" in f.title for f in result.findings)
+
+
+def test_a_junos_plain_text_password_in_the_config_text_is_called_out(db_session):
+    """Junos の設定文に合言葉が字のまま書かれていたら言う。値は証跡に出さない。
+
+    機器に入れた時点で暗号化されるので、この形が残っているのは投入前の設定文。
+
+    出典: Junos OS CLI Reference「user (Access)」
+    （"The plain text password will be automatically encrypted as soon as you
+    configure it."）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name ex-03",
+            'set system root-authentication plain-text-password "sample-value"',
+            'set system login user admin authentication encrypted-password "$6$sample"',
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-03.conf")
+    hit = next(f for f in result.findings if "字のまま" in f.title)
+    assert hit.evidence == ["set system root-authentication plain-text-password"]
+    # 合言葉そのものは、どこにも出さない
+    assert all("sample-value" not in item for item in hit.evidence)
+    assert "sample-value" not in hit.why
