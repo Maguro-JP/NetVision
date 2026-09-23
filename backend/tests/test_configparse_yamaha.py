@@ -241,3 +241,68 @@ def test_the_scope_line_is_read_down_to_what_it_keeps_back():
     ]
     # 十六進のマスクも同じ帯として読む
     assert dhcp.pools[1].network == "10.9.0.0/24"
+
+
+OFFICIAL_LLDP = """\
+# RTX830 Rev.15.02.28 (Tue Nov 26 18:39:03 2019)
+console prompt osaka-rt01
+ip lan1 address 192.168.100.1/24
+show lldp neighbors
+Interface Name           : port1.1
+System Name              : SWX2310-10G
+System Description       : SWX2310 Rev.2.04.01 (Thu Sep 26 17:35:20 2019)
+Port Description         : port1.3
+System Capabilities      : L2 Switching
+Interface Numbering      : 2
+Interface Number         : 5003
+OID Number               :
+Management MAC Address   : ac44.f230.0000
+
+Mandatory TLVs
+  CHASSIS ID TYPE
+    IP ADDRESS           : 0.0.0.0
+  PORT ID TYPE
+    INTERFACE NAME       : port1.3
+  TTL (Time To Live)     : 41
+
+Interface Name           : port1.2
+System Name              : SWX2210-8G
+System Description       : SWX2210-8G Rev.1.02.14 (Fri Feb  7 14:45:31 2025)
+Port Description         :
+System Capabilities      : L2 Switching
+Interface Numbering      : 2
+Interface Number         : 3
+OID Number               :
+Management MAC Address   : ac44.f230.0001
+
+Mandatory TLVs
+  CHASSIS ID TYPE
+    IP ADDRESS           : 0.0.0.0
+  PORT ID TYPE
+    INTERFACE NAME       : port1.5
+  TTL (Time To Live)     : 41
+
+Interface Name           : port1.8
+System Name              :
+System Description       :
+Port Description         :
+"""
+
+
+def test_the_lldp_block_gives_the_neighbour_and_its_port():
+    """出典: ヤマハ SWX2310 コマンドリファレンス 4.23.20
+    「全てのインターフェースにおける接続機器の情報表示」の設定例。
+    SWX2210（4.13.11）・SWX2320（4.25.20）にも同じ形の例がある。
+
+    ヤマハの LLDP は表ではなく項目を縦に並べた形で出る。1件は
+    `Interface Name` で始まる。相手のポートは `Port Description` に
+    出るが、空のこともあるので、そのときは `PORT ID TYPE` の
+    `INTERFACE NAME` を使う。名乗っていない相手は線を引かない。
+    """
+    neighbors = configparse.parse(OFFICIAL_LLDP).neighbors
+    found = {n.local_interface: (n.remote_hostname, n.remote_interface) for n in neighbors}
+    assert found["port1.1"] == ("SWX2310-10G", "port1.3")
+    # Port Description が空でも、TLV 側のポート名で引ける
+    assert found["port1.2"] == ("SWX2210-8G", "port1.5")
+    # 名乗っていない相手は作らない（無いのか読めていないのかを混ぜない）
+    assert "port1.8" not in found

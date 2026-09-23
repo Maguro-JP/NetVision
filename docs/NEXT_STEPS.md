@@ -51,8 +51,8 @@ Config には管理IP・ACL・SNMP コミュニティ名が入ります。攻撃
 | 確認すること | 見方 | 駄目だったときの影響 |
 |---|---|---|
 | NEC IX の LLDP 出力 | トポロジーに線が出るか | 公開書式から実装。IX-R/IX-V の公式コマンドリファレンス（HTML）には LLDP のコマンドが無く、IX2000/IX3000 のコマンドリファレンス（PDF）はこの環境から読めていないので公式未確認。結線が引けないときは実出力を渡してほしい |
-| 隣（LLDP）の読み取り範囲 | トポロジーに線が出るか | 公式の出力例で確認して実装済み: Cisco IOS / IOS-XR（表・詳細）、Juniper、H3C、ファーウェイ、Aruba CX、FastIron、アラクサラ（`show lldp detail`）、Dell OS10、EXOS（detailed）、Cisco 小規模機（Catalyst 1200/1300 系）。FortiGate 配下の FortiSwitch はメーカーのナレッジベースの出力例から実装（文書ライブラリ側は未確認） |
-| 隣（LLDP）が未対応のもの | 同上 | Palo Alto（`show lldp neighbors all` の出力例が公式に見当たらない）、NEC QX（公式のコマンドマニュアルに当たれていない）、ヤマハ。いずれも推測で書かず未実装のままにしている。実出力を渡してもらえれば読めるようにする |
+| 隣（LLDP）の読み取り範囲 | トポロジーに線が出るか | 公式の出力例で確認して実装済み: Cisco IOS / IOS-XR（表・詳細）、Juniper、H3C、ファーウェイ、Aruba CX、FastIron、アラクサラ（`show lldp detail`）、Dell OS10、EXOS（detailed）、Cisco 小規模機（Catalyst 1200/1300 系）、ヤマハ SWX（`show lldp neighbors`）。FortiGate 配下の FortiSwitch はメーカーのナレッジベースの出力例から実装（文書ライブラリ側は未確認） |
+| 隣（LLDP）が未対応のもの | 同上 | Palo Alto（`show lldp neighbors all` の出力例が公式に見当たらない）、NEC QX（公式のコマンドマニュアルに当たれていない）。いずれも推測で書かず未実装のままにしている。実出力を渡してもらえれば読めるようにする |
 | NEC IX の書き方 | 機器ページのポート表・経路・NAT・DHCP・OSPF・VRRP | IX-R/IX-V の公式コマンドリファレンス 1.5a の入力形式（`ip address`・`ip route`・`ip napt`・`ip dhcp`・`ip router ospf`・`vrrp`・`tunnel`）で確認済み。IX2000/IX3000 固有の差分は PDF が読めておらず未確認 |
 | アラクサラ AX の出力 | 型番・バージョン・ポートが入るか | `show version` は公式マニュアルの出力例（AX3650S アップグレードガイド）で確認済み。ポート表は公開書式から実装で、実機では未検証 |
 | NEC QX の display 出力 | 型番・バージョンが入るか | 版によって書式が違う可能性。公式のコマンドマニュアルにはまだ当たれていない（公式未確認）。`display version` の実サンプルがあれば渡してほしい |
