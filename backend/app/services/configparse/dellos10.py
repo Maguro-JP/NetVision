@@ -46,10 +46,20 @@ _CHANNEL = re.compile(
 #: FastIron も `interface ethernet 1/1/1` と書く。こちらの目印が出ていたら
 #: OS10 ではない（VLAN の下に口を並べる書き方は OS10 に無い）
 _FASTIRON = re.compile(r"\bby\s+port\b|\bport-name\b|\b(?:un)?tagged\s+ethe", re.IGNORECASE)
+#: Nexus のブレイクアウトも `interface ethernet 1/2/1` と書く。Cisco が
+#: 名乗っているなら OS10 ではない。取り違えると、型番も版数も別の
+#: メーカーの表を引きにいく。
+#: 出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+#: 「Specifying the Interfaces to Configure」の `interface ethernet 1/2/1`
+_NXOS = re.compile(
+    r"\bCisco\s+Nexus\s+Operating\s+System\b|\bNX-OS\b|^\s*cisco\s+Nexus\s*\S*\s+\S+\s+"
+    r"(?:\(\d+\s+Slot\)\s+)?[Cc]hassis",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def detect(text: str) -> Vendor | None:
-    if _FASTIRON.search(text):
+    if _FASTIRON.search(text) or _NXOS.search(text):
         return None
     for pattern in _STRONG:
         if pattern.search(text):

@@ -412,3 +412,41 @@ def test_a_named_range_is_expanded_and_an_undefined_one_makes_no_port():
     assert sorted(ports) == ["GigabitEthernet1/0/1", "GigabitEthernet1/0/2"]
     assert ports["GigabitEthernet1/0/2"].description == "端末用"
     assert ports["GigabitEthernet1/0/2"].vlan == 10
+
+
+OFFICIAL_NXOS_RANGE = """Cisco Nexus Operating System (NX-OS) Software
+hostname nx-01
+!
+interface ethernet 2/29-30
+  description 上位へ
+  switchport mode trunk
+!
+interface ethernet 2/33, ethernet 2/35
+  description 予備
+!
+interface ethernet 1/2/1
+  description ブレイクアウト
+!
+"""
+
+
+def test_nxos_writes_a_range_without_the_range_keyword():
+    """出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+    「Specifying the Interfaces to Configure」。NX-OS は `range` を付けず、
+    種類と番号を空けて書く。連続は `interface ethernet 2/29-30`、
+    非連続は `interface ethernet 2/29, ethernet 2/33, ethernet 2/35`、
+    ブレイクアウトは `interface ethernet 1/2/1`。
+
+    これまでは空白入りの書き方に当たらず、この口を丸ごと読み落としていた。
+    読み落とすと「設定されていない口」として資料に出る。
+    """
+    parsed = configparse.parse(OFFICIAL_NXOS_RANGE)
+    # Nexus のブレイクアウトは Dell OS10 と同じ形に見えるが、Cisco が
+    # 名乗っているので取り違えない（型番も版数も別の表を引いてしまう）
+    assert parsed.vendor.value == "cisco_nxos"
+    ports = {i.name: i.description for i in parsed.interfaces}
+    assert ports["Ethernet2/29"] == "上位へ"
+    assert ports["Ethernet2/30"] == "上位へ"
+    assert ports["Ethernet2/33"] == "予備"
+    assert ports["Ethernet2/35"] == "予備"
+    assert ports["Ethernet1/2/1"] == "ブレイクアウト"

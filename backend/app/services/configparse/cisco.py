@@ -62,6 +62,16 @@ _STACK_ROW = re.compile(
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 #: `interface range Gi1/0/1 - 24` や `interface range Gi1/0/1 - 3, Gi1/0/8`
 _INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
+#: NX-OS は `range` を付けずに、種類と番号を空けて書く。番号のところに
+#: 範囲（`2/29-30`）やカンマ区切り（`2/29, ethernet 2/33`）を書ける。
+#: 出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+#: 「Specifying the Interfaces to Configure」
+_INTERFACE_SPACED = re.compile(
+    r"^interface\s+(?!range\b)"
+    r"((?:[A-Za-z][\w\-]*\s+\d[\d/.\-]*)"
+    r"(?:\s*,\s*[A-Za-z][\w\-]*\s+\d[\d/.\-]*)*)\s*$",
+    re.IGNORECASE,
+)
 _RANGE_PART = re.compile(
     r"^([A-Za-z][A-Za-z\-]*)\s*([\d/]*?)(\d+)(?:\s*-\s*(\d+))?$", re.IGNORECASE
 )
@@ -300,6 +310,15 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             group = [
                 parsed.add_interface(ParsedInterface(name=name))
                 for name in expand_range(ranged.group(1), macros)
+            ]
+            current = group[0] if group else None
+            continue
+
+        spaced = _INTERFACE_SPACED.match(line.strip())
+        if spaced and not line.startswith(" "):
+            group = [
+                parsed.add_interface(ParsedInterface(name=name))
+                for name in expand_range(spaced.group(1))
             ]
             current = group[0] if group else None
             continue
