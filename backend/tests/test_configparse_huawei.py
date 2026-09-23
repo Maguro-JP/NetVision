@@ -266,3 +266,49 @@ def test_the_size_of_the_port_is_read_from_the_mtu_line():
     ports = {i.name: i for i in parsed.interfaces}
     assert ports["10GE1/0/1"].mtu == 9000
     assert ports["Vlanif10"].mtu is None
+
+
+OFFICIAL_PORT_GROUP = """sysname SW-HW
+#
+vlan batch 10 20
+#
+port-group group-member Ethernet2/0/1 to Ethernet2/0/3
+ port link-type access
+ port default vlan 10
+#
+port-group pg1
+ group-member GigabitEthernet1/0/1 to GigabitEthernet1/0/2
+ port link-type trunk
+ port trunk allow-pass vlan 10 20
+#
+"""
+
+
+def test_a_port_group_is_opened_out_to_its_member_ports() -> None:
+    """出典: Huawei NetEngine AR600 Command Reference「port-group group-member」
+    （`port-group group-member ethernet 2/0/0 to ethernet 2/0/1`）と、
+    AR300/AR700 Configuration Guide「How Do I Add Interfaces to a VLAN in a
+    Batch?」（`port-group pg1` の下に `group-member … to …`）。
+
+    その場限りの束と、名前を付けた束の両方がある。束に書いた設定は
+    メンバーの口すべてに効くので、開いてから読まないと、その口が
+    「何も設定されていない」ことになる。
+
+    なお公式には「port group の設定は確認も保存もできない」とあり、
+    `display current-configuration` には出てこない。出てくるのは手順書や
+    投入用のコマンド列をそのまま渡されたとき。
+    """
+    parsed = configparse.parse(OFFICIAL_PORT_GROUP)
+    assert parsed.vendor is Vendor.HUAWEI
+    ports = {i.name: i for i in parsed.interfaces}
+    assert sorted(ports) == [
+        "Ethernet2/0/1",
+        "Ethernet2/0/2",
+        "Ethernet2/0/3",
+        "GigabitEthernet1/0/1",
+        "GigabitEthernet1/0/2",
+    ]
+    assert ports["Ethernet2/0/2"].mode == "access"
+    assert ports["Ethernet2/0/2"].vlan == 10
+    assert ports["GigabitEthernet1/0/2"].mode == "trunk"
+    assert ports["GigabitEthernet1/0/2"].trunk_vlans == [10, 20]
