@@ -65,6 +65,14 @@ _INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
 _RANGE_PART = re.compile(
     r"^([A-Za-z][A-Za-z\-]*)\s*([\d/]*?)(\d+)(?:\s*-\s*(\d+))?$", re.IGNORECASE
 )
+#: 範囲に名前を付けておく書き方。`define interface-range enet_list Gi1/0/1 - 2`
+#: 出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration Guide
+#: 「Configuring and Using Interface Range Macros」
+_DEFINE_RANGE = re.compile(
+    r"^define\s+interface-range\s+(\S+)\s+(.+)$", re.IGNORECASE | re.MULTILINE
+)
+#: その名前を呼び出す側。`interface range macro enet_list`
+_RANGE_MACRO = re.compile(r"^macro\s+(\S+)\s*$", re.IGNORECASE)
 #: `vlan 10` に加えて `vlan 10,20,30` `vlan 100-110` も定義になる。
 #: 並べ書きを読み落とすと、その VLAN が「台帳にしか無い」ことになってしまう
 _VLAN_DEF = re.compile(r"^vlan\s+([\d,\s-]+)$", re.IGNORECASE)
@@ -233,12 +241,25 @@ def _chassis_item(text: str) -> tuple[str, str] | None:
     return None
 
 
-def expand_range(spec: str) -> list[str]:
+def expand_range(spec: str, macros: dict[str, str] | None = None) -> list[str]:
     """`Gi1/0/1 - 24, Gi1/0/30` を、ポート名の一覧にする。
 
     範囲でまとめて書いてあるポートは、現場では端末を挿す口であることが多い。
     畳んだままだと「そのポートは何も設定されていない」と読めてしまう。
+
+    `macro <名前>` は `define interface-range` で付けた名前の呼び出し。
+    その定義が同じ資料に無ければ、どの口かは分からないので、何も作らない
+    （`macro enet_list` という名前の口をでっち上げない）。
+
+    出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration
+    Guide「Configuring and Using Interface Range Macros」
+    （`define interface-range enet_list gigabitethernet1/0/1 - 2` →
+    `interface range macro enet_list`）
     """
+    called = _RANGE_MACRO.match(spec.strip())
+    if called:
+        defined = (macros or {}).get(called.group(1).lower())
+        return expand_range(defined) if defined else []
     names: list[str] = []
     for chunk in spec.split(","):
         part = chunk.strip()
@@ -265,6 +286,9 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     # 許可 VLAN を明示したポート。書いていないトランクは「全部通す」が既定なので、
     # 「書いていない」と「none と書いた」を取り違えないよう覚えておく
     allowed_written: set[str] = set()
+    #: `define interface-range` で名前を付けた範囲。呼び出しより後に
+    #: 書かれていることもあるので、先に全部集めてから展開する
+    macros = {name.lower(): spec.strip() for name, spec in _DEFINE_RANGE.findall(text)}
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -275,7 +299,7 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if ranged and not line.startswith(" "):
             group = [
                 parsed.add_interface(ParsedInterface(name=name))
-                for name in expand_range(ranged.group(1))
+                for name in expand_range(ranged.group(1), macros)
             ]
             current = group[0] if group else None
             continue

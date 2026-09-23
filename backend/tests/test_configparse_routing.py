@@ -381,3 +381,34 @@ def test_the_same_values_are_read_from_necqx():
     assert port.speed == "1000"
     assert port.duplex == "full"
     assert port.lag_mode == "active"
+
+
+OFFICIAL_RANGE_MACRO = """hostname sw-02
+!
+define interface-range enet_list GigabitEthernet1/0/1 - 2
+!
+interface range macro enet_list
+ description 端末用
+ switchport mode access
+ switchport access vlan 10
+!
+interface range macro not_defined_here
+ description 定義が同じ資料に無い
+!
+"""
+
+
+def test_a_named_range_is_expanded_and_an_undefined_one_makes_no_port():
+    """出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration
+    Guide「Configuring and Using Interface Range Macros」。
+    `define interface-range enet_list gigabitethernet1/0/1 - 2` で名前を付け、
+    `interface range macro enet_list` で呼び出す。
+
+    呼び出しをそのまま口の名前として読むと、`macro enet_list` という
+    存在しない口が台帳に載る。定義があるときだけ展開し、無いときは
+    何も作らない（どの口かが分からないものを、分かったふりで書かない）。
+    """
+    ports = {i.name: i for i in configparse.parse(OFFICIAL_RANGE_MACRO).interfaces}
+    assert sorted(ports) == ["GigabitEthernet1/0/1", "GigabitEthernet1/0/2"]
+    assert ports["GigabitEthernet1/0/2"].description == "端末用"
+    assert ports["GigabitEthernet1/0/2"].vlan == 10
