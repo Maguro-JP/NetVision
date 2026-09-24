@@ -489,3 +489,34 @@ def test_nxos_marks_a_port_layer2_with_the_bare_switchport_line():
     assert ports["Ethernet1/2"].mode == "trunk"
     assert ports["Ethernet1/3"].mode == "routed"
     assert ports["Ethernet1/3"].ip_address == "10.0.0.1/30"
+
+
+OFFICIAL_IOS_RANGE_MIXED = """hostname sw-03
+!
+interface range vlan 500 - 502
+ description SVI
+!
+interface range fastethernet 5/1 - 2 , gigabitethernet 1/1 - 2
+ description 混在
+!
+"""
+
+
+def test_ios_range_accepts_vlans_and_mixed_types():
+    """出典: Cisco IOS Interface Configuration Guide「Interface Range
+    Specification」（`interface range vlan 500 - 506` /
+    `interface range fastethernet 5/1 - 5 , gigabitethernet 1/1 - 2`）。
+
+    VLAN の口も範囲で書けて、カンマで種類の違う口を混ぜられる。
+    どちらも1つずつの口に開いて読めることを固定しておく。
+    """
+    ports = {i.name: i.description for i in configparse.parse(OFFICIAL_IOS_RANGE_MIXED).interfaces}
+    assert ports == {
+        "Vlan500": "SVI",
+        "Vlan501": "SVI",
+        "Vlan502": "SVI",
+        "FastEthernet5/1": "混在",
+        "FastEthernet5/2": "混在",
+        "GigabitEthernet1/1": "混在",
+        "GigabitEthernet1/2": "混在",
+    }
