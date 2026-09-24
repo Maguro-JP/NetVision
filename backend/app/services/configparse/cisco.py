@@ -62,9 +62,27 @@ _STACK_ROW = re.compile(
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 #: `interface range Gi1/0/1 - 24` や `interface range Gi1/0/1 - 3, Gi1/0/8`
 _INTERFACE_RANGE = re.compile(r"^interface\s+range\s+(.+)$", re.IGNORECASE)
+#: NX-OS は `range` を付けずに、種類と番号を空けて書く。番号のところに
+#: 範囲（`2/29-30`）やカンマ区切り（`2/29, ethernet 2/33`）を書ける。
+#: 出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+#: 「Specifying the Interfaces to Configure」
+_INTERFACE_SPACED = re.compile(
+    r"^interface\s+(?!range\b)"
+    r"((?:[A-Za-z][\w\-]*\s+\d[\d/.\-]*)"
+    r"(?:\s*,\s*[A-Za-z][\w\-]*\s+\d[\d/.\-]*)*)\s*$",
+    re.IGNORECASE,
+)
 _RANGE_PART = re.compile(
     r"^([A-Za-z][A-Za-z\-]*)\s*([\d/]*?)(\d+)(?:\s*-\s*(\d+))?$", re.IGNORECASE
 )
+#: 範囲に名前を付けておく書き方。`define interface-range enet_list Gi1/0/1 - 2`
+#: 出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration Guide
+#: 「Configuring and Using Interface Range Macros」
+_DEFINE_RANGE = re.compile(
+    r"^define\s+interface-range\s+(\S+)\s+(.+)$", re.IGNORECASE | re.MULTILINE
+)
+#: その名前を呼び出す側。`interface range macro enet_list`
+_RANGE_MACRO = re.compile(r"^macro\s+(\S+)\s*$", re.IGNORECASE)
 #: `vlan 10` に加えて `vlan 10,20,30` `vlan 100-110` も定義になる。
 #: 並べ書きを読み落とすと、その VLAN が「台帳にしか無い」ことになってしまう
 _VLAN_DEF = re.compile(r"^vlan\s+([\d,\s-]+)$", re.IGNORECASE)
@@ -233,12 +251,25 @@ def _chassis_item(text: str) -> tuple[str, str] | None:
     return None
 
 
-def expand_range(spec: str) -> list[str]:
+def expand_range(spec: str, macros: dict[str, str] | None = None) -> list[str]:
     """`Gi1/0/1 - 24, Gi1/0/30` を、ポート名の一覧にする。
 
     範囲でまとめて書いてあるポートは、現場では端末を挿す口であることが多い。
     畳んだままだと「そのポートは何も設定されていない」と読めてしまう。
+
+    `macro <名前>` は `define interface-range` で付けた名前の呼び出し。
+    その定義が同じ資料に無ければ、どの口かは分からないので、何も作らない
+    （`macro enet_list` という名前の口をでっち上げない）。
+
+    出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration
+    Guide「Configuring and Using Interface Range Macros」
+    （`define interface-range enet_list gigabitethernet1/0/1 - 2` →
+    `interface range macro enet_list`）
     """
+    called = _RANGE_MACRO.match(spec.strip())
+    if called:
+        defined = (macros or {}).get(called.group(1).lower())
+        return expand_range(defined) if defined else []
     names: list[str] = []
     for chunk in spec.split(","):
         part = chunk.strip()
@@ -265,6 +296,9 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     # 許可 VLAN を明示したポート。書いていないトランクは「全部通す」が既定なので、
     # 「書いていない」と「none と書いた」を取り違えないよう覚えておく
     allowed_written: set[str] = set()
+    #: `define interface-range` で名前を付けた範囲。呼び出しより後に
+    #: 書かれていることもあるので、先に全部集めてから展開する
+    macros = {name.lower(): spec.strip() for name, spec in _DEFINE_RANGE.findall(text)}
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -275,7 +309,16 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if ranged and not line.startswith(" "):
             group = [
                 parsed.add_interface(ParsedInterface(name=name))
-                for name in expand_range(ranged.group(1))
+                for name in expand_range(ranged.group(1), macros)
+            ]
+            current = group[0] if group else None
+            continue
+
+        spaced = _INTERFACE_SPACED.match(line.strip())
+        if spaced and not line.startswith(" "):
+            group = [
+                parsed.add_interface(ParsedInterface(name=name))
+                for name in expand_range(spaced.group(1))
             ]
             current = group[0] if group else None
             continue
@@ -361,6 +404,19 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             _ospf_option(current, body)
         elif body == "shutdown":
             current.enabled = False
+        elif body == "switchport":
+            # L2 の口に戻す。NX-OS では口を L2 にするのはこの1行で、
+            # 続けて mode を書かなければアクセスとして働く。
+            # 既定が L3 か L2 かは機種で違う（Nexus 7000 は routed、
+            # Nexus 6000 は switched）ので、書いてあるものだけを読む。
+            # 出典: Cisco Nexus 7000 Series NX-OS Interfaces Command Reference
+            # 「switchport」（To set the interface as a Layer 2 switching port …
+            # The default switchport mode is the access mode）
+            if current.mode == "routed":
+                current.mode = None
+                current.ip_address = None
+            if parsed.vendor is Vendor.CISCO_NXOS and not current.mode:
+                current.mode = "access"
         elif body == "no switchport":
             # L3 の口になった時点で、L2 の設定（access / trunk の VLAN）は無くなる。
             # 残したままだと、その口がまだ VLAN を運んでいることになってしまう

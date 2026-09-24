@@ -381,3 +381,142 @@ def test_the_same_values_are_read_from_necqx():
     assert port.speed == "1000"
     assert port.duplex == "full"
     assert port.lag_mode == "active"
+
+
+OFFICIAL_RANGE_MACRO = """hostname sw-02
+!
+define interface-range enet_list GigabitEthernet1/0/1 - 2
+!
+interface range macro enet_list
+ description 端末用
+ switchport mode access
+ switchport access vlan 10
+!
+interface range macro not_defined_here
+ description 定義が同じ資料に無い
+!
+"""
+
+
+def test_a_named_range_is_expanded_and_an_undefined_one_makes_no_port():
+    """出典: Cisco Catalyst 9300 Interface and Hardware Components Configuration
+    Guide「Configuring and Using Interface Range Macros」。
+    `define interface-range enet_list gigabitethernet1/0/1 - 2` で名前を付け、
+    `interface range macro enet_list` で呼び出す。
+
+    呼び出しをそのまま口の名前として読むと、`macro enet_list` という
+    存在しない口が台帳に載る。定義があるときだけ展開し、無いときは
+    何も作らない（どの口かが分からないものを、分かったふりで書かない）。
+    """
+    ports = {i.name: i for i in configparse.parse(OFFICIAL_RANGE_MACRO).interfaces}
+    assert sorted(ports) == ["GigabitEthernet1/0/1", "GigabitEthernet1/0/2"]
+    assert ports["GigabitEthernet1/0/2"].description == "端末用"
+    assert ports["GigabitEthernet1/0/2"].vlan == 10
+
+
+OFFICIAL_NXOS_RANGE = """Cisco Nexus Operating System (NX-OS) Software
+hostname nx-01
+!
+interface ethernet 2/29-30
+  description 上位へ
+  switchport mode trunk
+!
+interface ethernet 2/33, ethernet 2/35
+  description 予備
+!
+interface ethernet 1/2/1
+  description ブレイクアウト
+!
+"""
+
+
+def test_nxos_writes_a_range_without_the_range_keyword():
+    """出典: Cisco Nexus 9000 Series NX-OS Interfaces Configuration Guide
+    「Specifying the Interfaces to Configure」。NX-OS は `range` を付けず、
+    種類と番号を空けて書く。連続は `interface ethernet 2/29-30`、
+    非連続は `interface ethernet 2/29, ethernet 2/33, ethernet 2/35`、
+    ブレイクアウトは `interface ethernet 1/2/1`。
+
+    これまでは空白入りの書き方に当たらず、この口を丸ごと読み落としていた。
+    読み落とすと「設定されていない口」として資料に出る。
+    """
+    parsed = configparse.parse(OFFICIAL_NXOS_RANGE)
+    # Nexus のブレイクアウトは Dell OS10 と同じ形に見えるが、Cisco が
+    # 名乗っているので取り違えない（型番も版数も別の表を引いてしまう）
+    assert parsed.vendor.value == "cisco_nxos"
+    ports = {i.name: i.description for i in parsed.interfaces}
+    assert ports["Ethernet2/29"] == "上位へ"
+    assert ports["Ethernet2/30"] == "上位へ"
+    assert ports["Ethernet2/33"] == "予備"
+    assert ports["Ethernet2/35"] == "予備"
+    assert ports["Ethernet1/2/1"] == "ブレイクアウト"
+
+
+OFFICIAL_NXOS_SWITCHPORT = """Cisco Nexus Operating System (NX-OS) Software
+hostname nx-02
+!
+interface Ethernet1/1
+  switchport
+  description 端末用
+!
+interface Ethernet1/2
+  switchport
+  switchport mode trunk
+!
+interface Ethernet1/3
+  no switchport
+  ip address 10.0.0.1/30
+!
+"""
+
+
+def test_nxos_marks_a_port_layer2_with_the_bare_switchport_line():
+    """出典: Cisco Nexus 7000 Series NX-OS Interfaces Command Reference
+    「switchport」（To set the interface as a Layer 2 switching port, use the
+    switchport command … The default switchport mode is the access mode）。
+
+    NX-OS は口を L2 にするのがこの1行で、続けて mode を書かなければ
+    アクセスとして働く。この行を読まないと、L2 の口が「何モードか
+    分からない」ままになる。
+
+    既定が L3 か L2 かは機種で違う（Nexus 7000 の設定ガイドは routed、
+    Nexus 6000 は switched と書いている）ので、既定は決め打ちせず、
+    書いてあるものだけを読む。
+    """
+    ports = {i.name: i for i in configparse.parse(OFFICIAL_NXOS_SWITCHPORT).interfaces}
+    assert ports["Ethernet1/1"].mode == "access"
+    # あとから mode を書いてあれば、そちらが効く
+    assert ports["Ethernet1/2"].mode == "trunk"
+    assert ports["Ethernet1/3"].mode == "routed"
+    assert ports["Ethernet1/3"].ip_address == "10.0.0.1/30"
+
+
+OFFICIAL_IOS_RANGE_MIXED = """hostname sw-03
+!
+interface range vlan 500 - 502
+ description SVI
+!
+interface range fastethernet 5/1 - 2 , gigabitethernet 1/1 - 2
+ description 混在
+!
+"""
+
+
+def test_ios_range_accepts_vlans_and_mixed_types():
+    """出典: Cisco IOS Interface Configuration Guide「Interface Range
+    Specification」（`interface range vlan 500 - 506` /
+    `interface range fastethernet 5/1 - 5 , gigabitethernet 1/1 - 2`）。
+
+    VLAN の口も範囲で書けて、カンマで種類の違う口を混ぜられる。
+    どちらも1つずつの口に開いて読めることを固定しておく。
+    """
+    ports = {i.name: i.description for i in configparse.parse(OFFICIAL_IOS_RANGE_MIXED).interfaces}
+    assert ports == {
+        "Vlan500": "SVI",
+        "Vlan501": "SVI",
+        "Vlan502": "SVI",
+        "FastEthernet5/1": "混在",
+        "FastEthernet5/2": "混在",
+        "GigabitEthernet1/1": "混在",
+        "GigabitEthernet1/2": "混在",
+    }

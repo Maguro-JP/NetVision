@@ -180,6 +180,8 @@ def detect(text: str) -> Vendor | None:
 
 def parse(text: str) -> ParsedConfig:
     parsed = ParsedConfig(vendor=Vendor.HUAWEI, os_name="VRP")
+    # 口の束（port group）は、メンバーの口それぞれに書いた形へ開いてから読む
+    text = expand_port_groups(text)
 
     found = _VERSION.search(text)
     if found:
@@ -691,3 +693,86 @@ def _prefixlen(mask: str) -> int:
     if "." not in mask:
         return int(mask)
     return sum(bin(int(part)).count("1") for part in mask.split("."))
+
+
+# --- まとめて設定する口（port group）------------------------------------------
+
+#: その場限りの口の束。`port-group group-member Ethernet2/0/1 to Ethernet2/0/5`
+_PORT_GROUP_TEMPORARY = re.compile(r"^port-group\s+group-member\s+(.+?)\s*$", re.IGNORECASE)
+#: 名前を付けた口の束。`port-group pg1` の下に `group-member …` が並ぶ
+_PORT_GROUP_NAMED = re.compile(r"^port-group\s+(?!group-member\b)(\S+)\s*$", re.IGNORECASE)
+_GROUP_MEMBER = re.compile(r"^\s+group-member\s+(.+?)\s*$", re.IGNORECASE)
+#: `Ethernet2/0/1 to Ethernet2/0/5`。`to` の前後は同じ種類で、後ろが大きい
+_MEMBER_RANGE = re.compile(
+    r"^(?P<head>[A-Za-z][\w\-]*)\s*(?P<middle>[\d/]*?)(?P<first>\d+)"
+    r"(?:\s+to\s+[A-Za-z][\w\-]*\s*[\d/]*?(?P<last>\d+))?$",
+    re.IGNORECASE,
+)
+
+
+def _group_members(spec: str) -> list[str]:
+    """`Ethernet2/0/1 to Ethernet2/0/5` を口の名前の一覧にする。
+
+    `&<1-10>` の並べ書き（空白区切りで複数の範囲）にも対応する。
+
+    出典: Huawei NetEngine AR600 Command Reference「port-group group-member」
+    （`port-group group-member ethernet 2/0/0 to ethernet 2/0/1`）と、
+    CloudEngine 16800 Configuration Guide「Configuring a Port Group」。
+    """
+    names: list[str] = []
+    for part in re.split(r"(?i)(?<=\d)\s+(?!to\b)", spec.strip()):
+        found = _MEMBER_RANGE.match(re.sub(r"\s+", " ", part.strip()))
+        if not found:
+            names.append(part.strip())
+            continue
+        head, middle = found.group("head"), found.group("middle")
+        first = int(found.group("first"))
+        last = int(found.group("last")) if found.group("last") else first
+        if last < first or last - first > 512:
+            names.append(part.strip())
+            continue
+        names.extend(f"{head}{middle}{number}" for number in range(first, last + 1))
+    return names
+
+
+def expand_port_groups(text: str) -> str:
+    """口の束への設定を、メンバーの口それぞれに書いた形へ開く。
+
+    公式には「port group の設定は確認も保存もできない」とあり、
+    `display current-configuration` には出てこない。出てくるのは手順書や
+    投入用のコマンド列をそのまま渡されたときなので、そこで口を
+    読み落とさないようにするためのもの。
+
+    出典: Huawei CloudEngine 16800 Configuration Guide「Configuring a Port
+    Group」（"you cannot check or save the port group configuration"）。
+    """
+    lines = text.splitlines()
+    out: list[str] = []
+    index = 0
+    while index < len(lines):
+        raw = lines[index]
+        temporary = _PORT_GROUP_TEMPORARY.match(raw)
+        named = _PORT_GROUP_NAMED.match(raw)
+        if not (temporary or named):
+            out.append(raw)
+            index += 1
+            continue
+
+        members = _group_members(temporary.group(1)) if temporary else []
+        body: list[str] = []
+        index += 1
+        while index < len(lines):
+            line = lines[index]
+            if line and not line[0].isspace():
+                break
+            member = _GROUP_MEMBER.match(line)
+            if member:
+                members.extend(_group_members(member.group(1)))
+            elif line.strip() and line.strip().lower() not in ("quit", "commit", "return"):
+                body.append(line)
+            index += 1
+
+        for name in members:
+            out.append(f"interface {name}")
+            out.extend(body)
+    return "\n".join(out)

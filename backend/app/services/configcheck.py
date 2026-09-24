@@ -981,7 +981,53 @@ def _dhcp_snooping(text: str) -> list[Finding]:
                 evidence=["ip dhcp snooping vlan はあるが ip dhcp snooping trust が無い"],
             )
         )
+        return out
+
+    out.extend(_dhcp_snooping_option82(lines))
     return out
+
+
+def _dhcp_snooping_option82(lines: list[str]) -> list[Finding]:
+    """見張りを入れた L2 のスイッチが、上位で落とされる形。
+
+    option 82 の挿入は既定で有効。自分でリレー（`ip helper-address`）を
+    していない L2 のスイッチがこれを付けると、中の giaddr は 0.0.0.0 の
+    ままになる。上位の機器から見ると「リレーでないのに option 82 が付いて
+    いる」ので、その口を信用していなければ落とす。端末がアドレスを
+    取れない形で出る。
+
+    上位側が信用する口にしてあれば通るので、これだけで壊れると決めつけない。
+    上位の設定はこの1台の資料からは読めないので、確認してほしいものとして出す。
+
+    出典:
+    - Catalyst 6500 Supervisor Engine 2T Software Configuration Guide
+      「Default Configuration for DHCP Snooping」（DHCP snooping information
+      option: Enabled / DHCP option-82 on untrusted port feature: Disabled）
+    - Catalyst 4500 Software Configuration Guide「Configuring DHCP Snooping」
+      （If the downstream switch ... adds DHCP information Option 82 to the
+      DHCP packets, the DHCP packets would be dropped on arriving on a
+      snooping untrusted port）
+    """
+    if any(re.match(r"^no ip dhcp snooping information option\b", line, re.I) for line in lines):
+        return []
+    if any(re.match(r"^\s*ip helper-address\b", line, re.IGNORECASE) for line in lines):
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="見張りを入れた口から、上位で落とされる形の DHCP が出ます",
+            why="option 82 の挿入は既定で有効です。この機器は自分でリレー"
+            "（ip helper-address）をしていないので、付けた option 82 の中の"
+            "giaddr は 0.0.0.0 のままになります。上位がその口を信用していなければ"
+            "落とすので、端末がアドレスを取れません。上位を信用する口にするか、"
+            "この機器で no ip dhcp snooping information option を書くかの"
+            "どちらかにしてください。",
+            evidence=[
+                "ip dhcp snooping vlan はあるが、no ip dhcp snooping information option も "
+                "ip helper-address も無い"
+            ],
+        )
+    ]
 
 
 def _arp_inspection(text: str) -> list[Finding]:

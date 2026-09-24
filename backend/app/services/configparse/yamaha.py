@@ -23,6 +23,7 @@ from __future__ import annotations
 import re
 
 from app.services.configparse.base import (
+    NeighborProtocol,
     ParsedAcl,
     ParsedAclEntry,
     ParsedConfig,
@@ -33,6 +34,7 @@ from app.services.configparse.base import (
     ParsedInterface,
     ParsedNat,
     ParsedNatRule,
+    ParsedNeighbor,
     ParsedRoute,
     ParsedTransformSet,
     ParsedTunnel,
@@ -127,6 +129,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_nat(text, parsed)
     _parse_dhcp(text, parsed)
     _parse_tunnels(text, parsed)
+    _lldp_neighbors(text, parsed)
     return parsed
 
 
@@ -658,3 +661,73 @@ def _parse_tunnels(text: str, parsed: ParsedConfig) -> None:
         crypto.keyed_peers.append(peer or f"gateway {gateway}")
     crypto.ike_policies.extend(policies.values())
     parsed.crypto = crypto
+
+
+# ---------------------------------------------------------------------------
+# 隣（LLDP）
+# ---------------------------------------------------------------------------
+
+#: 隣1件の始まり。`Interface Name` は受信した側、つまり自機の口。
+#: 項目は行頭から始まる。TLV の中にも `INTERFACE NAME` があり、そちらは
+#: 相手のポート ID なので、字下げの有無で区別する（混ぜると口が入れ替わる）
+_LLDP_LOCAL = re.compile(r"^Interface\s+Name\s*:\s*(\S+)\s*$", re.IGNORECASE)
+_LLDP_SYSTEM_NAME = re.compile(r"^System\s+Name\s*:\s*(.+?)\s*$", re.IGNORECASE)
+_LLDP_PORT_DESCRIPTION = re.compile(r"^Port\s+Description\s*:\s*(.+?)\s*$", re.IGNORECASE)
+#: `PORT ID TYPE` の下に出る相手のポート。Port Description が空のときの控え
+_LLDP_PORT_ID_NAME = re.compile(r"^\s+INTERFACE\s+NAME\s*:\s*(\S+)\s*$", re.IGNORECASE)
+
+
+def _lldp_neighbors(text: str, parsed: ParsedConfig) -> None:
+    """`show lldp neighbors` から隣を読む。
+
+    ヤマハの LLDP は表ではなく、項目を縦に並べた形で出る。1件は
+    `Interface Name` で始まり、次の `Interface Name` までが1件。
+    名乗っていない相手（System Name が空）は作らない。無いのか
+    読めていないのかを混ぜないため、線を引かないほうを選ぶ。
+
+    出典: ヤマハ SWX2310 コマンドリファレンス 4.23.20
+    「全てのインターフェースにおける接続機器の情報表示」の設定例
+    （`Interface Name : port1.1` / `System Name : SWX2310-10G` /
+    `Port Description : port1.3` / `PORT ID TYPE` の
+    `INTERFACE NAME : port1.3`）。SWX2210・SWX2320 でも同じ形。
+    """
+    local: str | None = None
+    host: str | None = None
+    port_description: str | None = None
+    port_id: str | None = None
+
+    def flush() -> None:
+        nonlocal host, port_description, port_id
+        if local and host:
+            parsed.add_neighbor(
+                ParsedNeighbor(
+                    local_interface=local,
+                    remote_hostname=host,
+                    remote_interface=port_description or port_id,
+                    protocol=NeighborProtocol.LLDP,
+                )
+            )
+        host = None
+        port_description = None
+        port_id = None
+
+    for raw in text.splitlines():
+        head = _LLDP_LOCAL.match(raw)
+        if head:
+            flush()
+            local = head.group(1)
+            continue
+        if local is None:
+            continue
+        name = _LLDP_SYSTEM_NAME.match(raw)
+        if name:
+            host = name.group(1) or None
+            continue
+        described = _LLDP_PORT_DESCRIPTION.match(raw)
+        if described:
+            port_description = described.group(1) or None
+            continue
+        identified = _LLDP_PORT_ID_NAME.match(raw)
+        if identified and port_id is None:
+            port_id = identified.group(1)
+    flush()
