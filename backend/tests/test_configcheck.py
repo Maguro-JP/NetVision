@@ -1456,3 +1456,36 @@ def test_a_nat_or_policy_fragment_is_not_judged_by_what_it_cannot_show() -> None
     parsed = configparse.parse(whole)
     titles = [item.title for item in configcheck._findings(parsed, whole)]
     assert [title for title in titles if "内側のポートが決まっていません" in title]
+
+
+def test_option_82_from_a_layer2_switch_is_called_out(db_session):
+    """見張りを入れた L2 のスイッチが、上位で落とされる形。
+
+    option 82 の挿入は既定で有効。自分でリレー（ip helper-address）を
+    していない L2 のスイッチがこれを付けると、中の giaddr は 0.0.0.0 の
+    ままになり、上位がその口を信用していなければ落とす。
+
+    出典:
+    - Catalyst 6500 Supervisor Engine 2T Software Configuration Guide
+      「Default Configuration for DHCP Snooping」（DHCP snooping information
+      option: Enabled）
+    - Catalyst 4500 Software Configuration Guide「Configuring DHCP Snooping」
+      （the DHCP packets would be dropped on arriving on a snooping untrusted port）
+    """
+    base = (
+        "hostname sw-o82\nip dhcp snooping\nip dhcp snooping vlan 10\n"
+        "interface GigabitEthernet1/0/24\n switchport mode trunk\n ip dhcp snooping trust\n"
+    )
+    titles = _titles(configcheck.check(db_session, base))
+    assert any("上位で落とされる形" in t for t in titles)
+
+    # 自分で切ってあれば言わない
+    off = base.replace("sw-o82", "sw-o82b") + "no ip dhcp snooping information option\n"
+    assert not [t for t in _titles(configcheck.check(db_session, off)) if "上位で落とされる" in t]
+
+    # 自分でリレーしているなら giaddr が入るので言わない
+    relay = (
+        base.replace("sw-o82", "sw-o82c")
+        + "interface Vlan10\n ip address 10.0.10.1 255.255.255.0\n ip helper-address 10.9.9.9\n"
+    )
+    assert not [t for t in _titles(configcheck.check(db_session, relay)) if "上位で落とされる" in t]
