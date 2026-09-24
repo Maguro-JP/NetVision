@@ -237,6 +237,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_arp_inspection(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
+    found.extend(_junos_plain_password(text))
     return _sorted(found)
 
 
@@ -631,12 +632,103 @@ _EDGE_PORT = re.compile(
 #: 誰かがスイッチを挿したときに、その口だけ落とす仕組み
 _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
 #: 機種によっては1行で全ポートに掛ける。口ごとに書いていなくても効いている
+#: 行頭（インデント無し）だけを見る。口の中に書く `spanning-tree bpdu-guard`
+#: （Aruba CX）まで拾うと、1口守っただけで機器全体が守られていることになり、
+#: 守っていない口を見逃す
 _GLOBAL_BPDU_GUARD = re.compile(
-    r"^\s*(?:stp\s+bpdu-protection"
+    r"^(?:stp\s+bpdu-protection"
     r"|spanning-tree\s+portfast\s+bpduguard\s+default"
     r"|spanning-tree\s+bpdu-guard\s*$)",
     re.IGNORECASE | re.MULTILINE,
 )
+
+
+#: Junos の端末口（`set protocols rstp interface ge-0/0/1 edge`）
+#: 出典: Junos OS CLI Reference「edge (edit protocols stp)」
+_JUNOS_EDGE = re.compile(
+    r"^set\s+protocols\s+(?:rstp|mstp|vstp)\s+interface\s+(\S+)\s+edge\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: 全部の端末口をまとめて守る書き方
+#: 出典: Junos OS CLI Reference「bpdu-block-on-edge」
+_JUNOS_EDGE_GUARD = re.compile(
+    r"^set\s+protocols\s+(?:rstp|mstp|vstp)\s+bpdu-block-on-edge\s*$",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: 口ごとに守る書き方
+#: 出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+_JUNOS_BPDU_BLOCK = re.compile(
+    r"^set\s+protocols\s+layer2-control\s+bpdu-block\s+interface\s+(\S+)",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def _junos_edge_without_guard(text: str) -> list[Finding]:
+    """Junos で、端末口にしてあるのに BPDU から守っていないものを言う。
+
+    端末口はつないだ瞬間に通す口なので、そこへスイッチを挿されると輪ができる。
+    `bpdu-block-on-edge`（まとめて）か `layer2-control bpdu-block`（口ごと）の
+    どちらかが要る。
+
+    出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+    （"you must protect edge ports by enabling bpdu-block-on-edge"）。
+    読むのは `set` 形だけ。囲みの形はここでは見ていない
+    """
+    if _JUNOS_EDGE_GUARD.search(text):
+        return []
+    blocked = {name.split(".")[0] for name in _JUNOS_BPDU_BLOCK.findall(text)}
+    naked = [name for name in _JUNOS_EDGE.findall(text) if name.split(".")[0] not in blocked]
+    if not naked:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="端末用の口に、BPDU から守る設定が入っていません",
+            why="端末用（edge）の口はつないだ瞬間に通します。そこへ誰かがスイッチを"
+            "挿すと、輪ができて網全体が止まります。"
+            "bpdu-block-on-edge を入れておけば、その口だけが落ちて済みます。",
+            evidence=[f"{name}: edge のみ" for name in naked[:5]],
+        )
+    ]
+
+
+#: Junos の、値まで書いてある平文の合言葉。
+#: 機器に入れた時点で暗号化されるので（出典: Junos OS CLI Reference「user (Access)」
+#: "The plain text password will be automatically encrypted as soon as you
+#: configure it."）、この形が残っているのは投入前の設定文のほう。
+#: その文を誰かに渡すと、合言葉がそのまま渡る
+_JUNOS_PLAIN_PASSWORD = re.compile(
+    r"^set\s+system\s+(?:root-authentication"
+    r"|login\s+user\s+\S+\s+authentication)\s+plain-text-password\s+\S",
+    re.IGNORECASE,
+)
+
+
+def _junos_plain_password(text: str) -> list[Finding]:
+    """Junos の設定文に、合言葉が字のまま書かれているのを言う。
+
+    機器の running config には出ない形なので、これが見えているのは
+    投入用の設定文。渡した相手にそのまま合言葉が渡る。
+
+    証跡には値を出さない。どの行かが分かる形だけ残す。
+    """
+    heads = [
+        " ".join(line.strip().split()[:4])
+        for line in text.splitlines()
+        if _JUNOS_PLAIN_PASSWORD.match(line.strip())
+    ]
+    if not heads:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="設定文に、合言葉が字のまま書かれています",
+            why="Junos は入れた時点で暗号化するので、この形が残っているのは"
+            "投入前の設定文です。その文を渡すと合言葉もそのまま渡ります。"
+            "渡す前に消すか、暗号化した形（encrypted-password）に替えてください。",
+            evidence=heads[:3],
+        )
+    ]
 
 
 def _stp(text: str) -> list[Finding]:
@@ -650,6 +742,7 @@ def _stp(text: str) -> list[Finding]:
     優先度が分からない）ので、ここでは見ない。
     """
     out: list[Finding] = []
+    out.extend(_junos_edge_without_guard(text))
     ports = _interface_blocks(text)
 
     # 端末をつなぐ口の言い方は機種で違う。1つの書き方だけを見ていると、
@@ -671,7 +764,9 @@ def _stp(text: str) -> list[Finding]:
                 "挿すと、輪ができて網全体が止まります。BPDU guard を入れておけば、"
                 "その口だけが落ちて済みます。",
                 evidence=[
-                    f"{name}: spanning-tree portfast のみ" for name in fast_without_guard[:5]
+                    # 端末口の書き方は機種で違うので、証跡では書き方を決め打ちしない
+                    f"{name}: 端末用の口の指定のみ"
+                    for name in fast_without_guard[:5]
                 ],
             )
         )

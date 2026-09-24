@@ -251,3 +251,46 @@ def test_ip_mtu_is_kept_apart_from_the_size_of_the_port_itself():
     assert ports["GigabitEthernet1/0/1"].ip_mtu is None
     assert ports["Vlan-interface10"].mtu is None
     assert ports["Vlan-interface10"].ip_mtu == 1500
+
+
+def test_ports_written_as_an_interface_range_are_opened_one_by_one():
+    """`interface range ... to ...` に書いた設定は、範囲の口すべてに入る。
+
+    開かないと、その設定がどの口にも入らず、口自体も台帳から落ちる。
+
+    出典: H3C Command Reference「Bulk interface commands」の interface range
+    （"interface range gigabitethernet 1/0/1 to gigabitethernet 1/0/4"、
+    項目は空白区切りで最大24個）。
+    """
+    text = "\n".join(
+        [
+            "<h3c>display version",
+            "H3C Comware Software, Version 7.1.070, Release 6127P02",
+            "#",
+            " sysname h3c-sw-03",
+            "#",
+            "vlan 10",
+            " name USERS",
+            "#",
+            "interface range gigabitethernet 1/0/1 to gigabitethernet 1/0/4",
+            " port link-mode bridge",
+            " port access vlan 10",
+            " description office",
+            "#",
+            "interface GigabitEthernet1/0/24",
+            " port link-mode bridge",
+            "#",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert sorted(ports) == [
+        "GigabitEthernet1/0/1",
+        "GigabitEthernet1/0/2",
+        "GigabitEthernet1/0/24",
+        "GigabitEthernet1/0/3",
+        "GigabitEthernet1/0/4",
+    ]
+    assert all(ports[f"GigabitEthernet1/0/{n}"].vlan == 10 for n in (1, 2, 3, 4))
+    assert all(ports[f"GigabitEthernet1/0/{n}"].description == "office" for n in (1, 2, 3, 4))
+    assert ports["GigabitEthernet1/0/24"].vlan is None

@@ -24,6 +24,7 @@ H3C だけに出てくる書き方（`port link-mode` など）を足す場所�
 
 from __future__ import annotations
 
+import copy
 import re
 
 from app.services.configparse import policy, routing, tunnels, vlanlist
@@ -76,6 +77,15 @@ _NEC_PRODUCT = re.compile(
 # --- 口と VLAN ----------------------------------------------------------------
 
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+#: 範囲でまとめた指定。`interface range gigabitethernet 1/0/1 to gigabitethernet 1/0/4`、
+#: 名前付き（`interface range name myEthPort interface ...`）、空白区切りの並べ書き。
+#: 出典: H3C Command Reference「Bulk interface commands」の interface range
+_INTERFACE_RANGE = re.compile(
+    r"^interface\s+range\s+(?:name\s+\S+\s+interface\s+)?(?P<list>.+?)\s*$",
+    re.IGNORECASE,
+)
+#: 種別と番号（`gigabitethernet 1/0/1`）。config では続けて書かれる
+_RANGE_ITEM = re.compile(r"^(?P<kind>[A-Za-z][\w-]*?)\s*(?P<number>\d+(?:/\d+)*)$")
 _DESCRIPTION = re.compile(r"^\s+description\s+(.+?)\s*$", re.IGNORECASE)
 _LINK_MODE = re.compile(r"^\s+port\s+link-mode\s+(bridge|route)\s*$", re.IGNORECASE)
 _LINK_TYPE = re.compile(r"^\s+port\s+link-type\s+(access|trunk|hybrid)\s*$", re.IGNORECASE)
@@ -204,16 +214,40 @@ def _read_interfaces_and_vlans(text: str, parsed: ParsedConfig) -> None:
     current_vlan: int | None = None
     #: 通す VLAN を1行でも書いたトランク。書いていないトランクは VLAN 1 だけ通す
     permitted: set[str] = set()
+    #: 範囲でまとめて書かれたときの、2つ目以降の口の名前
+    siblings: list[str] = []
+
+    def close() -> None:
+        """範囲に書いた内容を、2つ目以降の口へ写して閉じる。"""
+        nonlocal current, siblings
+        if current is not None:
+            for name in siblings:
+                other = copy.deepcopy(current)
+                other.name = name
+                added = parsed.add_interface(other)
+                if current.key in permitted:
+                    permitted.add(added.key)
+        current, siblings = None, []
 
     for raw in text.splitlines():
+        spread = _INTERFACE_RANGE.match(raw)
+        if spread:
+            close()
+            names = _range_ports(spread.group("list"))
+            current_vlan = None
+            if names:
+                current = parsed.add_interface(ParsedInterface(name=names[0]))
+                siblings = names[1:]
+            continue
         head = _INTERFACE.match(raw)
         if head:
+            close()
             current = parsed.add_interface(ParsedInterface(name=head.group(1)))
             current_vlan = None
             continue
         vlan = _VLAN_HEAD.match(raw)
         if vlan:
-            current = None
+            close()
             current_vlan = int(vlan.group(1))
             parsed.vlans.setdefault(current_vlan, "")
             continue
@@ -221,11 +255,11 @@ def _read_interfaces_and_vlans(text: str, parsed: ParsedConfig) -> None:
         if many:
             for number in vlanlist.parse_ranges(many.group(1)):
                 parsed.vlans.setdefault(number, "")
-            current = None
+            close()
             current_vlan = None
             continue
         if raw and not raw[0].isspace():
-            current = None
+            close()
             current_vlan = None
             continue
 
@@ -238,6 +272,8 @@ def _read_interfaces_and_vlans(text: str, parsed: ParsedConfig) -> None:
             continue
 
         _interface_line(current, raw, permitted)
+
+    close()
 
     # 通す VLAN を書いていないトランクは、VLAN 1 だけがタグ無しで通る既定。
     # 「書いていない」と読み落としの区別は付かないので、全許可とはみなさない
@@ -423,3 +459,61 @@ def _prefixlen(mask: str) -> int:
     if "." not in mask:
         return int(mask)
     return sum(bin(int(part)).count("1") for part in mask.split("."))
+
+
+def _range_ports(spec: str) -> list[str]:
+    """`gigabitethernet 1/0/1 to gigabitethernet 1/0/4` を口ごとに開く。
+
+    開かないと、その範囲に書いた設定がどの口にも入らない
+    （出典: H3C Command Reference「Bulk interface commands」interface range。
+    項目は空白区切りで最大24個、`to` で部分範囲を書ける）。
+    種別や番号の形が食い違う書き方は開かない。推測で口を作らない。
+    """
+    tokens = spec.replace(",", " ").split()
+    names: list[str] = []
+    joining = False
+    index = 0
+    while index < len(tokens):
+        token = tokens[index]
+        if token.lower() == "to":
+            joining = True
+            index += 1
+            continue
+        # 種別と番号が離れて書かれていたら、1つに戻す
+        if index + 1 < len(tokens) and re.fullmatch(r"\d+(?:/\d+)*", tokens[index + 1]):
+            token = f"{token}{tokens[index + 1]}"
+            index += 1
+        if joining and names:
+            names.extend(_between(names.pop(), token))
+        else:
+            names.append(token)
+        joining = False
+        index += 1
+
+    # 同じ口を2度書いた並べ書きもあるので、順番を保ったまま重複を落とす
+    seen: set[str] = set()
+    unique: list[str] = []
+    for name in names:
+        if name.lower() in seen:
+            continue
+        seen.add(name.lower())
+        unique.append(name)
+    return unique
+
+
+def _between(start: str, end: str) -> list[str]:
+    """`GigabitEthernet1/0/1` と `GigabitEthernet1/0/4` の間を埋める。"""
+    left = _RANGE_ITEM.match(start)
+    right = _RANGE_ITEM.match(end)
+    if not left or not right or left.group("kind").lower() != right.group("kind").lower():
+        return [start, end]
+    head_left = left.group("number").rsplit("/", maxsplit=1)
+    head_right = right.group("number").rsplit("/", maxsplit=1)
+    if head_left[:-1] != head_right[:-1]:
+        return [start, end]
+    first, last = int(head_left[-1]), int(head_right[-1])
+    if last < first or last - first > 255:
+        return [start, end]
+    head = "/".join(head_left[:-1])
+    prefix = f"{left.group('kind')}{head}/" if head else left.group("kind")
+    return [f"{prefix}{number}" for number in range(first, last + 1)]
