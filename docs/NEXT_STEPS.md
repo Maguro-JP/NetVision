@@ -53,6 +53,8 @@ Config には管理IP・ACL・SNMP コミュニティ名が入ります。攻撃
 | NEC IX の LLDP 出力 | トポロジーに線が出るか | 公開書式から実装。IX-R/IX-V の公式コマンドリファレンス（HTML）には LLDP のコマンドが無く、IX2000/IX3000 のコマンドリファレンス（PDF）はこの環境から読めていないので公式未確認。結線が引けないときは実出力を渡してほしい |
 | 隣（LLDP）の読み取り範囲 | トポロジーに線が出るか | 公式の出力例で確認して実装済み: Cisco IOS / IOS-XR（表・詳細）、Juniper、H3C、ファーウェイ、Aruba CX、FastIron、アラクサラ（`show lldp detail`）、Dell OS10、EXOS（detailed）、Cisco 小規模機（Catalyst 1200/1300 系）、ヤマハ SWX（`show lldp neighbors`）。FortiGate 配下の FortiSwitch はメーカーのナレッジベースの出力例から実装（文書ライブラリ側は未確認） |
 | 隣（LLDP）が未対応のもの | 同上 | Palo Alto（`show lldp neighbors all` の出力例が公式に見当たらない）、NEC QX（公式のコマンドマニュアルに当たれていない）。いずれも推測で書かず未実装のままにしている。実出力を渡してもらえれば読めるようにする |
+| 範囲でまとめた口の指定 | ポート表に口が1つずつ出るか | 公式の書式で確認して開けるようにした: Cisco IOS（`interface range`、カンマ区切り、`define interface-range` のマクロ）、NX-OS（`interface ethernet 2/29-30`、`ethernet 2/33, ethernet 2/35`）、Junos（`interface-range` の member / member-range）、Aruba CX（`interface 1/1/1-1/1/4`）、FastIron（`interface ethernet 1/1/1 to 1/1/4`）、H3C（`interface range ... to ...`、並べ書き、名前付き）、ファーウェイ VRP（`port-group`、`port-group group-member`）、Dell OS10（`interface range ethernet 1/1/1-1/1/4`、カンマ区切り）、EXOS（`add ports 1-3`） |
+| 範囲の指定が未対応のもの | 同上 | NEC QX（公式のコマンドマニュアルに当たれていない）。推測で開くと実在しない口を作るので、開かずに残している。実機の Config を渡してもらえれば対応する |
 | NEC IX の書き方 | 機器ページのポート表・経路・NAT・DHCP・OSPF・VRRP | IX-R/IX-V の公式コマンドリファレンス 1.5a の入力形式（`ip address`・`ip route`・`ip napt`・`ip dhcp`・`ip router ospf`・`vrrp`・`tunnel`）で確認済み。IX2000/IX3000 固有の差分は PDF が読めておらず未確認 |
 | アラクサラ AX の出力 | 型番・バージョン・ポートが入るか | `show version` は公式マニュアルの出力例（AX3650S アップグレードガイド）で確認済み。ポート表は公開書式から実装で、実機では未検証 |
 | NEC QX の display 出力 | 型番・バージョンが入るか | 版によって書式が違う可能性。公式のコマンドマニュアルにはまだ当たれていない（公式未確認）。`display version` の実サンプルがあれば渡してほしい |

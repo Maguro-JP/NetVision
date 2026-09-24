@@ -166,3 +166,35 @@ def test_a_virtual_address_outside_the_segment_is_still_caught():
     text = OFFICIAL_REDUNDANCY.replace("address 192.168.1.250 primary", "address 10.9.9.1 primary")
     titles = [f.title for f in policyreview.review(configparse.parse(text), text)]
     assert any("VRRP グループ 1 の仮想アドレス 10.9.9.1" in title for title in titles), titles
+
+
+def test_ports_written_as_a_range_are_opened_one_by_one():
+    """`interface 1/1/1-1/1/4` は4つの口。1つの変な名前の口にしない。
+
+    開かないと、その4口が台帳にも図にも実在しない名前で1つだけ出る。
+
+    出典: AOS-CX Link Aggregation Guide
+    （"To assign a range of interfaces to a LAG:
+    switch(config-lag-if)# interface 1/1/1-1/1/4"）。
+    """
+    text = "\n".join(
+        [
+            "!Version ArubaOS-CX GL.10.09.0010",
+            "hostname cx-01",
+            "vlan 10",
+            "    name USERS",
+            "interface 1/1/1-1/1/4",
+            "    no shutdown",
+            "    vlan access 10",
+            "interface 1/1/24",
+            "    no shutdown",
+            "    vlan trunk allowed 10",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert sorted(ports) == ["1/1/1", "1/1/2", "1/1/24", "1/1/3", "1/1/4"]
+    assert all(ports[name].vlan == 10 for name in ("1/1/1", "1/1/2", "1/1/3", "1/1/4"))
+    assert all(ports[name].enabled for name in ("1/1/1", "1/1/4"))
+    # 範囲の書き方そのままの口は作らない
+    assert "1/1/1-1/1/4" not in ports

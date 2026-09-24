@@ -1489,3 +1489,93 @@ def test_option_82_from_a_layer2_switch_is_called_out(db_session):
         + "interface Vlan10\n ip address 10.0.10.1 255.255.255.0\n ip helper-address 10.9.9.9\n"
     )
     assert not [t for t in _titles(configcheck.check(db_session, relay)) if "上位で落とされる" in t]
+
+
+def test_junos_edge_ports_without_bpdu_protection_are_called_out(db_session):
+    """Junos で端末口にしてあるのに、BPDU から守っていない口を言う。
+
+    出典: Junos OS「BPDU Protection for Spanning-Tree Protocols」
+    （"you must protect edge ports by enabling bpdu-block-on-edge"）、
+    CLI Reference の「edge」「bpdu-block-on-edge」。
+    """
+    text = "\n".join(
+        [
+            "set system host-name ex-01",
+            "set protocols rstp interface ge-0/0/1 edge",
+            "set protocols rstp interface ge-0/0/2 edge",
+            "set protocols layer2-control bpdu-block interface ge-0/0/2",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-01.conf")
+    titles = [f.title for f in result.findings]
+    assert any("BPDU から守る設定が入っていません" in title for title in titles)
+    evidence = [e for f in result.findings for e in f.evidence]
+    assert any("ge-0/0/1" in item for item in evidence)
+    # 口ごとに守ってある口は言わない
+    assert not any("ge-0/0/2" in item for item in evidence)
+
+
+def test_junos_bpdu_block_on_edge_covers_every_edge_port(db_session):
+    """まとめて守る書き方（bpdu-block-on-edge）が入っていれば、言わない。"""
+    text = "\n".join(
+        [
+            "set system host-name ex-02",
+            "set protocols rstp bpdu-block-on-edge",
+            "set protocols rstp interface ge-0/0/1 edge",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-02.conf")
+    assert not any("BPDU から守る設定" in f.title for f in result.findings)
+
+
+def test_a_junos_plain_text_password_in_the_config_text_is_called_out(db_session):
+    """Junos の設定文に合言葉が字のまま書かれていたら言う。値は証跡に出さない。
+
+    機器に入れた時点で暗号化されるので、この形が残っているのは投入前の設定文。
+
+    出典: Junos OS CLI Reference「user (Access)」
+    （"The plain text password will be automatically encrypted as soon as you
+    configure it."）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name ex-03",
+            'set system root-authentication plain-text-password "sample-value"',
+            'set system login user admin authentication encrypted-password "$6$sample"',
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="ex-03.conf")
+    hit = next(f for f in result.findings if "字のまま" in f.title)
+    assert hit.evidence == ["set system root-authentication plain-text-password"]
+    # 合言葉そのものは、どこにも出さない
+    assert all("sample-value" not in item for item in hit.evidence)
+    assert "sample-value" not in hit.why
+
+
+def test_a_port_level_bpdu_guard_is_not_read_as_a_device_wide_one(db_session):
+    """口の中に書いた bpdu-guard を、機器全体の設定と取り違えない。
+
+    Aruba CX は口の中に `spanning-tree bpdu-guard` と書く。これを全体の
+    設定として読むと、1口守っただけで残りの口を見逃す。
+
+    出典: AOS-CX の書き方（`spanning-tree port-type admin-edge` /
+    `spanning-tree bpdu-guard` を口の下に書く形）。
+    """
+    text = "\n".join(
+        [
+            "!Version ArubaOS-CX GL.10.09.0010",
+            "hostname cx-01",
+            "spanning-tree mode rpvst",
+            "interface 1/1/1",
+            "    no shutdown",
+            "    spanning-tree port-type admin-edge",
+            "interface 1/1/2",
+            "    no shutdown",
+            "    spanning-tree port-type admin-edge",
+            "    spanning-tree bpdu-guard",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="cx-01.conf")
+    hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
+    assert any("1/1/1" in item for item in hit.evidence)
+    assert not any("1/1/2" in item for item in hit.evidence)

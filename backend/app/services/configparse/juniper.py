@@ -133,6 +133,11 @@ def parse(text: str) -> ParsedConfig:
     flattened = _flatten(text)
     if flattened is not text:
         text = f"{text}\n{flattened}"
+    # 範囲でまとめて書かれた口を、1つずつに開く。開かないと、その口が
+    # 「何も設定されていない」ことになる
+    expanded = _expand_interface_ranges(text)
+    if expanded:
+        text = f"{text}\n{expanded}"
 
     match = (
         _SET_HOSTNAME.search(text) or _BRACE_HOSTNAME.search(text) or _SHOW_HOSTNAME.search(text)
@@ -649,3 +654,74 @@ def _parse_lldp_table(text: str, parsed: ParsedConfig) -> None:
                     protocol=NeighborProtocol.LLDP,
                 )
             )
+
+
+#: `set interfaces interface-range NAME member ge-0/0/9`
+_RANGE_MEMBER = re.compile(
+    r"^set\s+interfaces\s+interface-range\s+(?P<name>\S+)\s+member\s+(?P<port>\S+)\s*$",
+    re.IGNORECASE,
+)
+#: `set interfaces interface-range NAME member-range ge-0/0/0 to ge-0/0/10`
+_RANGE_SPAN = re.compile(
+    r"^set\s+interfaces\s+interface-range\s+(?P<name>\S+)\s+member-range\s+"
+    r"(?P<start>\S+)\s+to\s+(?P<end>\S+)\s*$",
+    re.IGNORECASE,
+)
+#: 範囲そのものに書いた共通の設定
+_RANGE_BODY = re.compile(
+    r"^set\s+interfaces\s+interface-range\s+(?P<name>\S+)\s+(?P<rest>.+)$",
+    re.IGNORECASE,
+)
+#: `ge-0/0/10` のような、末尾の番号だけが動く名前
+_PORT_TAIL = re.compile(r"^(?P<head>.*?)(?P<number>\d+)$")
+
+
+def _expand_interface_ranges(text: str) -> str:
+    """`interface-range` を、メンバーの口ごとの `set` に開く。
+
+    範囲に書いた共通の設定は、メンバー全部に写される
+    （出典: Junos OS「Interface Ranges for Physical Interfaces」
+    "The operating system copies the common configuration to all the
+    interface range's member interfaces."）。開かないと、その口は台帳で
+    「何も設定されていない」ことになる。
+
+    メンバーの指定には正規表現・ワイルドカードも使えるが、そちらは
+    読んでいない（当てずっぽうで口を作るより、読めないほうが害が小さい）。
+    """
+    members: dict[str, list[str]] = {}
+    bodies: list[tuple[str, str]] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        span = _RANGE_SPAN.match(line)
+        if span:
+            members.setdefault(span.group("name"), []).extend(
+                _ports_between(span.group("start"), span.group("end"))
+            )
+            continue
+        one = _RANGE_MEMBER.match(line)
+        if one:
+            members.setdefault(one.group("name"), []).append(one.group("port"))
+            continue
+        body = _RANGE_BODY.match(line)
+        if body:
+            bodies.append((body.group("name"), body.group("rest")))
+
+    out: list[str] = []
+    for name, rest in bodies:
+        for port in members.get(name, []):
+            out.append(f"set interfaces {port} {rest}")
+    return "\n".join(out)
+
+
+def _ports_between(start: str, end: str) -> list[str]:
+    """`ge-0/0/0 to ge-0/0/2` を1つずつに開く。末尾の番号だけを動かす。"""
+    left = _PORT_TAIL.match(start)
+    right = _PORT_TAIL.match(end)
+    if not left or not right or left.group("head") != right.group("head"):
+        # 名前の付け方が違うものは、開かずに両端だけを残す。
+        # 推測で間の口を作らない
+        return [start, end]
+    first, last = int(left.group("number")), int(right.group("number"))
+    if last < first:
+        first, last = last, first
+    return [f"{left.group('head')}{number}" for number in range(first, last + 1)]

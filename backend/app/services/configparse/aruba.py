@@ -17,6 +17,7 @@ VLAN や経路の道具、BGP / OSPF は IOS の読み手でそのまま読め�
 
 from __future__ import annotations
 
+import copy
 import re
 
 from app.services.configparse import cisco
@@ -125,6 +126,15 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
     """ポート。既定で落ちている前提で読む。"""
     current: ParsedInterface | None = None
     group: ParsedRedundancy | None = None
+    #: 範囲でまとめて書かれたときの、2つ目以降の口の名前
+    siblings: list[str] = []
+
+    def close() -> None:
+        """範囲で書いた内容を、2つ目以降の口へ写して閉じる。"""
+        nonlocal current, group, siblings
+        if current is not None and siblings:
+            _copy_to_siblings(parsed, current, siblings)
+        current, group, siblings = None, None, []
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -134,17 +144,20 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         match = _INTERFACE.match(line.strip())
         if match and not line.startswith(" "):
             name = " ".join(match.group(1).split())
+            close()
+            # 範囲（`interface 1/1/1-1/1/4`）は、1つずつの口として持つ
+            names = _expand_range(name)
+            name, siblings = names[0], names[1:]
             # 物理ポートと lag は、書いていなければ落ちている。`no shutdown` を
             # 見たときだけ上げる。VLAN の口（interface vlan N）は作った時点で上がる
             svi = name.lower().startswith("vlan")
             current = parsed.add_interface(ParsedInterface(name=name, enabled=svi))
-            group = None
             continue
 
         if current is None:
             continue
         if not line.startswith(" "):
-            current, group = None, None
+            close()
             continue
 
         body = line.strip()
@@ -152,6 +165,41 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
         if handled:
             continue
         _interface_option(current, body)
+
+    close()
+
+
+#: `1/1/1-1/1/4` のように、末尾の番号だけが動く範囲指定
+#: （出典: AOS-CX Link Aggregation Guide「To assign a range of interfaces to a LAG:
+#: switch(config-lag-if)# interface 1/1/1-1/1/4」）
+_RANGE = re.compile(r"^(?P<head>\S*?)(?P<first>\d+)-(?P<tail>\S+?)(?P<last>\d+)$")
+
+
+def _expand_range(name: str) -> list[str]:
+    """`interface 1/1/1-1/1/4` を、口1つずつの名前に開く。
+
+    開かないと、その4口が「1つの変な名前の口」になり、台帳でも図でも
+    実在しないものになる。番号の付け方が食い違う書き方は開かない
+    （推測で口を作るより、読めないほうが害が小さい）。
+    """
+    found = _RANGE.match(name)
+    if not found:
+        return [name]
+    head, tail = found.group("head"), found.group("tail")
+    if head != tail:
+        return [name]
+    first, last = int(found.group("first")), int(found.group("last"))
+    if last < first or last - first > 255:
+        return [name]
+    return [f"{head}{number}" for number in range(first, last + 1)]
+
+
+def _copy_to_siblings(parsed: ParsedConfig, current: ParsedInterface, names: list[str]) -> None:
+    """範囲の1つ目に読み取った内容を、残りの口へ写す。"""
+    for name in names:
+        other = copy.deepcopy(current)
+        other.name = name
+        parsed.add_interface(other)
 
 
 def _redundancy_option(

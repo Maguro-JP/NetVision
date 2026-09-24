@@ -262,3 +262,31 @@ def test_the_brace_form_also_feeds_routing_and_security():
     assert parsed.ospf is not None and parsed.ospf.areas[0].area == "0.0.0.0"
     assert parsed.bgp is not None and parsed.bgp.neighbors[0].remote_as == "65001"
     assert any(acl.entries for acl in parsed.acls)
+
+
+def test_ports_written_as_an_interface_range_are_opened_one_by_one():
+    """`interface-range` は、メンバーの口ごとに共通設定が写される。
+
+    開かないと、その口は台帳で「何も設定されていない」ことになる。
+
+    出典: Junos OS「Interface Ranges for Physical Interfaces」
+    （"The operating system copies the common configuration to all the
+    interface range's member interfaces."）。member-range の例も同文書。
+    """
+    text = "\n".join(
+        [
+            "set system host-name ex-01",
+            "set interfaces interface-range office member-range ge-0/0/0 to ge-0/0/2",
+            "set interfaces interface-range office member ge-0/0/9",
+            "set interfaces interface-range office unit 0 family ethernet-switching "
+            "vlan members v10",
+            "set vlans v10 vlan-id 10",
+        ]
+    )
+    parsed = configparse.parse(text)
+    ports = {i.name: i for i in parsed.interfaces}
+    assert sorted(ports) == ["ge-0/0/0", "ge-0/0/1", "ge-0/0/2", "ge-0/0/9"]
+    assert all(port.vlan == 10 for port in ports.values())
+    # 範囲の名前そのものは、口として作らない
+    assert "office" not in ports
+    assert "interface-range" not in ports
