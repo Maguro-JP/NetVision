@@ -404,6 +404,19 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             _ospf_option(current, body)
         elif body == "shutdown":
             current.enabled = False
+        elif body == "switchport":
+            # L2 の口に戻す。NX-OS では口を L2 にするのはこの1行で、
+            # 続けて mode を書かなければアクセスとして働く。
+            # 既定が L3 か L2 かは機種で違う（Nexus 7000 は routed、
+            # Nexus 6000 は switched）ので、書いてあるものだけを読む。
+            # 出典: Cisco Nexus 7000 Series NX-OS Interfaces Command Reference
+            # 「switchport」（To set the interface as a Layer 2 switching port …
+            # The default switchport mode is the access mode）
+            if current.mode == "routed":
+                current.mode = None
+                current.ip_address = None
+            if parsed.vendor is Vendor.CISCO_NXOS and not current.mode:
+                current.mode = "access"
         elif body == "no switchport":
             # L3 の口になった時点で、L2 の設定（access / trunk の VLAN）は無くなる。
             # 残したままだと、その口がまだ VLAN を運んでいることになってしまう

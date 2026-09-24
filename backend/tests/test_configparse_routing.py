@@ -450,3 +450,42 @@ def test_nxos_writes_a_range_without_the_range_keyword():
     assert ports["Ethernet2/33"] == "予備"
     assert ports["Ethernet2/35"] == "予備"
     assert ports["Ethernet1/2/1"] == "ブレイクアウト"
+
+
+OFFICIAL_NXOS_SWITCHPORT = """Cisco Nexus Operating System (NX-OS) Software
+hostname nx-02
+!
+interface Ethernet1/1
+  switchport
+  description 端末用
+!
+interface Ethernet1/2
+  switchport
+  switchport mode trunk
+!
+interface Ethernet1/3
+  no switchport
+  ip address 10.0.0.1/30
+!
+"""
+
+
+def test_nxos_marks_a_port_layer2_with_the_bare_switchport_line():
+    """出典: Cisco Nexus 7000 Series NX-OS Interfaces Command Reference
+    「switchport」（To set the interface as a Layer 2 switching port, use the
+    switchport command … The default switchport mode is the access mode）。
+
+    NX-OS は口を L2 にするのがこの1行で、続けて mode を書かなければ
+    アクセスとして働く。この行を読まないと、L2 の口が「何モードか
+    分からない」ままになる。
+
+    既定が L3 か L2 かは機種で違う（Nexus 7000 の設定ガイドは routed、
+    Nexus 6000 は switched と書いている）ので、既定は決め打ちせず、
+    書いてあるものだけを読む。
+    """
+    ports = {i.name: i for i in configparse.parse(OFFICIAL_NXOS_SWITCHPORT).interfaces}
+    assert ports["Ethernet1/1"].mode == "access"
+    # あとから mode を書いてあれば、そちらが効く
+    assert ports["Ethernet1/2"].mode == "trunk"
+    assert ports["Ethernet1/3"].mode == "routed"
+    assert ports["Ethernet1/3"].ip_address == "10.0.0.1/30"
