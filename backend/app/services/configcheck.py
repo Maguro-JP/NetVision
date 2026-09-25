@@ -631,6 +631,10 @@ _EDGE_PORT = re.compile(
     r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
     re.IGNORECASE,
 )
+#: 全体でトランク以外の口を端末口にする書き方
+_PORTFAST_DEFAULT = re.compile(
+    r"^spanning-tree\s+portfast(?:\s+edge)?\s+default\s*$", re.IGNORECASE | re.MULTILINE
+)
 #: 誰かがスイッチを挿したときに、その口だけ落とす仕組み
 _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
 #: 機種によっては1行で全ポートに掛ける。口ごとに書いていなくても効いている
@@ -752,10 +756,24 @@ def _stp(text: str) -> list[Finding]:
     # 端末をつなぐ口の言い方は機種で違う。1つの書き方だけを見ていると、
     # 他社の機器では黙って通る
     guarded_here = _GLOBAL_BPDU_GUARD.search(text) is not None
+    # 全体で `spanning-tree portfast [edge] default` を入れると、トランクでない口は
+    # 口ごとに書かなくても端末口になる。アクセスと書いた口はここで拾う
+    # （出典: Layer 2 Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9300）
+    # 「Enabling PortFast」: use the spanning-tree portfast default global
+    # configuration command to globally enable the PortFast feature on all
+    # nontrunking ports）
+    fast_by_default = _PORTFAST_DEFAULT.search(text) is not None
     fast_without_guard = [
         name
         for name, body in ports
-        if any(_EDGE_PORT.match(line) for line in body)
+        if (
+            any(_EDGE_PORT.match(line) for line in body)
+            or (
+                fast_by_default
+                and any(re.match(r"^switchport mode access\b", line, re.I) for line in body)
+                and not any(re.match(r"^no spanning-tree portfast\b", line, re.I) for line in body)
+            )
+        )
         and not guarded_here
         and not any(_BPDU_GUARD.search(line) for line in body)
     ]

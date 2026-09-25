@@ -1599,3 +1599,29 @@ def test_portfast_edge_is_read_as_an_edge_port(db_session):
 
     guarded = bare.replace("sw-pe1", "sw-pe2") + "spanning-tree portfast edge bpduguard default\n"
     assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
+
+
+def test_portfast_default_makes_access_ports_edge_ports(db_session):
+    """全体の `spanning-tree portfast default` で、アクセスの口は端末口になる。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9300）
+    「Enabling PortFast」（use the spanning-tree portfast default global
+    configuration command to globally enable the PortFast feature on all
+    nontrunking ports）。
+
+    口ごとに portfast と書いていないので、口だけを見ていると BPDU から
+    守っていない端末口を見逃す。
+    """
+    bare = (
+        "hostname sw-pd1\nspanning-tree portfast default\n"
+        "interface GigabitEthernet1/0/5\n switchport mode access\n"
+        "interface GigabitEthernet1/0/48\n switchport mode trunk\n"
+    )
+    result = configcheck.check(db_session, bare)
+    hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
+    assert any("1/0/5" in item for item in hit.evidence)
+    # トランクは端末口にならない
+    assert not any("1/0/48" in item for item in hit.evidence)
+
+    guarded = bare.replace("sw-pd1", "sw-pd2") + "spanning-tree portfast bpduguard default\n"
+    assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
