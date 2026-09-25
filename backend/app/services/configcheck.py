@@ -623,7 +623,9 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
 
 #: 端末をつなぐ口（つないだ瞬間に通す設定）。機種ごとの言い方
 _EDGE_PORT = re.compile(
-    r"^(?:spanning-tree\s+portfast(?:\s+trunk)?\s*$"
+    #: IOS-XE は `portfast edge [trunk]` とも書く（出典: Command Reference, Cisco IOS XE
+    #: 17.16.x（Catalyst 9300）「spanning-tree portfast edge [trunk]」）
+    r"^(?:spanning-tree\s+portfast(?:\s+edge)?(?:\s+trunk)?\s*$"
     r"|stp\s+edged-port(?:\s+enable)?\s*$"  # NEC QX / VRP
     r"|spanning-tree\s+802-1w\s+admin-edge-port\s*$"  # FastIron
     r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
@@ -637,7 +639,9 @@ _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
 #: 守っていない口を見逃す
 _GLOBAL_BPDU_GUARD = re.compile(
     r"^(?:stp\s+bpdu-protection"
-    r"|spanning-tree\s+portfast\s+bpduguard\s+default"
+    #: 同じく `portfast edge bpduguard default`（出典: 同「spanning-tree portfast edge
+    #: bpduguard default」）
+    r"|spanning-tree\s+portfast(?:\s+edge)?\s+bpduguard\s+default"
     r"|spanning-tree\s+bpdu-guard\s*$)",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -775,7 +779,10 @@ def _stp(text: str) -> list[Finding]:
         name
         for name, body in ports
         if any(line.lower().startswith("switchport mode trunk") for line in body)
-        and any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+        and any(
+            re.match(r"^spanning-tree portfast(?:\s+edge)?\s*$", line, re.IGNORECASE)
+            for line in body
+        )
     ]
     if fast_on_trunk:
         out.append(

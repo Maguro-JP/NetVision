@@ -1579,3 +1579,23 @@ def test_a_port_level_bpdu_guard_is_not_read_as_a_device_wide_one(db_session):
     hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
     assert any("1/1/1" in item for item in hit.evidence)
     assert not any("1/1/2" in item for item in hit.evidence)
+
+
+def test_portfast_edge_is_read_as_an_edge_port(db_session):
+    """IOS-XE は端末口を `spanning-tree portfast edge` とも書く。
+
+    出典: Command Reference, Cisco IOS XE 17.16.x（Catalyst 9300 Switches）
+    「spanning-tree portfast edge [trunk]」「spanning-tree portfast edge bpduguard default」。
+
+    この書き方を読まないと、BPDU から守っていない端末口を見逃す。
+    全体で `portfast edge bpduguard default` を入れてあれば守られている。
+    """
+    bare = (
+        "hostname sw-pe1\n"
+        "interface GigabitEthernet1/0/1\n switchport mode access\n spanning-tree portfast edge\n"
+    )
+    hit = [t for t in _titles(configcheck.check(db_session, bare)) if "BPDU guard" in t]
+    assert hit
+
+    guarded = bare.replace("sw-pe1", "sw-pe2") + "spanning-tree portfast edge bpduguard default\n"
+    assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
