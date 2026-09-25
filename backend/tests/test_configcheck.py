@@ -1662,3 +1662,23 @@ def test_vtp_v1_v2_server_with_a_revision_is_called_out(db_session):
             "sw-vtp", f"sw-vtp-{version}{mode}{revision}"
         )
         assert not [t for t in _titles(configcheck.check(db_session, calm)) if "VTP の版" in t]
+
+
+def test_access_ports_left_on_vlan1_are_called_out(db_session):
+    """出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（Default VLAN (for access
+    ports): VLAN 1）。
+
+    VLAN を書き忘れたアクセスの口は VLAN 1 に入る。止めてある口と、
+    VLAN を書いてある口は言わない。
+    """
+    text = (
+        "hostname sw-v1\n"
+        "interface GigabitEthernet1/0/1\n switchport mode access\n"
+        "interface GigabitEthernet1/0/2\n switchport mode access\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/3\n switchport mode access\n shutdown\n"
+    )
+    result = configcheck.check(db_session, text)
+    hit = next(f for f in result.findings if "既定の VLAN 1" in f.title)
+    assert any("1/0/1" in item for item in hit.evidence)
+    assert not any("1/0/2" in item or "1/0/3" in item for item in hit.evidence)

@@ -236,6 +236,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_dhcp_snooping(text))
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
+    found.extend(_access_on_vlan1(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
@@ -1105,6 +1106,38 @@ def _vtp_overwrite(text: str) -> list[Finding]:
                 f"VTP version running: {version.group(1)} / Operating Mode: {mode.group(1)}"
                 f" / Domain: {domain.group(1)} / Configuration Revision: {revision.group(1)}"
             ],
+        )
+    ]
+
+
+def _access_on_vlan1(text: str) -> list[Finding]:
+    """アクセスの口が、VLAN を書かずに既定の VLAN 1 に乗っている。
+
+    VLAN 1 は管理用の通信（CDP・VTP など）も流れる帯で、端末を置くと
+    分けたつもりの帯が混ざる。書き忘れで VLAN 1 に入っている口を言う。
+    止めてある口（shutdown）は、使っていないので言わない。
+
+    出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（Default VLAN (for access ports):
+    VLAN 1）
+    """
+    loose = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^switchport mode access\b", line, re.I) for line in body)
+        and not any(re.match(r"^switchport access vlan\b", line, re.I) for line in body)
+        and not any(re.match(r"^shutdown\s*$", line, re.I) for line in body)
+    ]
+    if not loose:
+        return []
+    return [
+        Finding(
+            level=LOW,
+            title="VLAN を書いていないアクセスの口が、既定の VLAN 1 に乗っています",
+            why="アクセスの口は、VLAN を書かなければ VLAN 1 に入ります。VLAN 1 は"
+            "管理用の通信も流れる帯なので、端末をここに置くと、分けたつもりの帯が"
+            "混ざります。意図した VLAN を switchport access vlan で書いてください。",
+            evidence=[f"{name}: switchport access vlan が無い" for name in loose[:5]],
         )
     ]
 
