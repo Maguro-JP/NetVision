@@ -1625,3 +1625,40 @@ def test_portfast_default_makes_access_ports_edge_ports(db_session):
 
     guarded = bare.replace("sw-pd1", "sw-pd2") + "spanning-tree portfast bpduguard default\n"
     assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
+
+
+_SHOW_VTP = """hostname sw-vtp
+Switch#show vtp status
+VTP Version capable             : 1 to 3
+VTP version running             : {version}
+VTP Domain Name                 : Lab_Network
+VTP Pruning Mode                : Disabled
+VTP Traps Generation            : Disabled
+Device ID                       : f87a.41a8.ca00
+
+Feature VLAN:
+--------------
+VTP Operating Mode                : {mode}
+Maximum VLANs supported locally   : 1005
+Number of existing VLANs          : 6
+Configuration Revision            : {revision}
+"""
+
+
+def test_vtp_v1_v2_server_with_a_revision_is_called_out(db_session):
+    """出典: VLAN Configuration Guide, Cisco IOS XE 17.15.x（Catalyst 9300）
+    「Configuring VTP」の Caution と、Command Reference 16.5.x の
+    `show vtp status` の出力例。
+
+    版 1・2 でサーバー／クライアントのままリビジョンが 0 でないと、
+    つないだ先のドメインの VLAN を消しうる。版 3・transparent・
+    リビジョン 0 は言わない。
+    """
+    risky = _SHOW_VTP.format(version=2, mode="Server", revision=4)
+    assert any("VTP の版 1・2" in t for t in _titles(configcheck.check(db_session, risky)))
+
+    for version, mode, revision in ((3, "Server", 4), (2, "Transparent", 4), (2, "Server", 0)):
+        calm = _SHOW_VTP.format(version=version, mode=mode, revision=revision).replace(
+            "sw-vtp", f"sw-vtp-{version}{mode}{revision}"
+        )
+        assert not [t for t in _titles(configcheck.check(db_session, calm)) if "VTP の版" in t]

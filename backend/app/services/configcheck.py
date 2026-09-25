@@ -235,6 +235,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
     found.extend(_arp_inspection(text))
+    found.extend(_vtp_overwrite(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
@@ -1050,6 +1051,59 @@ def _dhcp_snooping_option82(lines: list[str]) -> list[Finding]:
             evidence=[
                 "ip dhcp snooping vlan はあるが、no ip dhcp snooping information option も "
                 "ip helper-address も無い"
+            ],
+        )
+    ]
+
+
+_VTP_VERSION = re.compile(r"^\s*VTP version running\s*:\s*(\d)", re.IGNORECASE | re.MULTILINE)
+_VTP_DOMAIN = re.compile(r"^\s*VTP Domain Name\s*:[ \t]*(\S*)", re.IGNORECASE | re.MULTILINE)
+_VTP_MODE = re.compile(r"^\s*VTP Operating Mode\s*:\s*(\w+)", re.IGNORECASE | re.MULTILINE)
+_VTP_REVISION = re.compile(r"^\s*Configuration Revision\s*:\s*(\d+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _vtp_overwrite(text: str) -> list[Finding]:
+    """VTP の版 1・2 で、つなぐと VLAN を上書きしうる状態。
+
+    同じドメインでは、構成リビジョンのいちばん大きい機器の VLAN が全体に
+    効く。版 1・2 では、リビジョンの大きい機器をつなぐと、ドメイン全体の
+    VLAN が消えることがある。サーバー／クライアントのままリビジョンが
+    0 でない機器は、他所へつなぐ前にリビジョンを戻す必要がある。
+
+    running-config には出ない（出るのは transparent のときだけ）ので、
+    `show vtp status` が貼られているときだけ見る。
+
+    出典:
+    - VLAN Configuration Guide, Cisco IOS XE 17.15.x（Catalyst 9300）
+      「Configuring VTP」の Caution（With VTP versions 1 and 2, adding a device
+      that has a revision number higher than the revision number in the VTP
+      domain can erase all VLAN information … With VTP version 3, the VLAN
+      information is not erased）
+    - Command Reference, Cisco IOS XE 16.5.x（Catalyst 9300）「show vtp」の出力例
+    """
+    version = _VTP_VERSION.search(text)
+    mode = _VTP_MODE.search(text)
+    revision = _VTP_REVISION.search(text)
+    domain = _VTP_DOMAIN.search(text)
+    if not (version and mode and revision and domain):
+        return []
+    if version.group(1) not in ("1", "2"):
+        return []
+    if mode.group(1).lower() not in ("server", "client"):
+        return []
+    if not domain.group(1) or int(revision.group(1)) == 0:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="VTP の版 1・2 で、つなぐと VLAN を上書きしうる状態です",
+            why="同じ VTP ドメインでは、構成リビジョンのいちばん大きい機器の VLAN が"
+            "全体に効きます。版 1・2 では、この機器を他の場所へつなぐと、ドメイン全体の"
+            "VLAN が消えることがあります。VTP を使わないなら transparent（または off）に、"
+            "使うなら版 3 にするか、つなぐ前にリビジョンを 0 に戻してください。",
+            evidence=[
+                f"VTP version running: {version.group(1)} / Operating Mode: {mode.group(1)}"
+                f" / Domain: {domain.group(1)} / Configuration Revision: {revision.group(1)}"
             ],
         )
     ]
