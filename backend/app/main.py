@@ -38,6 +38,7 @@ from app.api.routes import (
 from app.api.routes import schema as schema_routes
 from app.api.routes import settings as settings_routes
 from app.config import settings
+from app.originguard import RejectCrossSiteWrites
 from app.services import audit  # noqa: F401  変更履歴のフック登録
 from app.strictjson import RejectNonFiniteJson
 
@@ -79,6 +80,9 @@ app.add_middleware(
 
 # JSON の NaN・Infinity を入口で断る（app/strictjson.py）
 app.add_middleware(RejectNonFiniteJson)
+
+# 別のサイトのページから届く書き換えを断る（app/originguard.py）
+app.add_middleware(RejectCrossSiteWrites, allowed_origins=settings.cors_origins)
 
 api = "/api/v1"
 app.include_router(devices.router, prefix=api)

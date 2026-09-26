@@ -1473,7 +1473,7 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_BACKUP_PATH` | DB または資料フォルダの隣の `backups/` | 表を更新する前の控えの置き場所 |
 | `NETVISION_SERVE_FRONTEND` | なし | ビルド済み画面の配信元。同一プロセスで画面も返す |
 | `NETVISION_DEMO_MODE` | `false` | プレビュー用。起動時にスキーマ作成とデモデータ投入を行う（本番では使わない） |
-| `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列） |
+| `NETVISION_CORS_ORIGINS` | `["http://localhost:5173","http://localhost:3000"]` | CORS 許可オリジン（JSON配列）。書き換えの要求もここにある宛先・手元・同じ宛先からだけ受ける。リバースプロキシの外の名前で開くなら、その宛先を足す |
 ※ 保守期限のしきい値、リファレンスの鮮度、時刻の地域、モデルの置き場所、
 モデルを使うかどうかは、画面の「設定」から決められます。ここに書いた環境変数は、
 その初期値として扱います（画面で決めたほうが勝ちます）。
