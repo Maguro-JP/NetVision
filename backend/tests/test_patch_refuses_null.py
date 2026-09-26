@@ -53,3 +53,23 @@ def test_optional_fields_can_still_be_cleared(client, ids) -> None:
     response = client.patch(f"{API}/devices/{ids['devices']}", json={"notes": None})
     assert response.status_code == 200
     assert response.json()["notes"] is None
+
+
+def test_null_for_a_required_scenario_item_field_is_refused(client, ids):
+    item = client.post(
+        f"{API}/scenarios/{ids['scenarios']}/items",
+        json={"action": "replace", "device_id": ids["devices"]},
+    ).json()
+    for field in ("action", "quantity"):
+        response = client.patch(f"{API}/scenarios/items/{item['id']}", json={field: None})
+        assert response.status_code == 422
+
+
+def test_null_for_a_required_contract_field_is_refused(client, ids):
+    contract = client.post(
+        f"{API}/devices/{ids['devices']}/contracts",
+        json={"provider": "保守会社", "start_date": "2026-01-01", "end_date": "2027-01-01"},
+    ).json()
+    for field in ("provider", "start_date", "end_date"):
+        response = client.patch(f"{API}/contracts/{contract['id']}", json={field: None})
+        assert response.status_code == 422

@@ -37,6 +37,8 @@ class ScenarioItemUpdate(BaseModel):
     planned_eol_date: date | None = None
     notes: str | None = None
 
+    _not_null = field_validator("action", "quantity", mode="before")(refuse_null)
+
 
 class ScenarioItemRead(ScenarioItemBase):
     model_config = ConfigDict(from_attributes=True)
