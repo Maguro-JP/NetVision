@@ -113,8 +113,8 @@ def _read_upstream(
         for name in (device.hostname, device.code, device.label):
             if not name:
                 continue
-            position = lowered.find(name.lower())
-            if position >= 0:
+            position = _find_name(lowered, name.lower())
+            if position is not None:
                 hits.append((position, device))
                 break
 
@@ -159,6 +159,20 @@ def _read_upstream(
     reading.upstream_hostname = chosen.hostname
     reading.notes.append(f"「{chosen.hostname}」につなぐものとして読みました。")
     return chosen
+
+
+def _find_name(text: str, name: str) -> int | None:
+    """名前が、別の名前の一部としてではなく出てくる位置。
+
+    ただの部分一致だと、core-sw-10 と書いたのに core-sw-1 にも当たり、
+    台帳の並び次第で別の機器を「つなぐ先」に選んでしまう。前後が名前に使う
+    文字（英数字・ハイフン・下線、続きのあるドット）でないときだけ当てる。
+    """
+    pattern = re.compile(
+        r"(?<![A-Za-z0-9_.\-])" + re.escape(name) + r"(?![A-Za-z0-9_\-]|\.[A-Za-z0-9])"
+    )
+    found = pattern.search(text)
+    return found.start() if found else None
 
 
 def _under_position(text: str) -> int | None:
