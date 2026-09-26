@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from app.models.device import DeviceStatus, DeviceType
 from app.schemas.maintenance import MaintenanceContractRead
+from app.schemas.types import refuse_null
 from app.services.lifecycle import Severity
 
 
@@ -91,6 +92,10 @@ class DeviceUpdate(BaseModel):
     eos_date: date | None = None
     eol_date: date | None = None
     notes: str | None = None
+
+    _not_null = field_validator(
+        "hostname", "vendor", "model", "device_type", "status", mode="before"
+    )(refuse_null)
 
     @field_validator("code", mode="before")
     @classmethod

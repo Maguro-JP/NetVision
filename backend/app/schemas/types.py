@@ -26,3 +26,16 @@ def _with_timezone(value: datetime) -> str:
 
 # タイムゾーン付きで返る日時。画面側は現地時刻に直して表示する
 Timestamp = Annotated[datetime, PlainSerializer(_with_timezone, return_type=str)]
+
+
+def refuse_null(value: object) -> object:
+    """PATCH で「送らない」と「空にする」を分ける。
+
+    更新用のスキーマは項目を省略できるよう `X | None` で持つが、DB の列が
+    空を許さない項目（機器名・状態など）に null が来ると、そのまま書こうとして
+    NOT NULL 違反の 500 になる。null を送られたら 422 で断る。省略は今までどおり。
+    `field_validator(..., mode="before")` から呼ぶ。
+    """
+    if value is None:
+        raise ValueError("空にはできない項目です。変えないときは送らないでください")
+    return value

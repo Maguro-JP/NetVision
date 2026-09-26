@@ -3,6 +3,7 @@ from datetime import date
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models import SiteStatus
+from app.schemas.types import refuse_null
 
 
 def _blank_to_none(value: str | None) -> str | None:
@@ -44,6 +45,8 @@ class SiteUpdate(BaseModel):
     opened_on: date | None = None
     closed_on: date | None = None
     notes: str | None = None
+
+    _not_null = field_validator("name", "status", mode="before")(refuse_null)
 
     @field_validator("code", mode="before")
     @classmethod

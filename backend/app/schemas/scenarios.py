@@ -1,8 +1,9 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.scenario import ScenarioAction, ScenarioStatus
+from app.schemas.types import refuse_null
 
 
 class ScenarioItemBase(BaseModel):
@@ -63,6 +64,8 @@ class ScenarioUpdate(BaseModel):
     description: str | None = None
     status: ScenarioStatus | None = None
     target_date: date | None = None
+
+    _not_null = field_validator("name", "status", mode="before")(refuse_null)
 
 
 class ScenarioRead(ScenarioBase):
