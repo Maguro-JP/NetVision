@@ -24,22 +24,47 @@ logger = logging.getLogger(__name__)
 FILE_NAME = "settings.json"
 
 
+#: 置き場所の解決と中身の読み込みを、変わるまで覚えておく。
+#: 保守期限の判定は機器1台ごとに境目の日数をここから引くので、毎回ファイルを
+#: 解決して読むと、2万台の書き出しで時間の半分がこれに消えていた
+_resolved: tuple[str, Path] | None = None
+_cached: tuple[Path, int, int, dict[str, Any]] | None = None
+
+
 def path() -> Path:
     """設定ファイルの置き場所。データの隣に置く。"""
-    return Path(settings.document_storage_path).expanduser().resolve().parent / FILE_NAME
+    global _resolved
+    configured = settings.document_storage_path
+    if _resolved is None or _resolved[0] != configured:
+        folder = Path(configured).expanduser().resolve().parent
+        _resolved = (configured, folder / FILE_NAME)
+    return _resolved[1]
 
 
 def load() -> dict[str, Any]:
-    """読めなければ空。壊れていても道具は止めない。"""
+    """読めなければ空。壊れていても道具は止めない。
+
+    中身は、ファイルの更新時刻と大きさが変わるまで読み直さない。
+    画面から書き換えれば更新時刻が変わるので、すぐに効く。返すのは写しなので、
+    受け取った側が書き換えても覚えている中身は変わらない。
+    """
+    global _cached
     file = path()
-    if not file.is_file():
+    try:
+        stat = file.stat()
+    except OSError:
         return {}
+    if _cached is not None and _cached[:3] == (file, stat.st_mtime_ns, stat.st_size):
+        return dict(_cached[3])
     try:
         data = json.loads(file.read_text(encoding="utf-8"))
     except (OSError, ValueError):
         logger.warning("設定ファイルを読めません（%s）。既定で続けます", file)
         return {}
-    return data if isinstance(data, dict) else {}
+    if not isinstance(data, dict):
+        return {}
+    _cached = (file, stat.st_mtime_ns, stat.st_size, data)
+    return dict(data)
 
 
 def get(key: str, default: Any = None) -> Any:
@@ -81,8 +106,12 @@ def set_value(key: str, value: Any) -> None:
     data = load()
     data[key] = value
     file = path()
+    global _cached
     try:
         file.parent.mkdir(parents=True, exist_ok=True)
         file.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
     except OSError as error:
         raise RuntimeError(f"設定を保存できませんでした（{file}）") from error
+    finally:
+        # 更新時刻の刻みが粗いファイルシステムでも、書いた直後に古い中身を返さない
+        _cached = None
