@@ -52,6 +52,7 @@ ntp server 10.10.10.9
 !
 ip route 0.0.0.0 0.0.0.0 10.10.10.254
 !
+ip ssh version 2
 line vty 0 15
  transport input ssh
 """
@@ -1579,3 +1580,145 @@ def test_a_port_level_bpdu_guard_is_not_read_as_a_device_wide_one(db_session):
     hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
     assert any("1/1/1" in item for item in hit.evidence)
     assert not any("1/1/2" in item for item in hit.evidence)
+
+
+def test_portfast_edge_is_read_as_an_edge_port(db_session):
+    """IOS-XE は端末口を `spanning-tree portfast edge` とも書く。
+
+    出典: Command Reference, Cisco IOS XE 17.16.x（Catalyst 9300 Switches）
+    「spanning-tree portfast edge [trunk]」「spanning-tree portfast edge bpduguard default」。
+
+    この書き方を読まないと、BPDU から守っていない端末口を見逃す。
+    全体で `portfast edge bpduguard default` を入れてあれば守られている。
+    """
+    bare = (
+        "hostname sw-pe1\n"
+        "interface GigabitEthernet1/0/1\n switchport mode access\n spanning-tree portfast edge\n"
+    )
+    hit = [t for t in _titles(configcheck.check(db_session, bare)) if "BPDU guard" in t]
+    assert hit
+
+    guarded = bare.replace("sw-pe1", "sw-pe2") + "spanning-tree portfast edge bpduguard default\n"
+    assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
+
+
+def test_portfast_default_makes_access_ports_edge_ports(db_session):
+    """全体の `spanning-tree portfast default` で、アクセスの口は端末口になる。
+
+    出典: Layer 2 Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9300）
+    「Enabling PortFast」（use the spanning-tree portfast default global
+    configuration command to globally enable the PortFast feature on all
+    nontrunking ports）。
+
+    口ごとに portfast と書いていないので、口だけを見ていると BPDU から
+    守っていない端末口を見逃す。
+    """
+    bare = (
+        "hostname sw-pd1\nspanning-tree portfast default\n"
+        "interface GigabitEthernet1/0/5\n switchport mode access\n"
+        "interface GigabitEthernet1/0/48\n switchport mode trunk\n"
+    )
+    result = configcheck.check(db_session, bare)
+    hit = next(f for f in result.findings if "BPDU guard が入っていません" in f.title)
+    assert any("1/0/5" in item for item in hit.evidence)
+    # トランクは端末口にならない
+    assert not any("1/0/48" in item for item in hit.evidence)
+
+    guarded = bare.replace("sw-pd1", "sw-pd2") + "spanning-tree portfast bpduguard default\n"
+    assert not [t for t in _titles(configcheck.check(db_session, guarded)) if "BPDU guard" in t]
+
+
+_SHOW_VTP = """hostname sw-vtp
+Switch#show vtp status
+VTP Version capable             : 1 to 3
+VTP version running             : {version}
+VTP Domain Name                 : Lab_Network
+VTP Pruning Mode                : Disabled
+VTP Traps Generation            : Disabled
+Device ID                       : f87a.41a8.ca00
+
+Feature VLAN:
+--------------
+VTP Operating Mode                : {mode}
+Maximum VLANs supported locally   : 1005
+Number of existing VLANs          : 6
+Configuration Revision            : {revision}
+"""
+
+
+def test_vtp_v1_v2_server_with_a_revision_is_called_out(db_session):
+    """出典: VLAN Configuration Guide, Cisco IOS XE 17.15.x（Catalyst 9300）
+    「Configuring VTP」の Caution と、Command Reference 16.5.x の
+    `show vtp status` の出力例。
+
+    版 1・2 でサーバー／クライアントのままリビジョンが 0 でないと、
+    つないだ先のドメインの VLAN を消しうる。版 3・transparent・
+    リビジョン 0 は言わない。
+    """
+    risky = _SHOW_VTP.format(version=2, mode="Server", revision=4)
+    assert any("VTP の版 1・2" in t for t in _titles(configcheck.check(db_session, risky)))
+
+    for version, mode, revision in ((3, "Server", 4), (2, "Transparent", 4), (2, "Server", 0)):
+        calm = _SHOW_VTP.format(version=version, mode=mode, revision=revision).replace(
+            "sw-vtp", f"sw-vtp-{version}{mode}{revision}"
+        )
+        assert not [t for t in _titles(configcheck.check(db_session, calm)) if "VTP の版" in t]
+
+
+def test_access_ports_left_on_vlan1_are_called_out(db_session):
+    """出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（Default VLAN (for access
+    ports): VLAN 1）。
+
+    VLAN を書き忘れたアクセスの口は VLAN 1 に入る。止めてある口と、
+    VLAN を書いてある口は言わない。
+    """
+    text = (
+        "hostname sw-v1\n"
+        "interface GigabitEthernet1/0/1\n switchport mode access\n"
+        "interface GigabitEthernet1/0/2\n switchport mode access\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/3\n switchport mode access\n shutdown\n"
+    )
+    result = configcheck.check(db_session, text)
+    hit = next(f for f in result.findings if "既定の VLAN 1" in f.title)
+    assert any("1/0/1" in item for item in hit.evidence)
+    assert not any("1/0/2" in item or "1/0/3" in item for item in hit.evidence)
+
+
+def test_ports_with_a_vlan_but_no_mode_are_called_out(db_session):
+    """出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（VLAN trunking: Switchport mode
+    dynamic auto (supports DTP)）。
+
+    VLAN だけ書いて mode を書かない口は dynamic auto のままで、相手次第で
+    トランクになる。mode を書いた口と NX-OS の資料は言わない。
+    """
+    text = (
+        "hostname sw-dtp\n"
+        "interface GigabitEthernet1/0/1\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/2\n switchport mode access\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/3\n switchport access vlan 10\n shutdown\n"
+    )
+    result = configcheck.check(db_session, text)
+    hit = next(f for f in result.findings if "相手次第でトランク" in f.title)
+    assert any("1/0/1" in item for item in hit.evidence)
+    assert not any("1/0/2" in item or "1/0/3" in item for item in hit.evidence)
+
+    nxos = "hostname nx-dtp\nfeature lacp\ninterface Ethernet1/1\n  switchport access vlan 10\n"
+    assert not [
+        t for t in _titles(configcheck.check(db_session, nxos)) if "相手次第でトランク" in t
+    ]
+
+
+def test_ssh_that_still_accepts_version_1_is_called_out(db_session):
+    """出典: Security and VPN Configuration Guide, Cisco IOS XE 17.x
+    「Secure Shell Version 2 Support」（If you do not configure this command, SSH
+    by default runs in compatibility mode）。
+
+    SSH を使っていて ip ssh version 2 が無ければ、版 1 も受ける。
+    """
+    base = "hostname sw-ssh\nline vty 0 4\n transport input ssh\n"
+    assert any("版 1 でもつながる" in t for t in _titles(configcheck.check(db_session, base)))
+
+    fixed = base.replace("sw-ssh", "sw-ssh2") + "ip ssh version 2\n"
+    assert not [t for t in _titles(configcheck.check(db_session, fixed)) if "版 1 でも" in t]

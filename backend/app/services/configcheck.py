@@ -235,6 +235,10 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
     found.extend(_arp_inspection(text))
+    found.extend(_vtp_overwrite(text))
+    found.extend(_access_on_vlan1(text))
+    found.extend(_negotiable_ports(text))
+    found.extend(_ssh_version(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
@@ -623,11 +627,17 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
 
 #: 端末をつなぐ口（つないだ瞬間に通す設定）。機種ごとの言い方
 _EDGE_PORT = re.compile(
-    r"^(?:spanning-tree\s+portfast(?:\s+trunk)?\s*$"
+    #: IOS-XE は `portfast edge [trunk]` とも書く（出典: Command Reference, Cisco IOS XE
+    #: 17.16.x（Catalyst 9300）「spanning-tree portfast edge [trunk]」）
+    r"^(?:spanning-tree\s+portfast(?:\s+edge)?(?:\s+trunk)?\s*$"
     r"|stp\s+edged-port(?:\s+enable)?\s*$"  # NEC QX / VRP
     r"|spanning-tree\s+802-1w\s+admin-edge-port\s*$"  # FastIron
     r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
     re.IGNORECASE,
+)
+#: 全体でトランク以外の口を端末口にする書き方
+_PORTFAST_DEFAULT = re.compile(
+    r"^spanning-tree\s+portfast(?:\s+edge)?\s+default\s*$", re.IGNORECASE | re.MULTILINE
 )
 #: 誰かがスイッチを挿したときに、その口だけ落とす仕組み
 _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
@@ -637,7 +647,9 @@ _BPDU_GUARD = re.compile(r"bpdu[-_ ]?guard|bpdu[-_ ]?protection", re.IGNORECASE)
 #: 守っていない口を見逃す
 _GLOBAL_BPDU_GUARD = re.compile(
     r"^(?:stp\s+bpdu-protection"
-    r"|spanning-tree\s+portfast\s+bpduguard\s+default"
+    #: 同じく `portfast edge bpduguard default`（出典: 同「spanning-tree portfast edge
+    #: bpduguard default」）
+    r"|spanning-tree\s+portfast(?:\s+edge)?\s+bpduguard\s+default"
     r"|spanning-tree\s+bpdu-guard\s*$)",
     re.IGNORECASE | re.MULTILINE,
 )
@@ -748,10 +760,24 @@ def _stp(text: str) -> list[Finding]:
     # 端末をつなぐ口の言い方は機種で違う。1つの書き方だけを見ていると、
     # 他社の機器では黙って通る
     guarded_here = _GLOBAL_BPDU_GUARD.search(text) is not None
+    # 全体で `spanning-tree portfast [edge] default` を入れると、トランクでない口は
+    # 口ごとに書かなくても端末口になる。アクセスと書いた口はここで拾う
+    # （出典: Layer 2 Configuration Guide, Cisco IOS XE 17.16.x（Catalyst 9300）
+    # 「Enabling PortFast」: use the spanning-tree portfast default global
+    # configuration command to globally enable the PortFast feature on all
+    # nontrunking ports）
+    fast_by_default = _PORTFAST_DEFAULT.search(text) is not None
     fast_without_guard = [
         name
         for name, body in ports
-        if any(_EDGE_PORT.match(line) for line in body)
+        if (
+            any(_EDGE_PORT.match(line) for line in body)
+            or (
+                fast_by_default
+                and any(re.match(r"^switchport mode access\b", line, re.I) for line in body)
+                and not any(re.match(r"^no spanning-tree portfast\b", line, re.I) for line in body)
+            )
+        )
         and not guarded_here
         and not any(_BPDU_GUARD.search(line) for line in body)
     ]
@@ -775,7 +801,10 @@ def _stp(text: str) -> list[Finding]:
         name
         for name, body in ports
         if any(line.lower().startswith("switchport mode trunk") for line in body)
-        and any(re.match(r"^spanning-tree portfast\s*$", line, re.IGNORECASE) for line in body)
+        and any(
+            re.match(r"^spanning-tree portfast(?:\s+edge)?\s*$", line, re.IGNORECASE)
+            for line in body
+        )
     ]
     if fast_on_trunk:
         out.append(
@@ -1026,6 +1055,165 @@ def _dhcp_snooping_option82(lines: list[str]) -> list[Finding]:
                 "ip dhcp snooping vlan はあるが、no ip dhcp snooping information option も "
                 "ip helper-address も無い"
             ],
+        )
+    ]
+
+
+_VTP_VERSION = re.compile(r"^\s*VTP version running\s*:\s*(\d)", re.IGNORECASE | re.MULTILINE)
+_VTP_DOMAIN = re.compile(r"^\s*VTP Domain Name\s*:[ \t]*(\S*)", re.IGNORECASE | re.MULTILINE)
+_VTP_MODE = re.compile(r"^\s*VTP Operating Mode\s*:\s*(\w+)", re.IGNORECASE | re.MULTILINE)
+_VTP_REVISION = re.compile(r"^\s*Configuration Revision\s*:\s*(\d+)", re.IGNORECASE | re.MULTILINE)
+
+
+def _vtp_overwrite(text: str) -> list[Finding]:
+    """VTP の版 1・2 で、つなぐと VLAN を上書きしうる状態。
+
+    同じドメインでは、構成リビジョンのいちばん大きい機器の VLAN が全体に
+    効く。版 1・2 では、リビジョンの大きい機器をつなぐと、ドメイン全体の
+    VLAN が消えることがある。サーバー／クライアントのままリビジョンが
+    0 でない機器は、他所へつなぐ前にリビジョンを戻す必要がある。
+
+    running-config には出ない（出るのは transparent のときだけ）ので、
+    `show vtp status` が貼られているときだけ見る。
+
+    出典:
+    - VLAN Configuration Guide, Cisco IOS XE 17.15.x（Catalyst 9300）
+      「Configuring VTP」の Caution（With VTP versions 1 and 2, adding a device
+      that has a revision number higher than the revision number in the VTP
+      domain can erase all VLAN information … With VTP version 3, the VLAN
+      information is not erased）
+    - Command Reference, Cisco IOS XE 16.5.x（Catalyst 9300）「show vtp」の出力例
+    """
+    version = _VTP_VERSION.search(text)
+    mode = _VTP_MODE.search(text)
+    revision = _VTP_REVISION.search(text)
+    domain = _VTP_DOMAIN.search(text)
+    if not (version and mode and revision and domain):
+        return []
+    if version.group(1) not in ("1", "2"):
+        return []
+    if mode.group(1).lower() not in ("server", "client"):
+        return []
+    if not domain.group(1) or int(revision.group(1)) == 0:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="VTP の版 1・2 で、つなぐと VLAN を上書きしうる状態です",
+            why="同じ VTP ドメインでは、構成リビジョンのいちばん大きい機器の VLAN が"
+            "全体に効きます。版 1・2 では、この機器を他の場所へつなぐと、ドメイン全体の"
+            "VLAN が消えることがあります。VTP を使わないなら transparent（または off）に、"
+            "使うなら版 3 にするか、つなぐ前にリビジョンを 0 に戻してください。",
+            evidence=[
+                f"VTP version running: {version.group(1)} / Operating Mode: {mode.group(1)}"
+                f" / Domain: {domain.group(1)} / Configuration Revision: {revision.group(1)}"
+            ],
+        )
+    ]
+
+
+def _access_on_vlan1(text: str) -> list[Finding]:
+    """アクセスの口が、VLAN を書かずに既定の VLAN 1 に乗っている。
+
+    VLAN 1 は管理用の通信（CDP・VTP など）も流れる帯で、端末を置くと
+    分けたつもりの帯が混ざる。書き忘れで VLAN 1 に入っている口を言う。
+    止めてある口（shutdown）は、使っていないので言わない。
+
+    出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（Default VLAN (for access ports):
+    VLAN 1）
+    """
+    loose = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^switchport mode access\b", line, re.I) for line in body)
+        and not any(re.match(r"^switchport access vlan\b", line, re.I) for line in body)
+        and not any(re.match(r"^shutdown\s*$", line, re.I) for line in body)
+    ]
+    if not loose:
+        return []
+    return [
+        Finding(
+            level=LOW,
+            title="VLAN を書いていないアクセスの口が、既定の VLAN 1 に乗っています",
+            why="アクセスの口は、VLAN を書かなければ VLAN 1 に入ります。VLAN 1 は"
+            "管理用の通信も流れる帯なので、端末をここに置くと、分けたつもりの帯が"
+            "混ざります。意図した VLAN を switchport access vlan で書いてください。",
+            evidence=[f"{name}: switchport access vlan が無い" for name in loose[:5]],
+        )
+    ]
+
+
+def _negotiable_ports(text: str) -> list[Finding]:
+    """VLAN は書いたのに mode を書いておらず、相手次第でトランクになる口。
+
+    Catalyst（IOS / IOS-XE）の L2 の口は、mode を書かなければ dynamic auto で、
+    相手がトランクを求めるとトランクになる。`switchport access vlan` だけ書いて
+    アクセスのつもりでいると、挿された機器次第で全 VLAN が流れ込む。
+
+    NX-OS は既定がアクセスで DTP を使わないので、NX-OS の資料では言わない。
+
+    出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（VLAN trunking: Switchport mode
+    dynamic auto (supports DTP)）
+    """
+    if re.search(r"\bNX-OS\b|^\s*feature\s+\S+", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    loose = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^switchport access vlan\b", line, re.I) for line in body)
+        and not any(re.match(r"^switchport mode\b", line, re.I) for line in body)
+        and not any(re.match(r"^no switchport\s*$", line, re.I) for line in body)
+        # 止めてある口は相手と交渉しないので言わない
+        and not any(re.match(r"^shutdown\s*$", line, re.I) for line in body)
+    ]
+    if not loose:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="VLAN だけ書いて mode を書いていない口が、相手次第でトランクになります",
+            why="mode を書かない L2 の口は dynamic auto で、相手がトランクを求めると"
+            "トランクになります。アクセスのつもりでも、挿された機器次第で全 VLAN が"
+            "流れ込みます。switchport mode access を書いてください。",
+            evidence=[f"{name}: switchport access vlan はあるが mode が無い" for name in loose[:5]],
+        )
+    ]
+
+
+def _ssh_version(text: str) -> list[Finding]:
+    """IOS / IOS-XE の SSH が、版 1 でもつながる形。
+
+    `ip ssh version` を書かなければ互換モード（1.99）で、版 1 の接続も受ける。
+    版 1 は規格として定まっていないので、版 2 に固定するよう公式が勧めている。
+    SSH を使っている資料（`transport input` に ssh があるか `ip ssh` の行が
+    ある）だけを見る。NX-OS は別の書き方なので言わない。
+
+    出典: Security and VPN Configuration Guide, Cisco IOS XE 17.x
+    「Secure Shell Version 2 Support」（If you do not configure this command, SSH
+    by default runs in compatibility mode … If you do not want your device to
+    fall back to the undefined protocol (Version 1), you should use the ip ssh
+    version command and specify Version 2）
+    """
+    if re.search(r"\bNX-OS\b|^\s*feature\s+\S+", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    uses_ssh = re.search(
+        r"^\s*transport input\b.*\bssh\b|^ip ssh\b", text, re.IGNORECASE | re.MULTILINE
+    )
+    if not uses_ssh:
+        return []
+    if re.search(r"^ip ssh version 2\s*$", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    forced_v1 = re.search(r"^ip ssh version 1\s*$", text, re.IGNORECASE | re.MULTILINE)
+    return [
+        Finding(
+            level=MEDIUM if forced_v1 else LOW,
+            title="SSH が版 1 でもつながる形です",
+            why="ip ssh version を 2 に固定しないと、版 1 の接続も受けます"
+            "（書かなければ 1.99 の互換モード）。版 1 は規格として定まっていないので、"
+            "ip ssh version 2 を書いてください。",
+            evidence=["ip ssh version 1 がある" if forced_v1 else "ip ssh version 2 が無い"],
         )
     ]
 
