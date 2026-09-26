@@ -193,7 +193,7 @@ def _mount_frontend(directory: str) -> None:
     from fastapi.responses import FileResponse
     from fastapi.staticfiles import StaticFiles
 
-    root = Path(directory)
+    root = Path(directory).resolve()
     index = root / "index.html"
     if not index.exists():
         return
@@ -203,8 +203,11 @@ def _mount_frontend(directory: str) -> None:
 
     @app.get("/{full_path:path}", include_in_schema=False)
     def spa(full_path: str) -> FileResponse:
-        candidate = root / full_path
-        if full_path and candidate.is_file():
+        # パスは URL の %2F や生の ".." を解いたあとで届くので、そのまま連結すると
+        # 配信元より上のファイル（データベースや設定）を返してしまう。
+        # 解決したあとで配信元の中にあるものだけを返す。
+        candidate = (root / full_path).resolve()
+        if full_path and candidate.is_relative_to(root) and candidate.is_file():
             return FileResponse(candidate)
         return FileResponse(index)
 

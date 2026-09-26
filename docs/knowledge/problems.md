@@ -85,3 +85,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - `tests/test_background_import.py::test_the_dashboard_lists_what_ran` で、全体を流したときに
   1回だけ `SAWarning: Identity map already had an identity for (Device, (1,))`（`importer.py` の flush）。
   単独で5回・全体で2回流して再現しなかった。裏の処理と試験の DB の共有のタイミングと見ているが、確かめていない。
+
+## 配布版で配信元の外のファイルが読める（2026-09-27 JST）
+
+- 症状: `NETVISION_SERVE_FRONTEND` で画面を配るとき、`GET /../netvision.db` のような
+  パスで、配信元より上にあるファイル（データベースや設定）がそのまま返った。
+- 原因: uvicorn は `%2F` や生の `..` を解いたパスを渡す。`main._mount_frontend` の SPA の経路が
+  それを配信元に連結して、そのまま返していた。`/assets` 配下は StaticFiles が自分で防いでいた。
+- 対策: 解決したパスが配信元の中にあるときだけ返し、外なら画面の入口（index.html）を返す。
+- 試験: `tests/test_serve_frontend.py`。httpx は `..` を先に畳むので、ASGI を直接呼んで生のパスを渡す。
+- 影響: 配布版（start.sh・start.bat・standalone.py）で、この機能を開ける人すべて。
+  開発時の Vite 経由の起動は当たらない。
