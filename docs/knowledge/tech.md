@@ -21,3 +21,18 @@
   普段の `pytest -q` の要約では件数しか見えない。
 - 残っている1件は `fastapi.testclient` が httpx を使うことへの Starlette の警告。
   試験側だけの話で、対応には別パッケージ（httpx2）の追加が要るため見送っている。
+
+## 画面を全ページ開いて確かめる（2026-09-26 JST）
+
+- 一時 DB に `alembic upgrade head` と `python -m scripts.seed` で見本（57拠点・120台）を入れ、
+  `NETVISION_SERVE_FRONTEND=../frontend/dist` で backend から画面を配る。
+- Chromium は `/opt/pw-browsers/chromium-1194/chrome-linux/chrome`。playwright-core は
+  リポジトリに入れず scratchpad に入れて使う。
+- `frontend/src/nav.ts` の経路と機器・シナリオの詳細の 32 ページを開き、console のエラー、
+  画面の例外、5xx の応答を集めた。2026-09-26 時点で 0 件。
+
+## 取り込みの速さ（2026-09-26 JST）
+
+- 5000 行の CSV（管理ID・シリアル番号・拠点あり）を SQLite で: 新規 1.1 秒、全行更新 1.3 秒。
+- 重複の確認で機器を関連ごと読むと、全行更新が 1.7 秒になった。値と id だけを引けば変わらない。
+  取り込みに確認を足すときは、同じ 5000 行で前後を測る。
