@@ -215,6 +215,9 @@ def render_svg(
             groups=groups,
         )
     if not nodes:
+        # 機器が無くても、頼まれた形は空で渡す。鍵が無いと受け取る側（線の引き直し）が落ちる
+        if collect is not None:
+            collect.update({"boxes": {}, "wires": {}, "labels": {}})
         return _empty_svg(title, layer=graph.layer)
 
     # 画面の assignAnchors と同じ手順。
