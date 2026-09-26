@@ -334,7 +334,14 @@ def get_graph(
     orientation: str = "vertical",
     only: set[int] | None = None,
     site_id: int | None = None,
+    arrange: bool = True,
 ) -> TopologyGraph:
+    """図のグラフを組む。
+
+    `arrange=False` は、未配置の機器を並べる手順を省く。結線表のように位置を
+    使わない呼び出し向け。並べる手順は機器の数の2乗で重く、2万台の台帳で結線表を
+    出すのに 37 秒かかっていた（そのほとんどが使わない位置の計算）。
+    """
     if layer == "logical":
         # 論理図はトンネルから組み立てる。物理の結線とは別の話なので、
         # 同じ関数の中で分岐させて、呼び出し側（画面・書き出し）は同じままにする
@@ -437,7 +444,7 @@ def get_graph(
         graph = _as_l3(graph, ports)
 
     # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
-    if graph.nodes:
+    if graph.nodes and arrange:
         rank = _align_redundant_pairs(
             hierarchy_rank(graph), _adjacency(graph), edges=graph.edges, nodes=graph.nodes
         )

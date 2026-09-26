@@ -126,3 +126,33 @@ def test_site_filter_keeps_links_that_only_touch_it_on_one_side(client):
 
     assert "acc-sw-01" in text
     assert "core-sw-01" in text  # 相手も行に残る
+
+
+def test_the_table_does_not_arrange_the_diagram(client, db_session, monkeypatch):
+    """結線表は位置を使わないので、機器を並べる手順を通らない。
+
+    並べる手順は機器の数の2乗で重く、2万台で結線表に 37 秒かかっていた。
+    """
+    from app.services import topology, topology_table
+
+    def refuse(*args, **kwargs):
+        raise AssertionError("結線表のために図を並べている")
+
+    monkeypatch.setattr(topology, "_arrange_initial", refuse)
+    a = client.post(
+        f"{API}/devices", json={"hostname": "a", "vendor": "Cisco", "model": "m"}
+    ).json()
+    b = client.post(
+        f"{API}/devices", json={"hostname": "b", "vendor": "Cisco", "model": "m"}
+    ).json()
+    client.post(
+        f"{API}/topology/links",
+        json={
+            "a_device_id": a["id"],
+            "a_interface": "Gi0/1",
+            "b_device_id": b["id"],
+            "b_interface": "Gi0/1",
+        },
+    )
+    rows = topology_table.rows(db_session)
+    assert [(row[0], row[4]) for row in rows] in ([("a", "b")], [("b", "a")])
