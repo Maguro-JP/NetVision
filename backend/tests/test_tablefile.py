@@ -51,3 +51,72 @@ def test_the_import_screen_gets_the_reason(client):
     )
     assert response.status_code == 422
     assert "閉じていません" in response.json()["detail"]
+
+
+def _xlsx(rows: list[list[object]]) -> bytes:
+    import io
+
+    from openpyxl import Workbook
+
+    book = Workbook()
+    for row in rows:
+        book.active.append(row)
+    buffer = io.BytesIO()
+    book.save(buffer)
+    return buffer.getvalue()
+
+
+def test_a_title_above_the_headers_is_skipped_in_excel():
+    """表題（と作成日）の行の下に見出しを書いた台帳も、そのまま取り込める。"""
+    table = read_table(
+        "d.xlsx",
+        _xlsx(
+            [
+                ["機器台帳（2026年度）"],
+                [],
+                ["作成: 2026/09/01"],
+                ["ホスト名", "型番"],
+                ["sw1", "C1"],
+            ]
+        ),
+    )
+    assert table.headers == ["ホスト名", "型番"]
+    assert table.rows == [{"ホスト名": "sw1", "型番": "C1"}]
+    assert table.first_row == 5
+
+
+def test_a_title_above_the_headers_is_skipped_in_csv():
+    table = read_table("d.csv", _csv(["機器台帳", "", "ホスト名,型番", "sw1,C1"]))
+    assert table.headers == ["ホスト名", "型番"]
+    assert table.first_row == 4
+
+
+def test_a_one_column_file_keeps_its_first_row_as_the_header():
+    table = read_table("d.csv", _csv(["ホスト名", "sw1", "sw2"]))
+    assert table.headers == ["ホスト名"]
+    assert table.first_row == 2
+
+
+def test_row_numbers_and_error_rows_follow_the_file(client):
+    """結果の「何行目」は、表題の行を数えたファイルの行番号。エラー行の書き出しもその行。"""
+    body = _xlsx(
+        [
+            ["機器台帳"],
+            ["ホスト名", "ベンダー", "型番", "管理ID"],
+            ["sw-a", "Cisco", "C1", "NW-1"],
+            ["sw-b", "Cisco", "C1", "NW-1"],
+        ]
+    )
+    result = client.post(
+        f"{API}/import/devices/preview",
+        files={"file": ("d.xlsx", body, "application/octet-stream")},
+    ).json()
+    assert [row["row_number"] for row in result["rows"]] == [3, 4]
+    assert "3行目" in result["rows"][1]["issues"][0]["message"]
+
+    errors = client.post(
+        f"{API}/import/devices/errors.csv",
+        files={"file": ("d.xlsx", body, "application/octet-stream")},
+    )
+    assert "sw-b" in errors.content.decode("utf-8-sig")
+    assert "sw-a" not in errors.content.decode("utf-8-sig")

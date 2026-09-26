@@ -117,7 +117,7 @@ def run_import(
     for site in sites:
         by_name.setdefault(site.name, site)
 
-    for number, raw in enumerate(table.rows, start=2):
+    for number, raw in enumerate(table.rows, start=table.first_row):
         values = {mapping[h]: str(raw.get(h) or "").strip() for h in mapping}
         code, name = values.get("code", ""), values.get("name", "")
         if not code and not name:

@@ -209,7 +209,7 @@ def run_import(
 
     devices = _device_lookup(db)
 
-    for index, raw in enumerate(table.rows, start=2):
+    for index, raw in enumerate(table.rows, start=table.first_row):
         if index % _PROGRESS_STEP == 0:
             progress(index - 1, "1行ずつ見ています")
         values = {mapping[h]: str(raw.get(h) or "").strip() for h in mapping}

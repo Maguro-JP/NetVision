@@ -683,6 +683,7 @@ def run_import(
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
     on_progress: Callable[[int, int, str], None] | None = None,
+    first_row: int = 2,
 ) -> ImportOutcome:
     """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
@@ -705,6 +706,7 @@ def run_import(
             commit=commit,
             keep_rows=keep_rows,
             on_progress=on_progress,
+            first_row=first_row,
         )
 
 
@@ -719,6 +721,7 @@ def _run_import(
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
     on_progress: Callable[[int, int, str], None] | None = None,
+    first_row: int = 2,
 ) -> ImportOutcome:
     total_rows = len(table_rows)
 
@@ -823,9 +826,11 @@ def _run_import(
     results: list[RowResult] = []
     created = updated = skipped = errors = contracts_added = 0
 
-    for index, (values, issues) in enumerate(extracted, start=2):
-        if index % _PROGRESS_STEP == 0:
-            progress(index - 1, "1行ずつ見ています")
+    for position, (values, issues) in enumerate(extracted):
+        # 結果に出す行番号はファイルの行番号。進み具合は何行目まで見たかで数える
+        index = first_row + position
+        if (position + 1) % _PROGRESS_STEP == 0:
+            progress(position + 1, "1行ずつ見ています")
         key_value = str(values.get(str(key_field)) or "").strip()
 
         # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
