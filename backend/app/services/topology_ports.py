@@ -103,15 +103,17 @@ def collect(db: Session, *, site_id: int | None = None) -> list[DevicePorts]:
 
     # 結線を「機器 → 自分のポート → 相手」に組み替える
     linked: dict[int, dict[str, tuple[int, str]]] = {}
+    # 台帳に無いポートの名前は、線に書かれた綴りで出す（その機器が a 側の線で
+    # 最初に見つかった綴り、無ければ b 側）。以前は1ポートずつ結線の表を
+    # 問い合わせており、2万台で数秒かかっていた
+    written_a: dict[tuple[int, str], str] = {}
+    written_b: dict[tuple[int, str], str] = {}
     for link in db.scalars(select(Link)):
-        linked.setdefault(link.a_device_id, {})[ifname.normalize(link.a_interface)] = (
-            link.b_device_id,
-            link.b_interface,
-        )
-        linked.setdefault(link.b_device_id, {})[ifname.normalize(link.b_interface)] = (
-            link.a_device_id,
-            link.a_interface,
-        )
+        a_key, b_key = ifname.normalize(link.a_interface), ifname.normalize(link.b_interface)
+        linked.setdefault(link.a_device_id, {})[a_key] = (link.b_device_id, link.b_interface)
+        linked.setdefault(link.b_device_id, {})[b_key] = (link.a_device_id, link.a_interface)
+        written_a.setdefault((link.a_device_id, a_key), link.a_interface)
+        written_b.setdefault((link.b_device_id, b_key), link.b_interface)
 
     out: list[DevicePorts] = []
     for device in devices:
@@ -144,7 +146,8 @@ def collect(db: Session, *, site_id: int | None = None) -> list[DevicePorts]:
         for key, peer in mine.items():
             if key in seen:
                 continue
-            entry.ports.append(_row(peer_name(db, device.id, key) or key, peer, by_id, tier))
+            written = written_a.get((device.id, key)) or written_b.get((device.id, key))
+            entry.ports.append(_row(written or key, peer, by_id, tier))
 
         entry.ports.sort(key=lambda row: _sort_key(row.interface))
         out.append(entry)
@@ -152,17 +155,6 @@ def collect(db: Session, *, site_id: int | None = None) -> list[DevicePorts]:
     # 上位を先に。同じ段は名前順
     out.sort(key=lambda d: (d.tier, d.site_name, d.hostname))
     return out
-
-
-def peer_name(db: Session, device_id: int, normalized: str) -> str | None:
-    """線に書かれているポート名をそのまま拾う（台帳に無いポート用）。"""
-    for link in db.scalars(select(Link).where(Link.a_device_id == device_id)):
-        if ifname.normalize(link.a_interface) == normalized:
-            return link.a_interface
-    for link in db.scalars(select(Link).where(Link.b_device_id == device_id)):
-        if ifname.normalize(link.b_interface) == normalized:
-            return link.b_interface
-    return None
 
 
 def _row(
@@ -201,8 +193,12 @@ def _row(
 
 def rows(db: Session, *, site_id: int | None = None) -> list[list[str]]:
     """1ポート1行の一覧。並べ替え・絞り込みができる形。"""
+    return _rows_of(collect(db, site_id=site_id))
+
+
+def _rows_of(devices: list[DevicePorts]) -> list[list[str]]:
     out: list[list[str]] = []
-    for device in collect(db, site_id=site_id):
+    for device in devices:
         for port in device.ports:
             out.append(
                 [
@@ -241,7 +237,8 @@ def to_xlsx(db: Session, *, site_id: int | None = None) -> bytes:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
 
-    data = rows(db, site_id=site_id)
+    # 一覧と結線図は同じ集計から作る（集計を2回すると、2万台で数秒余計にかかる）
+    data = _rows_of(devices)
     for row in data:
         sheet.append(row_values(row))
 
