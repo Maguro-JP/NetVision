@@ -96,3 +96,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `tests/test_serve_frontend.py`。httpx は `..` を先に畳むので、ASGI を直接呼んで生のパスを渡す。
 - 影響: 配布版（start.sh・start.bat・standalone.py）で、この機能を開ける人すべて。
   開発時の Vite 経由の起動は当たらない。
+
+## = で始まる値が Excel の式として書き出される（2026-09-27 JST）
+
+- 症状: 機器名や型番が `=` で始まると、xlsx の書き出しで式になった。「=== 要確認 ===」は
+  壊れた式、`=HYPERLINK(...)` は開いた人の Excel でリンクとして動いた。`#N/A` はエラー値になった。
+- 原因: openpyxl は文字列の型を推定し、`=` で始まれば式、ERROR_CODES に一致すればエラー値にする。
+- 対策: `xlsxsafe.cell_value` で、その形の文字列だけ `CellRichText` で包む。型の推定を通らずに
+  文字列として書かれ、読み戻すと元の文字列になる。`cell_value`・`row_values` を通らない書き方を
+  足すと、また式になる。
+- 試験: `tests/test_export_formula_text.py`（xlsx の5経路に `<f>` と `t="e"` が無いこと、読み戻し）。
+- 残り: CSV は値を変えないと防げないので、判断待ち（docs/reports/pending.md）。
