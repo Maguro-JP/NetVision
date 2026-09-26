@@ -253,6 +253,33 @@ def unscoped_graph_too_wide(db: Session, *, include_retired: bool = False) -> bo
     return (db.scalar(stmt) or 0) > UNSCOPED_GRAPH_LIMIT
 
 
+def auto_scoped_ids(
+    db: Session,
+    layer: str = DEFAULT_LAYER,
+    *,
+    site_id: int | None = None,
+    q: str | None = None,
+    include_retired: bool = False,
+) -> set[int] | None:
+    """絞らずに頼まれた物理の全体図を、描ける範囲に絞るときの機器。絞らないなら None。
+
+    画面の全体図と書き出し（SVG・ワークブック）で同じ判定を使う。書き出しだけ
+    全台を描こうとすると、2万台で終わらずにメモリを使い切り、アプリごと止まった。
+    L2 / L3 / 論理は中身が絞られるので、台帳全体の台数では判断しない。
+    """
+    if layer != DEFAULT_LAYER or site_id is not None or q:
+        return None
+    if not unscoped_graph_too_wide(db, include_retired=include_retired):
+        return None
+    return busiest_device_ids(db, include_retired=include_retired)
+
+
+#: 絞って出した図に添える一言。画面の注記と書き出しの表題で同じ言い方にする
+AUTO_SCOPED_NOTE = (
+    "台数が多いので、結線の多いところだけを出しています。拠点か機器名で絞ると、その範囲を出します"
+)
+
+
 def busiest_device_ids(
     db: Session, *, limit: int = UNSCOPED_GRAPH_LIMIT, include_retired: bool = False
 ) -> set[int]:

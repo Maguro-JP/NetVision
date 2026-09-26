@@ -27,10 +27,12 @@ from app.services.lifecycle import Severity
 from app.services.portlabel import MEDIA_COLOR, MEDIA_LABEL, Media
 from app.services.topology import (
     _DETAIL_HEIGHT,
+    AUTO_SCOPED_NOTE,
     PLANE_NAMES,
     TopologyGraph,
     _box_height,
     _box_width,
+    auto_scoped_ids,
     load_diagram,
 )
 
@@ -2526,9 +2528,10 @@ def export_svg(
     orientation: str = "vertical",
     view: topology_view.ViewGeometry | None = None,
 ) -> str:
+    only = auto_scoped_ids(db, layer, site_id=site_id)
     return render_svg(
-        load_diagram(db, layer, site_id=site_id, orientation=orientation),
-        title=title,
+        load_diagram(db, layer, site_id=site_id, orientation=orientation, only=only),
+        title=title if only is None else f"{title}（{AUTO_SCOPED_NOTE}）",
         vlan=vlan,
         vrf=vrf,
         site_id=site_id,

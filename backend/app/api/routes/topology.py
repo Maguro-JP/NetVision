@@ -65,19 +65,11 @@ def get_topology(
     """
     # 絞り込みが決まっているなら、必要な機器だけ読む。全部読んでから
     # 捨てる作りだと、全国規模では図を1つ出すのに何分もかかる
-    only = service.scoped_device_ids(db, site_id=site_id, q=q)
-    # 物理の全体図だけ止める。L2 / L3 / 論理は中身が絞られるので、
-    # 台帳全体の台数では判断しない（論理は全国のトンネルを一度に見たい）
     # 台数が多いと全体図は描けない。ただし「出せません」とだけ返すと、
     # 台帳と結線表を入れた直後に、何も出ない図を見ることになる。
-    # こちらで線の多いところを選んで出し、絞り込みの入口にする
-    auto_scoped = (
-        only is None
-        and layer == service.DEFAULT_LAYER
-        and service.unscoped_graph_too_wide(db, include_retired=include_retired)
-    )
-    if auto_scoped:
-        only = service.busiest_device_ids(db, include_retired=include_retired)
+    # こちらで線の多いところを選んで出し、絞り込みの入口にする（書き出しも同じ判定）
+    only = service.auto_scoped_ids(db, layer, site_id=site_id, q=q, include_retired=include_retired)
+    auto_scoped = only is not None
     graph = service.load_diagram(
         db,
         layer,
@@ -107,10 +99,7 @@ def get_topology(
 
     if auto_scoped:
         graph.auto_scoped = True
-        graph.note = (
-            "台数が多いので、結線の多いところだけを出しています。"
-            "拠点か機器名で絞ると、その範囲を出します"
-        )
+        graph.note = service.AUTO_SCOPED_NOTE
     return TopologyGraphRead.model_validate(graph, from_attributes=True)
 
 

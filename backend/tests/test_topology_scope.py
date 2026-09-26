@@ -477,3 +477,45 @@ def test_a_wide_ledger_still_shows_something(client, db_session):
     assert body["auto_scoped"] is True
     assert body["note"]
     assert 0 < len(body["nodes"]) <= UNSCOPED_GRAPH_LIMIT
+
+
+def test_the_exports_are_scoped_the_same_way_as_the_screen(client, db_session):
+    """絞らずに頼まれた全体図の書き出しも、画面と同じく描ける範囲に絞る。
+
+    書き出しだけ全台を描こうとして、2万台で終わらずにメモリを使い切り、
+    アプリごと止まっていた。絞ったことは図の表題に書く。
+    """
+    import io
+    import re
+    import zipfile
+
+    from app.models.device import Device, DeviceType
+    from app.services.topology import AUTO_SCOPED_NOTE, UNSCOPED_GRAPH_LIMIT
+
+    db_session.add_all(
+        [
+            Device(
+                hostname=f"sw-{index:03d}",
+                vendor="Cisco",
+                model="C2960",
+                device_type=DeviceType.SWITCH,
+                serial_number=f"S{index}",
+            )
+            for index in range(UNSCOPED_GRAPH_LIMIT + 20)
+        ]
+    )
+    db_session.commit()
+
+    svg = client.get(f"{API}/topology/export.svg")
+    assert svg.status_code == 200
+    assert AUTO_SCOPED_NOTE in svg.text
+    assert 0 < len(set(re.findall(r"sw-\d{3}", svg.text))) <= UNSCOPED_GRAPH_LIMIT
+
+    book = client.get(f"{API}/topology/workbook.xlsx")
+    assert book.status_code == 200
+    drawing = "".join(
+        zipfile.ZipFile(io.BytesIO(book.content)).read(name).decode("utf-8")
+        for name in zipfile.ZipFile(io.BytesIO(book.content)).namelist()
+        if name.startswith("xl/drawings/") and name.endswith(".xml")
+    )
+    assert 0 < len(set(re.findall(r"sw-\d{3}", drawing))) <= UNSCOPED_GRAPH_LIMIT
