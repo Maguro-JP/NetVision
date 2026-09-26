@@ -125,3 +125,23 @@ def test_the_detailed_lldp_display_gives_the_neighbours_names():
     assert ("1:2", "core-sw-01", "1:1") in found
     # 名前が出ていない相手は作らない
     assert not any(n.local_interface == "2:6" for n in parsed.neighbors)
+
+
+def test_a_mask_cut_off_mid_line_is_skipped_rather_than_failing() -> None:
+    """貼り付けが途中で切れた行で、Config 全体を読めなくしない。
+
+    切れたマスク（`255.255.255.`）から長さを作ると誤った住所になるので、その行は読まない。
+    """
+    parsed = configparse.parse(
+        "# Module devmgr configuration.\n"
+        'configure snmp sysName "exos-sw1"\n'
+        'create vlan "MGMT"\n'
+        "configure vlan MGMT tag 10\n"
+        'create vlan "USERS"\n'
+        "configure vlan USERS tag 20\n"
+        "configure vlan MGMT ipaddress 10.0.0.5 255.255.255.\n"
+        "configure vlan USERS ipaddress 10.0.20.1 255.255.255.0\n",
+        Vendor.EXOS,
+    )
+    addresses = {i.name: i.ip_address for i in parsed.interfaces if i.ip_address}
+    assert addresses == {"Vlan20": "10.0.20.1/24"}
