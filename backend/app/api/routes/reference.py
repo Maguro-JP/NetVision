@@ -132,7 +132,20 @@ def update_product(
     product_id: int, payload: ProductReferenceUpdate, db: DbSession
 ) -> ProductReferenceRead:
     product = _load_product(db, product_id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    # ベンダーと型番の組は一意。直した結果が別の行と重なると一意制約の 500 になるので先に断る
+    vendor = changes.get("vendor", product.vendor)
+    model = changes.get("model", product.model)
+    duplicate = db.scalar(
+        select(ProductReference).where(
+            func.lower(ProductReference.vendor) == vendor.lower(),
+            func.lower(ProductReference.model) == model.lower(),
+            ProductReference.id != product.id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{vendor} {model} は登録済みです")
+    for key, value in changes.items():
         setattr(product, key, value)
     db.commit()
     db.refresh(product)

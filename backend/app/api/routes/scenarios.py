@@ -84,7 +84,12 @@ def get_scenario(scenario_id: int, db: DbSession) -> ScenarioDetail:
 @router.patch("/{scenario_id}", response_model=ScenarioDetail)
 def update_scenario(scenario_id: int, payload: ScenarioUpdate, db: DbSession) -> ScenarioDetail:
     scenario = _load(db, scenario_id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    # 名前は一意。別のシナリオと同じ名前に直すと一意制約の 500 になるので先に断る
+    if "name" in changes and changes["name"] != scenario.name:
+        if db.scalar(select(Scenario).where(Scenario.name == changes["name"])):
+            raise HTTPException(status.HTTP_409_CONFLICT, f"「{changes['name']}」は登録済みです")
+    for key, value in changes.items():
         setattr(scenario, key, value)
     db.commit()
     db.refresh(scenario)

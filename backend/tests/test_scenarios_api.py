@@ -303,3 +303,13 @@ def test_a_fully_priced_plan_says_nothing_about_missing_prices(client, device_pa
     result = summary(client, scenario_id)
     assert result["investment"] == 600000
     assert not any("導入費用が入っているのは" in w for w in result["warnings"])
+
+
+def test_renaming_to_a_name_already_used_is_refused(client):
+    """名前は一意。別のシナリオと同じ名前に直すと、一意制約の 500 になっていた。"""
+    client.post(f"{API}/scenarios", json={"name": "更改A"})
+    other = client.post(f"{API}/scenarios", json={"name": "更改B"}).json()
+    response = client.patch(f"{API}/scenarios/{other['id']}", json={"name": "更改A"})
+    assert response.status_code == 409
+    same = client.patch(f"{API}/scenarios/{other['id']}", json={"name": "更改B"})
+    assert same.status_code == 200
