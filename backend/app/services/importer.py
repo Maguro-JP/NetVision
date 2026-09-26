@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import enum
+import math
 import re
 import unicodedata
 from collections.abc import Callable
@@ -554,9 +555,16 @@ def parse_decimal(value: object) -> float | None:
     if not text:
         return None
     try:
-        return float(text)
+        amount = float(text)
     except ValueError as exc:
         raise CellValueError(f"金額として解釈できません: '{value}'") from exc
+    # float は nan / inf も読む。pandas で作った CSV は空欄を nan と書くことがあり、
+    # 通すと合計が壊れる。負の金額は API が受け付けず、その機器の契約一覧が 500 になる
+    if not math.isfinite(amount):
+        raise CellValueError(f"金額として解釈できません: '{value}'")
+    if amount < 0:
+        raise CellValueError(f"金額は 0 以上で書いてください: '{value}'")
+    return amount
 
 
 def parse_device_type(value: object) -> DeviceType | None:

@@ -99,6 +99,16 @@ def test_parse_date_reads_the_year_last_form_when_it_is_clear(raw, expected):
     assert parse_date(raw) == expected
 
 
+@pytest.mark.parametrize("raw", ["nan", "inf", "-infinity", "-100"])
+def test_parse_decimal_refuses_non_finite_and_negative_amounts(raw):
+    """pandas の CSV の nan や、負の金額を保守年額として通さない。
+
+    負の金額を持つ契約は、その機器の契約一覧が 500 になっていた（応答は 0 以上を求める）。
+    """
+    with pytest.raises(CellValueError):
+        parse_decimal(raw)
+
+
 def test_parse_decimal_strips_currency_symbols():
     assert parse_decimal("¥480,000") == 480000
     assert parse_decimal("480000円") == 480000
