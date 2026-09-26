@@ -73,12 +73,12 @@ def decide(exposure_id: int, payload: ExposureDecision, db: DbSession) -> Exposu
 
     if payload.status is ExposureStatus.ACCEPTED and not (payload.note or "").strip():
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "リスクを受容する場合は理由を残してください",
         )
 
     if payload.remediation_id is not None and db.get(Remediation, payload.remediation_id) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "指定された対処がありません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "指定された対処がありません")
 
     row.status = payload.status
     row.remediation_id = payload.remediation_id
@@ -128,9 +128,9 @@ def _build(db: Session, device_id: int, remediation_id: int) -> remediation_conf
     try:
         return remediation_config.build_fix(db, device, remediation)
     except remediation_config.FixError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
     except Exception as exc:  # テンプレート展開の失敗など
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
 
 @router.get(
@@ -154,7 +154,7 @@ def download_fix(device_id: int, remediation_id: int, kind: str, db: DbSession) 
         raise HTTPException(status.HTTP_404_NOT_FOUND, "その種別の出力はありません")
     if kind == "diff" and not fix.diff.verified:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "投入コマンドが対応版 config に収束しないため出力できません",
         )
 
@@ -177,7 +177,7 @@ def verify_config(exposure_id: int, db: DbSession) -> ExposureRowRead:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象が見つかりません")
     if row.remediation_id is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "確認するには、適用した対処を指定してください",
         )
 

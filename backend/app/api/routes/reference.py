@@ -159,12 +159,12 @@ async def import_products(
     """
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルが大きすぎます")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "ファイルが大きすぎます")
 
     try:
         table = read_table(file.filename or "products.csv", content)
     except TableFileError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     result = service.import_products(
         db, table, source=ReferenceSource.CSV, fetched_at=fetched_at or date.today()
@@ -215,12 +215,12 @@ async def import_vulnerabilities(
     """脆弱性データを JSON で取り込む。形式は中身から自動判別する。"""
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルが大きすぎます")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "ファイルが大きすぎます")
 
     try:
         result = service.import_vulnerabilities(db, content, fetched_at=fetched_at)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return VulnerabilityImportResultRead.model_validate(result, from_attributes=True)
 

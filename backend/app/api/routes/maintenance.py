@@ -64,7 +64,7 @@ def update_contract(
     if contract.end_date < contract.start_date:
         db.rollback()
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, "end_date は start_date 以降である必要があります"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, "end_date は start_date 以降である必要があります"
         )
 
     db.commit()

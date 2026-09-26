@@ -122,12 +122,12 @@ async def _run(
 ) -> tuple[Table, importer.ImportOutcome]:
     content = await file.read()
     if len(content) > _max_upload_bytes():
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _too_large_message())
 
     try:
         table = read_table(file.filename or "", content)
     except TableFileError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     mapping_override: dict[str, str] | None = None
     if mapping:
@@ -135,16 +135,16 @@ async def _run(
             parsed = json.loads(mapping)
         except json.JSONDecodeError as exc:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は JSON で指定してください"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "mapping は JSON で指定してください"
             ) from exc
         if not isinstance(parsed, dict):
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は {列名: 項目名} の形式です"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "mapping は {列名: 項目名} の形式です"
             )
         unknown = [v for v in parsed.values() if v and v not in importer.IMPORTABLE_FIELDS]
         if unknown:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"未知の項目が指定されています: {', '.join(unknown)}",
             )
         mapping_override = {str(k): str(v) if v else "" for k, v in parsed.items()}
@@ -153,7 +153,7 @@ async def _run(
         key = importer.KeyField(key_field)
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "key_field は code / hostname / serial_number を指定してください",
         ) from exc
 
@@ -211,7 +211,7 @@ async def download_error_rows(
     """
     if encoding not in ERROR_CSV_ENCODINGS:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "encoding は utf-8 または shift_jis を指定してください",
         )
 
@@ -261,11 +261,11 @@ def link_template() -> Response:
 async def _run_links(db: Session, file: UploadFile, commit: bool) -> LinkImportResultRead:
     content = await file.read()
     if len(content) > _max_upload_bytes():
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _too_large_message())
     try:
         outcome = linkimport.run_import(db, file.filename or "links", content, commit=commit)
     except TableFileError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
     return LinkImportResultRead.model_validate(outcome, from_attributes=True)
 
 
@@ -314,11 +314,11 @@ class SiteImportResultRead(BaseModel):
 async def _run_sites(db: Session, file: UploadFile, commit: bool) -> SiteImportResultRead:
     content = await file.read()
     if len(content) > _max_upload_bytes():
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _too_large_message())
     try:
         outcome = siteimport.run_import(db, file.filename or "sites", content, commit=commit)
     except TableFileError as error:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
     return SiteImportResultRead.model_validate(outcome, from_attributes=True)
 
 
@@ -365,16 +365,16 @@ def _parse_options(
             parsed = json.loads(mapping)
         except json.JSONDecodeError as exc:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は JSON で指定してください"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "mapping は JSON で指定してください"
             ) from exc
         if not isinstance(parsed, dict):
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "mapping は {列名: 項目名} の形式です"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "mapping は {列名: 項目名} の形式です"
             )
         unknown = [v for v in parsed.values() if v and v not in importer.IMPORTABLE_FIELDS]
         if unknown:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"未知の項目が指定されています: {', '.join(unknown)}",
             )
         mapping_override = {str(k): str(v) if v else "" for k, v in parsed.items()}
@@ -382,7 +382,7 @@ def _parse_options(
         key = importer.KeyField(key_field)
     except ValueError as exc:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "key_field は code / hostname / serial_number を指定してください",
         ) from exc
     return mapping_override, key
@@ -403,7 +403,7 @@ async def commit_import_in_background(
     """
     content = await file.read()
     if len(content) > _max_upload_bytes():
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _too_large_message())
     mapping_override, key = _parse_options(mapping, key_field)
     filename = file.filename or "devices"
 
@@ -438,7 +438,7 @@ async def commit_link_import_in_background(
     """結線表の取り込みを裏で走らせる。様子は `/jobs/{id}` で聞く。"""
     content = await file.read()
     if len(content) > _max_upload_bytes():
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, _too_large_message())
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, _too_large_message())
     filename = file.filename or "links"
 
     def work(job) -> LinkImportResultRead:  # noqa: ANN001

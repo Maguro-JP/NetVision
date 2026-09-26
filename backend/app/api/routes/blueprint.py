@@ -155,7 +155,7 @@ def _request(payload: BlueprintBody) -> service.BlueprintRequest:
     unknown = [c for c in payload.conditions if c not in service.CONDITION_LABELS]
     if unknown:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"知らない条件です: {', '.join(unknown)}",
         )
     return service.BlueprintRequest(

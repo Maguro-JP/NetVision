@@ -28,7 +28,7 @@ def _load(db: Session, device_id: int) -> Device:
 
 def _validate_site(db: Session, site_id: int | None) -> None:
     if site_id is not None and db.get(Site, site_id) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"site {site_id} が存在しません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"site {site_id} が存在しません")
 
 
 def _resolve_site_code(db: Session, code: str | None) -> int | None:
@@ -39,7 +39,7 @@ def _resolve_site_code(db: Session, code: str | None) -> int | None:
     site = db.scalar(select(Site).where(Site.code == wanted))
     if site is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"拠点ID '{wanted}' の拠点がありません。先に拠点台帳へ登録してください",
         )
     return site.id
@@ -210,7 +210,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
     if device.eos_date and device.eol_date and device.eol_date < device.eos_date:
         db.rollback()
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "eol_date（サポート終了）は eos_date（販売終了）以降である必要があります",
         )
 

@@ -126,14 +126,14 @@ def _validate_item(db: Session, payload: ScenarioItemCreate | ScenarioItemUpdate
         device = db.get(Device, payload.device_id)
         if device is None:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {payload.device_id} が存在しません"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"device {payload.device_id} が存在しません"
             )
     if (
         payload.action in (ScenarioAction.REPLACE, ScenarioAction.REMOVE)
         and payload.device_id is None
     ):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "入れ替え・撤去には対象の機器を指定してください",
         )
     return device
@@ -173,7 +173,7 @@ def update_item(item_id: int, payload: ScenarioItemUpdate, db: DbSession) -> Sce
         device = db.get(Device, changes["device_id"])
         if device is None:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"device {changes['device_id']} が存在しません",
             )
         item.device_label = device.hostname
@@ -184,7 +184,7 @@ def update_item(item_id: int, payload: ScenarioItemUpdate, db: DbSession) -> Sce
     if item.action in (ScenarioAction.REPLACE, ScenarioAction.REMOVE) and item.device_id is None:
         db.rollback()
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "入れ替え・撤去には対象の機器を指定してください",
         )
 

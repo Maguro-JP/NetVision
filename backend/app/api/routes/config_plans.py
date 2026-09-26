@@ -184,14 +184,14 @@ def list_for_device(device_id: int, db: DbSession) -> list[ConfigPlanRead]:
 def create_plan(payload: ConfigPlanCreate, db: DbSession) -> ConfigPlanRead:
     device = db.get(Device, payload.device_id)
     if device is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "対象の機器が見つかりません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "対象の機器が見つかりません")
 
     body = payload.body
     if not body:
         try:
             body = service.seed_body(db, device, payload.seed_from, payload.template_id)
         except ValueError as exc:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     base = payload.base_snapshot_id
     if base is None:
@@ -295,7 +295,7 @@ def download(plan_id: int, kind: str, db: DbSession) -> Response:
     body, filename = bodies[kind]
     if kind == "diff" and not result.diff.verified:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "差分が将来の config に収束しないため出力できません。"
             "画面で収束しなかった箇所を確認してください",
         )
@@ -322,14 +322,14 @@ async def verify_plan(
     content = await file.read()
     if len(content) > MAX_CONFIG_BYTES:
         raise HTTPException(
-            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルサイズが大きすぎます（上限 10MB）"
+            status.HTTP_413_CONTENT_TOO_LARGE, "ファイルサイズが大きすぎます（上限 10MB）"
         )
     result = configs.ingest(
         db, file.filename or "after.txt", _decode(content), device_id=plan.device_id
     )
     snapshot = db.get(ConfigSnapshot, result.snapshot_id) if result.snapshot_id else None
     if snapshot is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Config を取り込めませんでした")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Config を取り込めませんでした")
 
     outputs = service.outputs(db, plan)
     remaining = build(snapshot.content, plan.body, outputs.vendor)
@@ -401,7 +401,7 @@ def draft_config(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> 
     if device is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
     if not payload.request.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "やりたいことを書いてください")
 
     result = config_draft.draft(db, device, payload.request, base=payload.base)
     return ConfigDraftRead(
@@ -478,7 +478,7 @@ def draft_prompt(device_id: int, payload: ConfigDraftRequest, db: DbSession) -> 
     if device is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
     if not payload.request.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "やりたいことを書いてください")
 
     result = config_draft.prompt_for(db, device, payload.request, base=payload.base)
     return _draft_read(device, result)
@@ -495,7 +495,7 @@ def review_draft(device_id: int, payload: ConfigReviewRequest, db: DbSession) ->
     if device is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
     if not payload.body.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "設定を貼ってください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "設定を貼ってください")
 
     return _draft_read(device, config_draft.review(db, device, payload.request, payload.body))
 
@@ -518,7 +518,7 @@ def draft_config_in_background(
     if device is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
     if not payload.request.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "やりたいことを書いてください")
 
     device_id_value = device.id
     request_text = payload.request
@@ -598,7 +598,7 @@ def plan_addition(device_id: int, payload: AdditionRequestBody, db: DbSession) -
     from app.services import addition
 
     if not payload.hostname.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "足す機器の名前を書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "足す機器の名前を書いてください")
 
     try:
         plan = addition.build(

@@ -135,7 +135,7 @@ def _decode(raw: bytes) -> str:
 def read_text(payload: LogBody, db: DbSession) -> LogReportRead:
     """貼り付けたログを読む。台帳には何も書かない。"""
     if not payload.text.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "中身が空です")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "中身が空です")
     return _read(service.review(db, payload.text))
 
 
@@ -155,12 +155,12 @@ async def read_files(
         raw = await file.read()
         if len(raw) > limit:
             raise HTTPException(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 f"{file.filename} が大きすぎます（上限 {max(1, limit // (1024 * 1024))}MB）",
             )
         chunks.append(_decode(raw))
 
     text = "\n".join(chunks)
     if not text.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "読める中身がありませんでした")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "読める中身がありませんでした")
     return _read(service.review(db, text))

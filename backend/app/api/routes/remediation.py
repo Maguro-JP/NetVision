@@ -46,7 +46,7 @@ def create_remediation(payload: RemediationCreate, db: DbSession) -> Remediation
     ).first()
     if vulnerability is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"{payload.cve_id} が登録されていません。先に脆弱性情報を取り込んでください",
         )
 

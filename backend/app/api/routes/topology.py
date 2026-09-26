@@ -249,7 +249,7 @@ def upsert_vlan_catalog(vlan_id: int, payload: VlanCatalogWrite, db: DbSession) 
     実機の設定と食い違っていれば、それは実機側が古いという情報になる。
     """
     if not 1 <= vlan_id <= 4094:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "VLAN は 1〜4094 です")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "VLAN は 1〜4094 です")
     return vlan_service.upsert(db, vlan_id, payload.model_dump(exclude_unset=True))
 
 
@@ -642,7 +642,7 @@ def save_positions(payload: SavePositions, db: DbSession) -> dict[str, int]:
     unknown = [device_id for device_id in wanted if device_id not in known]
     if unknown:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"存在しない機器が含まれています: {unknown}",
         )
 
@@ -727,12 +727,12 @@ def list_links(db: DbSession) -> list[Link]:
 def create_link(payload: LinkCreate, db: DbSession) -> Link:
     """人が図に引いた線を登録する。"""
     if payload.a_device_id == payload.b_device_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ機器同士は結線できません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "同じ機器同士は結線できません")
 
     for device_id in (payload.a_device_id, payload.b_device_id):
         if db.get(Device, device_id) is None:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {device_id} が存在しません"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"device {device_id} が存在しません"
             )
 
     link = config_service.upsert_link(
@@ -774,12 +774,12 @@ def update_link(link_id: int, payload: LinkUpdate, db: DbSession) -> Link:
     a_device = changes.get("a_device_id", link.a_device_id)
     b_device = changes.get("b_device_id", link.b_device_id)
     if a_device == b_device:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ機器同士は結線できません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "同じ機器同士は結線できません")
     for device_id in (a_device, b_device):
         if device_id != link.a_device_id and device_id != link.b_device_id:
             if db.get(Device, device_id) is None:
                 raise HTTPException(
-                    status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {device_id} が存在しません"
+                    status.HTTP_422_UNPROCESSABLE_CONTENT, f"device {device_id} が存在しません"
                 )
 
     a_port = changes.get("a_interface", link.a_interface)
@@ -794,7 +794,7 @@ def update_link(link_id: int, payload: LinkUpdate, db: DbSession) -> Link:
         )
     )
     if duplicate is not None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "同じ結線が既にあります")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "同じ結線が既にあります")
 
     for key, value in changes.items():
         setattr(link, key, value)

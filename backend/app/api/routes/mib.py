@@ -141,7 +141,7 @@ def _read(report: service.MibReport) -> MibReportRead:
 def read_mib(payload: MibBody, db: DbSession) -> MibReportRead:
     """貼り付けた snmpwalk の出力を読む。"""
     if not payload.text.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "読ませるものがありません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "読ませるものがありません")
     return _read(service.review(db, payload.text))
 
 
@@ -155,13 +155,13 @@ async def upload_mib(db: DbSession, files: list[UploadFile] = File(...)) -> MibR
         total += len(body)
         if total > MAX_BYTES:
             raise HTTPException(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 "大きすぎます。機器ごとに分けて渡してください",
             )
         chunks.append(body.decode("utf-8", errors="replace"))
     text = "\n".join(chunks)
     if not text.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "中身がありません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "中身がありません")
     return _read(service.review(db, text))
 
 

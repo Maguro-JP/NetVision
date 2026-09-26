@@ -153,7 +153,7 @@ async def create_document(
         try:
             path, digest = service.store_file(content, file.filename)
         except service.DocumentStorageError as exc:
-            raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, str(exc)) from exc
+            raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, str(exc)) from exc
 
         document.storage_path = path
         document.sha256 = digest
@@ -214,7 +214,7 @@ def update_document(document_id: int, payload: DocumentUpdate, db: DbSession) ->
     changes = payload.model_dump(exclude_unset=True)
 
     if changes.get("superseded_by_id") == document_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "自分自身は後継にできません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "自分自身は後継にできません")
     if changes.get("superseded_by_id") is not None:
         _load(db, changes["superseded_by_id"])
 
@@ -238,7 +238,7 @@ def index_document(document_id: int, db: DbSession) -> DocumentRead:
 def supersede_document(document_id: int, successor_id: int, db: DbSession) -> DocumentRead:
     """新しい版を「後継」として結び付ける。古い版は消さずに残す。"""
     if document_id == successor_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "自分自身は後継にできません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "自分自身は後継にできません")
 
     document = _load(db, document_id)
     _load(db, successor_id)
@@ -387,7 +387,7 @@ def update_template(
     changes = payload.model_dump(exclude_unset=True)
 
     if changes.get("superseded_by_id") == template_id:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "自分自身は後継にできません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "自分自身は後継にできません")
 
     for key, value in changes.items():
         setattr(template, key, value)
@@ -429,13 +429,13 @@ def render_template(template_id: int, payload: RenderRequest, db: DbSession) -> 
         device = db.get(Device, payload.device_id)
         if device is None:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {payload.device_id} が存在しません"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, f"device {payload.device_id} が存在しません"
             )
 
     try:
         result = config_render.render(db, template, device, payload.variables)
     except config_render.RenderError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return RenderResultRead(
         rendered=result.rendered,
@@ -499,7 +499,7 @@ def create_template_from_document(
     drafts = template_from_docs.drafts_for_document(db, document)
     if not drafts:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "この資料からはコマンドを拾えませんでした（読めない形式か、コマンドが無い）",
         )
     if not 0 <= payload.index < len(drafts):
@@ -547,7 +547,7 @@ def draft_template_from_config(payload: FromConfigRequest, db: DbSession):
     )
     if drafted is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "重ねられる Config が足りません。同じ役割の機器を2台ぶん以上取り込んでください。",
         )
     return ConfigTemplateDraftRead(
@@ -576,7 +576,7 @@ def save_template_from_config(payload: FromConfigRequest, db: DbSession) -> Conf
     )
     if drafted is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "重ねられる Config が足りません。同じ役割の機器を2台ぶん以上取り込んでください。",
         )
     return _to_template_read(template_from_config.save(db, drafted, name=payload.name))
