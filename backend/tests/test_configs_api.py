@@ -210,6 +210,20 @@ def test_preview_does_not_store_anything(client, device_payload):
     assert client.get(f"{API}/configs").json() == []
 
 
+def test_preview_refuses_a_file_over_the_ingest_limit(client, monkeypatch):
+    """取り込みで断られる大きさは、確認の段階で断る。"""
+    from app.api.routes import configs as routes
+
+    monkeypatch.setattr(routes, "MAX_CONFIG_BYTES", 16)
+    res = client.post(
+        f"{API}/configs/preview",
+        files={"file": ("big.txt", b"hostname big-sw\n" * 4, "text/plain")},
+    )
+
+    assert res.status_code == 413
+    assert "big.txt" in res.json()["detail"]
+
+
 def test_device_can_be_specified_when_hostname_is_missing(client, device_payload):
     device_id = add_device(client, device_payload, hostname="mystery-sw")
     res = client.post(
