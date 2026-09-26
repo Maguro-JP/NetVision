@@ -13,7 +13,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services.addition import latest_config
+from app.models.topology import ConfigSnapshot
+from app.services.addition import latest_config_ids
 from app.services.configparse import hapair
 from app.services.configparse.hapair import KIND_LABELS, ParsedHaPair
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
@@ -42,8 +43,10 @@ _WITHIN_ONE_DEVICE = frozenset({"stack", "stackwise", "irf"})
 def review(db: Session) -> HaReport:
     report = HaReport()
     members: list[Member] = []
+    latest = latest_config_ids(db)
     for device in db.scalars(select(Device)):
-        snapshot = latest_config(db, device)
+        snapshot_id = latest.get(device.id)
+        snapshot = db.get(ConfigSnapshot, snapshot_id) if snapshot_id is not None else None
         if snapshot is None:
             continue
         # 全部を読み解く必要は無い。組の設定だけを見る読み手を直に使う

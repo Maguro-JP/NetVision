@@ -27,7 +27,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services.addition import latest_config
+from app.models.topology import ConfigSnapshot
+from app.services.addition import latest_config_ids
 from app.services.reviewnote import HIGH, LOW, MEDIUM, Finding
 
 #: 書かなかったときの優先度。ここが並ぶと、根は MAC の若い順で決まる
@@ -87,7 +88,12 @@ class StpReport:
 def review(db: Session) -> StpReport:
     report = StpReport()
     devices = list(db.scalars(select(Device)))
-    states = [state for state in (_read(db, device) for device in devices) if state is not None]
+    latest = latest_config_ids(db)
+    states = [
+        state
+        for state in (_read(db, device, latest.get(device.id)) for device in devices)
+        if state is not None
+    ]
     if not states:
         report.notes.append(
             "STP の設定を読み取れる Config がありません。取り込むと、"
@@ -113,8 +119,8 @@ def review(db: Session) -> StpReport:
     return report
 
 
-def _read(db: Session, device: Device) -> DeviceStp | None:
-    snapshot = latest_config(db, device)
+def _read(db: Session, device: Device, snapshot_id: int | None) -> DeviceStp | None:
+    snapshot = db.get(ConfigSnapshot, snapshot_id) if snapshot_id is not None else None
     if snapshot is None:
         return None
     text = snapshot.content
