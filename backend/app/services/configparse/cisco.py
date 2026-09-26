@@ -365,10 +365,21 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             if spoken.isdigit():
                 current.voice_vlan = int(spoken)
         elif body.startswith("switchport access vlan "):
-            current.vlan = int(body.rsplit(maxsplit=1)[-1])
+            # `dynamic` は VMPS が端末の MAC から VLAN を決める口で、番号は Config に無い。
+            # 数字でない語で取り込み全体を落とさず、番号は空のまま access として持つ。
+            # 出典: Catalyst 2960-X Consolidated Platform Configuration Guide 15.2(7)E
+            # 「Configuring VMPS」Configuring Dynamic-Access Ports on VMPS Clients, Step 5
+            assigned = body.rsplit(maxsplit=1)[-1]
+            if assigned.isdigit():
+                current.vlan = int(assigned)
             current.mode = current.mode or "access"
         elif body.startswith("switchport trunk native vlan "):
-            current.native_vlan = int(body.rsplit(maxsplit=1)[-1])
+            # 公式の書式は vlan-id（1〜4094）だけ。数字でないものは読まずに残す。
+            # 出典: Cisco IOS XE 17.15.x Command Reference (Catalyst 9300) VLAN Commands
+            # 「switchport trunk」
+            native = body.rsplit(maxsplit=1)[-1]
+            if native.isdigit():
+                current.native_vlan = int(native)
         elif body.startswith("switchport trunk allowed vlan"):
             # 範囲でまとめて書いたときは、その範囲の全部が「書いてある」。
             # 1つ目だけを覚えると、2つ目以降が「指定なし＝全部通す」になる

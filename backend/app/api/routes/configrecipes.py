@@ -86,14 +86,14 @@ def render_recipe(name: str, payload: RenderRequest) -> RenderRead:
         vendor = Vendor(payload.vendor)
     except ValueError as error:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, f"知らない機種です: {payload.vendor}"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"知らない機種です: {payload.vendor}"
         ) from error
 
     try:
         result = service.render(name, vendor, payload.values)
     except service.RecipeError as error:
         # 値の間違いも、出せない機種も、人が直せる話なので同じ扱いにする
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
     return RenderRead(
         vendor=str(result.vendor),

@@ -105,7 +105,7 @@ def export_devices_csv(
     """機器台帳を CSV で書き出す。列見出しは取り込み側と同じなので、そのまま取り込み直せる。"""
     if encoding not in CSV_ENCODINGS:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "encoding は utf-8 または shift_jis を指定してください",
         )
 

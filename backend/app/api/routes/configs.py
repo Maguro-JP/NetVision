@@ -96,11 +96,11 @@ async def upload_configs(
     """
     if device_id is not None and db.get(Device, device_id) is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY, f"device {device_id} が存在しません"
+            status.HTTP_422_UNPROCESSABLE_CONTENT, f"device {device_id} が存在しません"
         )
     if device_id is not None and len(files) > 1:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "機器を指定する場合はファイルを1つずつ取り込んでください",
         )
 
@@ -109,7 +109,7 @@ async def upload_configs(
         content = await upload.read()
         if len(content) > MAX_CONFIG_BYTES:
             raise HTTPException(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 f"{upload.filename}: ファイルサイズが大きすぎます（上限 10MB）",
             )
         # 1つのファイルに何台分も貼ってあることがある。台数ぶんに分けて取り込む

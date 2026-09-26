@@ -155,7 +155,7 @@ def _request(payload: BlueprintBody) -> service.BlueprintRequest:
     unknown = [c for c in payload.conditions if c not in service.CONDITION_LABELS]
     if unknown:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"知らない条件です: {', '.join(unknown)}",
         )
     return service.BlueprintRequest(
@@ -181,7 +181,10 @@ def apply(payload: BlueprintBody, db: DbSession) -> AppliedRead:
     本物と混ざらないよう、拠点名に印を付ける。まとめて消せる。
     """
     plan = service.build(_request(payload))
-    site = service.apply_to_ledger(db, plan, f"{payload.a_name}-{payload.b_name}")
+    try:
+        site = service.apply_to_ledger(db, plan, f"{payload.a_name}-{payload.b_name}")
+    except service.HostnameTaken as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return AppliedRead(
         site_id=site.id,
         site_name=site.name,

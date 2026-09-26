@@ -82,7 +82,7 @@ _decode = textencoding.decode
 def check_text(payload: CheckBody, db: DbSession) -> CheckRead:
     """貼り付けた Config を見る。台帳には何も書かない。"""
     if not payload.text.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "中身が空です")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "中身が空です")
     return _read(service.check(db, payload.text, filename=payload.filename))
 
 
@@ -98,7 +98,7 @@ async def check_files(
         raw = await file.read()
         if len(raw) > limit:
             raise HTTPException(
-                status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                status.HTTP_413_CONTENT_TOO_LARGE,
                 f"{file.filename} が大きすぎます（上限 {max(1, limit // (1024 * 1024))}MB）",
             )
         text = _decode(raw)
@@ -112,7 +112,7 @@ async def check_files(
             label = name if len(chunks) == 1 else f"{name} ({number}/{len(chunks)})"
             out.append(_read(service.check(db, chunk, filename=label)))
     if not out:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "読める中身がありませんでした")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "読める中身がありませんでした")
     return out
 
 
@@ -191,7 +191,7 @@ def edit_selection(payload: EditBody) -> EditRead:
     from app.services import config_edit
 
     if not payload.request.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "どう直したいかを書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "どう直したいかを書いてください")
 
     result = config_edit.edit(payload.selection, payload.request, description=payload.description)
     return EditRead(

@@ -18,6 +18,7 @@ from app.models.topology import LinkOrigin
 from app.services import portlabel
 from app.services.configparse import vlanlist
 from app.services.topology import DEFAULT_LAYER, get_graph
+from app.services.xlsxsafe import row_values
 
 HEADERS = (
     "機器A",
@@ -118,7 +119,7 @@ def to_xlsx(db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = No
 
     data = rows(db, layer, site_id=site_id)
     for row in data:
-        sheet.append(row)
+        sheet.append(row_values(row))
 
     # 食い違いのある行は色を付ける。表でも見落とさないようにする
     warning_column = HEADERS.index("注意") + 1

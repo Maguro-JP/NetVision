@@ -1,8 +1,9 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.models.reference import ReferenceSource
+from app.schemas.types import refuse_null
 
 
 class ProductReferenceBase(BaseModel):
@@ -39,6 +40,8 @@ class ProductReferenceUpdate(BaseModel):
     source_url: str | None = None
     fetched_at: date | None = None
     notes: str | None = None
+
+    _not_null = field_validator("vendor", "model", "source", mode="before")(refuse_null)
 
 
 class ProductReferenceRead(ProductReferenceBase):

@@ -28,7 +28,7 @@ def _load(db: Session, device_id: int) -> Device:
 
 def _validate_site(db: Session, site_id: int | None) -> None:
     if site_id is not None and db.get(Site, site_id) is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, f"site {site_id} が存在しません")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, f"site {site_id} が存在しません")
 
 
 def _resolve_site_code(db: Session, code: str | None) -> int | None:
@@ -39,7 +39,7 @@ def _resolve_site_code(db: Session, code: str | None) -> int | None:
     site = db.scalar(select(Site).where(Site.code == wanted))
     if site is None:
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"拠点ID '{wanted}' の拠点がありません。先に拠点台帳へ登録してください",
         )
     return site.id
@@ -82,6 +82,19 @@ def _ensure_unique_device_code(
         stmt = stmt.where(Device.id != exclude_id)
     if db.scalar(stmt):
         raise HTTPException(status.HTTP_409_CONFLICT, f"管理ID '{code}' は登録済みです")
+
+
+def _ensure_unique_serial(
+    db: Session, serial: str | None, *, exclude_id: int | None = None
+) -> None:
+    """シリアル番号も台帳で一意。重なると DB の一意制約で 500 になるので先に断る。"""
+    if not serial:
+        return
+    stmt = select(Device).where(Device.serial_number == serial)
+    if exclude_id is not None:
+        stmt = stmt.where(Device.id != exclude_id)
+    if db.scalar(stmt):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"シリアル番号 '{serial}' は登録済みです")
 
 
 @router.get("", response_model=list[DeviceRead])
@@ -149,6 +162,7 @@ def create_device(payload: DeviceCreate, db: DbSession) -> DeviceDetail:
             status.HTTP_409_CONFLICT, f"hostname '{payload.hostname}' は登録済みです"
         )
     _ensure_unique_device_code(db, payload.code)
+    _ensure_unique_serial(db, payload.serial_number)
 
     values = payload.model_dump()
     site_code = values.pop("site_code", None)
@@ -202,6 +216,8 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
             )
     if "code" in changes:
         _ensure_unique_device_code(db, changes["code"], exclude_id=device_id)
+    if "serial_number" in changes:
+        _ensure_unique_serial(db, changes["serial_number"], exclude_id=device_id)
 
     for key, value in changes.items():
         setattr(device, key, value)
@@ -210,7 +226,7 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
     if device.eos_date and device.eol_date and device.eol_date < device.eos_date:
         db.rollback()
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             "eol_date（サポート終了）は eos_date（販売終了）以降である必要があります",
         )
 

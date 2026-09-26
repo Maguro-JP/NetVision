@@ -1,6 +1,8 @@
 from datetime import date
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from app.schemas.types import refuse_null
 
 
 class MaintenanceContractBase(BaseModel):
@@ -33,6 +35,8 @@ class MaintenanceContractUpdate(BaseModel):
     annual_cost: float | None = Field(default=None, ge=0)
     contact: str | None = None
     notes: str | None = None
+
+    _not_null = field_validator("provider", "start_date", "end_date", mode="before")(refuse_null)
 
 
 class MaintenanceContractRead(MaintenanceContractBase):

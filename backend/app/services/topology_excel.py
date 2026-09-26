@@ -27,6 +27,7 @@ from app.services import (
     xlsxdraw,
 )
 from app.services.topology import DEFAULT_LAYER, load_diagram
+from app.services.xlsxsafe import row_values
 
 
 def to_xlsx(
@@ -124,7 +125,7 @@ def _append_table(sheet, headers, rows, Font, get_column_letter) -> None:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
     for row in rows:
-        sheet.append(row)
+        sheet.append(row_values(row))
     for index, header in enumerate(headers, start=1):
         width = max(len(header) * 2 + 2, 12)
         for row in rows:

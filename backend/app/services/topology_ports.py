@@ -26,6 +26,7 @@ from app.models.topology import Interface, Link
 from app.services import portlabel
 from app.services.configparse import ifname
 from app.services.topology import TIER_ORDER
+from app.services.xlsxsafe import cell_value, row_values
 
 UPLINK = "上り"
 DOWNLINK = "下り"
@@ -242,7 +243,7 @@ def to_xlsx(db: Session, *, site_id: int | None = None) -> bytes:
 
     data = rows(db, site_id=site_id)
     for row in data:
-        sheet.append(row)
+        sheet.append(row_values(row))
 
     # 空きポートに色を付ける。増設のときに真っ先に見る列
     free = PatternFill("solid", start_color="E8F4E8", end_color="E8F4E8")
@@ -296,10 +297,16 @@ def _write_tree(
         for offset in range(height):
             up = ups[offset] if offset < len(ups) else None
             down = downs[offset] if offset < len(downs) else None
-            sheet.cell(row=row_index + offset, column=1, value=up.interface if up else "")
-            sheet.cell(row=row_index + offset, column=2, value=up.peer if up else "")
-            sheet.cell(row=row_index + offset, column=4, value=down.interface if down else "")
-            sheet.cell(row=row_index + offset, column=5, value=down.peer if down else "")
+            sheet.cell(
+                row=row_index + offset, column=1, value=cell_value(up.interface) if up else ""
+            )
+            sheet.cell(row=row_index + offset, column=2, value=cell_value(up.peer) if up else "")
+            sheet.cell(
+                row=row_index + offset, column=4, value=cell_value(down.interface) if down else ""
+            )
+            sheet.cell(
+                row=row_index + offset, column=5, value=cell_value(down.peer) if down else ""
+            )
             for column in range(1, 6):
                 sheet.cell(row=row_index + offset, column=column).border = box
 
@@ -310,7 +317,7 @@ def _write_tree(
         else:
             summary = f"{device.total_ports}ポート / 空き {len(device.unused)}"
         label = f"{device.hostname}\n{device.model}\n{summary}"
-        cell = sheet.cell(row=row_index, column=3, value=label)
+        cell = sheet.cell(row=row_index, column=3, value=cell_value(label))
         cell.alignment = center
         cell.fill = tier_fill
         cell.border = box

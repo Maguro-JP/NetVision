@@ -785,22 +785,32 @@ def _run_import(
     # 書き出したファイルには ID が入っているので、Excel で直して戻せば通る
     wanted_ids: set[int] = set()
     for values, _ in extracted:
-        text = str(values.get("device_id") or "").strip()
-        if text.isdigit():
-            wanted_ids.add(int(text))
+        number = _device_id_of(values)
+        if number is not None:
+            wanted_ids.add(number)
     by_id = _devices_by_ids(db, wanted_ids)
 
     # 重複判定に使う表。ファイルに出てくる名前の分だけ台帳を引く
     # （全件読むと、台数が増えたときに取り込みが終わらなくなる）
     wanted_names = [str(values.get("hostname") or "").strip() for values, _ in extracted]
     existing_by_name = _devices_by_hostnames(db, wanted_names)
+    # 管理ID とシリアル番号も一意。DB の重複エラーで全体を落とさず、どの行かを
+    # 返すために先に引く
+    existing_by_unique = {
+        name: _devices_by_unique(
+            db, name, [str(values.get(name) or "").strip() for values, _ in extracted]
+        )
+        for name in _UNIQUE_FIELDS
+    }
+    #: このファイルで使った値と、その行番号（項目ごと）
+    seen_unique: dict[str, dict[str, int]] = {name: {} for name in _UNIQUE_FIELDS}
 
     # このファイルで名前が変わる機器。入れ替えは正しい操作なので弾かない
     renaming_ids: set[int] = set()
     for values, _ in extracted:
-        text = str(values.get("device_id") or "").strip()
-        if text.isdigit() and int(text) in by_id:
-            renaming_ids.add(int(text))
+        number = _device_id_of(values)
+        if number is not None and number in by_id:
+            renaming_ids.add(number)
 
     #: 行の結果と、その行で作った・更新した機器。id は最後にまとめて入れる
     pending: list[tuple[RowResult, Device]] = []
@@ -825,10 +835,11 @@ def _run_import(
         by_id_device: Device | None = None
         id_issue: RowIssue | None = None
         if id_text:
-            if not id_text.isdigit():
+            number = _device_id_of(values)
+            if number is None:
                 id_issue = RowIssue(column="device_id", message="機器IDは数字で書いてください")
             else:
-                by_id_device = by_id.get(int(id_text))
+                by_id_device = by_id.get(number)
                 if by_id_device is None:
                     id_issue = RowIssue(
                         column="device_id",
@@ -900,6 +911,32 @@ def _run_import(
                 errors += 1
                 results.append(result)
                 continue
+
+        # 管理ID とシリアル番号も、他の機器のものや、このファイルの別の行と重ならないか見る
+        wanted_unique = {name: str(values.get(name) or "").strip() for name in _UNIQUE_FIELDS}
+        for name, wanted in wanted_unique.items():
+            if not wanted:
+                continue
+            label = FIELD_LABELS[name]
+            owner = existing_by_unique[name].get(wanted)
+            if owner is not None and owner is not device:
+                result.issues.append(
+                    RowIssue(column=name, message=f"{label}「{wanted}」は他の機器が使っています")
+                )
+            elif wanted in seen_unique[name]:
+                result.issues.append(
+                    RowIssue(
+                        column=name,
+                        message=f"{label}「{wanted}」が{seen_unique[name][wanted]}行目と重複しています",
+                    )
+                )
+        if result.issues:
+            errors += 1
+            results.append(result)
+            continue
+        for name, wanted in wanted_unique.items():
+            if wanted:
+                seen_unique[name][wanted] = index
 
         # 既存を直す行は、変わる前の値を控える。どこが変わるのかを人が
         # 見てから取り込めるようにするため（変わらない行は出さない）
@@ -1129,6 +1166,24 @@ def _existing_by_key(db: Session, key_field: KeyField, keys: list[str]) -> dict[
     return found
 
 
+#: 機器ID として読む上限。Postgres の integer（int4）の最大値。これを超える数で
+#: 台帳を引くと DB が値の範囲外として落ちる（SQLite でも 64bit を超えると落ちる）
+_MAX_DEVICE_ID = 2**31 - 1
+
+
+def _device_id_of(values: dict[str, object]) -> int | None:
+    """行に書かれた機器ID。ID として読めなければ None。
+
+    別の列（シリアル番号など）を誤って割り当てると、桁の多い数が入る。
+    `str.isdigit()` は「²」のような文字も数字とみなすので、ASCII の数字だけを見る。
+    """
+    text = str(values.get("device_id") or "").strip()
+    if not (text.isascii() and text.isdigit()):
+        return None
+    number = int(text)
+    return number if 0 < number <= _MAX_DEVICE_ID else None
+
+
 def _devices_by_ids(db: Session, wanted_ids: set[int]) -> dict[int, Device]:
     by_id: dict[int, Device] = {}
     if not wanted_ids:
@@ -1150,6 +1205,26 @@ def _devices_by_hostnames(db: Session, names: list[str]) -> dict[str, Device]:
         stmt = select(Device).where(Device.hostname.in_(chunk)).options(_device_lookup())
         for device in db.scalars(stmt):
             found[normalize_hostname(device.hostname)] = device
+    return found
+
+
+#: 台帳で一意な項目のうち、ホスト名のほかに取り込みで書けるもの。
+#: ここが重なると DB の一意制約で取り込み全体が落ちるので、行のエラーとして先に返す
+_UNIQUE_FIELDS = ("code", "serial_number")
+
+
+def _devices_by_unique(db: Session, field_name: str, values: list[str]) -> dict[str, Device]:
+    """一意な項目（管理ID・シリアル番号）の値で台帳を引く。"""
+    column = getattr(Device, field_name)
+    found: dict[str, Device] = {}
+    unique = [value for value in dict.fromkeys(values) if value]
+    for start in range(0, len(unique), _LOOKUP_CHUNK):
+        chunk = unique[start : start + _LOOKUP_CHUNK]
+        stmt = select(Device).where(column.in_(chunk)).options(_device_lookup())
+        for device in db.scalars(stmt):
+            held = getattr(device, field_name)
+            if held:
+                found[held] = device
     return found
 
 

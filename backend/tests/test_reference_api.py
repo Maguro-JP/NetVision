@@ -273,3 +273,24 @@ def test_the_added_vendors_version_formats_are_compared_correctly() -> None:
         vulnerability.affects = [affect]
         found = reference.match_device(device, [vulnerability])
         assert bool(found) is hit, (model, version)
+
+
+def test_changing_a_product_into_another_existing_one_is_refused(client):
+    """ベンダーと型番の組は一意。直した結果が別の行と重なると 500 になっていた。"""
+    client.post(f"{API}/reference/products", json={"vendor": "Cisco", "model": "C9300-48P"})
+    other = client.post(
+        f"{API}/reference/products", json={"vendor": "Cisco", "model": "C9200"}
+    ).json()
+    clash = client.patch(f"{API}/reference/products/{other['id']}", json={"model": "c9300-48p"})
+    assert clash.status_code == 409
+    fine = client.patch(f"{API}/reference/products/{other['id']}", json={"model": "C9200L"})
+    assert fine.status_code == 200
+
+
+def test_a_required_product_field_cannot_be_nulled(client):
+    product = client.post(
+        f"{API}/reference/products", json={"vendor": "Cisco", "model": "C9300-48P"}
+    ).json()
+    for field in ("vendor", "model", "source"):
+        response = client.patch(f"{API}/reference/products/{product['id']}", json={field: None})
+        assert response.status_code == 422

@@ -1,6 +1,7 @@
 # Vercel のサーバレス関数（api/index.py）が使う依存。
 # 開発・本番は backend/pyproject.toml が正で、ここはプレビュー用に合わせて置いている。
 fastapi>=0.115
+starlette>=0.48
 sqlalchemy>=2.0.36
 # プレビューは起動時に Alembic で表を作る。無いと API が起きず画面が出ない
 alembic>=1.14

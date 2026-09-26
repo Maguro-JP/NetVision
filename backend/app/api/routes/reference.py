@@ -132,7 +132,20 @@ def update_product(
     product_id: int, payload: ProductReferenceUpdate, db: DbSession
 ) -> ProductReferenceRead:
     product = _load_product(db, product_id)
-    for key, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    # ベンダーと型番の組は一意。直した結果が別の行と重なると一意制約の 500 になるので先に断る
+    vendor = changes.get("vendor", product.vendor)
+    model = changes.get("model", product.model)
+    duplicate = db.scalar(
+        select(ProductReference).where(
+            func.lower(ProductReference.vendor) == vendor.lower(),
+            func.lower(ProductReference.model) == model.lower(),
+            ProductReference.id != product.id,
+        )
+    )
+    if duplicate is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{vendor} {model} は登録済みです")
+    for key, value in changes.items():
         setattr(product, key, value)
     db.commit()
     db.refresh(product)
@@ -159,12 +172,12 @@ async def import_products(
     """
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルが大きすぎます")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "ファイルが大きすぎます")
 
     try:
         table = read_table(file.filename or "products.csv", content)
     except TableFileError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     result = service.import_products(
         db, table, source=ReferenceSource.CSV, fetched_at=fetched_at or date.today()
@@ -215,12 +228,12 @@ async def import_vulnerabilities(
     """脆弱性データを JSON で取り込む。形式は中身から自動判別する。"""
     content = await file.read()
     if len(content) > MAX_UPLOAD_BYTES:
-        raise HTTPException(status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, "ファイルが大きすぎます")
+        raise HTTPException(status.HTTP_413_CONTENT_TOO_LARGE, "ファイルが大きすぎます")
 
     try:
         result = service.import_vulnerabilities(db, content, fetched_at=fetched_at)
     except ValueError as exc:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(exc)) from exc
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc)) from exc
 
     return VulnerabilityImportResultRead.model_validate(result, from_attributes=True)
 

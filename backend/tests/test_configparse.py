@@ -430,3 +430,55 @@ def test_a_neighbour_that_turned_lldp_off_is_not_made_up():
     names = [n.remote_hostname for n in parsed.neighbors]
     assert "rt-02" in names
     assert not any(name.startswith("[") for name in names)
+
+
+# ---------------------------------------------------------------------------
+# VLAN に数字でない語が来る口
+# ---------------------------------------------------------------------------
+
+
+def test_a_vmps_dynamic_access_port_is_read_without_a_vlan_number() -> None:
+    """`switchport access vlan dynamic` で取り込み全体が落ちない。
+
+    番号は VMPS が端末ごとに決めるので Config には無い。access の口として持ち、
+    VLAN は空のままにする（VLAN 1 と決めつけない）。
+    出典: Catalyst 2960-X Consolidated Platform Configuration Guide 15.2(7)E
+    「Configuring VMPS」Configuring Dynamic-Access Ports on VMPS Clients, Step 5
+    """
+    parsed = parse(
+        "hostname sw1\n"
+        "!\n"
+        "interface GigabitEthernet0/1\n"
+        " switchport mode access\n"
+        " switchport access vlan dynamic\n"
+        "!\n"
+        "interface GigabitEthernet0/2\n"
+        " switchport mode access\n"
+        " switchport access vlan 20\n"
+        "!\n"
+        "end\n"
+    )
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["GigabitEthernet0/1"].mode == "access"
+    assert ports["GigabitEthernet0/1"].vlan is None
+    assert ports["GigabitEthernet0/2"].vlan == 20
+
+
+def test_a_non_numeric_native_vlan_does_not_stop_the_import() -> None:
+    """native vlan の後ろは vlan-id だけが公式の書式。崩れた行で全体を落とさない。"""
+    parsed = parse(
+        "hostname sw1\n"
+        "!\n"
+        "interface GigabitEthernet0/1\n"
+        " switchport mode trunk\n"
+        " switchport trunk native vlan x\n"
+        "!\n"
+        "interface GigabitEthernet0/2\n"
+        " switchport mode trunk\n"
+        " switchport trunk native vlan 99\n"
+        "!\n"
+        "end\n"
+    )
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["GigabitEthernet0/1"].native_vlan is None
+    assert ports["GigabitEthernet0/2"].native_vlan == 99

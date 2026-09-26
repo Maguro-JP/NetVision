@@ -72,25 +72,25 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
     for key in ("warning_days", "critical_days", "reference_stale_days"):
         if key in changes and not 1 <= changes[key] <= 3650:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY, "日数は 1〜3650 で指定してください"
+                status.HTTP_422_UNPROCESSABLE_CONTENT, "日数は 1〜3650 で指定してください"
             )
     if "exposure_sync_hours" in changes and not (
         0 <= changes["exposure_sync_hours"] <= exposure_schedule.MAX_HOURS
     ):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"洗い直しの間隔は 0〜{exposure_schedule.MAX_HOURS} 時間で指定してください",
         )
     if "backup_interval_hours" in changes and not (
         0 <= changes["backup_interval_hours"] <= backup.MAX_HOURS
     ):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"控えを取る間隔は 0〜{backup.MAX_HOURS} 時間で指定してください",
         )
     if "backup_keep" in changes and not (1 <= changes["backup_keep"] <= backup.MAX_KEEP):
         raise HTTPException(
-            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            status.HTTP_422_UNPROCESSABLE_CONTENT,
             f"控えは 1〜{backup.MAX_KEEP} 世代で指定してください",
         )
     if "display_timezone" in changes:
@@ -100,7 +100,7 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
             ZoneInfo(changes["display_timezone"])
         except Exception as error:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 f"時刻の地域として読めません: {changes['display_timezone']}",
             ) from error
     if "warning_days" in changes or "critical_days" in changes:
@@ -108,7 +108,7 @@ def update_settings(payload: AppSettingsUpdate) -> AppSettingsRead:
         critical = changes.get("critical_days", _current().critical_days)
         if critical > warning:
             raise HTTPException(
-                status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status.HTTP_422_UNPROCESSABLE_CONTENT,
                 "「要対応」は「要計画」より短い日数にしてください",
             )
 

@@ -71,5 +71,5 @@ def run_pipeline(device_id: int, payload: RunBody, db: DbSession) -> service.Run
     if device is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "対象の機器が見つかりません")
     if not payload.request.strip():
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "やりたいことを書いてください")
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "やりたいことを書いてください")
     return service.run(db, device, payload.request, base=payload.base)

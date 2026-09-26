@@ -103,7 +103,7 @@ def revert_change(entry_id: int, db: DbSession) -> ChangeLogRead:
         try:
             revert.revert_entry(db, entry_id)
         except revert.NotRevertable as error:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
     entry = db.get(ChangeLog, entry_id)
     return _to_read(entry)  # type: ignore[arg-type]
@@ -120,7 +120,7 @@ def revert_batch(batch_id: str, db: DbSession) -> RevertBatchResult:
         try:
             result = revert.revert_batch(db, batch_id)
         except revert.NotRevertable as error:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, str(error)) from error
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(error)) from error
 
     return RevertBatchResult(
         reverted=result.reverted,

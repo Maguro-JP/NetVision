@@ -4,9 +4,17 @@
 """
 
 import os
+import tempfile
 import time
 
 os.environ.setdefault("NETVISION_SKIP_SCHEMA", "true")
+# 設定（settings.json）・バックアップ・利用記録は、資料フォルダの隣に置かれる。
+# 既定のままだと手元の backend/data を読み書きし、そこに残った設定で結果が変わる
+# （実際に、手元で LLM を切った設定が残って LLM の試験が落ちた）。
+# 試験ごとの一時フォルダに向け、手元の状態に左右されないようにする
+os.environ["NETVISION_DOCUMENT_STORAGE_PATH"] = os.path.join(
+    tempfile.mkdtemp(prefix="netvision-test-"), "documents"
+)
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient

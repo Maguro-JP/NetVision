@@ -50,7 +50,7 @@ _ADD_PORTS = re.compile(
 )
 _VLAN_IP = re.compile(
     r'^\s*configure\s+vlan\s+"?(?P<name>[^"\s]+)"?\s+ipaddress\s+'
-    r"(?P<ip>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>[\d.]+)",
+    r"(?P<ip>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>\d+\.\d+\.\d+\.\d+|\d{1,2})(?![\d.])",
     re.IGNORECASE,
 )
 _DISPLAY = re.compile(
@@ -63,7 +63,7 @@ _SHARING = re.compile(
 )
 _ROUTE = re.compile(
     r"^\s*configure\s+iproute\s+add\s+(?:(?P<default>default)|"
-    r"(?P<dest>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>[\d.]+))\s+(?P<hop>\d+\.\d+\.\d+\.\d+)",
+    r"(?P<dest>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>\d+\.\d+\.\d+\.\d+|\d{1,2})(?![\d.]))\s+(?P<hop>\d+\.\d+\.\d+\.\d+)",
     re.IGNORECASE,
 )
 
