@@ -36,3 +36,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 総当たりは手元の `backend/data/settings.json` を書き換える。試験の前提を崩すので、
   `NETVISION_DOCUMENT_STORAGE_PATH` を一時フォルダに向けて走らせる。
   試験（conftest）は今は自分で一時フォルダに向けている。
+
+## 一意な項目の重複で 500 になっていた（2026-09-26 JST）
+
+- 機器の一意な列は hostname・code（管理ID）・serial_number の3つ（`models/device.py`）。
+  ホスト名は取り込みも API も重複を見ていたが、管理ID は取り込みで、シリアル番号は
+  取り込みと API の両方で見ておらず、DB の一意制約の 500 になっていた。
+- 取り込みは `importer._UNIQUE_FIELDS` を回して行のエラーにする。API は 409。
+- 一意な列を足したら、この2か所（取り込みの `_UNIQUE_FIELDS`、`routes/devices.py` の
+  `_ensure_unique_*`）にも足すこと。見つけ方は、台帳の取り込みに崩れた CSV / Excel を
+  送る総当たり（種を変えて3回、各120ファイル × 5経路）。
+- 空文字のシリアル番号は重複の元になるので、スキーマで空なら未設定にしている。
