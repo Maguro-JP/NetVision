@@ -93,7 +93,7 @@ write_hook() {  # $1=ファイル名 $2=見出し $3...=コマンド
   chmod +x "$f"; placed+=(".claude/hooks/$name（${*:-コマンド未検出}）")
 }
 # 言語ルールの差し込みと、応答の韓国語混入の検査。中身は固定なのでコピーする
-for h in lang-rule.sh lang-check.sh skill-nudge.sh pr-nudge.sh; do
+for h in lang-rule.sh lang-check.sh skill-nudge.sh pr-nudge.sh lessons.sh; do
   if [ -f "$dest/.claude/hooks/$h" ]; then kept+=(".claude/hooks/$h（既にある）")
   else cp "$tpl/hooks/$h" "$dest/.claude/hooks/$h"; chmod +x "$dest/.claude/hooks/$h"; placed+=(".claude/hooks/$h"); fi
 done
