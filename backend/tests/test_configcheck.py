@@ -1697,11 +1697,12 @@ def test_ports_with_a_vlan_but_no_mode_are_called_out(db_session):
         "hostname sw-dtp\n"
         "interface GigabitEthernet1/0/1\n switchport access vlan 10\n"
         "interface GigabitEthernet1/0/2\n switchport mode access\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/3\n switchport access vlan 10\n shutdown\n"
     )
     result = configcheck.check(db_session, text)
     hit = next(f for f in result.findings if "相手次第でトランク" in f.title)
     assert any("1/0/1" in item for item in hit.evidence)
-    assert not any("1/0/2" in item for item in hit.evidence)
+    assert not any("1/0/2" in item or "1/0/3" in item for item in hit.evidence)
 
     nxos = "hostname nx-dtp\nfeature lacp\ninterface Ethernet1/1\n  switchport access vlan 10\n"
     assert not [

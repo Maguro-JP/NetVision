@@ -1165,6 +1165,8 @@ def _negotiable_ports(text: str) -> list[Finding]:
         if any(re.match(r"^switchport access vlan\b", line, re.I) for line in body)
         and not any(re.match(r"^switchport mode\b", line, re.I) for line in body)
         and not any(re.match(r"^no switchport\s*$", line, re.I) for line in body)
+        # 止めてある口は相手と交渉しないので言わない
+        and not any(re.match(r"^shutdown\s*$", line, re.I) for line in body)
     ]
     if not loose:
         return []
