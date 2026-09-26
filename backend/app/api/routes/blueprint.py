@@ -181,7 +181,10 @@ def apply(payload: BlueprintBody, db: DbSession) -> AppliedRead:
     本物と混ざらないよう、拠点名に印を付ける。まとめて消せる。
     """
     plan = service.build(_request(payload))
-    site = service.apply_to_ledger(db, plan, f"{payload.a_name}-{payload.b_name}")
+    try:
+        site = service.apply_to_ledger(db, plan, f"{payload.a_name}-{payload.b_name}")
+    except service.HostnameTaken as exc:
+        raise HTTPException(status.HTTP_409_CONFLICT, str(exc)) from exc
     return AppliedRead(
         site_id=site.id,
         site_name=site.name,

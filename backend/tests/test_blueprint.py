@@ -235,6 +235,27 @@ def test_the_api_can_place_and_remove_the_test_site(client):
     assert client.get(f"{API}/blueprint/test-sites").json() == []
 
 
+def test_placing_the_same_plan_twice_is_refused_with_the_names(client, db_session):
+    """二度押しや置き直しで、機器名の一意制約の 500 にしない。
+
+    どの名前がどの拠点で使われているかを返し、2つ目の拠点は作らない。
+    消してから置き直せば通る。
+    """
+    body = {"a_name": "honsha", "b_name": "shisha", "conditions": [bp.SEPARATE]}
+    first = client.post(f"{API}/blueprint/apply", json=body)
+    assert first.status_code == 200, first.text
+    sites_before = db_session.query(Site).count()
+
+    again = client.post(f"{API}/blueprint/apply", json=body)
+    assert again.status_code == 409
+    assert first.json()["site_name"] in again.json()["detail"]
+    assert db_session.query(Site).count() == sites_before
+
+    client.delete(f"{API}/blueprint/test-sites/{first.json()['site_id']}")
+    placed = client.post(f"{API}/blueprint/apply", json=body)
+    assert placed.status_code == 200, placed.text
+
+
 def test_aruba_cx_configs_read_back_with_the_same_tool():
     """AOS-CX の書式で出したものを、同じ道具の読み手で読み戻せること。"""
     from app.services import configparse

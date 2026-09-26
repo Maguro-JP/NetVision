@@ -1109,6 +1109,22 @@ TEST_PREFIX = "テスト"
 TEST_NOTE = "NetVision が案として作ったテスト構成です。実機はありません。"
 
 
+class HostnameTaken(ValueError):
+    """案の機器名が、台帳に既にある。
+
+    機器名は台帳で一意なので、同じ案を2回置く（ボタンの二度押し、置き直し）と
+    DB の一意制約で落ちる。前もって見つけ、どの名前がどこで使われているかを返す。
+    """
+
+    def __init__(self, taken: list[tuple[str, str | None]]) -> None:
+        self.taken = taken
+        where = "、".join(f"{name}（{site or '拠点なし'}）" for name, site in taken[:5])
+        super().__init__(
+            f"同じ機器名が台帳にあります: {where}。"
+            "前に置いたテスト拠点なら、消してから置き直してください"
+        )
+
+
 def apply_to_ledger(db: Session, plan: Blueprint, site_name: str) -> Site:
     """起こした構成を、テスト拠点として台帳に作る。
 
@@ -1118,6 +1134,15 @@ def apply_to_ledger(db: Session, plan: Blueprint, site_name: str) -> Site:
 
     本物と混ざらないよう、拠点名に印を付け、備考にも残す。まとめて消せる。
     """
+    wanted = [planned.hostname for planned in plan.devices]
+    existing = db.execute(
+        select(Device.hostname, Site.name)
+        .outerjoin(Site, Device.site_id == Site.id)
+        .where(Device.hostname.in_(wanted))
+    ).all()
+    if existing:
+        raise HostnameTaken([(hostname, site) for hostname, site in existing])
+
     name = site_name if site_name.startswith(TEST_PREFIX) else f"{TEST_PREFIX}-{site_name}"
     site = Site(name=name, status="planned", notes=TEST_NOTE)
     db.add(site)
