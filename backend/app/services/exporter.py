@@ -14,6 +14,7 @@ from datetime import date
 from app.models import Device, MaintenanceContract, Site
 from app.services.importer import FIELD_LABELS, IMPORTABLE_FIELDS
 from app.services.lifecycle import LifecycleStatus, Severity, evaluate
+from app.services.xlsxsafe import cell_value, row_values
 
 # 取り込みでは使わないが、資料として役に立つ算出列
 STATUS_COLUMNS: tuple[tuple[str, str], ...] = (
@@ -224,7 +225,7 @@ def to_xlsx(devices, *, include_status: bool = True) -> bytes:
                 cell.number_format = "yyyy/mm/dd"
                 row.append(cell)
             else:
-                row.append(value)
+                row.append(cell_value(value))
         sheet.append(row)
 
     buffer = io.BytesIO()
@@ -296,7 +297,7 @@ def sites_to_xlsx(rows: list[tuple[Site, int]]) -> bytes:
     for cell in sheet[1]:
         cell.font = Font(bold=True)
     for site, count in rows:
-        sheet.append(build_site_row(site, count))
+        sheet.append(row_values(build_site_row(site, count)))
 
     for index, header in enumerate(headers, start=1):
         letter = get_column_letter(index)

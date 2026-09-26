@@ -213,9 +213,17 @@ def _rotation(element: ET.Element) -> float:
 # ---------------------------------------------------------------------------
 
 
+#: XML 1.0 に書けない文字。SVG 側で落としてあるが、図形の XML も同じ理由で壊れるので重ねて落とす
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
 def _escape(value: str) -> str:
     return (
-        value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace('"', "&quot;")
+        _NOT_XML.sub("", value)
+        .replace("&", "&amp;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 

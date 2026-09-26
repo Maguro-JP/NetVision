@@ -131,8 +131,13 @@ def _port_key(name: str | None) -> tuple:
     )
 
 
+#: XML 1.0 に書けない文字（タブ・改行・復帰を除く制御文字）。端末のログから写した
+#: Config の ESC などが名前に混じると、図全体が XML として壊れて開けなくなる
+_NOT_XML = re.compile("[\x00-\x08\x0b\x0c\x0e-\x1f\ufffe\uffff]")
+
+
 def _esc(value: object) -> str:
-    return escape(str(value if value is not None else ""))
+    return escape(_NOT_XML.sub("", str(value if value is not None else "")))
 
 
 def _clip(value: str | None, limit: int) -> str:
