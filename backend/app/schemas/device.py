@@ -37,9 +37,9 @@ class DeviceBase(BaseModel):
     eol_date: date | None = None
     notes: str | None = None
 
-    @field_validator("code", mode="before")
+    @field_validator("code", "serial_number", mode="before")
     @classmethod
-    def _normalize_code(cls, value: object) -> str | None:
+    def _strip_to_none(cls, value: object) -> str | None:
         if value is None:
             return None
         cleaned = str(value).strip()
@@ -97,9 +97,9 @@ class DeviceUpdate(BaseModel):
         "hostname", "vendor", "model", "device_type", "status", mode="before"
     )(refuse_null)
 
-    @field_validator("code", mode="before")
+    @field_validator("code", "serial_number", mode="before")
     @classmethod
-    def _normalize_code(cls, value: object) -> str | None:
+    def _strip_to_none(cls, value: object) -> str | None:
         if value is None:
             return None
         cleaned = str(value).strip()

@@ -132,3 +132,26 @@ def test_clearing_the_site_name_unsets_the_site(client, device_payload):
     assert updated["site_id"] is None
     # 空文字で拠点は増えない
     assert [s["name"] for s in client.get(f"{API}/sites").json()] == ["一時拠点"]
+
+
+def test_a_serial_number_already_used_is_refused(client, device_payload):
+    """シリアル番号も台帳で一意。重なると一意制約の 500 になっていた。"""
+    first = client.post(f"{API}/devices", json=device_payload(hostname="a", serial_number="S1"))
+    assert first.status_code == 201
+    again = client.post(f"{API}/devices", json=device_payload(hostname="b", serial_number="S1"))
+    assert again.status_code == 409
+    other = client.post(f"{API}/devices", json=device_payload(hostname="c", serial_number="S2"))
+    moved = client.patch(f"{API}/devices/{other.json()['id']}", json={"serial_number": "S1"})
+    assert moved.status_code == 409
+    kept = client.patch(f"{API}/devices/{first.json()['id']}", json={"serial_number": "S1"})
+    assert kept.status_code == 200
+
+
+def test_a_blank_serial_number_means_none(client, device_payload):
+    """空のシリアル番号は未設定。空文字のまま持つと、2台目で重複になる。"""
+    for name in ("a", "b"):
+        created = client.post(
+            f"{API}/devices", json=device_payload(hostname=name, serial_number=" ")
+        )
+        assert created.status_code == 201
+        assert created.json()["serial_number"] is None

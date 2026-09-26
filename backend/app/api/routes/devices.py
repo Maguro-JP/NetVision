@@ -84,6 +84,19 @@ def _ensure_unique_device_code(
         raise HTTPException(status.HTTP_409_CONFLICT, f"管理ID '{code}' は登録済みです")
 
 
+def _ensure_unique_serial(
+    db: Session, serial: str | None, *, exclude_id: int | None = None
+) -> None:
+    """シリアル番号も台帳で一意。重なると DB の一意制約で 500 になるので先に断る。"""
+    if not serial:
+        return
+    stmt = select(Device).where(Device.serial_number == serial)
+    if exclude_id is not None:
+        stmt = stmt.where(Device.id != exclude_id)
+    if db.scalar(stmt):
+        raise HTTPException(status.HTTP_409_CONFLICT, f"シリアル番号 '{serial}' は登録済みです")
+
+
 @router.get("", response_model=list[DeviceRead])
 def list_devices(
     db: DbSession,
@@ -149,6 +162,7 @@ def create_device(payload: DeviceCreate, db: DbSession) -> DeviceDetail:
             status.HTTP_409_CONFLICT, f"hostname '{payload.hostname}' は登録済みです"
         )
     _ensure_unique_device_code(db, payload.code)
+    _ensure_unique_serial(db, payload.serial_number)
 
     values = payload.model_dump()
     site_code = values.pop("site_code", None)
@@ -202,6 +216,8 @@ def update_device(device_id: int, payload: DeviceUpdate, db: DbSession) -> Devic
             )
     if "code" in changes:
         _ensure_unique_device_code(db, changes["code"], exclude_id=device_id)
+    if "serial_number" in changes:
+        _ensure_unique_serial(db, changes["serial_number"], exclude_id=device_id)
 
     for key, value in changes.items():
         setattr(device, key, value)
