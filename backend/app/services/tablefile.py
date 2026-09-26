@@ -63,8 +63,7 @@ def _read_csv(content: bytes, delimiter: str | None = None) -> Table:
         except csv.Error:
             delimiter = ","
 
-    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
-    records = [row for row in reader if any(cell.strip() for cell in row)]
+    records = _csv_records(text, delimiter)
     if not records:
         raise TableFileError("データ行がありません")
 
@@ -76,6 +75,44 @@ def _read_csv(content: bytes, delimiter: str | None = None) -> Table:
             row[header] = record[index].strip() if index < len(record) else ""
         rows.append(row)
     return Table(headers=headers, rows=rows)
+
+
+def _csv_records(text: str, delimiter: str) -> list[list[str]]:
+    """CSV の行を読む。閉じていない「"」を黙って通さない。
+
+    欄の中に閉じていない「"」が1つあると、そこから後ろが全部1つの欄になる。
+    ゆるい読み方ではそのまま通り、数千行の台帳が「5行・エラー0件」として取り込まれ、
+    残りが黙って消える。厳密に読んで「引用の途中でファイルが終わった」ことを見つけ、
+    どの行かを返す。それ以外の厳密さの違い（`"x"y` のような書き方）は、今までどおり
+    ゆるく読む（手で作った CSV を急に弾かないため）。
+    """
+    records: list[list[str]] = []
+    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+    try:
+        for row in reader:
+            if any(cell.strip() for cell in row):
+                records.append(row)
+        return records
+    except csv.Error as exc:
+        started = reader.line_num
+        if "unexpected end of data" in str(exc):
+            raise TableFileError(
+                f"CSV を最後まで読めませんでした。見出しから数えて{len(records) + 1}件目の行で、"
+                f'欄の中の「"」が閉じていません（ファイルの終わりの{started}行目まで続いています）。'
+                '閉じていない「"」を直してから取り込んでください'
+            ) from exc
+        if "field larger than field limit" in str(exc):
+            raise TableFileError(
+                f"見出しから数えて{len(records) + 1}件目の行に、"
+                "大きすぎる欄（128KB 超）があります。"
+                '閉じていない「"」で後ろの行まで1つの欄になっていないか確かめてください'
+            ) from exc
+
+    loose = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
+    try:
+        return [row for row in loose if any(cell.strip() for cell in row)]
+    except csv.Error as exc:
+        raise TableFileError(f"CSV を読めませんでした（{loose.line_num}行目付近: {exc}）") from exc
 
 
 def _read_excel(content: bytes) -> Table:
