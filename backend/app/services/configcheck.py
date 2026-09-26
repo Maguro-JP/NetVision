@@ -238,6 +238,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
     found.extend(_negotiable_ports(text))
+    found.extend(_ssh_version(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
@@ -1175,6 +1176,42 @@ def _negotiable_ports(text: str) -> list[Finding]:
             "トランクになります。アクセスのつもりでも、挿された機器次第で全 VLAN が"
             "流れ込みます。switchport mode access を書いてください。",
             evidence=[f"{name}: switchport access vlan はあるが mode が無い" for name in loose[:5]],
+        )
+    ]
+
+
+def _ssh_version(text: str) -> list[Finding]:
+    """IOS / IOS-XE の SSH が、版 1 でもつながる形。
+
+    `ip ssh version` を書かなければ互換モード（1.99）で、版 1 の接続も受ける。
+    版 1 は規格として定まっていないので、版 2 に固定するよう公式が勧めている。
+    SSH を使っている資料（`transport input` に ssh があるか `ip ssh` の行が
+    ある）だけを見る。NX-OS は別の書き方なので言わない。
+
+    出典: Security and VPN Configuration Guide, Cisco IOS XE 17.x
+    「Secure Shell Version 2 Support」（If you do not configure this command, SSH
+    by default runs in compatibility mode … If you do not want your device to
+    fall back to the undefined protocol (Version 1), you should use the ip ssh
+    version command and specify Version 2）
+    """
+    if re.search(r"\bNX-OS\b|^\s*feature\s+\S+", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    uses_ssh = re.search(
+        r"^\s*transport input\b.*\bssh\b|^ip ssh\b", text, re.IGNORECASE | re.MULTILINE
+    )
+    if not uses_ssh:
+        return []
+    if re.search(r"^ip ssh version 2\s*$", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    forced_v1 = re.search(r"^ip ssh version 1\s*$", text, re.IGNORECASE | re.MULTILINE)
+    return [
+        Finding(
+            level=MEDIUM if forced_v1 else LOW,
+            title="SSH が版 1 でもつながる形です",
+            why="ip ssh version を 2 に固定しないと、版 1 の接続も受けます"
+            "（書かなければ 1.99 の互換モード）。版 1 は規格として定まっていないので、"
+            "ip ssh version 2 を書いてください。",
+            evidence=["ip ssh version 1 がある" if forced_v1 else "ip ssh version 2 が無い"],
         )
     ]
 

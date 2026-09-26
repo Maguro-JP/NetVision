@@ -52,6 +52,7 @@ ntp server 10.10.10.9
 !
 ip route 0.0.0.0 0.0.0.0 10.10.10.254
 !
+ip ssh version 2
 line vty 0 15
  transport input ssh
 """
@@ -1706,3 +1707,17 @@ def test_ports_with_a_vlan_but_no_mode_are_called_out(db_session):
     assert not [
         t for t in _titles(configcheck.check(db_session, nxos)) if "相手次第でトランク" in t
     ]
+
+
+def test_ssh_that_still_accepts_version_1_is_called_out(db_session):
+    """出典: Security and VPN Configuration Guide, Cisco IOS XE 17.x
+    「Secure Shell Version 2 Support」（If you do not configure this command, SSH
+    by default runs in compatibility mode）。
+
+    SSH を使っていて ip ssh version 2 が無ければ、版 1 も受ける。
+    """
+    base = "hostname sw-ssh\nline vty 0 4\n transport input ssh\n"
+    assert any("版 1 でもつながる" in t for t in _titles(configcheck.check(db_session, base)))
+
+    fixed = base.replace("sw-ssh", "sw-ssh2") + "ip ssh version 2\n"
+    assert not [t for t in _titles(configcheck.check(db_session, fixed)) if "版 1 でも" in t]
