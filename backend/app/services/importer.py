@@ -918,8 +918,8 @@ def _run_import(
             if not wanted:
                 continue
             label = FIELD_LABELS[name]
-            owner = existing_by_unique[name].get(wanted)
-            if owner is not None and owner is not device:
+            owner_id = existing_by_unique[name].get(wanted)
+            if owner_id is not None and owner_id != device.id:
                 result.issues.append(
                     RowIssue(column=name, message=f"{label}「{wanted}」は他の機器が使っています")
                 )
@@ -1213,18 +1213,20 @@ def _devices_by_hostnames(db: Session, names: list[str]) -> dict[str, Device]:
 _UNIQUE_FIELDS = ("code", "serial_number")
 
 
-def _devices_by_unique(db: Session, field_name: str, values: list[str]) -> dict[str, Device]:
-    """一意な項目（管理ID・シリアル番号）の値で台帳を引く。"""
+def _devices_by_unique(db: Session, field_name: str, values: list[str]) -> dict[str, int]:
+    """一意な項目（管理ID・シリアル番号）の値から、それを持つ機器の id を引く。
+
+    重なりを見るだけなので、機器そのもの（関連ごと）は読まない。読むと、
+    書き出した台帳を戻すような全行更新で、取り込みが3割ほど遅くなる。
+    """
     column = getattr(Device, field_name)
-    found: dict[str, Device] = {}
+    found: dict[str, int] = {}
     unique = [value for value in dict.fromkeys(values) if value]
     for start in range(0, len(unique), _LOOKUP_CHUNK):
         chunk = unique[start : start + _LOOKUP_CHUNK]
-        stmt = select(Device).where(column.in_(chunk)).options(_device_lookup())
-        for device in db.scalars(stmt):
-            held = getattr(device, field_name)
+        for held, device_id in db.execute(select(column, Device.id).where(column.in_(chunk))):
             if held:
-                found[held] = device
+                found[held] = device_id
     return found
 
 
