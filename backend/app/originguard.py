@@ -53,7 +53,11 @@ class RejectCrossSiteWrites:
             origin = _header(scope, b"origin")
             if origin is not None and not self._is_allowed(scope, origin):
                 response = JSONResponse(
-                    {"detail": f"別のサイト（{origin}）からの書き換えは受け付けません"},
+                    {
+                        "detail": f"別のサイト（{origin}）からの書き換えは受け付けません。"
+                        "この画面を正規に使っているなら、NETVISION_CORS_ORIGINS に"
+                        "この宛先を足してください"
+                    },
                     status_code=403,
                 )
                 await response(scope, receive, send)

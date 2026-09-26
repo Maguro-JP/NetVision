@@ -24,6 +24,8 @@ def test_a_file_sent_from_another_site_is_refused(client):
     res = _import(client, Origin=EVIL)
 
     assert res.status_code == 403
+    # 正規の利用者が当たったときに直し方が分かる
+    assert "NETVISION_CORS_ORIGINS" in res.json()["detail"]
     assert client.get(f"{API}/devices").json() == []
 
 
