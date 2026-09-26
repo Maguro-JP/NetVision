@@ -77,6 +77,28 @@ def test_parse_date_rejects_garbage():
         parse_date("未定")
 
 
+@pytest.mark.parametrize("raw", ["4/1/2026", "01/02/2026"])
+def test_parse_date_refuses_when_day_and_month_could_be_swapped(raw):
+    """月/日/年（英語設定の Excel）とも日/月/年とも読める値を、片方に決めつけない。
+
+    以前は日/月/年として読み、4/1/2026（4月1日のつもり）が1月4日になっていた。
+    """
+    with pytest.raises(CellValueError, match="年/月/日"):
+        parse_date(raw)
+
+
+@pytest.mark.parametrize(
+    ("raw", "expected"),
+    [
+        ("13/4/2026", date(2026, 4, 13)),
+        ("4/13/2026", date(2026, 4, 13)),
+        ("5/5/2026", date(2026, 5, 5)),
+    ],
+)
+def test_parse_date_reads_the_year_last_form_when_it_is_clear(raw, expected):
+    assert parse_date(raw) == expected
+
+
 def test_parse_decimal_strips_currency_symbols():
     assert parse_decimal("¥480,000") == 480000
     assert parse_decimal("480000円") == 480000

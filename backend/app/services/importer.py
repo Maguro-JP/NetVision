@@ -400,7 +400,6 @@ _DATE_PATTERNS = (
     "%Y/%m/%d",
     "%Y.%m.%d",
     "%Y年%m月%d日",
-    "%d/%m/%Y",
     "%Y-%m",
     "%Y/%m",
     "%Y年%m月",
@@ -470,6 +469,10 @@ def parse_date(value: object) -> date | None:
     if fast is not None:
         return fast
 
+    day_first = _parse_day_and_month(text, value)
+    if day_first is not None:
+        return day_first
+
     for pattern in _DATE_PATTERNS:
         try:
             parsed = datetime.strptime(text, pattern).date()
@@ -482,6 +485,38 @@ def parse_date(value: object) -> date | None:
     if wareki is not None:
         return wareki
     raise CellValueError(f"日付として解釈できません: '{value}'")
+
+
+_DAY_MONTH_YEAR = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
+
+
+def _parse_day_and_month(text: str, value: object) -> date | None:
+    """年が後ろに来る形（4/1/2026、13/4/2026）を読む。
+
+    英語設定の Excel は CSV に月/日/年で書き出し、欧州の資料は日/月/年で書く。
+    どちらとも読める値（4/1/2026）を片方に決めつけると、保守期限が黙って数か月ずれる。
+    片方が 13 以上ならそれを日として読み、どちらとも読めるときは断って年/月/日で
+    書き直してもらう。
+    """
+    match = _DAY_MONTH_YEAR.match(text)
+    if match is None:
+        return None
+    first, second, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    if first > 12 >= second:
+        day, month = first, second
+    elif second > 12 >= first:
+        month, day = first, second
+    elif first == second:
+        day = month = first
+    else:
+        raise CellValueError(
+            f"日と月のどちらが先か分かりません: '{value}'。"
+            "2026/04/01 のように年/月/日の順で書いてください"
+        )
+    try:
+        return date(year, month, day)
+    except ValueError as exc:
+        raise CellValueError(f"日付として解釈できません: '{value}'") from exc
 
 
 def _parse_date_fast(text: str) -> date | None:
