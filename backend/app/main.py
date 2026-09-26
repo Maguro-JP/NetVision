@@ -39,6 +39,7 @@ from app.api.routes import schema as schema_routes
 from app.api.routes import settings as settings_routes
 from app.config import settings
 from app.services import audit  # noqa: F401  変更履歴のフック登録
+from app.strictjson import RejectNonFiniteJson
 
 
 @asynccontextmanager
@@ -75,6 +76,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# JSON の NaN・Infinity を入口で断る（app/strictjson.py）
+app.add_middleware(RejectNonFiniteJson)
 
 api = "/api/v1"
 app.include_router(devices.router, prefix=api)

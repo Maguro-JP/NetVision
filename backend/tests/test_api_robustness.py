@@ -104,3 +104,37 @@ def test_a_broken_config_does_not_stop_the_reader(fixture):
     rnd = random.Random(fixture)
     for _ in range(30):
         configparse.parse(_mutated(text, rnd))
+
+
+@pytest.mark.parametrize("literal", ["NaN", "Infinity", "-Infinity", "1e400"])
+def test_non_finite_numbers_in_json_are_refused(seeded, literal):
+    """NaN・Infinity は保存も 500 もせず 422 で断る。
+
+    以前は Infinity がそのまま保存され、NaN は検証エラーの応答が JSON に書けず 500 だった。
+    """
+    body = (
+        '{"provider": "p", "start_date": "2026-01-01", "end_date": "2027-01-01", '
+        f'"annual_cost": {literal}}}'
+    )
+    response = seeded.post(
+        f"{API}/devices/1/contracts", content=body, headers={"content-type": "application/json"}
+    )
+    assert response.status_code == 422
+    assert literal in response.json()["detail"]
+
+
+def test_ordinary_and_broken_json_behave_as_before(seeded):
+    ok = seeded.post(
+        f"{API}/devices/1/contracts",
+        json={
+            "provider": "p",
+            "start_date": "2026-01-01",
+            "end_date": "2027-01-01",
+            "annual_cost": 1.5e5,
+        },
+    )
+    assert ok.status_code == 201
+    broken = seeded.post(
+        f"{API}/devices/1/contracts", content="{", headers={"content-type": "application/json"}
+    )
+    assert broken.status_code == 422
