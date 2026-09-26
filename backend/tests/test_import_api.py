@@ -88,7 +88,8 @@ def test_blank_cells_do_not_erase_existing_values(client):
 
     # OSバージョンと拠点が空の台帳を再取り込みしても既存値は消えない
     sparse = "ホスト名,メーカー,型番,OSバージョン,設置場所\ncore-sw-01,Cisco,C9500-40X,,\n"
-    assert upload(client, sparse, path="/import/devices").json()["updated"] == 1
+    # 空欄は既存の値を消さないので、この行で変わる値は無い（「変更なし」と数える）
+    assert upload(client, sparse, path="/import/devices").json()["unchanged"] == 1
 
     core = next(d for d in client.get(f"{API}/devices").json() if d["hostname"] == "core-sw-01")
     assert core["os_version"] == "17.09.04a"
@@ -721,3 +722,27 @@ def test_rows_that_do_not_change_show_nothing(client):
     body = upload(client, sheet, path="/import/devices/preview").json()
     row = next(r for r in body["rows"] if r["key"] == "core-sw-01")
     assert row["changes"] == []
+
+
+def test_an_exported_ledger_put_back_as_is_changes_nothing(client, device_payload):
+    """書き出した台帳をそのまま戻すと「変更なし」。「更新」と数えて不安にさせない。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="sw-a", code="NW-1"))
+    client.post(
+        f"{API}/devices", json=device_payload(hostname="sw-b", code="NW-2", serial_number="X2")
+    )
+    exported = client.get(f"{API}/export/devices.xlsx").content
+    result = client.post(
+        f"{API}/import/devices/preview",
+        files={"file": ("devices.xlsx", exported, "application/octet-stream")},
+    ).json()
+    assert result["errors"] == 0
+    assert result["updated"] == 0
+    assert result["unchanged"] == 2
+    assert {row["action"] for row in result["rows"]} == {"unchanged"}
+
+
+def test_a_changed_row_is_still_an_update(client, device_payload):
+    client.post(f"{API}/devices", json=device_payload(hostname="sw-a", code="NW-1"))
+    result = _import(client, _csv(["管理ID,ホスト名,備考", "NW-1,sw-a,直した"]))
+    assert result["updated"] == 1
+    assert result["unchanged"] == 0

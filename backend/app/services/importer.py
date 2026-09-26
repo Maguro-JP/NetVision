@@ -593,6 +593,9 @@ def parse_device_status(value: object) -> DeviceStatus | None:
 class RowAction(enum.StrEnum):
     CREATE = "create"
     UPDATE = "update"
+    #: 既存の機器で、どの値も変わらず保守契約も増えない行。書き出した台帳をそのまま
+    #: 戻したときに「更新 120 件」と出ると、何か書き換わったように見えるため分ける
+    UNCHANGED = "unchanged"
     SKIP = "skip"
     ERROR = "error"
 
@@ -648,6 +651,8 @@ class ImportOutcome:
     rows: list[RowResult]
     #: 行結果の実数。rows はサンプルなので、多いときはこちらが正
     rows_total: int = 0
+    #: 既存の機器で、何も変わらない行の数（updated には含めない）
+    unchanged: int = 0
 
 
 def _sample_rows(results: list[RowResult], limit: int | None = _ROW_SAMPLE) -> list[RowResult]:
@@ -867,7 +872,7 @@ def _run_import(
     seen_keys: dict[str, int] = {}
 
     results: list[RowResult] = []
-    created = updated = skipped = errors = contracts_added = 0
+    created = updated = unchanged = skipped = errors = contracts_added = 0
 
     for position, (values, issues) in enumerate(extracted):
         # 結果に出す行番号はファイルの行番号。進み具合は何行目まで見たかで数える
@@ -1012,14 +1017,20 @@ def _run_import(
             created += 1
             if wanted_name:
                 existing_by_name[normalize_hostname(wanted_name)] = device
-        else:
-            result.action = RowAction.UPDATE
+
+        adds_contract = _has_contract(values) and _contract_would_be_added(device, values)
+        if existing is not None:
             result.device_id = existing.id
-            updated += 1
+            if result.changes or adds_contract:
+                result.action = RowAction.UPDATE
+                updated += 1
+            else:
+                result.action = RowAction.UNCHANGED
+                unchanged += 1
             if wanted_name:
                 existing_by_name[normalize_hostname(wanted_name)] = device
 
-        if _has_contract(values) and _contract_would_be_added(device, values):
+        if adds_contract:
             contracts_added += 1
             result.contract_added = True
             if commit:
@@ -1076,6 +1087,7 @@ def _run_import(
         column_samples=samples,
         rows=_sample_rows(results, keep_rows) if keep_rows is not None else results,
         rows_total=len(results),
+        unchanged=unchanged,
     )
 
 

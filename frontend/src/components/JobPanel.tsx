@@ -39,7 +39,9 @@ export function outcomeText(job: Job): string {
   if (job.status !== "done") return "";
   if (job.device_import) {
     const r = job.device_import;
-    return `新規 ${r.created} 件 / 更新 ${r.updated} 件 / 問題のあった行 ${r.errors} 件`;
+    // 何も変わらなかった行は、あるときだけ言う（書き出した台帳を戻したときに多い）
+    const same = r.unchanged ? ` / 変更なし ${r.unchanged} 件` : "";
+    return `新規 ${r.created} 件 / 更新 ${r.updated} 件${same} / 問題のあった行 ${r.errors} 件`;
   }
   if (job.link_import) {
     const r = job.link_import;

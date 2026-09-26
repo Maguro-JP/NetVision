@@ -14,6 +14,7 @@ import type { ImportResult, ImportRowAction, Job } from "../api/types";
 const ACTION_LABEL: Record<ImportRowAction, string> = {
   create: "新規",
   update: "更新",
+  unchanged: "変更なし",
   skip: "スキップ",
   error: "エラー",
 };
@@ -21,6 +22,7 @@ const ACTION_LABEL: Record<ImportRowAction, string> = {
 const ACTION_COLOR: Record<ImportRowAction, string> = {
   create: "var(--sev-ok)",
   update: "var(--accent)",
+  unchanged: "var(--sev-unknown)",
   skip: "var(--sev-unknown)",
   error: "var(--sev-expired)",
 };
@@ -456,6 +458,10 @@ export default function ImportPage() {
               <div className="value" style={{ color: "var(--accent)" }}>
                 {result.updated}
               </div>
+            </div>
+            <div className="card">
+              <div className="label">変更なし</div>
+              <div className="value">{result.unchanged}</div>
             </div>
             <div className="card">
               <div className="label">スキップ</div>

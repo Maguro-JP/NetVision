@@ -90,6 +90,21 @@ describe("終わったあとの一文", () => {
     expect(text).toBe("新規 12 件 / 更新 3 件 / 問題のあった行 1 件");
   });
 
+  it("何も変わらなかった行があれば、その件数も出す", () => {
+    const text = outcomeText(
+      job({
+        status: "done",
+        device_import: {
+          created: 0,
+          updated: 1,
+          unchanged: 119,
+          errors: 0,
+        } as Job["device_import"],
+      }),
+    );
+    expect(text).toBe("新規 0 件 / 更新 1 件 / 変更なし 119 件 / 問題のあった行 0 件");
+  });
+
   it("結線表は、本数で出す", () => {
     const text = outcomeText(
       job({
