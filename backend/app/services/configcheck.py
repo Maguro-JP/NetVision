@@ -237,6 +237,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
+    found.extend(_negotiable_ports(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
@@ -1138,6 +1139,42 @@ def _access_on_vlan1(text: str) -> list[Finding]:
             "管理用の通信も流れる帯なので、端末をここに置くと、分けたつもりの帯が"
             "混ざります。意図した VLAN を switchport access vlan で書いてください。",
             evidence=[f"{name}: switchport access vlan が無い" for name in loose[:5]],
+        )
+    ]
+
+
+def _negotiable_ports(text: str) -> list[Finding]:
+    """VLAN は書いたのに mode を書いておらず、相手次第でトランクになる口。
+
+    Catalyst（IOS / IOS-XE）の L2 の口は、mode を書かなければ dynamic auto で、
+    相手がトランクを求めるとトランクになる。`switchport access vlan` だけ書いて
+    アクセスのつもりでいると、挿された機器次第で全 VLAN が流れ込む。
+
+    NX-OS は既定がアクセスで DTP を使わないので、NX-OS の資料では言わない。
+
+    出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（VLAN trunking: Switchport mode
+    dynamic auto (supports DTP)）
+    """
+    if re.search(r"\bNX-OS\b|^\s*feature\s+\S+", text, re.IGNORECASE | re.MULTILINE):
+        return []
+    loose = [
+        name
+        for name, body in _interface_blocks(text)
+        if any(re.match(r"^switchport access vlan\b", line, re.I) for line in body)
+        and not any(re.match(r"^switchport mode\b", line, re.I) for line in body)
+        and not any(re.match(r"^no switchport\s*$", line, re.I) for line in body)
+    ]
+    if not loose:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="VLAN だけ書いて mode を書いていない口が、相手次第でトランクになります",
+            why="mode を書かない L2 の口は dynamic auto で、相手がトランクを求めると"
+            "トランクになります。アクセスのつもりでも、挿された機器次第で全 VLAN が"
+            "流れ込みます。switchport mode access を書いてください。",
+            evidence=[f"{name}: switchport access vlan はあるが mode が無い" for name in loose[:5]],
         )
     ]
 

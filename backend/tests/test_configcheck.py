@@ -1682,3 +1682,27 @@ def test_access_ports_left_on_vlan1_are_called_out(db_session):
     hit = next(f for f in result.findings if "既定の VLAN 1" in f.title)
     assert any("1/0/1" in item for item in hit.evidence)
     assert not any("1/0/2" in item or "1/0/3" in item for item in hit.evidence)
+
+
+def test_ports_with_a_vlan_but_no_mode_are_called_out(db_session):
+    """出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
+    「Default Ethernet interface configuration」（VLAN trunking: Switchport mode
+    dynamic auto (supports DTP)）。
+
+    VLAN だけ書いて mode を書かない口は dynamic auto のままで、相手次第で
+    トランクになる。mode を書いた口と NX-OS の資料は言わない。
+    """
+    text = (
+        "hostname sw-dtp\n"
+        "interface GigabitEthernet1/0/1\n switchport access vlan 10\n"
+        "interface GigabitEthernet1/0/2\n switchport mode access\n switchport access vlan 10\n"
+    )
+    result = configcheck.check(db_session, text)
+    hit = next(f for f in result.findings if "相手次第でトランク" in f.title)
+    assert any("1/0/1" in item for item in hit.evidence)
+    assert not any("1/0/2" in item for item in hit.evidence)
+
+    nxos = "hostname nx-dtp\nfeature lacp\ninterface Ethernet1/1\n  switchport access vlan 10\n"
+    assert not [
+        t for t in _titles(configcheck.check(db_session, nxos)) if "相手次第でトランク" in t
+    ]
