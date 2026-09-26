@@ -1,6 +1,8 @@
 import io
 import json
 
+import pytest
+
 from tests.conftest import API
 
 CSV_HEADER = "ホスト名,メーカー,型番,種別,状態,OSバージョン,設置場所,導入年月日,サポート終了日,保守ベンダー,保守開始日,保守終了日,保守年額\n"  # noqa: E501
@@ -434,6 +436,74 @@ def test_an_unknown_id_is_reported_instead_of_creating_a_device(client):
     assert result["created"] == 0
     assert "台帳にありません" in result["rows"][0]["issues"][0]["message"]
     assert client.get(f"{API}/devices").json() == []
+
+
+@pytest.mark.parametrize("written", ["99999999999999999999", "2147483648", "²", "0"])
+def test_an_id_that_cannot_be_a_device_id_is_a_row_error(client, written):
+    """別の列（シリアル番号など）を機器IDに割り当てても、全体を 500 にしない。
+
+    DB の整数に入らない桁の数や、数字に見えるだけの文字は、その行のエラーにする。
+    """
+    response = client.post(
+        f"{API}/import/devices",
+        files={
+            "file": (
+                "devices.csv",
+                _csv(["機器ID,ホスト名,ベンダー,型番", f"{written},x-sw,Cisco,C9300-48P"]),
+                "text/csv",
+            )
+        },
+    )
+    assert response.status_code == 200
+    result = response.json()
+    assert result["errors"] == 1
+    assert result["rows"][0]["issues"][0]["column"] == "device_id"
+
+
+def test_a_code_repeated_in_the_file_is_a_row_error(client):
+    """管理ID の重複で、全体を一意制約の 500 にしない。どの行と重なったかを返す。"""
+    result = _import(
+        client,
+        _csv(["管理ID,ホスト名,ベンダー,型番", "NW-1,a1,Cisco,C1", "NW-1,a2,Cisco,C1"]),
+    )
+    assert result["errors"] == 1
+    issue = result["rows"][-1]["issues"][0]
+    assert issue["column"] == "code"
+    assert "2行目" in issue["message"]
+
+
+def test_a_code_used_by_another_device_is_a_row_error(client, device_payload):
+    client.post(f"{API}/devices", json=device_payload(hostname="owner", code="NW-9"))
+    client.post(
+        f"{API}/devices", json=device_payload(hostname="other", code="NW-8", serial_number="X2")
+    )
+    for line in ("NW-9,newcomer,Cisco,C1", "NW-9,other,Cisco,C1"):
+        result = _import(client, _csv(["管理ID,ホスト名,ベンダー,型番", line]))
+        assert result["errors"] == 1
+        assert "他の機器が使っています" in result["rows"][0]["issues"][0]["message"]
+
+
+def test_a_serial_number_repeated_or_taken_is_a_row_error(client, device_payload):
+    """シリアル番号も台帳で一意。管理ID と同じく行のエラーにする。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="owner", serial_number="FOC1"))
+    repeated = _import(
+        client,
+        _csv(["ホスト名,ベンダー,型番,シリアル番号", "a1,Cisco,C1,FOC2", "a2,Cisco,C1,FOC2"]),
+    )
+    assert repeated["errors"] == 1
+    assert repeated["rows"][-1]["issues"][0]["column"] == "serial_number"
+
+    taken = _import(client, _csv(["ホスト名,ベンダー,型番,シリアル番号", "b1,Cisco,C1,FOC1"]))
+    assert taken["errors"] == 1
+    assert "他の機器が使っています" in taken["rows"][0]["issues"][0]["message"]
+
+
+def test_a_device_can_keep_its_own_code(client, device_payload):
+    """自分の管理ID をそのまま書いて戻す行は、重複扱いにしない。"""
+    client.post(f"{API}/devices", json=device_payload(hostname="sw-own", code="NW-7"))
+    result = _import(client, _csv(["管理ID,ホスト名,ベンダー,型番", "NW-7,sw-own,Cisco,C1"]))
+    assert result["errors"] == 0
+    assert result["updated"] == 1
 
 
 def test_two_devices_can_swap_hostnames_in_one_file(client, device_payload):
