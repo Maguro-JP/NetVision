@@ -97,7 +97,8 @@ def outputs(db: Session, plan: ConfigPlan) -> PlanOutputs:
     diff = build(current_full, plan.body, vendor)
     return PlanOutputs(
         current_full=current_full,
-        future_full=plan.body,
+        # 以前の計画は本文に show の出力を含むことがある。新機種に貼る将来フルからは除く
+        future_full=config_part(plan.body),
         diff=diff,
         vendor=vendor,
         base_snapshot_id=base.id if base else None,

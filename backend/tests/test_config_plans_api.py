@@ -303,3 +303,17 @@ def test_verifying_with_the_config_after_the_change_marks_the_plan_applied(clien
     plan_after = client.get(f"{API}/config-plans?device_id={device_id}").json()[0]
     assert plan_after["status"] == "applied"
     assert plan_after["base_snapshot_id"] == body["snapshot_id"]
+
+
+def test_the_future_full_leaves_out_show_output_kept_in_an_old_plan(client, device_payload):
+    """直す前に作った計画は、本文に show の出力を含む。将来フルからは除く。"""
+    device_id = make_device(client, device_payload)
+    upload_config(client)
+    plan = make_plan(client, device_id).json()
+    client.patch(f"{API}/config-plans/{plan['id']}", json={"body": FIXTURE.read_text()})
+
+    out = client.get(f"{API}/config-plans/{plan['id']}/outputs").json()
+
+    assert "hostname core-sw-01" in out["future_full"]
+    assert "show version" not in out["future_full"]
+    assert "Device ID:" not in out["future_full"]
