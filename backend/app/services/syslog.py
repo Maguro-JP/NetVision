@@ -118,6 +118,19 @@ _STAMPS = (
 #: ホスト名らしい語。日付の後ろに来る
 _HOST = re.compile(r"^([A-Za-z][\w.\-]{1,60})\s")
 
+#: RFC 5424（6章の ABNF）の頭。PRI の後に VERSION、TIMESTAMP（`-` か、小数秒と
+#: 時差の付いた日時）、HOSTNAME、APP-NAME、PROCID、MSGID、STRUCTURED-DATA、MSG と続く。
+#: 出典: RFC 5424 "The Syslog Protocol" 6. Syslog Message Format
+_RFC5424 = re.compile(
+    r"^[1-9]\d{0,2} "
+    r"(?P<stamp>-|\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|[+-]\d{2}:\d{2})) "
+    r"(?P<host>\S+) \S+ \S+ \S+ "
+    r"(?P<sd>-|(?:\[(?:[^\]\\]|\\.)*\])+)"
+    r"(?: (?P<msg>.*))?$"
+)
+#: PRIVAL は 0〜191（RFC 5424 6.2.1）。それを超えるものは重さとして読まない
+_MAX_PRIVAL = 191
+
 
 #: FortiGate の `level=warning`。syslog の重さの数字にそろえる
 _FORTI_LEVEL = re.compile(r"\blevel=(\w+)", re.IGNORECASE)
@@ -147,22 +160,32 @@ def parse_line(line: str) -> LogEvent | None:
     priority = _PRI.match(rest)
     if priority:
         value = int(priority.group(1))
-        event.severity = value % 8
-        event.facility = str(value // 8)
+        if value <= _MAX_PRIVAL:
+            event.severity = value % 8
+            event.facility = str(value // 8)
         rest = rest[priority.end() :].strip()
 
-    for pattern, fmt in _STAMPS:
-        found = pattern.match(rest)
-        if not found:
-            continue
-        event.at = _to_datetime(found.group(1), fmt)
-        rest = rest[found.end() :].strip()
-        break
+    ietf = _RFC5424.match(rest) if priority else None
+    if ietf:
+        # 版数・時差付きの時刻・機器名がこの順に並ぶ形。前からの読み方では、
+        # 版数の数字で時刻も機器名も読めなかった
+        event.at = _rfc5424_time(ietf.group("stamp"))
+        if ietf.group("host") != "-":
+            event.host = ietf.group("host")
+        rest = (ietf.group("msg") or "").strip()
+    else:
+        for pattern, fmt in _STAMPS:
+            found = pattern.match(rest)
+            if not found:
+                continue
+            event.at = _to_datetime(found.group(1), fmt)
+            rest = rest[found.end() :].strip()
+            break
 
-    host = _HOST.match(rest)
-    if host and not host.group(1).startswith("%"):
-        event.host = host.group(1)
-        rest = rest[host.end() :].strip()
+        host = _HOST.match(rest)
+        if host and not host.group(1).startswith("%"):
+            event.host = host.group(1)
+            rest = rest[host.end() :].strip()
 
     for pattern in (_CODE_SLASHED, _CODE):
         found = pattern.search(rest)
@@ -189,6 +212,23 @@ def parse_line(line: str) -> LogEvent | None:
     if event.code is None and event.severity is None and event.at is None:
         return None  # 何も読み取れていない。ログの行とみなさない
     return event
+
+
+def _rfc5424_time(stamp: str) -> datetime | None:
+    """RFC 5424 の時刻を、表示の時間帯の時刻（時差なし）に直す。
+
+    ほかの形（`Sep 27 10:00:00`）は機器の現地時刻で時差を持たないので、並べたときに
+    ずれないよう、時差の付いた時刻も表示の時間帯に揃える。
+    """
+    if stamp == "-":
+        return None
+    try:
+        parsed = datetime.fromisoformat(stamp.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    from app.services import localtime
+
+    return parsed.astimezone(localtime.zone()).replace(tzinfo=None)
 
 
 def _to_datetime(text: str, fmt: str) -> datetime | None:
