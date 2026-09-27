@@ -168,6 +168,10 @@ def _find_name(text: str, name: str) -> int | None:
     台帳の並び次第で別の機器を「つなぐ先」に選んでしまう。前後が名前に使う
     文字（英数字・ハイフン・下線、続きのあるドット）でないときだけ当てる。
     """
+    # 台帳の全台について呼ばれる。文に含まれない名前で正規表現を作ると、
+    # 2 万台で 4 秒かかっていた。含まれるものだけ境目を確かめる
+    if name not in text:
+        return None
     pattern = re.compile(
         r"(?<![A-Za-z0-9_.\-])" + re.escape(name) + r"(?![A-Za-z0-9_\-]|\.[A-Za-z0-9])"
     )
