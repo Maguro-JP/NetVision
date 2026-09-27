@@ -49,6 +49,8 @@
 | 台帳の CSV 書き出し | 3.9 秒 → 設定の読み直しをやめて約 1.9 秒 |
 | 台帳の Excel 書き出し | 10 秒（直す前。openpyxl の分が大きい） |
 | `/alerts`（画面からは呼ばない） | 2.1 秒（上限なしで全件返す） |
+| Config の取り込み（`POST /configs/upload`、IOS 1 本、2026-09-27） | 0.45 秒（初回）/ 0.07 秒（2 回目） |
+| Config の取り込み前の確認（`POST /configs/preview`、2026-09-27） | 0.04 秒 |
 
 - 測り方: 一時 DB に alembic で表を作り、拠点 500・機器 2 万・契約 1 万を直接入れて uvicorn で叩いた。
 - 設定ファイル（settings.json）の読み直しが、機器ごとの判定で 5 万回起きていた。`appsettings.load` は
