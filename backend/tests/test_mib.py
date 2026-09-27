@@ -153,3 +153,21 @@ def test_an_empty_sysname_is_no_hostname(db_session):
     from app.services import mib
 
     assert mib.review(db_session, "SNMPv2-MIB::sysName.0 =\n").hostname is None
+
+
+def test_lower_layer_down_on_an_enabled_port_is_a_fault(db_session):
+    """RFC 2863 の ifOperStatus は down(2) のほかに notPresent(6)・lowerLayerDown(7) がある。"""
+    from app.services import mib
+
+    walk = (
+        "IF-MIB::ifDescr.1 = STRING: Port-channel1\n"
+        "IF-MIB::ifAdminStatus.1 = INTEGER: up(1)\n"
+        "IF-MIB::ifOperStatus.1 = INTEGER: lowerLayerDown(7)\n"
+        "IF-MIB::ifDescr.2 = STRING: Gi1/0/2\n"
+        "IF-MIB::ifAdminStatus.2 = INTEGER: up(1)\n"
+        "IF-MIB::ifOperStatus.2 = INTEGER: dormant(5)\n"
+    )
+    ports = {p.index: p for p in mib.review(db_session, walk).ports}
+
+    assert ports["1"].down_but_enabled
+    assert not ports["2"].down_but_enabled

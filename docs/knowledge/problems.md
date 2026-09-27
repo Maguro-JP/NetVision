@@ -175,3 +175,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   読めるときだけ文字に戻し、MAC アドレスなどは16進のまま。空の sysName は機器名なし。
 - 試験: `tests/test_mib.py` の末尾 3 件（直す前は 3 件とも落ちた）。
 - 文書検索（`'` `%` `NEAR(` `*` など）と、崩れた MIB（空・バイナリ・3MB の1行）は 500 にならなかった。
+
+## SNMP の OID の突き合わせ（2026-09-28 JST）
+
+- 確かめたこと: `mib.NUMERIC` の OID を公式の定義と突き合わせた。ENTITY-MIB（RFC 6933）の
+  entPhysicalSoftwareRev=10・SerialNum=11・ModelName=13、IF-MIB（RFC 2863）の ifDescr=ifEntry 2・
+  ifSpeed=5・ifAdminStatus=7・ifOperStatus=8・ifHighSpeed=ifXEntry 15・ifAlias=18・ifNumber=interfaces 1。
+  いずれも一致した。HOST-RESOURCES-MIB（hrProcessorLoad）と CISCO-PROCESS-MIB（cpmCPUTotal5minRev）は
+  原文を取れておらず、未確認。
+- 直したこと: ifOperStatus の値は up(1)〜lowerLayerDown(7) の 7 つある（RFC 2863）。down(2) だけを
+  「使う設定なのに落ちている」としていたので、notPresent(6)・lowerLayerDown(7) を加えた。4〜7 の表示も
+  「状態が読めません」から、それぞれの意味に直した。試験は `tests/test_mib.py`。
+- 気づいたこと: RFC 2863 の ifDescr は「メーカー・製品名・版を含む説明」と定義されていて、ポートの名前は
+  ifName（ifXEntry 1）。多くの機器は ifDescr にも名前を入れるので、今は変えていない。

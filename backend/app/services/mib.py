@@ -143,7 +143,19 @@ NUMERIC: dict[str, str] = {
 }
 
 #: 状態の数字を、そのまま出しても分かる言い方に
-_STATUS = {"1": "上がっています", "2": "落ちています", "3": "試験中です"}
+#: ifOperStatus の値（RFC 2863 IF-MIB の ifOperStatus の SYNTAX）
+_STATUS = {
+    "1": "上がっています",
+    "2": "落ちています",
+    "3": "試験中です",
+    "4": "状態が分かりません（機器が判断できない）",
+    "5": "待機中です（dormant）",
+    "6": "部品が欠けていて使えません（notPresent）",
+    "7": "下の層が落ちているため使えません（lowerLayerDown）",
+}
+#: 通信できない状態。down(2) のほか、部品が無い notPresent(6)、
+#: 下の層が落ちている lowerLayerDown(7) も、使う設定なら異常として拾う
+_NOT_PASSING = frozenset({"2", "6", "7"})
 _ADMIN = {"1": "使う設定です", "2": "閉じています", "3": "試験中です"}
 
 
@@ -173,7 +185,7 @@ class PortState:
     @property
     def down_but_enabled(self) -> bool:
         """使う設定なのに落ちている。いちばん見たいのはここ。"""
-        return self.admin == "1" and self.oper == "2"
+        return self.admin == "1" and self.oper in _NOT_PASSING
 
 
 @dataclass
