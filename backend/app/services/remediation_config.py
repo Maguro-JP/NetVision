@@ -28,6 +28,7 @@ from app.services import config_plans, config_render
 from app.services.configdiff import DiffResult, build
 from app.services.configdiff.dialects import for_vendor
 from app.services.configdiff.engine import apply_script, normalize
+from app.services.configdiff.logtext import config_part
 from app.services.configdiff.tree import parse
 
 
@@ -91,12 +92,14 @@ def build_fix(db: Session, device: Device, remediation: Remediation) -> FixConfi
     dialect = for_vendor(vendor)
 
     # 現行に対処を当てた姿を作る。当て方は差分エンジンの適用処理と同じものを使う
-    current_tree = normalize(parse(snapshot.content, dialect), dialect)
+    # 取り込んだログには show の出力も入っている。設定の部分だけを土台にする
+    current_text = config_part(snapshot.content)
+    current_tree = normalize(parse(current_text, dialect), dialect)
     fixed_tree = apply_script(current_tree, fragment, dialect)
     fixed_full = fixed_tree.to_text()
 
     # 投入コマンドは通常の差分として作り直し、収束を検証させる
-    diff = build(snapshot.content, fixed_full, vendor)
+    diff = build(current_text, fixed_full, vendor)
     already_applied = diff.verified and diff.is_empty
 
     if already_applied:
@@ -118,7 +121,7 @@ def build_fix(db: Session, device: Device, remediation: Remediation) -> FixConfi
         remediation_summary=remediation.summary,
         vendor=vendor,
         source=source,
-        current_full=snapshot.content,
+        current_full=current_text,
         fixed_full=fixed_full,
         diff=diff,
         already_applied=already_applied,

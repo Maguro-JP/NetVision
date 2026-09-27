@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 
 from app.services.configdiff import tree
 from app.services.configdiff.dialects import UNSUPPORTED, Dialect, as_vendor, for_vendor
+from app.services.configdiff.logtext import config_part
 from app.services.configdiff.tree import ConfigNode
 
 
@@ -382,7 +383,12 @@ def _label(vendor: object) -> str:
 
 
 def build(current_text: str, target_text: str, vendor: str | None = None) -> DiffResult:
-    """現行 config と将来 config から、投入コマンドと切り戻しコマンドを作る。"""
+    """現行 config と将来 config から、投入コマンドと切り戻しコマンドを作る。
+
+    show の出力が混ざったログを渡されても、設定の部分だけで比べる（logtext.py）。
+    """
+    current_text = config_part(current_text)
+    target_text = config_part(target_text)
     found = vendor or _vendor_of(current_text, target_text)
     known = as_vendor(found)
     if known in UNSUPPORTED:

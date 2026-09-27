@@ -135,3 +135,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 残り: DNS リバインディング（攻撃者の名前を 127.0.0.1 に向け直す手口）では Origin と Host が
   一致するので防げない。防ぐなら Host を許した名前に限る仕組み（TrustedHost）が要る。
   LAN の IP で開く使い方と両立させる設定が要るので、まだ入れていない。
+
+## 投入手順に show の出力が混ざる（2026-09-27 JST）
+
+- 症状: 取り込んだ Config はログのまま（`show version` → `show running-config` → `show cdp neighbors`）
+  保存される。差分がそれをそのまま設定として比べていたため、次のことが起きた。
+  - 版数や隣接機器の表示が変わると、投入手順に `no Cisco IOS XE Software, Version ...` が入る
+  - 投入後の突き合わせが、稼働時間や版数が変わっただけで「一致しない」になる
+  - 計画と是正案の「現行フル」（故障時の復旧に貼るもの）に show の出力が入る
+- 対策: `configdiff/logtext.py` の `config_part`。プロンプト付きの設定を出すコマンド
+  （`show running-config`、`show configuration`、`display current-configuration` など）の直後から
+  次のプロンプト行までを設定とみなす。`Building configuration...` と `Current configuration : N bytes`
+  も除く。プロンプト行の無い文字列はそのまま。`configdiff.build` の入口と、計画・是正案の現行フルで使う。
+- 試験: `tests/test_configdiff_logtext.py`（直す前は 3 件落ちた）。是正案と脆弱性の試験は、見本の末尾
+  （show cdp の出力の後ろ）に設定の行を足していたので、`end` の手前に足す形に直した。
+- 未確認: プロンプトとコマンドの形は手元の見本（IOS・Junos）と既存の `_SHOW_OUTPUT` に合わせた。
+  各社のマニュアルでは確かめていない。形が合わないログは、今までどおりそのまま比べる。

@@ -139,13 +139,24 @@ def add_remediation_with_template(client):
     ).json()
 
 
+def _with_lines(log: bytes, extra: bytes) -> bytes:
+    """設定の中（running-config の end の手前）に行を足す。
+
+    見本のログは running-config の後ろに show cdp neighbors の出力が続く。末尾に足すと
+    設定ではなく show の出力の一部になり、差分では見なくなる。
+    """
+    return log.replace(b"\nend\n", extra.rstrip(b"\n") + b"\nend\n", 1) if extra else log
+
+
 def upload_config(client, extra=b""):
     from pathlib import Path
 
     fixture = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
     return client.post(
         f"{API}/configs/upload",
-        files=[("files", ("core-sw-01.txt", fixture.read_bytes() + extra, "text/plain"))],
+        files=[
+            ("files", ("core-sw-01.txt", _with_lines(fixture.read_bytes(), extra), "text/plain"))
+        ],
     )
 
 
