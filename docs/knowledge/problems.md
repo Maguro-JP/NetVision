@@ -164,3 +164,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   時差付きの時刻は、時差の無いほかの形と並ぶよう表示の時間帯に直す。PRIVAL は 0〜191（6.2.1）。
 - 試験: `tests/test_syslog.py` の末尾 3 件（直す前は 3 件とも落ちた）。
 - 崩れた入力（空・バイナリ・NUL・2MB の1行・Shift_JIS・2月30日）は、直す前から 500 にならなかった。
+
+## SNMP の Hex-STRING が値として読めない（2026-09-28 JST）
+
+- 症状: `SNMPv2-MIB::sysName.0 = Hex-STRING: 73 77 31` で、機器名が「Hex-STRING: 73 77 31」になった。
+  型名の読み取りが `-` を許していなかった。日本語の sysLocation も net-snmp は Hex-STRING で出す。
+  値の空の sysName は、機器名が空文字になった。
+- 対策: 型名は net-snmp の `snmplib/mib.c` が付けるもの（`Hex-STRING: `、`Network Address: `、
+  `Wrong Type (should be ...): ` など、ソースで確認）に合わせる。Hex-STRING は UTF-8 の文字として
+  読めるときだけ文字に戻し、MAC アドレスなどは16進のまま。空の sysName は機器名なし。
+- 試験: `tests/test_mib.py` の末尾 3 件（直す前は 3 件とも落ちた）。
+- 文書検索（`'` `%` `NEAR(` `*` など）と、崩れた MIB（空・バイナリ・3MB の1行）は 500 にならなかった。

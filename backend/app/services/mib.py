@@ -29,9 +29,14 @@ from app.services import configparse, versions
 
 #: `SNMPv2-MIB::sysDescr.0 = STRING: Cisco IOS Software ...`
 #: `.1.3.6.1.2.1.1.1.0 = STRING: ...`
+#: 型名は net-snmp の snmplib/mib.c が付けるもの（`STRING: `、`Hex-STRING: `、
+#: `Network Address: `、`Wrong Type (should be INTEGER): ` など）。`-`・空白・括弧を含む
 _LINE = re.compile(
-    r"^(?P<oid>[.\w:-]+?)\s*=\s*(?:(?P<type>[A-Za-z0-9 ]+?):)?\s*(?P<value>.*)$",
+    r"^(?P<oid>[.\w:-]+?)\s*=\s*(?:(?P<type>[A-Za-z][A-Za-z0-9 ()\-]*?):)?\s*(?P<value>.*)$",
 )
+
+#: `Hex-STRING: 73 77 31` の中身
+_HEX_BYTES = re.compile(r"^(?:[0-9A-Fa-f]{2}\s*)+$")
 
 #: 末尾の添字（`.0` や `.10101`）を外して、どの値かだけを見る
 _INDEX = re.compile(r"\.(\d+)$")
@@ -220,6 +225,22 @@ def key_of(oid: str) -> tuple[str, str]:
     return text, ""
 
 
+def _hex_text(value: str) -> str:
+    """`73 77 31` を `sw1` に戻す。
+
+    機器名に日本語や制御文字が入っていると、net-snmp は文字列を Hex-STRING で出す。
+    文字として読めるときだけ戻し、読めなければ16進のまま返す（MAC アドレスなど）。
+    """
+    if not _HEX_BYTES.match(value.strip()):
+        return value
+    data = bytes.fromhex(value.replace(" ", "").replace("\n", ""))
+    try:
+        text = data.decode("utf-8").rstrip("\x00")
+    except UnicodeDecodeError:
+        return value
+    return text if text and text.isprintable() else value
+
+
 def parse(text: str) -> list[Value]:
     """snmpwalk / snmpget の出力を読む。読めない行は落とす。"""
     out: list[Value] = []
@@ -235,6 +256,8 @@ def parse(text: str) -> list[Value]:
         quoted = _QUOTED.match(value)
         if quoted:
             value = quoted.group(1)
+        if (matched.group("type") or "").strip() == "Hex-STRING":
+            value = _hex_text(value)
         meaning = MEANINGS.get(key)
         out.append(
             Value(
@@ -260,7 +283,7 @@ def review(db: Session, text: str) -> MibReport:
     ports: dict[str, PortState] = {}
     for value in values:
         if value.key == "sysname":
-            report.hostname = value.raw
+            report.hostname = value.raw or None
         elif value.key == "sysdescr":
             report.descr = value.raw
         elif value.key == "syslocation":

@@ -127,3 +127,29 @@ def test_the_api_reads_what_was_pasted(db_session, client):
 
 def test_an_empty_body_is_refused(client):
     assert client.post(f"{API}/mib", json={"text": "   "}).status_code == 422
+
+
+# 型名は net-snmp の snmplib/mib.c が付けるもの。`Hex-STRING: ` のように `-` を含む。
+# 以前は型として読めず、機器名が「Hex-STRING: 73 77 31」になっていた
+
+
+def test_a_hex_string_that_is_text_is_read_as_text():
+    from app.services import mib
+
+    assert mib.parse("SNMPv2-MIB::sysName.0 = Hex-STRING: 73 77 31")[0].raw == "sw1"
+    # 日本語の設置場所は net-snmp が Hex-STRING で出す
+    located = mib.parse("SNMPv2-MIB::sysLocation.0 = Hex-STRING: E6 9D B1 E4 BA AC")
+    assert located[0].raw == "東京"
+
+
+def test_a_hex_string_that_is_not_text_stays_hex():
+    from app.services import mib
+
+    mac = mib.parse("IF-MIB::ifPhysAddress.1 = Hex-STRING: 00 1A 2B 3C 4D 5E")
+    assert mac[0].raw == "00 1A 2B 3C 4D 5E"
+
+
+def test_an_empty_sysname_is_no_hostname(db_session):
+    from app.services import mib
+
+    assert mib.review(db_session, "SNMPv2-MIB::sysName.0 =\n").hostname is None
