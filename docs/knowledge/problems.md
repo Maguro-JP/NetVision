@@ -80,11 +80,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 測り方の注意: GET を続けて送ると、重い要求が終わらないうちに次が詰まり、軽い経路まで
   打ち切りに見える。1 つずつ、前の要求が終わってから測る。
 
-## ときどき出る SQLAlchemy の警告（2026-09-26 JST、未解明）
+## ときどき出る SQLAlchemy の警告（2026-09-26 JST、2026-09-27 に解明）
 
-- `tests/test_background_import.py::test_the_dashboard_lists_what_ran` で、全体を流したときに
-  1回だけ `SAWarning: Identity map already had an identity for (Device, (1,))`（`importer.py` の flush）。
-  単独で5回・全体で2回流して再現しなかった。裏の処理と試験の DB の共有のタイミングと見ているが、確かめていない。
+- 症状: `tests/test_background_import.py::test_the_dashboard_lists_what_ran` で、全体を流したときに
+  まれに `SAWarning: Identity map already had an identity for (Device, (1,))`（`importer.py` の flush）。
+- 原因: 試験の DB は1本の接続を全セッションで共有する（conftest の StaticPool）。この試験は
+  取り込みを2本同時に裏で走らせるので、2つのスレッドの書き込みが同じ接続の上で重なっていた。
+  スレッドの中の警告と失敗は試験を落とさないので、見えにくかった。
+- 確かめ方: 同時に2本を50回（100件）。共有の接続では失敗2件・警告1回、接続を分けたファイルの
+  SQLite では失敗0件・警告0回。本番（接続が分かれる）では起きないと見ている。
+- 対策: 一覧の並びを見る試験なので、1本目を終えてから2本目を始める。
+- 残り: PostgreSQL で同じ台帳を2本同時に取り込むと、両方が「無い」と見て同じ hostname を
+  入れようとし、片方が UNIQUE 制約で失敗しうる。制約が守るので台帳は壊れない。
+  手元に PostgreSQL が無く、確かめていない。
 
 ## 配布版で配信元の外のファイルが読める（2026-09-27 JST）
 
