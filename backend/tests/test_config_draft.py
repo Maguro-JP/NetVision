@@ -134,3 +134,19 @@ def test_the_review_is_reachable_from_the_api(client, reference):
     )
     assert res.status_code == 200
     assert all(line["grounded"] for line in res.json()["lines"])
+
+
+def test_the_prompt_carries_the_config_not_the_show_output(db_session, reference):
+    """取り込んだログの show version や隣接機器の表示は、依頼文に載せない。"""
+    from pathlib import Path
+
+    log = (Path(__file__).parent / "fixtures" / "core-sw-01.txt").read_text(encoding="utf-8")
+    device = Device(hostname="core-sw-01", vendor="Cisco")
+    db_session.add(device)
+    db_session.commit()
+
+    result = config_draft.prompt_for(db_session, device, "vlan", base=log)
+
+    assert "hostname core-sw-01" in result.body
+    assert "show version" not in result.body
+    assert "Device ID:" not in result.body
