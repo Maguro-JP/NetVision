@@ -114,7 +114,7 @@ MEANINGS: dict[str, Meaning] = {
     "entphysicalsoftwarerev": Meaning("ソフトの版", "その機器に入っているソフトの版です"),
     "hrprocessorload": Meaning(
         "CPU の使用率",
-        "その機器の頭がどれだけ働いているかです（％）",
+        "その機器の頭がどれだけ働いているかです（直近1分の平均、％）",
         "高いままなら、その機器に無理をさせています",
     ),
     "cpmcputotal5minrev": Meaning("CPU の使用率（5分平均）", "直近5分の平均です（％）"),

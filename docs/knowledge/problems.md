@@ -181,8 +181,9 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 確かめたこと: `mib.NUMERIC` の OID を公式の定義と突き合わせた。ENTITY-MIB（RFC 6933）の
   entPhysicalSoftwareRev=10・SerialNum=11・ModelName=13、IF-MIB（RFC 2863）の ifDescr=ifEntry 2・
   ifSpeed=5・ifAdminStatus=7・ifOperStatus=8・ifHighSpeed=ifXEntry 15・ifAlias=18・ifNumber=interfaces 1。
-  いずれも一致した。HOST-RESOURCES-MIB（hrProcessorLoad）と CISCO-PROCESS-MIB（cpmCPUTotal5minRev）は
-  原文を取れておらず、未確認。
+  いずれも一致した。HOST-RESOURCES-MIB の hrProcessorLoad（1.3.6.1.2.1.25.3.3.1.2、直近1分の平均）は
+  net-snmp 同梱の MIB、CISCO-PROCESS-MIB の cpmCPUTotal5minRev（1.3.6.1.4.1.9.9.109.1.1.1.1.8、
+  直近5分）は cisco/cisco-mibs の定義で確かめ、一致した（2026-09-28）。
 - 直したこと: ifOperStatus の値は up(1)〜lowerLayerDown(7) の 7 つある（RFC 2863）。down(2) だけを
   「使う設定なのに落ちている」としていたので、notPresent(6)・lowerLayerDown(7) を加えた。4〜7 の表示も
   「状態が読めません」から、それぞれの意味に直した。試験は `tests/test_mib.py`。
