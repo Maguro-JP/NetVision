@@ -9,13 +9,12 @@
 
 from __future__ import annotations
 
-import csv
 import io
 
 from sqlalchemy.orm import Session
 
 from app.models.topology import LinkOrigin
-from app.services import portlabel
+from app.services import csvsafe, portlabel
 from app.services.configparse import vlanlist
 from app.services.topology import DEFAULT_LAYER, get_graph
 from app.services.xlsxsafe import row_values
@@ -93,7 +92,7 @@ def to_csv(
     db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = None, encoding: str = "utf-8"
 ) -> bytes:
     buffer = io.StringIO()
-    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer = csvsafe.writer(buffer, lineterminator="\r\n")
     writer.writerow(HEADERS)
     writer.writerows(rows(db, layer, site_id=site_id))
 

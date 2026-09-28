@@ -1,4 +1,3 @@
-import csv
 import io
 from datetime import date, timedelta
 from typing import Annotated
@@ -24,7 +23,7 @@ from app.schemas.reference import (
     VulnerabilityRead,
     VulnerabilitySummary,
 )
-from app.services import appsettings, versions
+from app.services import appsettings, csvsafe, versions
 from app.services import reference as service
 from app.services.device_query import DeviceFilters, query_devices
 from app.services.tablefile import TableFileError, read_table
@@ -189,7 +188,7 @@ async def import_products(
 def product_template() -> StreamingResponse:
     """記入用テンプレート。ベンダー資料からの転記作業に使う。"""
     buffer = io.StringIO()
-    writer = csv.writer(buffer)
+    writer = csvsafe.writer(buffer)
     writer.writerow(list(service.PRODUCT_FIELD_LABELS.values()))
     writer.writerow(
         [
