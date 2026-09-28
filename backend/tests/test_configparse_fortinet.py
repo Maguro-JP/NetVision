@@ -169,3 +169,56 @@ def test_the_lldp_table_of_a_managed_switch_gives_the_links():
     found = {(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors}
     assert ("port4", "core-sw-01", "wan1") in found
     assert not any(n.local_interface == "port1" for n in parsed.neighbors)
+
+
+#: 口の中の入れ子。FortiOS CLI Reference「config system interface」（7.0.1・7.6.6）と
+#: Administration Guide「IPv6 quick start」の書き方
+NESTED_INTERFACES = """#config-version=FGT60F-7.2.8-FW-build1639-230929:opmode=0
+config system interface
+    edit "port1"
+        set vdom "root"
+        set ip 192.168.1.99 255.255.255.0
+        config ipv6
+            set ip6-address 2001:db8::1/64
+        end
+        set secondary-IP enable
+        config secondaryip
+            edit 1
+                set ip 192.168.2.99 255.255.255.0
+            next
+        end
+        set role lan
+    next
+    edit "port2"
+        set ip 10.0.0.1 255.255.255.0
+    next
+    edit "vlan10"
+        set ip 10.10.0.1 255.255.255.0
+        set interface "port1"
+        set vlanid 10
+    next
+end
+"""
+
+
+def _nested_ports():
+    # 名前の大文字小文字は、別の処理で揃えられる（vlan10 → Vlan10）。ここでは見ない
+    return {i.name.lower(): i for i in configparse.parse(NESTED_INTERFACES).interfaces}
+
+
+def test_the_ports_after_a_nested_block_are_still_read():
+    """入れ子の `end` で読み終えると、後ろの口が全部台帳から消える。"""
+    ports = _nested_ports()
+    assert ports["port2"].ip_address == "10.0.0.1/24"
+    assert ports["vlan10"].vlan == 10
+
+
+def test_a_secondary_address_does_not_overwrite_the_first():
+    ports = _nested_ports()
+    assert ports["port1"].ip_address == "192.168.1.99/24"
+    assert "role lan" in (ports["port1"].description or "")
+
+
+def test_an_entry_inside_a_nested_block_is_not_a_port():
+    """`config secondaryip` の `edit 1` を口にすると、`1` という偽の口ができる。"""
+    assert set(_nested_ports()) == {"port1", "port2", "vlan10"}

@@ -429,8 +429,20 @@ def _parse_vdoms(text: str, parsed: ParsedConfig) -> None:
 
 
 def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
-    """`config system interface` 配下の `edit "port1"` ブロックを読む。"""
+    """`config system interface` 配下の `edit "port1"` ブロックを読む。
+
+    口の中には `config ipv6`・`config secondaryip`・`config vrrp` などが入れ子で入り、
+    それぞれ `end` で閉じる。中にはさらに `edit <id>` と `set ip` を持つものがある。
+    入れ子の深さを数え、口そのものの高さの行だけを読む。数えないと、入れ子の `end` で
+    読み終えて後ろの口が全部抜け、`config secondaryip` の `set ip` で住所を上書きし、
+    `edit 1` を口として作ってしまう。
+
+    出典: Fortinet「FortiOS CLI Reference」の `config system interface`（7.0.1 と 7.6.6 で
+    確かめた）。入れ子の書き方は同 Administration Guide「IPv6 quick start」の作例。
+    VLAN の番号は両方の版で `set vlanid`。表番号は無い。
+    """
     in_block = False
+    nested = 0
     current: ParsedInterface | None = None
 
     for raw in text.splitlines():
@@ -440,8 +452,16 @@ def _parse_interfaces(text: str, parsed: ParsedConfig) -> None:
             continue
         if not in_block:
             continue
+        if line.startswith("config "):
+            nested += 1
+            continue
         if line == "end":
+            if nested:
+                nested -= 1
+                continue
             break
+        if nested:
+            continue
 
         match = re.match(r'^edit\s+"?([^"\n]+)"?$', line)
         if match:
