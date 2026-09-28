@@ -4,6 +4,7 @@
 """
 
 from app.services import configparse, loadbalancereview
+from app.services.configparse import loadbalance
 from app.services.reviewnote import HIGH, LOW, MEDIUM
 
 F5 = """ltm virtual /Common/web_vs {
@@ -238,3 +239,57 @@ ltm pool /Common/web_pool {
     virtual = balance.virtual_servers[0]
     assert (virtual.address, virtual.port, virtual.pool) == ("10.1.1.100", "https", "web_pool")
     assert len(balance.pools) == 1
+
+
+def test_ipv6_addresses_keep_the_port_after_a_period():
+    """IPv6 はコロンを含むので、F5 は `アドレス.ポート` と書く。
+
+    出典: F5 BIG-IP TMSH Manual「ltm virtual」の destination（ipv6 は
+    a:b:c:d:e:f:g:h[.port]）と「ltm pool」の members。
+    """
+    text = """ltm virtual /Common/vs_v6 {
+    destination /Common/2001:db8::10.443
+    pool /Common/pool_v6
+}
+ltm pool /Common/pool_v6 {
+    members {
+        /Common/2001:db8::1.80 {
+            address 2001:db8::1
+        }
+        /Common/web1:http {
+            address 10.0.0.1
+        }
+    }
+    monitor /Common/http
+}
+"""
+    found = loadbalance.parse(text)
+    virtual = found.virtual_servers[0]
+    assert (virtual.address, virtual.port) == ("2001:db8::10", "443")
+    members = found.pool("pool_v6").members
+    assert [(m.name, m.address, m.port) for m in members] == [
+        ("2001:db8::1", "2001:db8::1", "80"),
+        ("web1", "10.0.0.1", "http"),
+    ]
+
+
+def test_a_virtual_server_borrowing_the_interface_address_is_read():
+    """A10 は `slb virtual-server vip use-if-ip ethernet 1` と、口のアドレスを借りられる。
+
+    出典: A10「Installing vThunder on GCP」の Configure a Server Load Balancer Using use-if-ip。
+    """
+    text = """slb server s1 10.33.0.101
+  port 80 tcp
+!
+slb service-group http-sg tcp
+  member s1 80
+!
+slb virtual-server vip use-if-ip ethernet 1
+  port 80 tcp
+    service-group http-sg
+!
+"""
+    found = loadbalance.parse(text)
+    virtual = found.virtual_servers[0]
+    assert (virtual.name, virtual.address, virtual.pool) == ("vip", None, "http-sg")
+    assert [m.address for m in found.pool("http-sg").members] == ["10.33.0.101"]
