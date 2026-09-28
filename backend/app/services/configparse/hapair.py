@@ -7,6 +7,13 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
 1台の Config だけでは「片方にしか入っていない」「両方とも primary」が
 言えないので、比べられる形で持ち帰る。判断は `hareview.py` で行う。
 確かめられる書き方だけ読む。読めないものは None のままにする。
+
+出典:
+- Arista MLAG: Arista「Security Advisory 0161」の `mlag configuration` の作例
+  （`domain-id`・`peer-link`・`peer-address heartbeat`）と `show mlag` の出力（`peer-address` と
+  `hb-peer-address` が別の項目として出る）。表番号は無い
+- FortiGate HA・ASA failover・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise は未確認
+  （この読み手としては公式の資料に当たれていない）
 """
 
 from __future__ import annotations
@@ -165,7 +172,10 @@ def _mlag(text: str) -> ParsedHaPair | None:
         if head == "domain-id" and len(words) > 1:
             pair.group = words[1]
         elif head == "peer-address" and len(words) > 1:
-            pair.peer_address = words[1]
+            # `peer-address heartbeat 172.30.118.190 vrf MGMT` は二重主の検出に使う別の宛先。
+            # 相手のアドレス（peer-link 越しの宛先）ではない
+            if words[1].lower() != "heartbeat":
+                pair.peer_address = words[1]
         elif head == "peer-link" and len(words) > 1:
             pair.link = words[1]
     return pair

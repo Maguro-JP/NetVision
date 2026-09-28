@@ -173,3 +173,22 @@ def test_two_separate_stacks_are_not_treated_as_one_pair(client):
     assert report["groups"]
     # 機器をまたいだ突き合わせはしない
     assert report["findings"] == []
+
+
+def test_the_heartbeat_address_is_not_taken_as_the_peer():
+    """`peer-address heartbeat` は二重主の検出用の別の宛先（Arista Security Advisory 0161 の作例）。
+
+    `show mlag` でも `peer-address` と `hb-peer-address` は別の項目として出る。
+    """
+    text = (
+        "mlag configuration\n"
+        "   domain-id mlagDomain\n"
+        "   local-interface Vlan4094\n"
+        "   peer-address 10.0.0.2\n"
+        "   peer-address heartbeat 172.30.118.190 vrf MGMT\n"
+        "   peer-link Port-Channel10\n"
+        "   dual-primary detection delay 5 action errdisable all-interfaces\n"
+    )
+    pair = hapair.parse(text)
+    assert pair.peer_address == "10.0.0.2"
+    assert pair.link == "Port-Channel10"
