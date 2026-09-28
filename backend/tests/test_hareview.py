@@ -192,3 +192,33 @@ def test_the_heartbeat_address_is_not_taken_as_the_peer():
     pair = hapair.parse(text)
     assert pair.peer_address == "10.0.0.2"
     assert pair.link == "Port-Channel10"
+
+
+#: Cisco「CLI Book 1: Cisco ASA Series General Operations」の failover の作例の形。
+#: Stateful 用の口（failover link）の住所を先に書いて、取り違えないことも見る
+ASA_PAIR = (
+    "failover\n"
+    "failover lan unit {role}\n"
+    "failover lan interface fover gigabitethernet0/8\n"
+    "failover link stlink gigabitethernet0/7\n"
+    "failover interface ip stlink 10.9.9.1 255.255.255.0 standby 10.9.9.2\n"
+    "failover interface ip fover 192.168.240.254 255.255.255.0 standby 192.168.240.253\n"
+)
+
+
+def test_the_asa_peer_is_the_address_on_the_other_side_of_the_failover_link():
+    """前の住所は primary、standby の後ろは secondary に付く。相手はその反対側。"""
+    primary = hapair.parse(ASA_PAIR.format(role="primary"))
+    secondary = hapair.parse(ASA_PAIR.format(role="secondary"))
+    assert primary.peer_address == "192.168.240.253"
+    assert secondary.peer_address == "192.168.240.254"
+    assert primary.link == "gigabitethernet0/8"
+
+
+def test_the_asa_peer_is_read_from_an_ipv6_failover_link():
+    pair = hapair.parse(
+        "failover lan unit primary\n"
+        "failover lan interface folink GigabitEthernet0/3\n"
+        "failover interface ip folink 2001:a0a:b00::a0a:b70/64 standby 2001:a0a:b00::a0a:b71\n"
+    )
+    assert pair.peer_address == "2001:a0a:b00::a0a:b71"

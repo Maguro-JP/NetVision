@@ -12,7 +12,11 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
 - Arista MLAG: Arista「Security Advisory 0161」の `mlag configuration` の作例
   （`domain-id`・`peer-link`・`peer-address heartbeat`）と `show mlag` の出力（`peer-address` と
   `hb-peer-address` が別の項目として出る）。表番号は無い
-- FortiGate HA・ASA failover・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise は未確認
+- ASA failover: Cisco「CLI Book 1: Cisco ASA Series General Operations」の failover の作例
+  （`failover lan unit primary`・`failover lan interface`・`failover interface ip … standby …`）と、
+  技術資料「Configure ASA Active/Active Failover in Firepower 4100 Series」。前の住所は primary に、
+  standby の住所は secondary に付く（同ガイドの説明）
+- FortiGate HA・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
@@ -54,6 +58,13 @@ _FORTI_SET = re.compile(r"^\s*set\s+(\S+)\s+(.+?)\s*$", re.IGNORECASE)
 _ASA_FAILOVER = re.compile(r"^failover\s+lan\s+unit\s+(primary|secondary)", re.IGNORECASE)
 _ASA_KEY = re.compile(r"^failover\s+key\b", re.IGNORECASE)
 _ASA_LINK = re.compile(r"^failover\s+lan\s+interface\s+(\S+)\s+(\S+)", re.IGNORECASE)
+#: `failover interface ip folink 172.27.48.1 255.255.255.0 standby 172.27.48.2`（IPv6 は
+#: `2001:db8::1/64 standby 2001:db8::2`）。前の住所は primary、standby の後ろは secondary に付く
+_ASA_LINK_IP = re.compile(
+    r"^failover\s+interface\s+ip\s+(?P<name>\S+)\s+(?P<primary>[\d.:a-f]+)(?:/\d+)?"
+    r"(?:\s+[\d.]+)?\s+standby\s+(?P<secondary>[\d.:a-f]+)",
+    re.IGNORECASE,
+)
 _VSX = re.compile(r"^vsx\s*$", re.IGNORECASE)
 _MLAG = re.compile(r"^mlag\s+configuration\s*$", re.IGNORECASE)
 _VPC = re.compile(r"^vpc\s+domain\s+(\d+)\s*$", re.IGNORECASE)
@@ -132,7 +143,22 @@ def _asa(text: str) -> ParsedHaPair | None:
             link = re.search(_ASA_LINK.pattern, text, re.IGNORECASE | re.MULTILINE)
             if link:
                 pair.link = link.group(2)
+            pair.peer_address = _asa_peer(text, pair.role, link.group(1) if link else None)
             return pair
+    return None
+
+
+def _asa_peer(text: str, role: str | None, link_name: str | None) -> str | None:
+    """failover 用の口の、相手側の住所。primary なら standby の住所、secondary なら前の住所。
+
+    Stateful 用に別の口（`failover link`）の住所も同じ形で書くので、failover 用の口の
+    名前（`failover lan interface` の名前）が分かるときはそれに合う行だけを見る。
+    """
+    for raw in text.splitlines():
+        found = _ASA_LINK_IP.match(raw.strip())
+        if not found or (link_name and found.group("name") != link_name):
+            continue
+        return found.group("secondary") if role == "primary" else found.group("primary")
     return None
 
 
