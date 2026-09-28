@@ -371,3 +371,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 5つとも公式の書き方どおりに読む。VLAN の番号は `set vlans <名前> vlan-id <番号>` で引き、無いときだけ
   名前の数字を使う（これまでの動きを残すため）。試験は `tests/test_multicast.py`。
 - 未確認のまま: Arista、NEC QX、Aruba CX のマルチキャストの書き方。
+
+## AOS-CX の候補 RP と帯の口の IGMP を読めていなかった（2026-09-29 JST）
+
+- 確かめた資料: AOS-CX Multicast Guide（10.09 / 10.10 / 10.15）の「IGMP configuration example」「PIM-SM configuration
+  example」「Configuring an RP」、CLI Bank の router pim。
+- 起きていたこと:
+  - AOS-CX は候補方式を `router pim` の中に `rp-candidate` / `bsr-candidate` と書く。`ip pim` で始まる行しか見て
+    いなかったので、候補方式で組んだ機器に「RP が決まっていません」と出ていた。
+  - AOS-CX は帯の口（`interface vlan2`）で `ip igmp enable` にすると、その帯の querier になれる（IGMPv3 では既定で
+    有効）。これを見ていなかったので、querier が居る帯にも「querier が居ない」と出ていた。
+  - 帯の中の `ip igmp snooping disable` を読んでいなかった。
+- 直したこと: 3つとも公式の書き方どおりに読む。帯の口の IGMP は、スヌーピングを入れた帯にだけ querier として
+  付ける（帯の口があるだけでスヌーピングの帯を作らない）。試験は `tests/test_multicast.py`。
+- 未確認のまま: Arista、NEC QX のマルチキャストの書き方。
