@@ -9,9 +9,20 @@
 
 - F5 BIG-IP `ltm virtual` / `ltm pool` / `ltm monitor`（tmsh の保存形式）
 - FortiGate `config firewall vip` の `type server-load-balance`
-- A10 / Cisco ACE 系の `slb` `virtual-server` `server-farm`
+- A10 Thunder（ACOS）の `slb server` / `slb service-group` / `slb virtual-server`
 
 判断はしない。判断は loadbalancereview.py の仕事。
+
+出典（2026-09-29 JST に確認）
+- F5: BIG-IP TMSH Manual の「ltm virtual」（destination の IPv4 `a.b.c.d:port` と
+  IPv6 `a:b:c:d:e:f:g:h.port`、`disabled`）と「ltm pool」（members の `node_name:port`、
+  `address`、`session user-disabled`、`state user-down`、`load-balancing-mode`、`monitor`）
+- A10: vThunder Installation Guide（GCP）の SLB の設定例と、ARM テンプレートの
+  「Verify Deployment」の show running-config（`member s1 80`、字下げした
+  `port 80 http` と `service-group sg80`、`use-if-ip`）
+- FortiGate の realservers の書き方は未確認（既存の試験の形のまま）
+- A10 の受け口は、口（port）ごとに別のサービスグループを結べる。ここでは最後の
+  口だけを持つ（ParsedVirtualServer が口を1つしか持たないため）
 """
 
 from __future__ import annotations
@@ -96,9 +107,12 @@ def has_any(text: str) -> bool:
 # ---------------------------------------------------------------------------
 
 _F5_HEAD = re.compile(r"^ltm\s+(virtual|pool|monitor)\s+(?:\S+\s+)??(\S+)\s*\{\s*$", re.IGNORECASE)
-_F5_DEST = re.compile(r"^\s*destination\s+(\S+?)(?::(\S+))?\s*$", re.IGNORECASE)
+_F5_DEST = re.compile(r"^\s*destination\s+(\S+)\s*$", re.IGNORECASE)
 _F5_POOL = re.compile(r"^\s*pool\s+(\S+)\s*$", re.IGNORECASE)
-_F5_MEMBER = re.compile(r"^\s*(\S+?):(\S+)\s*\{\s*$")
+#: `/Common/web1:80 {`、IPv6 は `/Common/2001:db8::1.80 {`。分け方は _f5_endpoint
+_F5_MEMBER = re.compile(r"^\s*(\S+[:.][\w-]+)\s*\{\s*$")
+#: ポートの位置に来るもの。番号か、サービス名（http、any など）
+_F5_PORT = re.compile(r"^[\w-]+$")
 _F5_MONITOR = re.compile(r"^\s*monitor\s+(.+?)\s*$", re.IGNORECASE)
 _F5_METHOD = re.compile(r"^\s*load-balancing-mode\s+(\S+)\s*$", re.IGNORECASE)
 _F5_ADDRESS = re.compile(r"^\s*address\s+(\S+)\s*$", re.IGNORECASE)
@@ -109,6 +123,25 @@ _F5_STOPPED = re.compile(r"^\s*(?:session\s+user-disabled|state\s+user-down)\s*$
 def _f5_name(raw: str) -> str:
     """/Common/web_pool を web_pool として扱う。区画は判断に効かない。"""
     return raw.rsplit("/", 1)[-1]
+
+
+def _f5_endpoint(raw: str) -> tuple[str, str | None]:
+    """`アドレス:ポート` を分ける。IPv6 はコロンを含むので `アドレス.ポート` と書かれる。
+
+    出典: F5 BIG-IP TMSH Manual「ltm virtual」の destination
+    （The format for "ipv4" is a.b.c.d[:port]. The format for an "ipv6" address is
+    a:b:c:d:e:f:g:h[.port]）。
+    """
+    text = _f5_name(raw)
+    if text.count(":") >= 2:
+        address, dot, port = text.rpartition(".")
+        if dot and ":" in address and _F5_PORT.match(port):
+            return address, port
+        return text, None
+    address, colon, port = text.rpartition(":")
+    if colon and address:
+        return address, port
+    return text, None
 
 
 def parse_f5(text: str, found: ParsedLoadBalance) -> None:
@@ -134,8 +167,8 @@ def parse_f5(text: str, found: ParsedLoadBalance) -> None:
             if kind == "pool" and depth >= 2:
                 entry = _F5_MEMBER.match(line)
                 if entry:
-                    label = _f5_name(entry.group(1))
-                    member = ParsedMember(address=label, name=label, port=entry.group(2))
+                    label, port = _f5_endpoint(entry.group(1))
+                    member = ParsedMember(address=label, name=label, port=port)
                     assert pool is not None
                     pool.members.append(member)
                     member_depth = depth
@@ -152,8 +185,7 @@ def parse_f5(text: str, found: ParsedLoadBalance) -> None:
             if virtual is not None and depth == 1:
                 destination = _F5_DEST.match(line)
                 if destination:
-                    virtual.address = _f5_name(destination.group(1))
-                    virtual.port = destination.group(2)
+                    virtual.address, virtual.port = _f5_endpoint(destination.group(1))
                 pool_ref = _F5_POOL.match(line)
                 if pool_ref:
                     virtual.pool = _f5_name(pool_ref.group(1))
@@ -267,7 +299,9 @@ def _fortios_members(text: str, found: ParsedLoadBalance) -> None:
 
 _SLB_SERVER = re.compile(r"^slb\s+server\s+(\S+)\s+(\S+)\s*$", re.IGNORECASE)
 _SLB_GROUP = re.compile(r"^slb\s+service-group\s+(\S+)(?:\s+(\S+))?\s*$", re.IGNORECASE)
-_SLB_VIRTUAL = re.compile(r"^slb\s+virtual-server\s+(\S+)(?:\s+(\S+))?\s*$", re.IGNORECASE)
+#: `slb virtual-server vip 10.0.2.9`。受け口のアドレスを口から借りる
+#: `slb virtual-server vip use-if-ip ethernet 1` もある（アドレスは Config に出ない）
+_SLB_VIRTUAL = re.compile(r"^slb\s+virtual-server\s+(\S+)(?:\s+(.+?))?\s*$", re.IGNORECASE)
 
 
 def parse_slb(text: str, found: ParsedLoadBalance) -> None:
@@ -290,7 +324,9 @@ def parse_slb(text: str, found: ParsedLoadBalance) -> None:
             continue
         vs = _SLB_VIRTUAL.match(stripped)
         if vs:
-            virtual = ParsedVirtualServer(name=vs.group(1), address=vs.group(2))
+            rest = (vs.group(2) or "").split()
+            address = rest[0] if rest and rest[0].lower() != "use-if-ip" else None
+            virtual = ParsedVirtualServer(name=vs.group(1), address=address)
             found.virtual_servers.append(virtual)
             group = None
             continue

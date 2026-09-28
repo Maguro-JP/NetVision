@@ -319,3 +319,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 3つとも公式の書式どおりに読む。preferred・bidir・override は範囲から外す。`enable vlan` は IGMP-snooping の
   囲みの中だけで読む。試験は `tests/test_multicast.py`。
 - 未確認のまま: NX-OS、Arista、Junos、NEC QX、Aruba CX のマルチキャストの書き方。
+
+## F5 の IPv6 と A10 の use-if-ip を読み違えていた（2026-09-29 JST）
+
+- 確かめた資料: F5 BIG-IP TMSH Manual の「ltm virtual」「ltm pool」、A10「Installing vThunder on GCP」と
+  ARM テンプレートの「Verify Deployment」の show running-config。
+- 起きていたこと:
+  - F5 は IPv6 のアドレスとポートを `.` で区切る（`2001:db8::10.443`）。最初のコロンで切っていたので、受け口は
+    アドレス `2001`、ポート `db8::10.443` になっていた。プールのメンバーも同じ。
+  - A10 の `slb virtual-server vip use-if-ip ethernet 1`（口のアドレスを借りる受け口）は、行の形が合わず
+    受け口として拾えていなかった。
+- 直したこと: F5 は `:` が2つ以上ある（IPv6）ときは最後の `.` でポートを分ける。A10 は `use-if-ip` の受け口を
+  アドレス無しで持つ。試験は `tests/test_loadbalance.py`。
+- 未確認のまま: FortiGate の realservers の書き方。
