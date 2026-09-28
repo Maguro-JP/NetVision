@@ -22,7 +22,11 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
 - H3C: IGMP snooping configuration / commands（Comware 7）の
   `igmp-snooping`（全体で入れて囲みに入る）、`enable vlan 2 to 10`、
   VLAN ビューの `igmp-snooping enable` / `igmp-snooping querier`
-- NX-OS、Arista、Junos、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
+- NX-OS: Cisco Nexus 9000 Series NX-OS Multicast Routing Configuration Guide
+  （7.x / 10.2(x) / 10.3(x)）「Configuring IGMP Snooping」の設定例
+  （`vlan configuration 2` の囲みの中の `ip igmp snooping`、
+  `ip igmp snooping querier 172.20.52.106`、`ip igmp snooping querier-timeout 300`）
+- Arista、Junos、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
 """
 
 from __future__ import annotations
@@ -109,8 +113,9 @@ _CANDIDATE = re.compile(
 )
 #: `interface Vlan10` と、番号を離して書く流儀（AOS-CX の `interface vlan 10`）
 _INTERFACE = re.compile(r"^interface\s+(\S+(?:\s+\d+(?:/\d+)*)?)\s*$", re.IGNORECASE)
-#: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）
-_VLAN_BLOCK = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
+#: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）。
+#: NX-OS は `vlan configuration 2`（`10,20-22` のように並べても書ける）
+_VLAN_BLOCK = re.compile(r"^vlan\s+(?:configuration\s+)?([\d,\-]+)\s*$", re.IGNORECASE)
 #: Arista `router pim sparse`、AOS-CX `router pim`
 _PIM_BLOCK = re.compile(r"^router\s+pim\b", re.IGNORECASE)
 #: Cisco `ip pim sparse-mode`、Arista `pim ipv4 sparse-mode`、
@@ -126,7 +131,10 @@ _SNOOP_VLAN = re.compile(
     r"^\s*(?P<no>no\s+)?ip\s+igmp\s+snooping\s+vlan\s+(?P<vlan>\d+)(?:\s+(?P<rest>.+))?$",
     re.IGNORECASE,
 )
-_QUERIER_GLOBAL = re.compile(r"^\s*ip\s+igmp\s+snooping\s+querier\b", re.IGNORECASE)
+#: `querier-timeout` などの設定値の行は querier を置く行ではない。`\b` だと `-` の前でも切れる
+_QUERIER_GLOBAL = re.compile(r"^ip\s+igmp\s+snooping\s+querier(?:\s|$)", re.IGNORECASE)
+_QUERIER_IN_VLAN = re.compile(r"^\s+ip\s+igmp\s+snooping\s+querier(?:\s|$)", re.IGNORECASE)
+_QUERIER_WORD = re.compile(r"^querier(?:\s|$)", re.IGNORECASE)
 
 
 _SCOPE_WORDS = re.compile(r"^(?:group-list|access-list|acl|prefix-list)\s+", re.IGNORECASE)
@@ -150,6 +158,19 @@ def _mode(word: str) -> str:
     return "dense" if lowered.startswith("dense") else "sparse"
 
 
+def _vlan_numbers(text: str) -> list[int]:
+    """`2`、`10,20-22` を帯の番号に開く。"""
+    numbers: list[int] = []
+    for part in text.split(","):
+        start, _, end = part.partition("-")
+        if not start.isdigit() or (end and not end.isdigit()):
+            continue
+        last = int(end) if end else int(start)
+        if int(start) <= last <= 4094:
+            numbers.extend(range(int(start), last + 1))
+    return numbers
+
+
 def _vlan(found: ParsedMulticast, number: int) -> ParsedSnoopVlan:
     for item in found.vlans:
         if item.vlan == number:
@@ -162,28 +183,29 @@ def _vlan(found: ParsedMulticast, number: int) -> ParsedSnoopVlan:
 def parse_cisco(text: str, found: ParsedMulticast) -> None:
     """Cisco IOS / NX-OS / Arista の書き方。"""
     interface: str | None = None
-    vlan: int | None = None
+    #: いま居る帯の囲み（`vlan 10`、NX-OS の `vlan configuration 10,20`）
+    vlans: list[int] = []
     pim_block = False
     global_querier = False
     for raw in text.splitlines():
         line = raw.rstrip()
         head = _INTERFACE.match(line)
         if head:
-            interface, vlan, pim_block = head.group(1), None, False
+            interface, vlans, pim_block = head.group(1), [], False
             continue
         in_vlan = _VLAN_BLOCK.match(line)
         if in_vlan:
             # どの帯の話かを覚えるだけ。ここで作ってしまうと、ただの VLAN の
             # 定義がスヌーピングの設定に化ける
             interface, pim_block = None, False
-            vlan = int(in_vlan.group(1))
+            vlans = _vlan_numbers(in_vlan.group(1))
             continue
         if _PIM_BLOCK.match(line):
-            interface, vlan, pim_block = None, None, True
+            interface, vlans, pim_block = None, [], True
             found.routing = True
             continue
         if line and not line.startswith((" ", "\t")):
-            interface, vlan, pim_block = None, None, False
+            interface, vlans, pim_block = None, [], False
 
         if _ROUTING.match(line):
             found.routing = True
@@ -215,24 +237,31 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
             item = _vlan(found, int(snoop_vlan.group("vlan")))
             rest = (snoop_vlan.group("rest") or "").lower()
             if snoop_vlan.group("no"):
-                if rest.startswith("querier"):
+                if _QUERIER_WORD.match(rest):
                     item.querier = False
-                else:
+                elif not rest:
                     item.enabled = False
-            elif rest.startswith("querier"):
+            elif _QUERIER_WORD.match(rest):
                 item.querier = True
             continue
         if _SNOOP_OFF.match(line):
-            found.snooping = False
+            if vlans:
+                # 帯の囲みの中の `no ip igmp snooping` は、その帯だけを止める
+                for number in vlans:
+                    _vlan(found, number).enabled = False
+            else:
+                found.snooping = False
             continue
         if _SNOOP_ON.match(line):
-            if vlan is None:
-                found.snooping = True
+            if vlans:
+                for number in vlans:
+                    _vlan(found, number).enabled = True
             else:
-                _vlan(found, vlan).enabled = True
+                found.snooping = True
             continue
-        if re.match(r"^\s*ip\s+igmp\s+snooping\s+querier\b", line, re.IGNORECASE) and vlan:
-            _vlan(found, vlan).querier = True
+        if vlans and _QUERIER_IN_VLAN.match(line):
+            for number in vlans:
+                _vlan(found, number).querier = True
 
     if global_querier:
         for item in found.vlans:

@@ -351,3 +351,52 @@ pim
         ("10.110.0.7", "myacl"),
         ("10.110.0.8", None),
     ]
+
+
+NXOS_SNOOP = """hostname nx-01
+ip igmp snooping
+vlan 1-3
+vlan configuration 2
+  ip igmp snooping
+  ip igmp snooping fast-leave
+  ip igmp snooping querier 172.20.52.106
+  ip igmp snooping querier-timeout 300
+vlan configuration 3
+  no ip igmp snooping
+"""
+
+
+def test_nxos_vlan_configuration_is_read():
+    """NX-OS は帯ごとの設定を `vlan configuration 2` の囲みの中に書く。
+
+    出典: Cisco Nexus 9000 Series NX-OS Multicast Routing Configuration Guide
+    （7.x / 10.2(x) / 10.3(x)）「Configuring IGMP Snooping」の Configuration Examples。
+    """
+    found = multicast.parse(NXOS_SNOOP, "cisco")
+    assert found.snooping is True
+    states = {item.vlan: (item.enabled, item.querier) for item in found.vlans}
+    assert states == {2: (True, True), 3: (False, False)}
+
+
+def test_querier_timeout_is_not_a_querier():
+    """`querier-timeout` は待ち時間の設定で、querier を置く行ではない。"""
+    text = """hostname nx-01
+vlan configuration 5
+  ip igmp snooping
+  ip igmp snooping querier-timeout 300
+"""
+    found = multicast.parse(text, "cisco")
+    assert [(item.vlan, item.querier) for item in found.vlans] == [(5, False)]
+
+
+def test_a_vlan_configuration_range_is_opened():
+    text = """hostname nx-01
+vlan configuration 10,20-21
+  ip igmp snooping querier 10.0.0.9
+"""
+    found = multicast.parse(text, "cisco")
+    assert sorted((item.vlan, item.querier) for item in found.vlans) == [
+        (10, True),
+        (20, True),
+        (21, True),
+    ]
