@@ -292,3 +292,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `irf member N priority M` が2台分以上あるときだけ組とする。優先度はいちばん大きい値を持つ。
   試験は `tests/test_hareview.py`（既存の試験は公式の形の2台分に直した）。
 - 同じ形の見落とし: StackWise（#90）と同じ。「1台の中で組む仕組み」は、メンバーが2台以上書かれているかで判定する。
+
+## 組む前の VRP スイッチを iStack のスタックと読んでいた（2026-09-28 JST）
+
+- 確かめた資料: Huawei「CloudEngine 8800, 6800, and 5800 V200R023C00 Configuration Guide - Virtualization」の「Example for
+  Establishing a Stack of Two Switches」と、CloudEngine Troubleshooting Guide。
+- 起きていたこと: `stack` の塊か `stack member N priority` が1行でもあればスタックとしていた。組む前のスイッチにも `stack`
+  の塊があり1台分の行が書かれるので、冗長でない機器が冗長構成に見えていた。既存の試験も1台分の行で期待していた。
+- 直したこと: `stack member N domain|priority` が2台分以上あるときだけスタックとする。組の番号は domain、優先度は最大。
+  試験は `tests/test_hareview.py`（既存の試験は公式の形の2台分に直した）。
+- これで HA ペアの読み手の8つの仕組みは、すべて公式の資料で確かめた。1台の中で組む仕組み（StackWise・IRF・iStack）は
+  3つとも同じ見落としがあった。
