@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from app.services import configparse
 from app.services.configparse.base import Vendor
+from app.services.configparse.ifname import normalize
 
 _SHOW = "\n".join(
     [
@@ -113,3 +114,48 @@ def test_the_summary_table_does_not_claim_the_radio_is_open() -> None:
     titles = [item.title for item in wirelessreview.review(parsed)]
     assert not [title for title in titles if "誰でも入れます" in title]
     assert [title for title in titles if "読めません" in title]
+
+
+#: 公式の作例の形。WLC Port and Interface Command Reference 7.4、
+#: Mobility Express Command Reference 8.10、「Configure VLANs on Wireless LAN Controllers」
+OFFICIAL_INTERFACES = """(Cisco Controller) >show interface summary
+Number of Interfaces.......................... 7
+
+Interface Name                   Port Vlan Id  IP Address      Type    Ap Mgr Guest
+-------------------------------- ---- -------- --------------- ------- ------ -----
+management                       1    untagged 192.168.1.11    Static  Yes    No
+dyn59                            LAG  59       9.10.59.66      Dynamic No     No
+redundancy-port                  -    untagged 0.0.0.0         Static  No     No
+service-port                     N/A  N/A      2.2.2.2         Static  No     No
+virtual                          N/A  N/A      1.2.3.4         Static  No     No
+vlan 81                          1    81       192.168.81.46   Dynamic No     No
+171                              1    171      192.168.171.30  Dynamic No     No
+"""
+
+
+def _official_ports():
+    # 名前は別の処理で揃えられる（management → Management、vlan 81 → Vlan81）。
+    # ここでは揃え方を見ないので、揃えた後の鍵で引く
+    return {i.key: i for i in configparse.parse(OFFICIAL_INTERFACES).interfaces}
+
+
+def _port(name: str):
+    return _official_ports()[normalize(name)]
+
+
+def test_every_row_of_the_official_table_is_a_port():
+    """`untagged`・`N/A` の行を読まないと、管理の口そのものが台帳から消える。"""
+    names = ["management", "dyn59", "redundancy-port", "service-port", "virtual", "vlan 81", "171"]
+    assert set(_official_ports()) == {normalize(name) for name in names}
+
+
+def test_an_untagged_port_has_its_address_but_no_vlan_number():
+    port = _port("management")
+    assert port.ip_address == "192.168.1.11"
+    assert port.vlan is None
+
+
+def test_a_name_with_a_space_keeps_its_vlan():
+    assert _port("vlan 81").vlan == 81
+    assert _port("171").vlan == 171
+    assert _port("dyn59").vlan == 59

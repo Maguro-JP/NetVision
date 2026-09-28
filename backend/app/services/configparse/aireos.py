@@ -12,6 +12,13 @@ AireOS は設定ファイルを持ち出す形が現場に馴染まないので�
 - `show interface summary` … 口の名前・VLAN・アドレス
 - `show wlan summary` … 電波の名前（SSID）と、載せている口
 - `show ap summary` … ぶら下がっている AP の名前・型番・アドレス
+
+出典: Cisco「Wireless LAN Controller Port and Interface Command Reference, Release 7.4」の
+`show interface summary` の作例（`management 1 untagged …`、`service-port N/A N/A …`）と、
+「Cisco Mobility Express Command Reference, Release 8.10」の Ports and Interfaces Commands の
+作例（`management LAG 56 …`、`redundancy-port - untagged …`）。名前に空白が入る
+`vlan 81` は、同社の技術資料「Configure VLANs on Wireless LAN Controllers」の出力で確かめた。
+表番号は無い。`show wlan summary`・`show ap summary`・`show sysinfo` の列は未確認。
 """
 
 from __future__ import annotations
@@ -32,11 +39,13 @@ _FIELD = re.compile(r"^([A-Za-z][\w'’ /()\.-]*?)\.{3,}\s*(.*)$", re.MULTILINE)
 _BANNER = re.compile(r"\(Cisco Controller\)|Cisco Controller\b|AireOS", re.IGNORECASE)
 _PID = re.compile(r"^PID:\s*([\w-]+)\s*,.*?SN:\s*(\S+?)\s*$", re.IGNORECASE | re.MULTILINE)
 
-#: `show interface summary` の行。名前・ポート番号・VLAN・アドレス
+#: `show interface summary` の行。名前・ポート番号・VLAN・アドレス。
+#: ポートは番号のほか `LAG`・`-`・`N/A`、VLAN は番号のほか `untagged`・`N/A` が入る。
+#: 名前には空白が入ることがある（`vlan 81`）
 _INTERFACE_ROW = re.compile(
-    r"^(?P<name>[\w-]+)\s+(?P<port>\d+|LAG|--)\s+(?P<vlan>\d+)\s+"
-    r"(?P<address>\d+\.\d+\.\d+\.\d+)\s+",
-    re.MULTILINE,
+    r"^(?P<name>[\w-]+(?: [\w-]+)?)\s+(?P<port>\d+|LAG|-{1,2}|N/A)\s+"
+    r"(?P<vlan>\d+|untagged|N/A)\s+(?P<address>\d+\.\d+\.\d+\.\d+)\s+",
+    re.MULTILINE | re.IGNORECASE,
 )
 #: `show wlan summary` の行。`1  Corp / Corp-WiFi  Enabled  management`
 _WLAN_ROW = re.compile(
@@ -93,7 +102,9 @@ def _read_interfaces(text: str, fields: dict[str, str], parsed: ParsedConfig) ->
         if name.lower() in ("interface", "name"):
             continue
         interface = parsed.add_interface(ParsedInterface(name=name, mode="routed"))
-        interface.vlan = int(row.group("vlan")) or None
+        vlan = row.group("vlan")
+        # `untagged` はタグを付けない（VLAN 番号を持たない）、`N/A` は VLAN に載らない口
+        interface.vlan = int(vlan) or None if vlan.isdigit() else None
         interface.ip_address = row.group("address")
 
     address = fields.get("IP Address")
