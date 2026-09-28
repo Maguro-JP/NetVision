@@ -29,7 +29,12 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   Stack Manager and High Availability Commands（`switch provision` は global configuration、
   `switch priority` は EXEC）、「Cisco IOS XE 17 - Stacking」、技術資料「Create and Manage Catalyst
   3750 Switch Stacks」（3750 の `switch priority` は global configuration）
-- Aruba VSX・IRF・iStack / CSS は未確認
+- Aruba VSX: HPE Aruba Networking「AOS-CX VSX Guide」10.06「Configuring the two aggregate
+  VSX switches」と 10.09「Configuring core 1 and core 2 for VSX」（`vsx` の下の
+  `role primary|secondary`・`inter-switch-link lag N`・
+  `keepalive peer <相手> source <自分> [vrf <名前>]`）、Aruba Developer Hub の構成例の
+  `show running-config`（`system-mac` を2台で同じにする）
+- IRF・iStack / CSS は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
