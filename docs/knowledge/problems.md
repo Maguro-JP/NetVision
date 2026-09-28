@@ -260,3 +260,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   secondary に付く（同ガイドの説明）ので、自分の役割の反対側を相手のアドレスとして持つ。Stateful 用の口
   （`failover link`）の行と取り違えないよう、`failover lan interface` の名前に合う行だけを見る。試験は
   `tests/test_hareview.py`。
+
+## FortiGate HA で、入れ子より後ろの優先度とハートビート線を落としていた（2026-09-28 JST）
+
+- 確かめた資料: Fortinet「FortiOS CLI Reference」の `config system ha`（7.0.1・7.2.7・7.4.2）。
+- 起きていたこと: `config system ha` を字下げで読み、中の入れ子（`config ha-mgmt-interfaces` など）の `end` で読み終えていた。
+  入れ子より後ろの `set hbdev`・`set priority` が抜け、2台の優先度が同じかどうかの確かめが働かなかった。
+- 直したこと: 入れ子の深さを数え、`config system ha` の直下の行だけを読む。`config vcluster` の中の `set priority`
+  （仮想クラスターの優先度）を機器の優先度と取り違えない。試験は `tests/test_hareview.py`。
+- 同じ形の見落とし: FortiGate の口の読み手でも、入れ子の `end` で読み終える不具合があった（#82）。FortiOS の
+  入れ子は `fortitext.blocks` か深さを数える形で読む。
