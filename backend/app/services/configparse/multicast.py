@@ -9,7 +9,20 @@
   L3 が居ない帯でこれをやると、数分後に配信が止まる
 
 読めるのは Cisco IOS / NX-OS、Arista、Junos（set 形式）、NEC QX、
-Aruba CX の書き方。判断はしない。判断は multicastreview.py の仕事。
+Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastreview.py の仕事。
+
+出典（2026-09-28 JST に確認）
+- Cisco IOS: Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 9600)
+  「IP Multicast Routing Commands」の ip pim rp-address
+  （`ip pim [vrf X] rp-address A [access-list] [override] [bidir]`）と、
+  IP Multicast Configuration Guide「Configuring Basic IP Multicast」
+- Huawei: S300/S500/S2700/S5700/S6700 V200R024C00 Command Reference の
+  igmp-snooping querier enable（VLAN ビュー）と static-rp (IPv4)
+  （`static-rp A [acl 番号 | acl-name 名前] [preferred]`）
+- H3C: IGMP snooping configuration / commands（Comware 7）の
+  `igmp-snooping`（全体で入れて囲みに入る）、`enable vlan 2 to 10`、
+  VLAN ビューの `igmp-snooping enable` / `igmp-snooping querier`
+- NX-OS、Arista、Junos、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
 """
 
 from __future__ import annotations
@@ -124,7 +137,9 @@ def _scope(text: str | None) -> str | None:
     if not text:
         return None
     cleaned = _SCOPE_WORDS.sub("", text.strip())
-    cleaned = re.sub(r"\boverride\b", "", cleaned, flags=re.IGNORECASE).strip()
+    # override は静的を優先する印、bidir は双方向 PIM の印。どちらも範囲ではない
+    cleaned = re.sub(r"\b(?:override|bidir)\b", "", cleaned, flags=re.IGNORECASE)
+    cleaned = " ".join(cleaned.split())
     return cleaned or None
 
 
@@ -274,35 +289,81 @@ def parse_junos(text: str, found: ParsedMulticast) -> None:
 
 _CW_ROUTING = re.compile(r"^\s*multicast\s+routing\b", re.IGNORECASE)
 _CW_PIM = re.compile(r"^\s*pim\s+(sm|dm)\s*$", re.IGNORECASE)
-_CW_STATIC_RP = re.compile(r"^\s*static-rp\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+#: `static-rp 10.1.1.1`、`static-rp 10.1.1.1 2001 preferred`、
+#: `static-rp 10.1.1.1 acl-name myacl preferred`。後ろは _cw_rp_scope で読む
+_CW_STATIC_RP = re.compile(r"^\s*static-rp\s+(\S+)(?:\s+(.+))?$", re.IGNORECASE)
 _CW_CANDIDATE = re.compile(r"^\s*c-(?:rp|bsr)\s+\S+", re.IGNORECASE)
 _CW_SNOOP = re.compile(r"^\s*igmp-snooping\s+enable\s*$", re.IGNORECASE)
-_CW_QUERIER = re.compile(r"^\s*igmp-snooping\s+querier\s*$", re.IGNORECASE)
+#: H3C / NEC QX は `igmp-snooping querier`、Huawei は `igmp-snooping querier enable`
+_CW_QUERIER = re.compile(r"^\s*igmp-snooping\s+querier(?:\s+enable)?\s*$", re.IGNORECASE)
+#: H3C の `igmp-snooping` だけの行。全体で入れて、IGMP-snooping の囲みに入る
+_CW_SNOOP_VIEW = re.compile(r"^igmp-snooping\s*$", re.IGNORECASE)
+#: その囲みの中の `enable vlan 2 to 10`（帯をまとめて入れる）
+_CW_ENABLE_VLANS = re.compile(r"^\s+enable\s+vlan\s+(.+)$", re.IGNORECASE)
 _CW_VLAN = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
 _CW_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
-#: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）
-_VLAN_BLOCK = re.compile(r"^vlan\s+(\d+)\s*$", re.IGNORECASE)
-#: Arista `router pim sparse`、AOS-CX `router pim`
-_PIM_BLOCK = re.compile(r"^router\s+pim\b", re.IGNORECASE)
+#: 範囲に数えない飾りの語。preferred は静的 RP を優先する印、bidir は双方向 PIM
+_CW_RP_FLAGS = {"preferred", "bidir"}
+
+
+def _cw_rp_scope(rest: str | None) -> str | None:
+    """`static-rp` の後ろから、対象の範囲（ACL の番号か名前）だけを取り出す。"""
+    words = [word for word in (rest or "").split() if word.lower() not in _CW_RP_FLAGS]
+    if words and words[0].lower() == "acl-name":
+        words = words[1:]
+    return words[0] if words else None
+
+
+def _vlan_list(text: str) -> list[int]:
+    """`2 to 10`、`2 5 to 8` を帯の番号に開く。"""
+    numbers: list[int] = []
+    words = text.split()
+    index = 0
+    while index < len(words):
+        word = words[index]
+        if not word.isdigit():
+            break
+        ranged = index + 2 < len(words) and words[index + 1].lower() == "to"
+        if ranged and words[index + 2].isdigit():
+            start, end = int(word), int(words[index + 2])
+            if start <= end <= 4094:
+                numbers.extend(range(start, end + 1))
+            index += 3
+            continue
+        numbers.append(int(word))
+        index += 1
+    return numbers
 
 
 def parse_undoform(text: str, found: ParsedMulticast) -> None:
     """NEC QX と Aruba CX。帯の中に書く流儀を見る。"""
     interface: str | None = None
     vlan: int | None = None
+    snoop_view = False
     for raw in text.splitlines():
         line = raw.rstrip()
         head = _CW_INTERFACE.match(line)
         if head:
-            interface, vlan = head.group(1), None
+            interface, vlan, snoop_view = head.group(1), None, False
             continue
         in_vlan = _CW_VLAN.match(line)
         if in_vlan:
-            interface, vlan = None, int(in_vlan.group(1))
+            interface, vlan, snoop_view = None, int(in_vlan.group(1)), False
+            continue
+        if _CW_SNOOP_VIEW.match(line):
+            interface, vlan, snoop_view = None, None, True
+            found.snooping = True
             continue
         if line and not line.startswith((" ", "\t")):
+            snoop_view = False
             if not _CW_ROUTING.match(line) and not line.lower().startswith("pim"):
                 interface, vlan = None, None
+
+        many = _CW_ENABLE_VLANS.match(line) if snoop_view else None
+        if many:
+            for number in _vlan_list(many.group(1)):
+                _vlan(found, number).enabled = True
+            continue
 
         if _CW_ROUTING.match(line):
             found.routing = True
@@ -317,7 +378,7 @@ def parse_undoform(text: str, found: ParsedMulticast) -> None:
             continue
         rp = _CW_STATIC_RP.match(line)
         if rp:
-            found.rps.append(ParsedRp(address=rp.group(1), scope=rp.group(2)))
+            found.rps.append(ParsedRp(address=rp.group(1), scope=_cw_rp_scope(rp.group(2))))
             continue
         if _CW_CANDIDATE.match(line):
             found.dynamic_rp = True

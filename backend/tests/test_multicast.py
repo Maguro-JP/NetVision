@@ -5,6 +5,7 @@
 """
 
 from app.services import configparse, multicastreview
+from app.services.configparse import multicast
 from app.services.reviewnote import HIGH, LOW, MEDIUM
 
 
@@ -256,3 +257,97 @@ vlan 10
 """
     parsed = configparse.parse(text)
     assert [item.vlan for item in parsed.multicast.vlans] == [10]
+
+
+def test_bidir_is_not_mistaken_for_a_group_range():
+    """Cisco: `ip pim rp-address A [access-list] [override] [bidir]`。
+
+    出典: Command Reference, Cisco IOS XE Gibraltar 16.12.x (Catalyst 9600)
+    「IP Multicast Routing Commands」の ip pim rp-address。
+    """
+    text = CISCO + "ip pim rp-address 10.0.0.2 5 override bidir\n"
+    assert configparse.parse(text).multicast.rps[0].scope == "5"
+
+
+HUAWEI_SNOOP = """sysname sw-01
+#
+igmp-snooping enable
+#
+vlan 3
+ igmp-snooping enable
+ igmp-snooping querier enable
+#
+vlan 4
+ igmp-snooping enable
+#
+"""
+
+
+def test_huawei_querier_is_read():
+    """Huawei は VLAN ビューに `igmp-snooping querier enable` と書く。
+
+    出典: Huawei S300/S500/S2700/S5700/S6700 V200R024C00 Command Reference の
+    igmp-snooping querier enable（例は `vlan 3` の中）。
+    """
+    found = multicast.parse(HUAWEI_SNOOP, "undoform")
+    assert found.snooping is True
+    assert {item.vlan: item.querier for item in found.vlans} == {3: True, 4: False}
+
+
+def test_h3c_turns_on_snooping_for_many_vlans_at_once():
+    """H3C は `igmp-snooping` で全体に入れ、囲みの中の `enable vlan 2 to 10` で帯に入れる。
+
+    出典: H3C「IGMP snooping commands」（Comware 7）の igmp-snooping と
+    enable (IGMP-snooping view)、VLAN ビューの igmp-snooping querier。
+    """
+    text = """sysname h3c-01
+#
+igmp-snooping
+ enable vlan 2 5 to 7
+#
+vlan 5
+ igmp-snooping querier
+#
+"""
+    found = multicast.parse(text, "undoform")
+    assert found.snooping is True
+    assert sorted(item.vlan for item in found.vlans) == [2, 5, 6, 7]
+    assert [item.vlan for item in found.vlans if item.querier] == [5]
+
+
+def test_enable_vlan_outside_the_snooping_view_is_not_read():
+    """`enable vlan` は IGMP-snooping の囲みの中だけ。他の囲みの同じ語は拾わない。"""
+    text = """sysname h3c-01
+#
+igmp-snooping
+#
+stp region-configuration
+ enable vlan 10
+#
+"""
+    found = multicast.parse(text, "undoform")
+    assert found is None or found.vlans == []
+
+
+def test_huawei_static_rp_keeps_only_the_acl():
+    """`static-rp A [acl 番号 | acl-name 名前] [preferred]`。preferred は範囲ではない。
+
+    出典: Huawei V200R024C00 / V200R025C00 Command Reference の static-rp (IPv4)。
+    """
+    text = """multicast routing-enable
+#
+interface Vlanif10
+ pim sm
+#
+pim
+ static-rp 10.110.0.6 2001 preferred
+ static-rp 10.110.0.7 acl-name myacl preferred
+ static-rp 10.110.0.8 preferred
+#
+"""
+    found = multicast.parse(text, "undoform")
+    assert [(rp.address, rp.scope) for rp in found.rps] == [
+        ("10.110.0.6", "2001"),
+        ("10.110.0.7", "myacl"),
+        ("10.110.0.8", None),
+    ]
