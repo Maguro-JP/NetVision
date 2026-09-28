@@ -32,7 +32,11 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
   （`vlan 2` の中の `ip igmp snooping enable`、`interface vlan2` の `ip igmp enable`
   （IGMPv3 では querier が既定で有効）、`router pim` の中の `rp-address A [グループ] [override]`、
   `rp-candidate` / `bsr-candidate`、口の `ip pim-sparse enable`）
-- Arista、NEC QX の書き方は未確認（既存の試験の形のまま）
+- Arista: EOS 4.36.2F User Manual「Protocol Independent Multicast」
+  （`router pim sparse-mode` の `ipv4` の中の `rp address A [グループ] [override]`、
+  `rp candidate vlan 24 ...`、`router pim bsr`、口の `pim ipv4 sparse-mode`）。
+  IGMP スヌーピングの書き方は未確認
+- NEC QX の書き方は未確認（既存の試験の形のまま）
 """
 
 from __future__ import annotations
@@ -108,17 +112,22 @@ _RP = re.compile(
     r"^\s*ip\s+pim\s+(?:vrf\s+\S+\s+)?rp-address\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",
     re.IGNORECASE,
 )
-#: Arista `ip rp address 10.0.0.9`、AOS-CX `rp-address 10.0.0.9`。
+#: Arista `rp address 10.0.0.9`（`router pim sparse-mode` の `ipv4` の中）、
+#: AOS-CX `rp-address 10.0.0.9`。`ip rp address` は既存の試験の形（未確認）。
 #: どちらも router pim の中に書くので、字下がりの中だけで見る
 _RP_BLOCK = re.compile(
-    r"^\s+(?:ip\s+rp\s+address|rp-address)\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",
+    r"^\s+(?:ip\s+rp\s+address|rp\s+address|rp-address)\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",
     re.IGNORECASE,
 )
 _CANDIDATE = re.compile(
     r"^\s*ip\s+pim\s+(?:bsr-candidate|rp-candidate|send-rp-announce|autorp)\b", re.IGNORECASE
 )
-#: AOS-CX は `router pim` の中に `rp-candidate source-ip-interface ...` と書く
-_CANDIDATE_IN_PIM = re.compile(r"^\s+(?:bsr-candidate|rp-candidate)\b", re.IGNORECASE)
+#: AOS-CX は `router pim` の中に `rp-candidate source-ip-interface ...` と書く。
+#: Arista は `router pim sparse-mode` の中に `rp candidate vlan 24 ...`、
+#: `router pim bsr` の中に `candidate vlan 24 ...` と書く
+_CANDIDATE_IN_PIM = re.compile(
+    r"^\s+(?:bsr-candidate|rp-candidate|rp\s+candidate|candidate)\b", re.IGNORECASE
+)
 #: AOS-CX の帯の口（`interface vlan2`）で IGMP を入れると、その帯の querier になれる
 _SVI_NUMBER = re.compile(r"^vlan\s*(\d+)$", re.IGNORECASE)
 _SVI_IGMP = re.compile(r"^\s+ip\s+igmp\s+(?:enable|querier)(?:\s|$)", re.IGNORECASE)
