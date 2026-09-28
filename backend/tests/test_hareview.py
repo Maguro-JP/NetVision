@@ -222,3 +222,34 @@ def test_the_asa_peer_is_read_from_an_ipv6_failover_link():
         "failover interface ip folink 2001:a0a:b00::a0a:b70/64 standby 2001:a0a:b00::a0a:b71\n"
     )
     assert pair.peer_address == "2001:a0a:b00::a0a:b71"
+
+
+def test_a_vpc_domain_from_the_official_example_is_read():
+    """公式の作例の vPC を読む。
+
+    Cisco「Understand and Configure Nexus 9000 vPC with Best Practices」の
+    show running-config vpc の形。
+
+    `virtual peer-link destination` を keepalive の相手と取り違えず、別の口の `vpc 20` を
+    peer-link と取り違えない。
+    """
+    pair = hapair.parse(
+        "feature vpc\n"
+        "vpc domain 1\n"
+        "  peer-switch\n"
+        "  role priority 150\n"
+        "  peer-keepalive destination 10.201.182.26 source 10.201.182.25\n"
+        "  virtual peer-link destination 10.1.1.3 source 10.1.1.4 dscp 56\n"
+        "  peer-gateway\n"
+        "\n"
+        "interface port-channel10\n"
+        "  vpc peer-link\n"
+        "\n"
+        "interface port-channel20\n"
+        "  vpc 20\n"
+    )
+    assert pair.kind == "vpc"
+    assert pair.group == "1"
+    assert pair.priority == 150
+    assert pair.peer_address == "10.201.182.26"
+    assert pair.link == "port-channel10"
