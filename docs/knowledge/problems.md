@@ -230,3 +230,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 公式の作例に出る値をすべて読む。`untagged`・`N/A` は VLAN 番号を持たない口として読む。
   試験は `tests/test_configparse_aireos.py`。
 - 未確認: `show wlan summary`・`show ap summary`・`show sysinfo` の列（公式の作例に当たれていない）。
+
+## Arista の route-target を読んでいなかった（2026-09-28 JST）
+
+- 確かめた資料: Arista「EOS User Manual」の「Inter-VRF Local Route Leaking」、Cisco「MPLS: Layer 3 VPNs Configuration
+  Guide, Cisco IOS XE 17」、Juniper「Junos OS CLI Reference」の vrf-target。
+- 起きていたこと: 読み手の説明には「Cisco / Arista」とあったが、Arista は route-target を `router bgp` の下の
+  `vrf X` の下に `route-target export vpn-ipv4 10:10` の形で書くので、1つも読めていなかった。仮に読めても
+  `vpn-ipv4` を値として拾う形だった。Junos の `vrf-target auto` も `auto` を値として持っていた。
+- 直したこと: `router bgp` の下の `vrf` を読み、アドレスファミリーの語を飛ばす。値は `A:B` の形のものだけを持つ。
+  試験は `tests/test_routetarget.py`。
+- 未確認: NEC QX の `vpn-target`（公式の資料に当たれていない）。
