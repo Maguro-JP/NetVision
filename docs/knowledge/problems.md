@@ -303,3 +303,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `tests/test_hareview.py`（既存の試験は公式の形の2台分に直した）。
 - これで HA ペアの読み手の8つの仕組みは、すべて公式の資料で確かめた。1台の中で組む仕組み（StackWise・IRF・iStack）は
   3つとも同じ見落としがあった。
+
+## Huawei・H3C の IGMP スヌーピングと RP の範囲を読み違えていた（2026-09-28 JST）
+
+- 確かめた資料: Huawei S300/S500/S2700/S5700/S6700 V200R024C00 Command Reference の igmp-snooping querier enable と
+  static-rp (IPv4)、H3C「IGMP snooping configuration / commands」（Comware 7）、Cisco IOS XE 16.12.x Command Reference の
+  ip pim rp-address。
+- 起きていたこと:
+  - Huawei の querier は `igmp-snooping querier enable` と書くのに、`igmp-snooping querier` で終わる行だけを見ていた。
+    querier を入れた帯にも「querier が居ない」と出ていた。
+  - H3C は `igmp-snooping` だけの行で全体に入れ、囲みの中の `enable vlan 2 to 10` で帯をまとめて入れる。どちらも拾えず、
+    スヌーピングを使っていないことになっていた。
+  - Huawei の `static-rp A preferred` は preferred を、`static-rp A acl-name 名前` は acl-name を範囲として持っていた。
+    Cisco の `ip pim rp-address A 5 bidir` も `5 bidir` を範囲にしていた。
+- 直したこと: 3つとも公式の書式どおりに読む。preferred・bidir・override は範囲から外す。`enable vlan` は IGMP-snooping の
+  囲みの中だけで読む。試験は `tests/test_multicast.py`。
+- 未確認のまま: NX-OS、Arista、Junos、NEC QX、Aruba CX のマルチキャストの書き方。
