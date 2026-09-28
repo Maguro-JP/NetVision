@@ -189,3 +189,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   「状態が読めません」から、それぞれの意味に直した。試験は `tests/test_mib.py`。
 - 気づいたこと: RFC 2863 の ifDescr は「メーカー・製品名・版を含む説明」と定義されていて、ポートの名前は
   ifName（ifXEntry 1）。多くの機器は ifDescr にも名前を入れるので、今は変えていない。
+
+### AOS-S の読み手がスタックの口の範囲と口の側の VLAN を読まなかった（2026-09-28）
+
+- 確かめた資料: HPE Aruba「VLAN and Link-Aggregation Interoperability ArubaOS-Switch and Cisco IOS」の作例と、
+  Airheads コミュニティの作例。表番号は未確認。
+- 直したこと: `untagged 1/1-1/4`・`A1-A3`・`trunk 1/49-1/50 trk1 lacp` のように前置きの付いた範囲を
+  1つの口として持っていたので、前置きが両端で同じときだけ開くようにした。前置きの違う `1/49-2/1` は開かない。
+  `interface Trk1` の下の `tagged vlan 20-22,25`・`untagged vlan 30` も読むようにした。試験は
+  `tests/test_configparse_arubaos.py`。
