@@ -16,7 +16,12 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   （`failover lan unit primary`・`failover lan interface`・`failover interface ip … standby …`）と、
   技術資料「Configure ASA Active/Active Failover in Firepower 4100 Series」。前の住所は primary に、
   standby の住所は secondary に付く（同ガイドの説明）
-- FortiGate HA・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise は未確認
+- Cisco vPC: Cisco「Cisco Nexus 3000 Series NX-OS Interfaces Configuration Guide,
+  Release 5.0(3)U4(1)」の「Configuring Virtual Port Channels」（`vpc domain`・
+  `peer-keepalive destination`・`role priority`・`vpc peer-link`。role priority は
+  小さいほうが primary）と、技術資料「Understand Virtual Port Channel (vPC) Enhancements」
+  「Understand and Configure Nexus 9000 vPC with Best Practices」の `show running-config vpc`
+- FortiGate HA・Aruba VSX・IRF・iStack / CSS・StackWise は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
