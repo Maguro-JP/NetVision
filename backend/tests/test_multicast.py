@@ -400,3 +400,40 @@ vlan configuration 10,20-21
         (20, True),
         (21, True),
     ]
+
+
+JUNOS_L3 = """set system host-name core-01
+set vlans SALES vlan-id 110
+set vlans ENG vlan-id 120
+set protocols pim rp local family inet address 172.18.19.254
+set protocols pim interface all mode sparse
+set protocols pim interface fxp0.0 disable
+set protocols igmp-snooping vlan SALES l2-querier source-address 10.1.10.2
+set protocols igmp-snooping vlan ENG
+"""
+
+
+def test_junos_follows_the_official_form():
+    """Junos の RP を自分で持つ書き方、管理口の除外、VLAN 名での snooping。
+
+    出典: Juniper「Enterprise Layer 3 Multicast」Implementation Guide の設定例と、
+    Junos OS「IGMP Snooping Overview」の `l2-querier source-address`。
+    """
+    found = multicast.parse(JUNOS_L3, "juniper")
+    assert [rp.address for rp in found.rps] == ["172.18.19.254"]
+    assert found.dynamic_rp is False
+    assert [item.name for item in found.pim_interfaces] == ["all"]
+    states = {item.vlan: item.querier for item in found.vlans}
+    assert states == {110: True, 120: False}
+
+
+def test_junos_snooping_turned_off_on_a_legacy_ex_switch():
+    """旧 EX（ELS でない）は既定で全帯が有効で、`disable` で帯ごとに止める。
+
+    出典: Junos OS「vlan (IGMP Snooping)」の disable。
+    """
+    text = """set vlans CAMERA vlan-id 30
+set protocols igmp-snooping vlan CAMERA disable
+"""
+    found = multicast.parse(text, "juniper")
+    assert [(item.vlan, item.enabled) for item in found.vlans] == [(30, False)]

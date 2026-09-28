@@ -357,3 +357,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `vlan configuration 10,20-22` の囲みを帯の番号に開いて読む。querier は語の後ろが空白か行末の
   ときだけ。囲みの中の `no ip igmp snooping` はその帯だけを止める。試験は `tests/test_multicast.py`。
 - 未確認のまま: Arista、Junos、NEC QX、Aruba CX のマルチキャストの書き方。
+
+## Junos のマルチキャストを公式の形の一部しか読めていなかった（2026-09-29 JST）
+
+- 確かめた資料: Juniper「Enterprise Layer 3 Multicast」Implementation Guide、Junos OS「IGMP Snooping Overview」
+  「vlan (IGMP Snooping)」。
+- 起きていたこと:
+  - `set protocols pim interface fxp0.0 disable`（管理口を PIM から外す行）を、PIM の口として数えていた。
+  - `rp local family inet address A`（この機器が RP）を「候補方式で他が決める」扱いにし、RP の住所を持っていなかった。
+  - 1つの VLAN の `l2-querier` で、全部の VLAN に querier が居ることにしていた。
+  - igmp-snooping の VLAN は名前で書くのに、名前の中の数字を VLAN 番号にしていた（`SALES` は拾えず、`floor2` は 2 になる）。
+  - 旧 EX の `igmp-snooping vlan X disable` を「有効」と読んでいた。
+- 直したこと: 5つとも公式の書き方どおりに読む。VLAN の番号は `set vlans <名前> vlan-id <番号>` で引き、無いときだけ
+  名前の数字を使う（これまでの動きを残すため）。試験は `tests/test_multicast.py`。
+- 未確認のまま: Arista、NEC QX、Aruba CX のマルチキャストの書き方。
