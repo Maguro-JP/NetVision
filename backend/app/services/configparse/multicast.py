@@ -27,7 +27,12 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
   （`vlan configuration 2` の囲みの中の `ip igmp snooping`、
   `ip igmp snooping querier 172.20.52.106`、`ip igmp snooping querier-timeout 300`）
 - Junos: parse_junos の docstring に書いた資料
-- Arista、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
+- Aruba CX: AOS-CX Multicast Guide（10.09 / 10.10 / 10.15）の「IGMP configuration example」
+  「PIM-SM configuration example」「Configuring an RP」と CLI Bank の router pim
+  （`vlan 2` の中の `ip igmp snooping enable`、`interface vlan2` の `ip igmp enable`
+  （IGMPv3 では querier が既定で有効）、`router pim` の中の `rp-address A [グループ] [override]`、
+  `rp-candidate` / `bsr-candidate`、口の `ip pim-sparse enable`）
+- Arista、NEC QX の書き方は未確認（既存の試験の形のまま）
 """
 
 from __future__ import annotations
@@ -112,6 +117,12 @@ _RP_BLOCK = re.compile(
 _CANDIDATE = re.compile(
     r"^\s*ip\s+pim\s+(?:bsr-candidate|rp-candidate|send-rp-announce|autorp)\b", re.IGNORECASE
 )
+#: AOS-CX は `router pim` の中に `rp-candidate source-ip-interface ...` と書く
+_CANDIDATE_IN_PIM = re.compile(r"^\s+(?:bsr-candidate|rp-candidate)\b", re.IGNORECASE)
+#: AOS-CX の帯の口（`interface vlan2`）で IGMP を入れると、その帯の querier になれる
+_SVI_NUMBER = re.compile(r"^vlan\s*(\d+)$", re.IGNORECASE)
+_SVI_IGMP = re.compile(r"^\s+ip\s+igmp\s+(?:enable|querier)(?:\s|$)", re.IGNORECASE)
+_SNOOP_DISABLE = re.compile(r"^\s+ip\s+igmp\s+snooping\s+disable\s*$", re.IGNORECASE)
 #: `interface Vlan10` と、番号を離して書く流儀（AOS-CX の `interface vlan 10`）
 _INTERFACE = re.compile(r"^interface\s+(\S+(?:\s+\d+(?:/\d+)*)?)\s*$", re.IGNORECASE)
 #: 帯の中に書く流儀（AOS-CX の `vlan 10` / `ip igmp snooping enable`）。
@@ -188,6 +199,8 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
     vlans: list[int] = []
     pim_block = False
     global_querier = False
+    #: IGMP を入れた帯の口の番号。後で、スヌーピングを入れた帯の querier に数える
+    igmp_svis: set[int] = set()
     for raw in text.splitlines():
         line = raw.rstrip()
         head = _INTERFACE.match(line)
@@ -221,8 +234,16 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
                 ParsedRp(address=in_pim.group("address"), scope=_scope(in_pim.group("scope")))
             )
             continue
-        if _CANDIDATE.match(line):
+        if _CANDIDATE.match(line) or (pim_block and _CANDIDATE_IN_PIM.match(line)):
             found.dynamic_rp = True
+            continue
+        svi = _SVI_NUMBER.match(interface or "")
+        if svi and _SVI_IGMP.match(line):
+            igmp_svis.add(int(svi.group(1)))
+            continue
+        if vlans and _SNOOP_DISABLE.match(line):
+            for number in vlans:
+                _vlan(found, number).enabled = False
             continue
         mode = _PIM_MODE.match(line)
         if mode and interface:
@@ -264,6 +285,9 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
             for number in vlans:
                 _vlan(found, number).querier = True
 
+    for item in found.vlans:
+        if item.vlan in igmp_svis:
+            item.querier = True
     if global_querier:
         for item in found.vlans:
             item.querier = True

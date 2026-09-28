@@ -437,3 +437,46 @@ set protocols igmp-snooping vlan CAMERA disable
 """
     found = multicast.parse(text, "juniper")
     assert [(item.vlan, item.enabled) for item in found.vlans] == [(30, False)]
+
+
+def test_aoscx_candidate_rp_inside_router_pim_is_read():
+    """AOS-CX は候補方式を `router pim` の中に書く。RP が決まっていない扱いにしない。
+
+    出典: AOS-CX Multicast Guide 10.09「PIM-SM configuration example」の Router1。
+    """
+    text = """router pim
+    enable
+    bsr-candidate source-ip-interface 1/1/1
+    rp-candidate source-ip-interface 1/1/1
+    rp-candidate group-prefix 224.0.0.0/4
+interface 1/1/1
+    ip address 10.10.10.1/24
+    ip pim-sparse enable
+interface 1/1/2
+    ip address 20.20.20.1/24
+    ip pim-sparse enable
+"""
+    found = multicast.parse(text, "aruba")
+    assert found.dynamic_rp is True
+    assert found.rps == []
+
+
+def test_aoscx_igmp_on_the_vlan_interface_is_the_querier():
+    """AOS-CX は帯の口で `ip igmp enable` にすると、その帯の querier になれる。
+
+    出典: AOS-CX 10.10 Multicast Guide（4100i/6000/6100）の IGMP の章
+    （Enabling IGMP allows the router to become querier）と「IGMP configuration example」。
+    """
+    text = """vlan 2
+    ip igmp snooping enable
+vlan 3
+    ip igmp snooping enable
+vlan 4
+    ip igmp snooping disable
+interface vlan2
+    ip address 20.1.1.1/24
+    ip igmp enable
+"""
+    found = multicast.parse(text, "aruba")
+    states = {item.vlan: (item.enabled, item.querier) for item in found.vlans}
+    assert states == {2: (True, True), 3: (True, False), 4: (False, False)}
