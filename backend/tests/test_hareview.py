@@ -123,7 +123,10 @@ def test_a_stack_is_read_as_one_failure_domain() -> None:
             "sysname hw1",
             "#",
             "stack",
+            " stack member 1 domain 10",
             " stack member 1 priority 150",
+            " stack member 2 domain 10",
+            " stack member 2 priority 120",
         ]
     )
     catalyst = "\n".join(
@@ -353,3 +356,25 @@ def test_an_irf_fabric_from_the_official_example_is_read():
     )
     pair = hapair.parse(fabric)
     assert (pair.kind, pair.group, pair.priority) == ("irf", "1", 2)
+
+
+def test_a_vrp_switch_before_joining_a_stack_is_not_a_stack():
+    """Huawei「Example for Establishing a Stack of Two Switches」の組む前の設定。
+
+    組む前のスイッチにも `stack` の塊があり、1台分の行だけが書かれる。
+    """
+    single = (
+        "#\nsysname SwitchA\n#\nstack\n #\n"
+        " stack member 1 domain 10\n stack member 1 priority 150\n#\n"
+    )
+    assert hapair.parse(single) is None
+
+
+def test_a_formed_vrp_stack_from_the_official_example_is_read():
+    formed = (
+        "#\nsysname SwitchA\n#\nstack\n #\n"
+        " stack member 1 domain 10\n stack member 1 priority 150\n #\n"
+        " stack member 2 domain 10\n stack member 2 priority 120\n#\n"
+    )
+    pair = hapair.parse(formed)
+    assert (pair.kind, pair.group, pair.priority) == ("stack", "10", 150)

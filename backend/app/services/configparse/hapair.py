@@ -38,7 +38,10 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   Indirectly Connected Members」「S12500 Ethernet Link Aggregation Configuration Examples」の
   Configuration files（組む前の各機器にも `irf member 1 priority 1` があり、組んだあとは全メンバーの
   `irf member N priority M` と `irf domain` が並ぶ。priority の大きいメンバーが master）
-- iStack / CSS は未確認
+- iStack / CSS: Huawei「CloudEngine 8800, 6800, and 5800 V200R023C00 Configuration Guide -
+  Virtualization」の「Example for Establishing a Stack of Two Switches」（組む前の各スイッチの
+  `stack` には1台分、組んだあとの Configuration Files には `stack member 1/2 domain`・
+  `priority` が並ぶ）と、CloudEngine Troubleshooting Guide の同じ形の設定
   （この読み手としては公式の資料に当たれていない）
 """
 
@@ -95,9 +98,8 @@ _IRF_PRIORITY = re.compile(
     r"^\s*irf\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
 )
 # VRP の iStack / CSS。`stack` の下に `stack member N priority M` と書く
-_STACK_HEAD = re.compile(r"^stack\s*$", re.IGNORECASE | re.MULTILINE)
-_STACK_PRIORITY = re.compile(
-    r"^\s*stack\s+member\s+(\d+)\s+priority\s+(\d+)", re.IGNORECASE | re.MULTILINE
+_STACK_MEMBER = re.compile(
+    r"^\s*stack\s+member\s+(\d+)\s+(domain|priority)\s+(\d+)", re.IGNORECASE | re.MULTILINE
 )
 # Catalyst の StackWise。`switch N provision 型番` が台数、`switch N priority M` が主
 _STACKWISE_MEMBER = re.compile(
@@ -313,19 +315,27 @@ def _irf(text: str) -> ParsedHaPair | None:
 
 
 def _stack(text: str) -> ParsedHaPair | None:
-    """VRP の iStack / CSS。`stack` の塊で組み、`stack member` で主を決める。
+    """VRP の iStack / CSS。`stack member N domain|priority` が2台分以上あるときだけ組とみなす。
 
-    組んであるスイッチは、外から見ると1台になる。読めないと、落ちる範囲を
-    数えるときに別々の機器として数えてしまう。
+    組んであるスイッチは、外から見ると1台になる。組む前の各スイッチの設定にも `stack` の
+    塊があり、`stack member 1 priority 150` のように1台分だけが書かれる（Huawei の iStack の
+    設定例）。組んだあとの設定には全メンバーの行が並ぶ。1台分で組と読むと、冗長でない機器を
+    冗長に見せてしまう。`domain` は組の番号、優先度は大きいほうが master になるので最大を持つ。
     """
-    head = _STACK_HEAD.search(text)
-    priority = _STACK_PRIORITY.search(text)
-    if head is None and priority is None:
+    members: set[str] = set()
+    domain: str | None = None
+    priorities: list[int] = []
+    for number, key, value in _STACK_MEMBER.findall(text):
+        members.add(number)
+        if key.lower() == "domain":
+            domain = domain or value
+        else:
+            priorities.append(int(value))
+    if len(members) < 2:
         return None
-    pair = ParsedHaPair(kind="stack")
-    if priority:
-        pair.group = priority.group(1)
-        pair.priority = int(priority.group(2))
+    pair = ParsedHaPair(kind="stack", group=domain)
+    if priorities:
+        pair.priority = max(priorities)
     return pair
 
 
