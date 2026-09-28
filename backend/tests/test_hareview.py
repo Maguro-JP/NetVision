@@ -253,3 +253,34 @@ def test_a_vpc_domain_from_the_official_example_is_read():
     assert pair.priority == 150
     assert pair.peer_address == "10.201.182.26"
     assert pair.link == "port-channel10"
+
+
+def test_fortigate_ha_settings_after_a_nested_block_are_read():
+    """FortiOS CLI Reference の `config system ha` には入れ子が入る。
+
+    入れ子の `end` で読み終えると、後ろの `set hbdev`・`set priority` が抜ける。
+    `config vcluster` の中の `set priority` は仮想クラスターの優先度なので、機器の優先度にしない。
+    """
+    pair = hapair.parse(
+        "config system ha\n"
+        "    set group-id 10\n"
+        '    set group-name "FGT-HA"\n'
+        "    set mode a-p\n"
+        "    config ha-mgmt-interfaces\n"
+        "        edit 1\n"
+        '            set interface "port5"\n'
+        "            set gateway 10.0.0.1\n"
+        "        next\n"
+        "    end\n"
+        '    set hbdev "port3" 50 "port4" 50\n'
+        "    set priority 200\n"
+        "    config vcluster\n"
+        "        edit 2\n"
+        "            set priority 50\n"
+        "        next\n"
+        "    end\n"
+        "end\n"
+    )
+    assert pair.group == "FGT-HA"
+    assert pair.link == "port3"
+    assert pair.priority == 200

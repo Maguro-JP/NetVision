@@ -21,7 +21,11 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   `peer-keepalive destination`・`role priority`・`vpc peer-link`。role priority は
   小さいほうが primary）と、技術資料「Understand Virtual Port Channel (vPC) Enhancements」
   「Understand and Configure Nexus 9000 vPC with Best Practices」の `show running-config vpc`
-- FortiGate HA・Aruba VSX・IRF・iStack / CSS・StackWise は未確認
+- FortiGate HA: Fortinet「FortiOS CLI Reference」の `config system ha`（7.0.1・7.2.7・7.4.2）。
+  `group-id`・`group-name`・`mode`・`hbdev`・`priority` と、中の入れ子
+  （`config ha-mgmt-interfaces`・`config unicast-peers`・`config vcluster`）。
+  `config vcluster` の中の `set priority` は、その仮想クラスターの優先度で、機器の優先度ではない
+- Aruba VSX・IRF・iStack / CSS・StackWise は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
@@ -117,8 +121,36 @@ def _block(text: str, head: re.Pattern[str]) -> list[str]:
     return []
 
 
+def _forti_ha_lines(text: str) -> list[str]:
+    """`config system ha` の直下の行。入れ子の中の行は含めない。
+
+    中には `config ha-mgmt-interfaces`・`config unicast-peers`・`config vcluster` が
+    入れ子で入り、それぞれ `end` で閉じる。字下げで読むと入れ子の `end` で読み終えて
+    後ろの `set priority`・`set hbdev` を落とし、深さを数えないと `config vcluster` の中の
+    `set priority`（その仮想クラスターだけの優先度）を機器の優先度と取り違える。
+    """
+    lines: list[str] = []
+    inside = False
+    depth = 0
+    for raw in text.splitlines():
+        line = raw.strip()
+        if not inside:
+            inside = bool(_FORTI_HA.match(raw))
+            continue
+        lowered = line.lower()
+        if lowered.startswith("config "):
+            depth += 1
+        elif lowered == "end":
+            if not depth:
+                break
+            depth -= 1
+        elif not depth and line:
+            lines.append(line)
+    return lines
+
+
 def _fortigate(text: str) -> ParsedHaPair | None:
-    body = _block(text, _FORTI_HA)
+    body = _forti_ha_lines(text)
     if not body:
         return None
     pair = ParsedHaPair(kind="fortigate-ha")
