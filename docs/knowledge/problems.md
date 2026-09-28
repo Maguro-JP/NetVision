@@ -206,3 +206,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `interface port1.0.1-1.0.4` を1つの口として持ち、間の口が抜けていた。口1つずつに開くようにした。
   `vlan 20-22 state enable` のように名前を付けずに作った VLAN も読むようにした。試験は `tests/test_configparse_allied.py`。
 - 未確認: `<vid-range>` にカンマ区切りが使えるか、経路と `access-list hardware` の書き方（コマンドリファレンスに当たれていない）。
+
+## FortiGate の口の中の入れ子で、後ろの口が全部抜けていた（2026-09-28 JST）
+
+- 確かめた資料: Fortinet「FortiOS CLI Reference」の `config system interface`（7.0.1・7.6.6）と、
+  Administration Guide「IPv6 quick start」の作例。
+- 起きていたこと: 口の中の `config ipv6 … end` の `end` を、`config system interface` の終わりと取り違えて
+  読み終えていた。その口より後ろの口が全部台帳から抜け、同じ口の `set role` も読まれていなかった。
+  `config secondaryip` の `set ip` で1つ目の住所を上書きし、その中の `edit 1` を口として作ってもいた。
+- 直したこと: 口の読み手で入れ子の深さを数え、口そのものの高さの行だけを読む。ほかの節の読み手
+  （`fortitext.blocks`）は元から数えていて、口の読み手だけが自前の数え方だった。試験は
+  `tests/test_configparse_fortinet.py`。
+- 気づいたこと: `vlan10` という口の名前が、別の処理で `Vlan10` に揃えられる。今回は触っていない。
