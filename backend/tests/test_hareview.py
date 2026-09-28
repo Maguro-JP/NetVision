@@ -63,7 +63,8 @@ def test_each_vendor_is_read_into_the_same_shape():
     assert hapair.parse(VSX_P).role == "primary"
     assert hapair.parse(MLAG).group == "DC1"
     assert hapair.parse(MLAG).peer_address == "10.255.0.2"
-    irf = hapair.parse("irf domain 10\nirf member 1 priority 32\n")
+    # 組んだあとの IRF は全メンバーの priority が並ぶ（H3C の IRF の設定例）
+    irf = hapair.parse("irf domain 10\nirf member 1 priority 32\nirf member 2 priority 1\n")
     assert (irf.kind, irf.group, irf.priority) == ("irf", "10", 32)
     assert hapair.parse("hostname sw\ninterface Gi1\n") is None
 
@@ -320,3 +321,35 @@ def test_a_vsx_pair_from_the_official_example_is_read():
     assert primary.peer_address == "192.168.1.101"
     assert secondary.peer_address == "192.168.1.100"
     assert primary.link == "lag 1"
+
+
+def test_a_standalone_comware_device_is_not_an_irf_fabric():
+    """H3C「Automatic IRF Setup Configuration Examples」の組む前の設定。
+
+    単体の機器にも `irf member 1 priority 1` が書かれる。1台分で組と読むと、
+    冗長でない機器を冗長に見せてしまう。
+    """
+    single = (
+        " irf mac-address persistent timer\n"
+        " irf auto-update enable\n"
+        " undo irf link-delay\n"
+        " irf member 1 priority 1\n"
+        "irf-port 1/2\n"
+        " port group mdc 1 interface HundredGigE3/0/1 mode enhanced\n"
+    )
+    assert hapair.parse(single) is None
+
+
+def test_an_irf_fabric_from_the_official_example_is_read():
+    fabric = (
+        " irf domain 1\n"
+        " irf mac-address persistent timer\n"
+        " irf member 1 priority 2\n"
+        " irf member 2 priority 1\n"
+        "irf-port 1/1\n"
+        " port group interface Ten-GigabitEthernet1/1/0/1 mode enhanced\n"
+        "irf-port 2/2\n"
+        " port group interface Ten-GigabitEthernet2/1/0/1 mode enhanced\n"
+    )
+    pair = hapair.parse(fabric)
+    assert (pair.kind, pair.group, pair.priority) == ("irf", "1", 2)

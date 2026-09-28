@@ -281,3 +281,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `provision` された機器が2台以上あるときだけスタックとする。優先度は、いちばん大きい値を持つ
   （大きいほうが active に選ばれやすい）。Catalyst 9300 では `switch priority` は EXEC のコマンドで running-config には
   出ない。試験は `tests/test_hareview.py`。
+
+## 単体の Comware 機器を IRF の組と読んでいた（2026-09-28 JST）
+
+- 確かめた資料: H3C「Automatic IRF Setup Configuration Examples」「Example for Configuring IRF Setup with Indirectly Connected
+  Members」「S12500 Ethernet Link Aggregation Configuration Examples」の Configuration files。
+- 起きていたこと: `irf member N priority M` か `irf domain` が1行でもあれば IRF の組としていた。組む前の単体の機器にも
+  `irf member 1 priority 1` が書かれるので、冗長でない機器が冗長構成に見えていた。既存の試験（`irf domain 10` と1台分の
+  priority）も、この誤った前提で書かれていた。
+- 直したこと: `irf member N priority M` が2台分以上あるときだけ組とする。優先度はいちばん大きい値を持つ。
+  試験は `tests/test_hareview.py`（既存の試験は公式の形の2台分に直した）。
+- 同じ形の見落とし: StackWise（#90）と同じ。「1台の中で組む仕組み」は、メンバーが2台以上書かれているかで判定する。
