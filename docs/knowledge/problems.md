@@ -332,3 +332,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: F5 は `:` が2つ以上ある（IPv6）ときは最後の `.` でポートを分ける。A10 は `use-if-ip` の受け口を
   アドレス無しで持つ。試験は `tests/test_loadbalance.py`。
 - 未確認のまま: FortiGate の realservers の書き方。
+
+## FortiGate の realservers を公式の形の一部しか読めていなかった（2026-09-29 JST）
+
+- 確かめた資料: FortiOS CLI Reference（6.4.8 / 7.0.19 / 7.6.4）の config firewall vip。
+- 起きていたこと:
+  - `set type address` と `set address <アドレスオブジェクト名>` で書いた振り分け先は、宛先が空になっていた。
+  - 振り分け先ごとの `set monitor` を見ていなかったので、監視を付けていても「監視が無い」扱いになっていた。
+  - edit を数える位置を囲みで分けていなかった。vip の中の `config ssl-cipher-suites` の `edit 1` を vip の名前と
+    取り違える作りだった。
+- 直したこと: 囲みの並びを積んで、`firewall vip` 直下の edit だけを vip 名とする（VDOM の中でも同じ）。アドレス
+  オブジェクト名と振り分け先ごとの監視を読む。試験は `tests/test_loadbalance.py`。
+- 決めたこと: `set status standby` は止めた扱いにしない。控えとして用意したもので、手で止めたものではないため。

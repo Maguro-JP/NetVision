@@ -20,7 +20,9 @@
 - A10: vThunder Installation Guide（GCP）の SLB の設定例と、ARM テンプレートの
   「Verify Deployment」の show running-config（`member s1 80`、字下げした
   `port 80 http` と `service-group sg80`、`use-if-ip`）
-- FortiGate の realservers の書き方は未確認（既存の試験の形のまま）
+- FortiGate: FortiOS CLI Reference（6.4.8 / 7.0.19 / 7.6.4）の config firewall vip
+  （`type server-load-balance`、`extip`、`extport`、`ldb-method`、`monitor`、
+  入れ子の `config realservers`）
 - A10 の受け口は、口（port）ごとに別のサービスグループを結べる。ここでは最後の
   口だけを持つ（ParsedVirtualServer が口を1つしか持たないため）
 """
@@ -247,7 +249,7 @@ def parse_fortios(text: str, found: ParsedLoadBalance) -> None:
     _fortios_members(text, found)
 
 
-_FG_VIP = re.compile(r'^\s*edit\s+"?([^"]+)"?\s*$', re.IGNORECASE)
+_FG_EDIT = re.compile(r'^\s*edit\s+"?([^"]+)"?\s*$', re.IGNORECASE)
 
 
 def parse_fortios_members(text: str, found: ParsedLoadBalance) -> None:
@@ -255,29 +257,40 @@ def parse_fortios_members(text: str, found: ParsedLoadBalance) -> None:
 
 
 def _fortios_members(text: str, found: ParsedLoadBalance) -> None:
-    """`config realservers` の中の edit を、その vip のプールに足す。"""
+    """`config firewall vip` の各 vip の中の `config realservers` を、その vip のプールに足す。
+
+    出典: FortiOS CLI Reference（6.4.8 / 7.0.19 / 7.6.4）の config firewall vip。
+    realservers は `set type [ip|address]` で、ip なら `set ip`、address なら
+    `set address <アドレスオブジェクト名>` で宛先を書く。`set status` は
+    active / standby / disable。7.0 からは振り分け先ごとに `set monitor` も書ける。
+
+    vip の中には `config ssl-cipher-suites` のように edit を持つ入れ子が他にもある。
+    どの囲みの中の edit かを数えて、vip の名前を取り違えない。
+    """
+    stack: list[str] = []
     vip: str | None = None
-    inside = False
     current: ParsedMember | None = None
     for raw in text.splitlines():
         line = raw.strip()
         lowered = line.lower()
-        if lowered == "config firewall vip":
-            vip = None
-            continue
-        if lowered == "config realservers":
-            inside = True
-            continue
-        if inside and lowered == "end":
-            inside = False
+        if lowered.startswith("config "):
+            stack.append(" ".join(lowered.split()[1:]))
             current = None
             continue
-        if not inside:
-            head = _FG_VIP.match(line)
+        if lowered == "end":
+            if stack:
+                stack.pop()
+            current = None
+            continue
+        # VDOM を使う機器では `config vdom` の中にあるので、末尾だけで見る
+        if stack[-1:] == ["firewall vip"]:
+            head = _FG_EDIT.match(line)
             if head:
                 vip = head.group(1)
             continue
-        if lowered.startswith("edit "):
+        if stack[-2:] != ["firewall vip", "realservers"]:
+            continue
+        if _FG_EDIT.match(line):
             current = ParsedMember(address="")
             pool = found.pool(vip)
             if pool is not None:
@@ -285,12 +298,25 @@ def _fortios_members(text: str, found: ParsedLoadBalance) -> None:
             continue
         if current is None:
             continue
+        words = line.split()
+        value = words[2].strip('"') if len(words) >= 3 else ""
         if lowered.startswith("set ip "):
-            current.address = line.split()[2].strip('"')
+            current.address = value
+        elif lowered.startswith("set address "):
+            # アドレスオブジェクトの名前。実際のアドレスは別の定義にある
+            current.name = value
+            current.address = current.address or value
         elif lowered.startswith("set port "):
-            current.port = line.split()[2].strip('"')
-        elif lowered.startswith("set status ") and "disable" in lowered:
+            current.port = value
+        elif lowered.startswith("set status ") and value.lower() == "disable":
             current.enabled = False
+        elif lowered.startswith("set monitor "):
+            pool = found.pool(vip)
+            if pool is not None:
+                for word in words[2:]:
+                    name = word.strip('"')
+                    if name and name not in pool.monitors:
+                        pool.monitors.append(name)
 
 
 # ---------------------------------------------------------------------------

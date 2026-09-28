@@ -293,3 +293,52 @@ slb virtual-server vip use-if-ip ethernet 1
     virtual = found.virtual_servers[0]
     assert (virtual.name, virtual.address, virtual.pool) == ("vip", None, "http-sg")
     assert [m.address for m in found.pool("http-sg").members] == ["10.33.0.101"]
+
+
+FORTI_ADDRESS_TYPE = """config vdom
+edit root
+config firewall vip
+    edit "web-vip"
+        set type server-load-balance
+        set extip 203.0.113.10
+        set extport 443
+        set ldb-method round-robin
+        config realservers
+            edit 1
+                set type address
+                set address "web-01"
+                set port 443
+                set monitor "https-check"
+            next
+            edit 2
+                set ip 10.1.1.12
+                set port 443
+                set status standby
+            next
+        end
+        config ssl-cipher-suites
+            edit 1
+                set cipher TLS-AES-256-GCM-SHA384
+            next
+        end
+    next
+end
+end
+"""
+
+
+def test_fortigate_realservers_follow_the_official_form():
+    """FortiOS の realservers。宛先はアドレスオブジェクトでも書け、監視は振り分け先ごとにも書ける。
+
+    出典: FortiOS CLI Reference 7.0.19 / 7.6.4 の config firewall vip の config realservers
+    （`set type [ip|address]`、`set address`、`set status [active|standby|disable]`、
+    `set monitor`）。VDOM の中の書き方と、vip の中の別の入れ子（ssl-cipher-suites）も含める。
+    """
+    found = loadbalance.parse(FORTI_ADDRESS_TYPE)
+    pool = found.pool("web-vip")
+    assert [(m.name, m.address, m.port) for m in pool.members] == [
+        ("web-01", "web-01", "443"),
+        (None, "10.1.1.12", "443"),
+    ]
+    assert pool.monitors == ["https-check"]
+    assert found.pool("1") is None
