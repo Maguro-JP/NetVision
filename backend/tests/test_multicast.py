@@ -480,3 +480,40 @@ interface vlan2
     found = multicast.parse(text, "aruba")
     states = {item.vlan: (item.enabled, item.querier) for item in found.vlans}
     assert states == {2: (True, True), 3: (True, False), 4: (False, False)}
+
+
+def test_arista_rp_address_inside_the_ipv4_submode_is_read():
+    """Arista の RP は `router pim sparse-mode` の `ipv4` の中に `rp address` と書く。
+
+    出典: Arista EOS 4.36.2F User Manual「Protocol Independent Multicast」の rp address
+    （`rp address 10.17.255.83 override`、`rp address 10.21.18.23 238.1.12.0/24`）。
+    """
+    text = """router multicast
+   ipv4
+      routing
+router pim sparse-mode
+   ipv4
+      rp address 10.17.255.83 override
+      rp address 10.21.18.23 238.1.12.0/24
+interface Vlan10
+   ip address 10.0.10.1/24
+   pim ipv4 sparse-mode
+"""
+    found = multicast.parse(text, "arista")
+    assert [(rp.address, rp.scope) for rp in found.rps] == [
+        ("10.17.255.83", None),
+        ("10.21.18.23", "238.1.12.0/24"),
+    ]
+    assert not any("決まっていません" in f.title for f in _review(text))
+
+
+def test_arista_candidate_rp_is_read():
+    """出典: Arista EOS 4.36.2F User Manual の rp candidate。"""
+    text = """router pim sparse-mode
+   ipv4
+      rp candidate vlan 24 235.1.1.0/24 priority 48 interval 45
+interface Vlan24
+   pim ipv4 sparse-mode
+"""
+    found = multicast.parse(text, "arista")
+    assert found.dynamic_rp is True

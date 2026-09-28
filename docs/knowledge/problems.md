@@ -385,3 +385,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 3つとも公式の書き方どおりに読む。帯の口の IGMP は、スヌーピングを入れた帯にだけ querier として
   付ける（帯の口があるだけでスヌーピングの帯を作らない）。試験は `tests/test_multicast.py`。
 - 未確認のまま: Arista、NEC QX のマルチキャストの書き方。
+
+## Arista の RP を読めておらず「RP が決まっていません」と出ていた（2026-09-29 JST）
+
+- 確かめた資料: Arista EOS 4.36.2F User Manual「Protocol Independent Multicast」。
+- 起きていたこと:
+  - Arista の静的 RP は `router pim sparse-mode` の `ipv4` の中に `rp address A [グループ] [override]` と書く。読み手は
+    `ip rp address` と `rp-address` しか見ていなかったので、公式の形で書いた RP が読めず「RP が決まっていません」と出ていた。
+  - 候補方式の `rp candidate vlan 24 ...`（`router pim sparse-mode` の中）と `candidate ...`（`router pim bsr` の中）も
+    拾えていなかった。
+- 直したこと: どちらも `router pim` の囲みの中で読む。試験は `tests/test_multicast.py`。
+- 未確認のまま: Arista の IGMP スヌーピングの書き方、既存の試験にある `ip rp address` の形、NEC QX。
