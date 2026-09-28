@@ -344,3 +344,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 囲みの並びを積んで、`firewall vip` 直下の edit だけを vip 名とする（VDOM の中でも同じ）。アドレス
   オブジェクト名と振り分け先ごとの監視を読む。試験は `tests/test_loadbalance.py`。
 - 決めたこと: `set status standby` は止めた扱いにしない。控えとして用意したもので、手で止めたものではないため。
+
+## NX-OS の vlan configuration の囲みを読めていなかった（2026-09-29 JST）
+
+- 確かめた資料: Cisco Nexus 9000 Series NX-OS Multicast Routing Configuration Guide（7.x / 10.2(x) / 10.3(x)）
+  「Configuring IGMP Snooping」。
+- 起きていたこと:
+  - NX-OS は帯ごとのスヌーピングを `vlan configuration 2` の囲みに書く。`vlan 2` の形しか見ていなかったので、
+    帯ごとの設定が拾えていなかった。
+  - `ip igmp snooping querier-timeout 300` を querier の行と読んでいた（`\b` は `-` の前でも切れる）。
+  - 囲みの中の `no ip igmp snooping` を、機器全体でスヌーピングを止めた行と読んでいた。
+- 直したこと: `vlan configuration 10,20-22` の囲みを帯の番号に開いて読む。querier は語の後ろが空白か行末の
+  ときだけ。囲みの中の `no ip igmp snooping` はその帯だけを止める。試験は `tests/test_multicast.py`。
+- 未確認のまま: Arista、Junos、NEC QX、Aruba CX のマルチキャストの書き方。
