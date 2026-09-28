@@ -5,7 +5,6 @@
       "Bash(git pull origin main)",
       "Bash(git fetch:*)",
       "Bash(git branch -D:*)",
-      "Bash(git push origin --delete:*)",
       "mcp__github__merge_pull_request"
     ]
   },

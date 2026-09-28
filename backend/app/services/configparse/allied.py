@@ -6,11 +6,24 @@
 - ポート名が `port1.0.1` / `vlan10` / `po1`（束）の形
 - アドレスと経路が長さ付き（`ip address 10.0.10.1/24`）
 - VLAN の名前は `vlan database` の下に `vlan 10 name USERS` と1行で並ぶ。
-  IOS のように `vlan 10` の下の `name` ではないので、そのままだと名前が入らない
+  IOS のように `vlan 10` の下の `name` ではないので、そのままだと名前が入らない。
+  名前を付けずに `vlan 20-25 state enable` と範囲でまとめて作ることもある
+- 同じ設定の口は `interface port1.0.1-1.0.24` と範囲でまとめて書く
+
+出典: Allied Telesis「VLANs Feature Overview and Configuration Guide」
+（C613-22001-00 REV N）の「Configuring VLANs」p.13〜14。VLAN は
+`vlan <vid> [name <vlan-name>] [state {enable|disable}]` か
+`vlan <vid-range> [state {enable|disable}]` で作る。口の範囲書きは同社
+「Getting Started with AlliedWare Plus」の既定の設定の作例
+（`interface port1.0.1-1.0.24`）。表番号は無い。`<vid-range>` にカンマ区切りが
+使えるかはコマンドリファレンスで未確認なので、`-` と `,` の両方を読む。
+アドレスの長さ付きの書き方（`ip address 192.168.10.1/24`）は同社サポートポータルの
+作例で確かめた。経路の書き方と `access-list hardware` は未確認。
 """
 
 from __future__ import annotations
 
+import copy
 import re
 
 from app.services.configparse import cisco, policy
@@ -23,12 +36,20 @@ from app.services.configparse.base import (
     Vendor,
 )
 from app.services.configparse.routing import to_prefix
+from app.services.configparse.vlanlist import parse_ranges
 
 _VERSION = re.compile(r"AlliedWare Plus.*?(?:version|Version)\s+([\d.\-A-Za-z]+)", re.IGNORECASE)
 _BUILD = re.compile(r"^!?\s*Build name\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _MODEL = re.compile(r"^!?\s*(?:Base|Product)\s+model\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _SERIAL = re.compile(r"^!?\s*Serial number\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _VLAN_LINE = re.compile(r"^vlan\s+(\d+)\s+name\s+(\S+)", re.IGNORECASE)
+#: 名前を付けずに作る形。`vlan 20-25 state enable`、`vlan 30`
+_VLAN_RANGE = re.compile(r"^vlan\s+(?P<vids>[\d,\-]+)(?:\s+state\s+\w+)?\s*$", re.IGNORECASE)
+#: 口の範囲。`port1.0.1-1.0.24`。前の2つ（スタック番号・モジュール番号）が同じときだけ開く
+_PORT_RANGE = re.compile(
+    r"^port(?P<stack>\d+)\.(?P<module>\d+)\.(?P<start>\d+)-(?P=stack)\.(?P=module)\.(?P<end>\d+)$",
+    re.IGNORECASE,
+)
 _IP_ADDRESS = re.compile(r"^ip address\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE)
@@ -76,6 +97,7 @@ def parse(text: str) -> ParsedConfig:
         parsed.serial_number = found.group(1)
 
     _parse_vlan_database(text, parsed)
+    _open_port_ranges(parsed)
     _parse_addresses(text, parsed)
     _parse_routes(text, parsed)
     _parse_hardware_acls(text, parsed)
@@ -89,12 +111,40 @@ def _parse_vlan_database(text: str, parsed: ParsedConfig) -> None:
     IOS の読み手は `vlan 10` を定義として拾うが、名前は次の行の `name` を
     見にいくので入らない。1行で書かれたものをここで入れる。
     """
+    in_database = False
     for raw in text.splitlines():
-        found = _VLAN_LINE.match(raw.strip())
-        if not found:
+        stripped = raw.strip()
+        if not raw.startswith((" ", "\t")):
+            in_database = stripped.lower() == "vlan database"
+        found = _VLAN_LINE.match(stripped)
+        if found:
+            parsed.vlans[int(found.group(1))] = found.group(2)
             continue
-        number = int(found.group(1))
-        parsed.vlans[number] = found.group(2)
+        # 名前の無い形は `vlan database` の下だけで読む。口の下の行と取り違えない
+        bare = _VLAN_RANGE.match(stripped) if in_database else None
+        if bare:
+            for number in parse_ranges(bare.group("vids")):
+                parsed.vlans.setdefault(number, "")
+
+
+def _open_port_ranges(parsed: ParsedConfig) -> None:
+    """`interface port1.0.1-1.0.24` を口1つずつに開く。
+
+    IOS の読み手は範囲を1つの口として持つので、そのままだと台帳にも図にも
+    `port1.0.1-1.0.24` という口が1つだけ出て、間の口が抜ける。
+    """
+    opened: list = []
+    for interface in parsed.interfaces:
+        found = _PORT_RANGE.match(interface.name)
+        if not found or int(found.group("start")) > int(found.group("end")):
+            opened.append(interface)
+            continue
+        head = f"port{found.group('stack')}.{found.group('module')}."
+        for number in range(int(found.group("start")), int(found.group("end")) + 1):
+            port = copy.deepcopy(interface)
+            port.name = f"{head}{number}"
+            opened.append(port)
+    parsed.interfaces = opened
 
 
 def _parse_addresses(text: str, parsed: ParsedConfig) -> None:

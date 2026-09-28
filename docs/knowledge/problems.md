@@ -198,3 +198,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   1つの口として持っていたので、前置きが両端で同じときだけ開くようにした。前置きの違う `1/49-2/1` は開かない。
   `interface Trk1` の下の `tagged vlan 20-22,25`・`untagged vlan 30` も読むようにした。試験は
   `tests/test_configparse_arubaos.py`。
+
+## AlliedWare Plus の範囲書きの口と、名前の無い VLAN が抜けていた（2026-09-28 JST）
+
+- 確かめた資料: Allied Telesis「VLANs Feature Overview and Configuration Guide」（C613-22001-00 REV N）p.13〜14、
+  「Getting Started with AlliedWare Plus」の既定の設定の作例、同社サポートポータルの作例。
+- 直したこと: `interface port1.0.1-1.0.4` を1つの口として持ち、間の口が抜けていた。口1つずつに開くようにした。
+  `vlan 20-22 state enable` のように名前を付けずに作った VLAN も読むようにした。試験は `tests/test_configparse_allied.py`。
+- 未確認: `<vid-range>` にカンマ区切りが使えるか、経路と `access-list hardware` の書き方（コマンドリファレンスに当たれていない）。
