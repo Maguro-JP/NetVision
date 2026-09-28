@@ -14,6 +14,12 @@ add address=10.0.0.1/24 interface=vlan10
 add dst-address=0.0.0.0/0 gateway=10.0.0.254
 ```
 
+出典: MikroTik RouterOS マニュアル（help.mikrotik.com）の「VLAN」（`/interface vlan` の name・
+vlan-id・interface）、「IP Routing」（`/ip route` の dst-address・gateway・distance、
+`/ip address` の address・interface）。2026-09-28 に確認。
+bridge の vlan-filtering と bridge port の pvid は「Bridging and Switching」の章にあるが、
+該当の表まで読めておらず未確認。
+
 行が長いと `\\` で折り返される。折り返しを繋いでから読まないと、
 後ろ半分の値がまるごと落ちる。
 """
@@ -146,7 +152,11 @@ def _address(parsed: ParsedConfig, values: dict[str, str]) -> None:
 
 
 def _route(parsed: ParsedConfig, values: dict[str, str]) -> None:
-    destination = values.get("dst-address")
+    # 既定経路は dst-address を 0.0.0.0/0 にするか、書かずに済ませる
+    # （MikroTik RouterOS マニュアル「IP Routing」の Default Route と、
+    # 作例 `/ip route add gateway=...`）。
+    # 書かない形を読み飛ばすと、いちばん大事な既定経路が抜ける
+    destination = values.get("dst-address") or ("0.0.0.0/0" if values.get("gateway") else None)
     if not destination:
         return
     parsed.routes.append(
