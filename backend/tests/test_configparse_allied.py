@@ -79,3 +79,54 @@ def test_the_lldp_table_gives_the_lines_for_the_diagram(parsed):
     pairs = [(n.local_interface, n.remote_hostname, n.remote_interface) for n in parsed.neighbors]
     assert ("port1.0.1", "core-at-01", "port1.0.24") in pairs
     assert ("port1.0.2", "core-sw-01", "GigabitEthernet1/0/2") in pairs
+
+
+#: 公式の資料の書き方（VLANs Feature Overview and Configuration Guide
+#: C613-22001-00 REV N p.13〜14、Getting Started with AlliedWare Plus の既定の設定）
+OFFICIAL_FORMS = """!
+hostname awplus
+!
+vlan database
+ vlan 10 name TEST
+ vlan 20-22 state enable
+ vlan 30
+!
+interface port1.0.1-1.0.4
+ switchport
+ switchport mode access
+ switchport access vlan 10
+!
+interface port1.0.5
+ switchport mode trunk
+ switchport trunk allowed vlan add 10,20
+!
+interface vlan10
+ ip address 192.168.10.1/24
+!
+end
+"""
+
+
+def _official():
+    return configparse.parse(OFFICIAL_FORMS)
+
+
+def test_vlans_made_without_a_name_are_still_vlans():
+    """`vlan 20-22 state enable` を読まないと、使っている VLAN が未定義に見える。"""
+    assert _official().vlans == {10: "TEST", 20: "", 21: "", 22: "", 30: ""}
+
+
+def test_a_range_of_ports_is_opened_one_by_one():
+    """`port1.0.1-1.0.4` を1つの口として持つと、間の口が台帳から消える。"""
+    ports = {i.name: i for i in _official().interfaces}
+    assert "port1.0.1-1.0.4" not in ports
+    for number in range(1, 5):
+        port = ports[f"port1.0.{number}"]
+        assert port.mode == "access"
+        assert port.vlan == 10
+
+
+def test_the_ports_after_a_range_are_left_as_they_are():
+    ports = {i.name: i for i in _official().interfaces}
+    assert ports["port1.0.5"].trunk_vlans == [10, 20]
+    assert ports["Vlan10"].ip_address == "192.168.10.1/24"
