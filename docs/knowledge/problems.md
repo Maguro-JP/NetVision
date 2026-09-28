@@ -190,7 +190,7 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 気づいたこと: RFC 2863 の ifDescr は「メーカー・製品名・版を含む説明」と定義されていて、ポートの名前は
   ifName（ifXEntry 1）。多くの機器は ifDescr にも名前を入れるので、今は変えていない。
 
-### AOS-S の読み手がスタックの口の範囲と口の側の VLAN を読まなかった（2026-09-28）
+## AOS-S の読み手がスタックの口の範囲と口の側の VLAN を読まなかった（2026-09-28 JST）
 
 - 確かめた資料: HPE Aruba「VLAN and Link-Aggregation Interoperability ArubaOS-Switch and Cisco IOS」の作例と、
   Airheads コミュニティの作例。表番号は未確認。
