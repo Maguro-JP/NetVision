@@ -25,7 +25,11 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   `group-id`・`group-name`・`mode`・`hbdev`・`priority` と、中の入れ子
   （`config ha-mgmt-interfaces`・`config unicast-peers`・`config vcluster`）。
   `config vcluster` の中の `set priority` は、その仮想クラスターの優先度で、機器の優先度ではない
-- Aruba VSX・IRF・iStack / CSS・StackWise は未確認
+- Catalyst StackWise: Cisco「Command Reference, Cisco IOS XE Fuji 16.8.x (Catalyst 9300)」の
+  Stack Manager and High Availability Commands（`switch provision` は global configuration、
+  `switch priority` は EXEC）、「Cisco IOS XE 17 - Stacking」、技術資料「Create and Manage Catalyst
+  3750 Switch Stacks」（3750 の `switch priority` は global configuration）
+- Aruba VSX・IRF・iStack / CSS は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
@@ -313,17 +317,19 @@ def _stack(text: str) -> ParsedHaPair | None:
 
 
 def _stackwise(text: str) -> ParsedHaPair | None:
-    """Catalyst の StackWise。`switch N provision` が台数、`switch N priority` が主。"""
-    members = _STACKWISE_MEMBER.findall(text)
-    priority = _STACKWISE_PRIORITY.search(text)
-    if not members and priority is None:
+    """Catalyst の StackWise。`switch N provision 型番` の台数で組かどうかを決める。
+
+    `provision` は設定の行で running-config に出る。単体の機器にも `switch 1 provision` が
+    自動で作られるので、2台以上あるときだけ組とみなす。`switch N priority M` は、
+    Catalyst 3750 / 1000 では設定の行だが、Catalyst 9300（IOS XE）では EXEC のコマンドで
+    running-config に出ない。優先度の行だけで組とはみなさない（単体の 3750 にも書ける）。
+    優先度は 1〜15 で、大きいほうが active に選ばれやすいので、いちばん大きい値を持つ。
+    """
+    members = {number for number, _model in _STACKWISE_MEMBER.findall(text)}
+    if len(members) < 2:
         return None
-    pair = ParsedHaPair(kind="stackwise")
-    if members:
-        # 何台で組んであるか。1台だけの `provision` は組ではない
-        if len(members) < 2 and priority is None:
-            return None
-        pair.group = str(len(members))
-    if priority:
-        pair.priority = int(priority.group(2))
+    pair = ParsedHaPair(kind="stackwise", group=str(len(members)))
+    priorities = [int(value) for _number, value in _STACKWISE_PRIORITY.findall(text)]
+    if priorities:
+        pair.priority = max(priorities)
     return pair

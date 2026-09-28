@@ -270,3 +270,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （仮想クラスターの優先度）を機器の優先度と取り違えない。試験は `tests/test_hareview.py`。
 - 同じ形の見落とし: FortiGate の口の読み手でも、入れ子の `end` で読み終える不具合があった（#82）。FortiOS の
   入れ子は `fortitext.blocks` か深さを数える形で読む。
+
+## 単体の Catalyst を StackWise のスタックと読んでいた（2026-09-28 JST）
+
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Fuji 16.8.x (Catalyst 9300)」の Stack Manager and High Availability
+  Commands、「Cisco IOS XE 17 - Stacking」、技術資料「Create and Manage Catalyst 3750 Switch Stacks」。
+- 起きていたこと: `switch N priority M` の行があれば、`provision` が1台分でも（無くても）スタックとしていた。単体の
+  3750 にも `switch 1 provision` は自動で作られ、`switch 1 priority` も設定の行として書けるので、冗長でない機器が
+  冗長構成に見えていた。
+- 直したこと: `provision` された機器が2台以上あるときだけスタックとする。優先度は、いちばん大きい値を持つ
+  （大きいほうが active に選ばれやすい）。Catalyst 9300 では `switch priority` は EXEC のコマンドで running-config には
+  出ない。試験は `tests/test_hareview.py`。

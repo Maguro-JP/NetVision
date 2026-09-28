@@ -284,3 +284,14 @@ def test_fortigate_ha_settings_after_a_nested_block_are_read():
     assert pair.group == "FGT-HA"
     assert pair.link == "port3"
     assert pair.priority == 200
+
+
+def test_a_standalone_3750_with_a_priority_is_not_a_stack() -> None:
+    """単体の Catalyst 3750 にも `switch 1 provision` が自動で作られ、`switch 1 priority` も書ける。
+
+    Cisco「Create and Manage Catalyst 3750 Switch Stacks」。優先度の行だけで組と読むと、
+    冗長でない機器を冗長に見せてしまう。
+    """
+    standalone = "hostname c3750\nswitch 1 provision ws-c3750x-48p\nswitch 1 priority 15\n"
+    assert configparse.parse(standalone).ha_pair is None
+    assert configparse.parse("hostname c3750\nswitch 1 priority 15\n").ha_pair is None
