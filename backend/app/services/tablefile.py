@@ -11,7 +11,7 @@ import io
 from dataclasses import dataclass, field
 from datetime import date, datetime
 
-from app.services import textencoding
+from app.services import csvsafe, textencoding
 
 #: 判別は textencoding にまとめてある。cp932 と EUC-JP はお互いのバイト列を
 #: エラー無しに読めるので、順に試して最初に通ったものを採ると化ける
@@ -78,7 +78,8 @@ def _read_csv(content: bytes, delimiter: str | None = None) -> Table:
     for record in records[1:]:
         row: dict[str, object] = {}
         for index, header in enumerate(headers):
-            row[header] = record[index].strip() if index < len(record) else ""
+            # 書き出しで式よけに付けた先頭の `'` を外す（csvsafe.py）
+            row[header] = csvsafe.unguard(record[index].strip()) if index < len(record) else ""
         rows.append(row)
     return Table(headers=headers, rows=rows, first_row=first_row)
 

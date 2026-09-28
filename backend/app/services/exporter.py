@@ -7,11 +7,11 @@ Excel で編集して戻す運用や、稟議・見積依頼用の資料作成�
 
 from __future__ import annotations
 
-import csv
 import io
 from datetime import date
 
 from app.models import Device, MaintenanceContract, Site
+from app.services import csvsafe
 from app.services.importer import FIELD_LABELS, IMPORTABLE_FIELDS
 from app.services.lifecycle import LifecycleStatus, Severity, evaluate
 from app.services.xlsxsafe import cell_value, row_values
@@ -127,7 +127,7 @@ def to_csv(
     devices: list[Device], *, include_status: bool = True, encoding: str = "utf-8-sig"
 ) -> bytes:
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer = csvsafe.writer(buffer, lineterminator="\r\n")
     writer.writerow(build_headers(include_status))
     for device in devices:
         writer.writerow([_text(v) for v in build_row(device, include_status)])
@@ -145,7 +145,7 @@ def stream_csv(
     数千行ごとに返せば、押した直後から保存が始まる。
     """
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer = csvsafe.writer(buffer, lineterminator="\r\n")
     # 印（BOM）は先頭に1つだけ。塊ごとに付けると、その都度ゴミの行が増える
     body_encoding = "utf-8" if encoding == "utf-8-sig" else encoding
 
@@ -277,7 +277,7 @@ def build_site_row(site: Site, device_count: int) -> list[object]:
 
 def sites_to_csv(rows: list[tuple[Site, int]], *, encoding: str = "utf-8-sig") -> bytes:
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer = csvsafe.writer(buffer, lineterminator="\r\n")
     writer.writerow(site_headers())
     for site, count in rows:
         writer.writerow([_text(value) for value in build_site_row(site, count)])

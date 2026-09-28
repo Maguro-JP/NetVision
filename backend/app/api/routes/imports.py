@@ -1,4 +1,3 @@
-import csv
 import io
 import json
 from datetime import date, datetime
@@ -17,7 +16,7 @@ from app.schemas.imports import (
     LinkImportResultRead,
 )
 from app.schemas.jobs import JobRead, job_read
-from app.services import importer, jobs, linkimport, siteimport
+from app.services import csvsafe, importer, jobs, linkimport, siteimport
 from app.services.tablefile import Table, TableFileError, read_table
 
 router = APIRouter(prefix="/import", tags=["import"])
@@ -69,7 +68,7 @@ def download_template() -> StreamingResponse:
     ホスト名を変えても同じ機器として更新できる。
     """
     buffer = io.StringIO()
-    writer = csv.writer(buffer)
+    writer = csvsafe.writer(buffer)
     writer.writerow([importer.FIELD_LABELS[f] for f in importer.IMPORTABLE_FIELDS])
     # 列と値の位置をずらさない。内部IDは新規では空、管理IDはサンプルを入れる
     sample = {name: "" for name in importer.IMPORTABLE_FIELDS}
@@ -221,7 +220,7 @@ async def download_error_rows(
     )
 
     buffer = io.StringIO(newline="")
-    writer = csv.writer(buffer, lineterminator="\r\n")
+    writer = csvsafe.writer(buffer, lineterminator="\r\n")
     writer.writerow([*table.headers, ERROR_COLUMN])
 
     for row in outcome.rows:
