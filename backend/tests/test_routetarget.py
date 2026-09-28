@@ -88,3 +88,45 @@ def test_an_import_nobody_exports_is_marked_across_devices(db_session, client):
 
     body = {v["name"]: v for v in client.get(f"{API}/topology/vrfs").json()}
     assert body["CUST-A"]["orphan_imports"] == ["65000:99"]
+
+
+#: Arista EOS User Manual「Inter-VRF Local Route Leaking」の書き方
+ARISTA = """hostname pe-04
+vrf instance vrf-red
+!
+router bgp 65001
+   neighbor 10.0.0.1 remote-as 65002
+   vrf vrf-red
+      rd 1:1
+      route-target export vpn-ipv4 10:10
+      route-target export evpn 10:1
+      route-target export vpn-ipv4 route-map EXPORT_V4
+   vrf vrf-blue
+      rd 2:2
+      route-target import vpn-ipv4 10:10
+   address-family evpn
+      route-target import 99:99
+!
+"""
+
+
+def test_arista_route_targets_under_router_bgp_are_read():
+    """Arista は `router bgp` の下に書く。読まないと、片側だけの import を見逃す。"""
+    parsed = routetarget.parse(ARISTA)
+    assert parsed["vrf-red"].exports == {"10:10", "10:1"}
+    assert parsed["vrf-blue"].imports == {"10:10"}
+
+
+def test_the_address_family_word_and_route_maps_are_not_values():
+    parsed = routetarget.parse(ARISTA)
+    values = {v for targets in parsed.values() for v in targets.imports | targets.exports}
+    assert not values & {"vpn-ipv4", "evpn", "route-map"}
+    # VRF の外（`address-family evpn` の下）の値を、直前の VRF のものにしない
+    assert "99:99" not in values
+
+
+def test_an_automatic_junos_target_is_not_compared():
+    """`vrf-target auto` は機器が決める値。`auto` 同士を比べても意味が無い。"""
+    parsed = routetarget.parse("set routing-instances EVPN-1 vrf-target auto\n")
+    assert parsed["EVPN-1"].imports == set()
+    assert parsed["EVPN-1"].exports == set()
