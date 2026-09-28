@@ -295,3 +295,28 @@ def test_a_standalone_3750_with_a_priority_is_not_a_stack() -> None:
     standalone = "hostname c3750\nswitch 1 provision ws-c3750x-48p\nswitch 1 priority 15\n"
     assert configparse.parse(standalone).ha_pair is None
     assert configparse.parse("hostname c3750\nswitch 1 priority 15\n").ha_pair is None
+
+
+def test_a_vsx_pair_from_the_official_example_is_read():
+    """AOS-CX VSX Guide と Aruba Developer Hub の構成例の `vsx` の形。
+
+    2台で同じ system-mac を組の名前として持ち、keepalive の相手をそれぞれ反対側に持つ。
+    """
+    body = (
+        "vsx\n"
+        "    system-mac 00:00:00:00:01:01\n"
+        "    inter-switch-link lag 1\n"
+        "    role {role}\n"
+        "    keepalive peer {peer} source {source} vrf KA\n"
+    )
+    primary = hapair.parse(
+        body.format(role="primary", peer="192.168.1.101", source="192.168.1.100")
+    )
+    secondary = hapair.parse(
+        body.format(role="secondary", peer="192.168.1.100", source="192.168.1.101")
+    )
+    assert primary.group == secondary.group == "00:00:00:00:01:01"
+    assert (primary.role, secondary.role) == ("primary", "secondary")
+    assert primary.peer_address == "192.168.1.101"
+    assert secondary.peer_address == "192.168.1.100"
+    assert primary.link == "lag 1"
