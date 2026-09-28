@@ -218,3 +218,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`fortitext.blocks`）は元から数えていて、口の読み手だけが自前の数え方だった。試験は
   `tests/test_configparse_fortinet.py`。
 - 気づいたこと: `vlan10` という口の名前が、別の処理で `Vlan10` に揃えられる。今回は触っていない。
+
+## AireOS の口の表で、管理の口などがほとんど読めていなかった（2026-09-28 JST）
+
+- 確かめた資料: Cisco「Wireless LAN Controller Port and Interface Command Reference, Release 7.4」、
+  「Cisco Mobility Express Command Reference, Release 8.10」、技術資料「Configure VLANs on Wireless LAN Controllers」の
+  `show interface summary` の作例。
+- 起きていたこと: VLAN の欄を数字だけ、ポートの欄を数字・`LAG`・`--` だけとして読んでいた。公式の作例にある
+  `management 1 untagged`、`redundancy-port - untagged`、`service-port N/A N/A`、`virtual N/A N/A`、名前に空白の入る
+  `vlan 81` がすべて落ち、管理の口そのものが台帳に出なかった。
+- 直したこと: 公式の作例に出る値をすべて読む。`untagged`・`N/A` は VLAN 番号を持たない口として読む。
+  試験は `tests/test_configparse_aireos.py`。
+- 未確認: `show wlan summary`・`show ap summary`・`show sysinfo` の列（公式の作例に当たれていない）。
