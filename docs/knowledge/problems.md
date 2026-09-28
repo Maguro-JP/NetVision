@@ -241,3 +241,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `router bgp` の下の `vrf` を読み、アドレスファミリーの語を飛ばす。値は `A:B` の形のものだけを持つ。
   試験は `tests/test_routetarget.py`。
 - 未確認: NEC QX の `vpn-target`（公式の資料に当たれていない）。
+
+## Arista MLAG で、heartbeat の宛先を相手のアドレスにしていた（2026-09-28 JST）
+
+- 確かめた資料: Arista「Security Advisory 0161」の `mlag configuration` の作例と `show mlag` の出力。
+- 起きていたこと: `peer-address heartbeat 172.30.118.190 vrf MGMT` の行を `peer-address` と同じに読み、相手のアドレスを
+  `heartbeat` という語にしていた。heartbeat は二重主の検出に使う別の宛先で、`show mlag` でも `hb-peer-address` として
+  別に出る。
+- 直したこと: `peer-address heartbeat` の行は相手のアドレスとして読まない。試験は `tests/test_hareview.py`。
+- 未確認: この読み手の FortiGate HA・ASA failover・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise の書き方。
