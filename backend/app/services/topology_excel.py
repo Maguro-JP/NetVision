@@ -26,7 +26,7 @@ from app.services import (
     topology_view,
     xlsxdraw,
 )
-from app.services.topology import DEFAULT_LAYER, load_diagram
+from app.services.topology import DEFAULT_LAYER, auto_scoped_ids, load_diagram
 from app.services.xlsxsafe import row_values
 
 
@@ -46,7 +46,9 @@ def to_xlsx(
     from openpyxl.styles import Font
     from openpyxl.utils import get_column_letter
 
-    graph = load_diagram(db, layer, site_id=site_id, scope=scope)
+    # 絞らずに頼まれた全体図は、画面と同じく描ける範囲に絞る（全台だと終わらない）
+    only = auto_scoped_ids(db, layer, site_id=site_id)
+    graph = load_diagram(db, layer, site_id=site_id, scope=scope, only=only)
     # 図は SVG と同じものを使う。ここでもう一度並べ直すと、同じ台帳から
     # 違う図が2つ出ることになる
     scope_name = ""

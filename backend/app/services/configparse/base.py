@@ -239,28 +239,55 @@ class ParsedConfig:
         self.tunnels.append(tunnel)
         return tunnel
 
+    def _interface_by_key(self, key: str) -> ParsedInterface | None:
+        """正規化した名前で口を引く。
+
+        口を足すたびに全部の口と名前を突き合わせると、口の数の2乗で遅くなる
+        （8000 口の Config で 76 秒）。名前から口を引く表を持つ。
+        読み手が一覧を作り直したり（`parsed.interfaces = []`）、直接足したりしても
+        古い表を使わないよう、一覧そのものと件数が変わったら作り直す。
+        引いた口の名前が変わっていたときも作り直す。
+        """
+        state = (id(self.interfaces), len(self.interfaces))
+        index: dict[str, ParsedInterface] | None = self.__dict__.get("_interface_index")
+        if index is None or self.__dict__.get("_interface_state") != state:
+            index = {}
+            for existing in self.interfaces:
+                index.setdefault(existing.key, existing)  # 先に出てきた口を採る（従来どおり）
+            self.__dict__["_interface_index"] = index
+            self.__dict__["_interface_state"] = state
+        found = index.get(key)
+        if found is not None and found.key != key:
+            self.__dict__.pop("_interface_index", None)
+            return self._interface_by_key(key)
+        return found
+
     def add_interface(self, interface: ParsedInterface) -> ParsedInterface:
         """同じポートが複数箇所に出てきたらまとめる（config と show 出力の両方に出るため）。"""
-        for existing in self.interfaces:
-            if existing.key == interface.key:
-                for name in (
-                    "description",
-                    "ip_address",
-                    "vlan",
-                    "mode",
-                    "native_vlan",
-                    "voice_vlan",
-                    "vrf",
-                    "lag_group",
-                ):
-                    if getattr(existing, name) is None:
-                        setattr(existing, name, getattr(interface, name))
-                if interface.trunk_vlans and not existing.trunk_vlans:
-                    existing.trunk_vlans = interface.trunk_vlans
-                existing.trunk_all = existing.trunk_all or interface.trunk_all
-                return existing
+        existing = self._interface_by_key(interface.key)
+        if existing is not None:
+            for name in (
+                "description",
+                "ip_address",
+                "vlan",
+                "mode",
+                "native_vlan",
+                "voice_vlan",
+                "vrf",
+                "lag_group",
+            ):
+                if getattr(existing, name) is None:
+                    setattr(existing, name, getattr(interface, name))
+            if interface.trunk_vlans and not existing.trunk_vlans:
+                existing.trunk_vlans = interface.trunk_vlans
+            existing.trunk_all = existing.trunk_all or interface.trunk_all
+            return existing
         interface.name = expand(interface.name)
         self.interfaces.append(interface)
+        index = self.__dict__.get("_interface_index")
+        if index is not None:
+            index.setdefault(interface.key, interface)
+            self.__dict__["_interface_state"] = (id(self.interfaces), len(self.interfaces))
         return interface
 
     def add_neighbor(self, neighbor: ParsedNeighbor) -> None:

@@ -110,3 +110,18 @@ def test_no_commands_are_offered_for_a_machine_we_cannot_write() -> None:
     )
     assert not diff.script.strip()
     assert diff.warnings
+
+
+def test_a_route_without_dst_address_is_the_default_route():
+    """MikroTik RouterOS マニュアル「IP Routing」: 既定経路は dst-address を省いて書ける
+    （作例 `/ip route add gateway=172.16.1.1`）。以前は読み飛ばしていた。"""
+    from app.services.configparse import routeros
+
+    parsed = routeros.parse(
+        "# by RouterOS 7.15\n/ip route\nadd gateway=172.16.1.1\n"
+        "add dst-address=10.0.0.0/8 gateway=10.1.1.1 distance=5\n"
+    )
+    routes = {(r.destination, r.next_hop, r.distance) for r in parsed.routes}
+
+    assert ("0.0.0.0/0", "172.16.1.1", None) in routes
+    assert ("10.0.0.0/8", "10.1.1.1", 5) in routes

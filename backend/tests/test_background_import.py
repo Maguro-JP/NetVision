@@ -91,7 +91,10 @@ def test_links_can_run_in_the_background(client, device_payload):
 
 
 def test_the_dashboard_lists_what_ran(client):
-    _start(client)
+    # 試験の DB は1本の接続を皆で使う（StaticPool）。2本を同時に走らせると同じ接続の上で
+    # 書き込みが重なり、まれに取り込みが落ちる（本番のように接続が分かれていれば起きない）。
+    # 見たいのは一覧の並びなので、1本目を終えてから2本目を始める
+    _wait(client, _start(client)["id"])
     _start(client, name="tsuika.csv")
     listed = client.get(f"{API}/jobs").json()
     assert [j["label"] for j in listed[:2]] == ["tsuika.csv", "daichou.csv"]

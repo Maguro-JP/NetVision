@@ -45,7 +45,8 @@ _ORIGIN_LABEL = {
 
 def rows(db: Session, layer: str = DEFAULT_LAYER, *, site_id: int | None = None) -> list[list[str]]:
     """結線を1本1行にする。図と同じ情報を、並べ替えられる形で出す。"""
-    graph = get_graph(db, layer)
+    # 表は位置を使わないので、機器を並べる手順は省く
+    graph = get_graph(db, layer, arrange=False)
     nodes = {n.device_id: n for n in graph.nodes}
 
     out: list[list[str]] = []

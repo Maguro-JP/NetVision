@@ -276,10 +276,11 @@ def _targets_for(db: Session, device_ids: list[int], today: date) -> list[Replac
 
 
 def _adjacency(db: Session) -> dict[int, set[int]]:
+    """結線からつながりを組む。要るのは両端の機器だけなので、その2列だけ読む。"""
     graph: dict[int, set[int]] = defaultdict(set)
-    for link in db.query(Link).all():
-        graph[link.a_device_id].add(link.b_device_id)
-        graph[link.b_device_id].add(link.a_device_id)
+    for a, b in db.execute(select(Link.a_device_id, Link.b_device_id)):
+        graph[a].add(b)
+        graph[b].add(a)
     return graph
 
 
@@ -303,9 +304,16 @@ def _reachable(graph: dict[int, set[int]], start: int, blocked: int) -> set[int]
     return seen
 
 
-def isolated_by(db: Session, device_id: int) -> list[int]:
-    """その機器を止めたとき、基幹から辿れなくなる機器のID。"""
-    graph = _adjacency(db)
+def isolated_by(
+    db: Session, device_id: int, *, graph: dict[int, set[int]] | None = None
+) -> list[int]:
+    """その機器を止めたとき、基幹から辿れなくなる機器のID。
+
+    何台分も求めるときは、組んだつながり（`graph`）を渡して使い回す。台ごとに
+    結線の表を読み直すと、2万台・結線 3000 本の更改計画で 58 秒かかっていた。
+    """
+    if graph is None:
+        graph = _adjacency(db)
     if device_id not in graph:
         return []
 
@@ -325,7 +333,7 @@ def impact_counts(db: Session, *, only: set[int] | None = None) -> dict[int, int
     """
     graph = _adjacency(db)
     wanted = graph.keys() if only is None else (graph.keys() & only)
-    return {device_id: len(isolated_by(db, device_id)) for device_id in wanted}
+    return {device_id: len(isolated_by(db, device_id, graph=graph)) for device_id in wanted}
 
 
 @dataclass
@@ -344,7 +352,7 @@ def impact_of(db: Session, device_id: int) -> ImpactReport:
 
     graph = _adjacency(db)
     names = {d.id: d.hostname for d in db.query(Device).all()}
-    isolated = isolated_by(db, device_id)
+    isolated = isolated_by(db, device_id, graph=graph)
 
     if device_id not in graph:
         note = (

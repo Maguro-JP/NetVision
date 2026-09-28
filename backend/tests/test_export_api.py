@@ -81,7 +81,9 @@ def test_exported_csv_can_be_imported_back(client):
     body = res.json()
     assert body["committed"] is True
     assert body["created"] == 0
-    assert body["updated"] == 2
+    # 何も変えずに戻したので「更新」ではなく「変更なし」
+    assert body["updated"] == 0
+    assert body["unchanged"] == 2
     assert body["errors"] == 0
     assert body["contracts_added"] == 0  # 同じ契約は重複登録しない
 

@@ -76,3 +76,24 @@ def test_a_bad_date_is_reported_by_row(client):
     assert result["created"] == 1
     assert result["issues"][0]["row_number"] == 2
     assert "日付" in result["issues"][0]["message"]
+
+
+def test_an_exported_excel_ledger_goes_back_unchanged(client):
+    """書き出した拠点台帳の Excel を、何も変えずに戻せる。
+
+    Excel の日付のセルは datetime で来るので、文字にしてから読むと
+    「2018-04-01 00:00:00」になり、開設日・閉鎖日のある行が読めなかった。
+    """
+    client.post(
+        f"{API}/sites",
+        json={"code": "HQ", "name": "本社", "opened_on": "2018-04-01", "closed_on": "2030-03-31"},
+    )
+    exported = client.get(f"{API}/export/sites.xlsx")
+    assert exported.status_code == 200
+    response = client.post(
+        f"{API}/import/sites/preview",
+        files={"file": ("sites.xlsx", exported.content, "application/octet-stream")},
+    )
+    result = response.json()
+    assert result["issues"] == []
+    assert result["unchanged"] == 1

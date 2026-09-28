@@ -165,7 +165,7 @@ def import_products(
     results: list[ProductImportRow] = []
     created = updated = unchanged = errors = 0
 
-    for index, raw in enumerate(table.rows, start=2):
+    for index, raw in enumerate(table.rows, start=table.first_row):
         values: dict[str, object] = {}
         issues: list[str] = []
 

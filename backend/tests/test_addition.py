@@ -271,3 +271,32 @@ def test_the_main_run_of_segments_decides_the_basis():
     assert pick_subnet(used, 30) == "10.10.30.0/24"
     # 数が同じなら、番号の小さいほうを採る（毎回同じ答えになるように）
     assert pick_subnet(["10.10.10.0/24", "10.20.10.0/24"], 30) == "10.10.30.0/24"
+
+
+def test_the_latest_config_of_every_device_is_found_in_one_query(db_session):
+    """全台を見る確認（STP・HA）は、機器ごとに問い合わせず、最新の Config の id をまとめて引く。"""
+    import hashlib
+
+    from app.models import Device
+    from app.models.topology import ConfigSnapshot, ConfigSource
+    from app.services.addition import latest_config_ids
+
+    a = Device(hostname="a", vendor="Cisco", model="m")
+    b = Device(hostname="b", vendor="Cisco", model="m")
+    c = Device(hostname="c", vendor="Cisco", model="m")
+    db_session.add_all([a, b, c])
+    db_session.flush()
+    snapshots = []
+    for device, body in [(a, "old"), (a, "new"), (b, "only")]:
+        snapshot = ConfigSnapshot(
+            device_id=device.id,
+            hostname=device.hostname,
+            filename="c.txt",
+            content=body,
+            sha256=hashlib.sha256(body.encode()).hexdigest(),
+            source=ConfigSource.UPLOAD,
+        )
+        db_session.add(snapshot)
+        db_session.flush()
+        snapshots.append(snapshot)
+    assert latest_config_ids(db_session) == {a.id: snapshots[1].id, b.id: snapshots[2].id}

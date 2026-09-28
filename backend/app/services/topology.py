@@ -253,6 +253,33 @@ def unscoped_graph_too_wide(db: Session, *, include_retired: bool = False) -> bo
     return (db.scalar(stmt) or 0) > UNSCOPED_GRAPH_LIMIT
 
 
+def auto_scoped_ids(
+    db: Session,
+    layer: str = DEFAULT_LAYER,
+    *,
+    site_id: int | None = None,
+    q: str | None = None,
+    include_retired: bool = False,
+) -> set[int] | None:
+    """絞らずに頼まれた物理の全体図を、描ける範囲に絞るときの機器。絞らないなら None。
+
+    画面の全体図と書き出し（SVG・ワークブック）で同じ判定を使う。書き出しだけ
+    全台を描こうとすると、2万台で終わらずにメモリを使い切り、アプリごと止まった。
+    L2 / L3 / 論理は中身が絞られるので、台帳全体の台数では判断しない。
+    """
+    if layer != DEFAULT_LAYER or site_id is not None or q:
+        return None
+    if not unscoped_graph_too_wide(db, include_retired=include_retired):
+        return None
+    return busiest_device_ids(db, include_retired=include_retired)
+
+
+#: 絞って出した図に添える一言。画面の注記と書き出しの表題で同じ言い方にする
+AUTO_SCOPED_NOTE = (
+    "台数が多いので、結線の多いところだけを出しています。拠点か機器名で絞ると、その範囲を出します"
+)
+
+
 def busiest_device_ids(
     db: Session, *, limit: int = UNSCOPED_GRAPH_LIMIT, include_retired: bool = False
 ) -> set[int]:
@@ -307,7 +334,14 @@ def get_graph(
     orientation: str = "vertical",
     only: set[int] | None = None,
     site_id: int | None = None,
+    arrange: bool = True,
 ) -> TopologyGraph:
+    """図のグラフを組む。
+
+    `arrange=False` は、未配置の機器を並べる手順を省く。結線表のように位置を
+    使わない呼び出し向け。並べる手順は機器の数の2乗で重く、2万台の台帳で結線表を
+    出すのに 37 秒かかっていた（そのほとんどが使わない位置の計算）。
+    """
     if layer == "logical":
         # 論理図はトンネルから組み立てる。物理の結線とは別の話なので、
         # 同じ関数の中で分岐させて、呼び出し側（画面・書き出し）は同じままにする
@@ -410,7 +444,7 @@ def get_graph(
         graph = _as_l3(graph, ports)
 
     # 未配置だけ、結線に沿った木で置く。保存済みは意思なので触らない
-    if graph.nodes:
+    if graph.nodes and arrange:
         rank = _align_redundant_pairs(
             hierarchy_rank(graph), _adjacency(graph), edges=graph.edges, nodes=graph.nodes
         )

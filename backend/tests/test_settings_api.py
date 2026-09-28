@@ -57,3 +57,42 @@ def test_the_model_folder_can_be_set_from_the_screen(client, tmp_path):
 
     client.patch(f"{API}/settings", json={"model_dir": str(folder)})
     assert [path.name for path in llm_inproc.available()] == ["qwen3-8b.gguf"]
+
+
+def test_a_file_edited_by_hand_is_read_again(tmp_path, monkeypatch):
+    """設定は変わるまで覚えておくが、ファイルを手で直したら読み直す。"""
+    import json
+    import os
+
+    from app.config import settings
+    from app.services import appsettings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "documents"))
+    appsettings.set_value("warning_days", 100)
+    assert appsettings.number("warning_days", 0) == 100
+
+    file = appsettings.path()
+    file.write_text(json.dumps({"warning_days": 200}), encoding="utf-8")
+    stat = file.stat()
+    os.utime(file, ns=(stat.st_atime_ns, stat.st_mtime_ns + 1_000_000))
+    assert appsettings.number("warning_days", 0) == 200
+
+
+def test_the_remembered_settings_cannot_be_changed_through_what_load_returns(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.services import appsettings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "documents"))
+    appsettings.set_value("warning_days", 100)
+    appsettings.load()["warning_days"] = 999
+    assert appsettings.number("warning_days", 0) == 100
+
+
+def test_moving_the_data_folder_moves_the_settings(tmp_path, monkeypatch):
+    from app.config import settings
+    from app.services import appsettings
+
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "a" / "documents"))
+    appsettings.set_value("warning_days", 100)
+    monkeypatch.setattr(settings, "document_storage_path", str(tmp_path / "b" / "documents"))
+    assert appsettings.number("warning_days", 7) == 7

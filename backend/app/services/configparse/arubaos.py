@@ -12,6 +12,12 @@ VLAN の下に口を並べる。
 
 タグ付きと一緒に載っているタグ無しは、その口のタグ無し VLAN（native）である。
 アクセス VLAN として持つと、両端で食い違っていても比べられない。
+
+出典: HPE Aruba「VLAN and Link-Aggregation Interoperability ArubaOS-Switch and
+Cisco IOS」の作例（`vlan 10` の下の `untagged a1`・`tagged a1`、
+`trunk a1-a2 trk1 lacp`）。口の側に書く `tagged vlan 20-22,25` の形は
+HPE Aruba の Airheads コミュニティの作例で確かめた。どちらも表番号は未確認。
+スタックの `1/1-1/48` の範囲の書き方は作例の形に合わせた（未確認）。
 """
 
 from __future__ import annotations
@@ -24,11 +30,12 @@ from app.services.configparse.base import (
     ParsedRoute,
     Vendor,
 )
+from app.services.configparse.vlanlist import parse_ranges
 
 #: AOS-S にしか出てこない書き方。1つでも当たれば AOS-S とみなす
 _STRONG = (
     re.compile(r"^\s*module\s+\d+\s+type\s+\S+", re.IGNORECASE | re.MULTILINE),
-    re.compile(r"^\s*trunk\s+[\d\-,]+\s+trk\d+", re.IGNORECASE | re.MULTILINE),
+    re.compile(r"^\s*trunk\s+[\w\-,/]+\s+trk\d+", re.IGNORECASE | re.MULTILINE),
     re.compile(r"^\s*(?:un)?tagged\s+[\d\-,/]+\s*$", re.IGNORECASE | re.MULTILINE),
     re.compile(r"\bProCurve\b|\bJL\d{3}[A-Z]\b|\bJ9\d{3}[A-Z]\b", re.IGNORECASE),
 )
@@ -55,7 +62,7 @@ _VLAN_IP = re.compile(
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _NAME = re.compile(r'^\s+name\s+"?(.+?)"?\s*$', re.IGNORECASE)
 _DISABLE = re.compile(r"^\s+disable\s*$", re.IGNORECASE)
-_TRUNK = re.compile(r"^\s*trunk\s+(?P<ports>[\d\-,/]+)\s+(?P<name>trk\d+)", re.IGNORECASE)
+_TRUNK = re.compile(r"^\s*trunk\s+(?P<ports>[\w\-,/]+)\s+(?P<name>trk\d+)", re.IGNORECASE)
 _GATEWAY = re.compile(r"^\s*ip\s+default-gateway\s+(\S+)", re.IGNORECASE | re.MULTILINE)
 _ROUTE = re.compile(
     r"^\s*ip\s+route\s+(?P<dest>\d+\.\d+\.\d+\.\d+)\s+(?P<mask>\d+\.\d+\.\d+\.\d+)\s+(?P<hop>\S+)",
@@ -94,6 +101,7 @@ def parse(text: str) -> ParsedConfig:
 
     _read_ports(text, parsed)
     _read_vlans(text, parsed)
+    _read_port_vlans(text, parsed)
     _read_trunks(text, parsed)
     _read_routes(text, parsed)
     return parsed
@@ -172,6 +180,50 @@ def _read_vlans(text: str, parsed: ParsedConfig) -> None:
             port.vlan = port.vlan or vlan_id
 
 
+#: 口の側に書く形（`interface Trk1` の下の `tagged vlan 20-22,25` / `untagged vlan 30`）
+_PORT_VLANS = re.compile(
+    r"^\s+(?P<how>tagged|untagged)\s+vlan\s+(?P<vlans>[\d\-,]+)\s*$", re.IGNORECASE
+)
+
+
+def _read_port_vlans(text: str, parsed: ParsedConfig) -> None:
+    """口の側に書いた VLAN。VLAN の下に並べる形と同じ意味で、入力の向きが違うだけ。
+
+    `trunk 1/49,1/50 trk1 lacp` のあと `interface trk1` の下で
+    `tagged vlan 10-20,25`・`untagged vlan 30` と書く形（HPE Aruba の Airheads と
+    AOS-S / Cisco 相互運用資料の作例）。
+    """
+    current: ParsedInterface | None = None
+    untagged: dict[str, int] = {}
+    for raw in text.splitlines():
+        head = _INTERFACE.match(raw)
+        if head and not raw.startswith((" ", "\t")):
+            current = parsed.add_interface(ParsedInterface(name=_port_name(head.group(1))))
+            continue
+        if current is None:
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            current = None
+            continue
+        found = _PORT_VLANS.match(raw)
+        if not found:
+            continue
+        vlans = parse_ranges(found.group("vlans"))
+        if found.group("how").lower() == "tagged":
+            current.mode = "trunk"
+            current.trunk_vlans.extend(v for v in vlans if v not in current.trunk_vlans)
+        elif vlans:
+            untagged[current.name] = vlans[0]
+
+    for name, vlan_id in untagged.items():
+        port = parsed.add_interface(ParsedInterface(name=name))
+        if port.trunk_vlans:
+            port.native_vlan = vlan_id
+        else:
+            port.mode = port.mode or "access"
+            port.vlan = vlan_id
+
+
 def _read_trunks(text: str, parsed: ParsedConfig) -> None:
     """束ね。`trunk 23-24 trk1 lacp` の形で、まとめて1行に書く。"""
     for raw in text.splitlines():
@@ -211,11 +263,18 @@ def _ports(written: str) -> list[str]:
         part = part.strip()
         if not part:
             continue
-        found = re.fullmatch(r"(\d+)-(\d+)", part)
+        # `1-4`、スタックの `1/1-1/48`、モジュールの `A1-A4`。前置き（`1/`・`A`）が
+        # 両端で同じときだけ番号を開く。前置きの違う範囲は機器にしか分からない
+        found = re.fullmatch(
+            r"(?P<head>[A-Za-z]?(?:\d+/)*[A-Za-z]?)(?P<start>\d+)"
+            r"-(?P=head)(?P<end>\d+)",
+            part,
+        )
         if found:
-            start, end = int(found.group(1)), int(found.group(2))
+            start, end = int(found.group("start")), int(found.group("end"))
             if start <= end:
-                names.extend(str(number) for number in range(start, end + 1))
+                head = found.group("head")
+                names.extend(f"{head}{number}" for number in range(start, end + 1))
             continue
         names.append(part)
     return [_port_name(name) for name in names]

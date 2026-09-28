@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import enum
+import math
 import re
 import unicodedata
 from collections.abc import Callable
@@ -400,7 +401,6 @@ _DATE_PATTERNS = (
     "%Y/%m/%d",
     "%Y.%m.%d",
     "%Y年%m月%d日",
-    "%d/%m/%Y",
     "%Y-%m",
     "%Y/%m",
     "%Y年%m月",
@@ -470,6 +470,10 @@ def parse_date(value: object) -> date | None:
     if fast is not None:
         return fast
 
+    day_first = _parse_day_and_month(text, value)
+    if day_first is not None:
+        return day_first
+
     for pattern in _DATE_PATTERNS:
         try:
             parsed = datetime.strptime(text, pattern).date()
@@ -482,6 +486,38 @@ def parse_date(value: object) -> date | None:
     if wareki is not None:
         return wareki
     raise CellValueError(f"日付として解釈できません: '{value}'")
+
+
+_DAY_MONTH_YEAR = re.compile(r"^(\d{1,2})/(\d{1,2})/(\d{4})$")
+
+
+def _parse_day_and_month(text: str, value: object) -> date | None:
+    """年が後ろに来る形（4/1/2026、13/4/2026）を読む。
+
+    英語設定の Excel は CSV に月/日/年で書き出し、欧州の資料は日/月/年で書く。
+    どちらとも読める値（4/1/2026）を片方に決めつけると、保守期限が黙って数か月ずれる。
+    片方が 13 以上ならそれを日として読み、どちらとも読めるときは断って年/月/日で
+    書き直してもらう。
+    """
+    match = _DAY_MONTH_YEAR.match(text)
+    if match is None:
+        return None
+    first, second, year = int(match.group(1)), int(match.group(2)), int(match.group(3))
+    if first > 12 >= second:
+        day, month = first, second
+    elif second > 12 >= first:
+        month, day = first, second
+    elif first == second:
+        day = month = first
+    else:
+        raise CellValueError(
+            f"日と月のどちらが先か分かりません: '{value}'。"
+            "2026/04/01 のように年/月/日の順で書いてください"
+        )
+    try:
+        return date(year, month, day)
+    except ValueError as exc:
+        raise CellValueError(f"日付として解釈できません: '{value}'") from exc
 
 
 def _parse_date_fast(text: str) -> date | None:
@@ -519,9 +555,16 @@ def parse_decimal(value: object) -> float | None:
     if not text:
         return None
     try:
-        return float(text)
+        amount = float(text)
     except ValueError as exc:
         raise CellValueError(f"金額として解釈できません: '{value}'") from exc
+    # float は nan / inf も読む。pandas で作った CSV は空欄を nan と書くことがあり、
+    # 通すと合計が壊れる。負の金額は API が受け付けず、その機器の契約一覧が 500 になる
+    if not math.isfinite(amount):
+        raise CellValueError(f"金額として解釈できません: '{value}'")
+    if amount < 0:
+        raise CellValueError(f"金額は 0 以上で書いてください: '{value}'")
+    return amount
 
 
 def parse_device_type(value: object) -> DeviceType | None:
@@ -550,6 +593,9 @@ def parse_device_status(value: object) -> DeviceStatus | None:
 class RowAction(enum.StrEnum):
     CREATE = "create"
     UPDATE = "update"
+    #: 既存の機器で、どの値も変わらず保守契約も増えない行。書き出した台帳をそのまま
+    #: 戻したときに「更新 120 件」と出ると、何か書き換わったように見えるため分ける
+    UNCHANGED = "unchanged"
     SKIP = "skip"
     ERROR = "error"
 
@@ -605,6 +651,8 @@ class ImportOutcome:
     rows: list[RowResult]
     #: 行結果の実数。rows はサンプルなので、多いときはこちらが正
     rows_total: int = 0
+    #: 既存の機器で、何も変わらない行の数（updated には含めない）
+    unchanged: int = 0
 
 
 def _sample_rows(results: list[RowResult], limit: int | None = _ROW_SAMPLE) -> list[RowResult]:
@@ -683,6 +731,7 @@ def run_import(
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
     on_progress: Callable[[int, int, str], None] | None = None,
+    first_row: int = 2,
 ) -> ImportOutcome:
     """台帳データを取り込む。commit=False なら検証だけ行い DB は変更しない。
 
@@ -705,6 +754,7 @@ def run_import(
             commit=commit,
             keep_rows=keep_rows,
             on_progress=on_progress,
+            first_row=first_row,
         )
 
 
@@ -719,6 +769,7 @@ def _run_import(
     commit: bool = False,
     keep_rows: int | None = _ROW_SAMPLE,
     on_progress: Callable[[int, int, str], None] | None = None,
+    first_row: int = 2,
 ) -> ImportOutcome:
     total_rows = len(table_rows)
 
@@ -821,11 +872,13 @@ def _run_import(
     seen_keys: dict[str, int] = {}
 
     results: list[RowResult] = []
-    created = updated = skipped = errors = contracts_added = 0
+    created = updated = unchanged = skipped = errors = contracts_added = 0
 
-    for index, (values, issues) in enumerate(extracted, start=2):
-        if index % _PROGRESS_STEP == 0:
-            progress(index - 1, "1行ずつ見ています")
+    for position, (values, issues) in enumerate(extracted):
+        # 結果に出す行番号はファイルの行番号。進み具合は何行目まで見たかで数える
+        index = first_row + position
+        if (position + 1) % _PROGRESS_STEP == 0:
+            progress(position + 1, "1行ずつ見ています")
         key_value = str(values.get(str(key_field)) or "").strip()
 
         # 機器ID が書かれていれば、それがその行の身元。ホスト名が変わっていても
@@ -918,8 +971,8 @@ def _run_import(
             if not wanted:
                 continue
             label = FIELD_LABELS[name]
-            owner = existing_by_unique[name].get(wanted)
-            if owner is not None and owner is not device:
+            owner_id = existing_by_unique[name].get(wanted)
+            if owner_id is not None and owner_id != device.id:
                 result.issues.append(
                     RowIssue(column=name, message=f"{label}「{wanted}」は他の機器が使っています")
                 )
@@ -964,14 +1017,20 @@ def _run_import(
             created += 1
             if wanted_name:
                 existing_by_name[normalize_hostname(wanted_name)] = device
-        else:
-            result.action = RowAction.UPDATE
+
+        adds_contract = _has_contract(values) and _contract_would_be_added(device, values)
+        if existing is not None:
             result.device_id = existing.id
-            updated += 1
+            if result.changes or adds_contract:
+                result.action = RowAction.UPDATE
+                updated += 1
+            else:
+                result.action = RowAction.UNCHANGED
+                unchanged += 1
             if wanted_name:
                 existing_by_name[normalize_hostname(wanted_name)] = device
 
-        if _has_contract(values) and _contract_would_be_added(device, values):
+        if adds_contract:
             contracts_added += 1
             result.contract_added = True
             if commit:
@@ -1028,6 +1087,7 @@ def _run_import(
         column_samples=samples,
         rows=_sample_rows(results, keep_rows) if keep_rows is not None else results,
         rows_total=len(results),
+        unchanged=unchanged,
     )
 
 
@@ -1213,18 +1273,20 @@ def _devices_by_hostnames(db: Session, names: list[str]) -> dict[str, Device]:
 _UNIQUE_FIELDS = ("code", "serial_number")
 
 
-def _devices_by_unique(db: Session, field_name: str, values: list[str]) -> dict[str, Device]:
-    """一意な項目（管理ID・シリアル番号）の値で台帳を引く。"""
+def _devices_by_unique(db: Session, field_name: str, values: list[str]) -> dict[str, int]:
+    """一意な項目（管理ID・シリアル番号）の値から、それを持つ機器の id を引く。
+
+    重なりを見るだけなので、機器そのもの（関連ごと）は読まない。読むと、
+    書き出した台帳を戻すような全行更新で、取り込みが3割ほど遅くなる。
+    """
     column = getattr(Device, field_name)
-    found: dict[str, Device] = {}
+    found: dict[str, int] = {}
     unique = [value for value in dict.fromkeys(values) if value]
     for start in range(0, len(unique), _LOOKUP_CHUNK):
         chunk = unique[start : start + _LOOKUP_CHUNK]
-        stmt = select(Device).where(column.in_(chunk)).options(_device_lookup())
-        for device in db.scalars(stmt):
-            held = getattr(device, field_name)
+        for held, device_id in db.execute(select(column, Device.id).where(column.in_(chunk))):
             if held:
-                found[held] = device
+                found[held] = device_id
     return found
 
 

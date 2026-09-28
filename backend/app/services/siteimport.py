@@ -73,9 +73,17 @@ def _map_columns(headers: list[str]) -> tuple[dict[str, str], list[str]]:
     return mapping, [h for h in headers if h not in mapping]
 
 
-def _as_date(value: str) -> date | None:
-    """日付の書き方は現場でまちまち。読めた形で受ける。"""
-    text = value.strip().replace("/", "-").replace(".", "-")
+def _as_date(value: object) -> date | None:
+    """日付の書き方は現場でまちまち。読めた形で受ける。
+
+    Excel の日付のセルは datetime で来る。文字にしてから読むと「2018-04-01 00:00:00」
+    になって読めず、書き出した拠点台帳をそのまま戻せなかった。
+    """
+    if isinstance(value, datetime):
+        return value.date()
+    if isinstance(value, date):
+        return value
+    text = str(value or "").strip().replace("/", "-").replace(".", "-")
     if not text:
         return None
     for pattern in ("%Y-%m-%d", "%Y-%m", "%Y"):
@@ -117,8 +125,10 @@ def run_import(
     for site in sites:
         by_name.setdefault(site.name, site)
 
-    for number, raw in enumerate(table.rows, start=2):
+    for number, raw in enumerate(table.rows, start=table.first_row):
         values = {mapping[h]: str(raw.get(h) or "").strip() for h in mapping}
+        #: 日付は元の値で読む（Excel の日付のセルは datetime で来る）
+        cells = {mapping[h]: raw.get(h) for h in mapping}
         code, name = values.get("code", ""), values.get("name", "")
         if not code and not name:
             continue  # 空行は黙って飛ばす
@@ -144,9 +154,9 @@ def run_import(
             if values.get("status"):
                 changes["status"] = _as_status(values["status"])
             if "opened_on" in values:
-                changes["opened_on"] = _as_date(values["opened_on"])
+                changes["opened_on"] = _as_date(cells["opened_on"])
             if "closed_on" in values:
-                changes["closed_on"] = _as_date(values["closed_on"])
+                changes["closed_on"] = _as_date(cells["closed_on"])
         except ValueError as error:
             result.issues.append(RowIssue(number, str(error)))
             continue

@@ -36,6 +36,7 @@ from sqlalchemy.orm import Session
 from app.models import Device
 from app.services import config_plans, documents, llm, prefill
 from app.services.configdiff.dialects import for_vendor
+from app.services.configdiff.logtext import config_part
 
 #: モデルへ渡す材料の上限。1台のサーバーで動かす前提なので、
 #: 長く詰め込むより、当たりの良い章だけを渡した方が速くて外れが少ない
@@ -230,7 +231,9 @@ def draft(
     `ready` は先に済ませた下ごしらえ。渡さなければここで作る。
     """
     snapshot = config_plans.latest_snapshot(db, device.id)
-    current = base if base is not None else (snapshot.content if snapshot else "")
+    # 取り込んだログは show の出力を含む。依頼文には設定の部分だけを載せる
+    # （先頭の show version で載せられる長さを使い切らないように）
+    current = config_part(base if base is not None else (snapshot.content if snapshot else ""))
     vendor = (snapshot.vendor if snapshot and snapshot.vendor else "") or (
         config_plans.vendor_from_name(device.vendor)
     )
@@ -312,7 +315,9 @@ def prompt_for(db: Session, device: Device, request: str, *, base: str | None = 
     `body` に依頼文を入れて返す（下書きそのものではない）。
     """
     snapshot = config_plans.latest_snapshot(db, device.id)
-    current = base if base is not None else (snapshot.content if snapshot else "")
+    # 取り込んだログは show の出力を含む。依頼文には設定の部分だけを載せる
+    # （先頭の show version で載せられる長さを使い切らないように）
+    current = config_part(base if base is not None else (snapshot.content if snapshot else ""))
     vendor = (snapshot.vendor if snapshot and snapshot.vendor else "") or (
         config_plans.vendor_from_name(device.vendor)
     )

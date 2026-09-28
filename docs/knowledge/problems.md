@@ -47,3 +47,154 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `_ensure_unique_*`）にも足すこと。見つけ方は、台帳の取り込みに崩れた CSV / Excel を
   送る総当たり（種を変えて3回、各120ファイル × 5経路）。
 - 空文字のシリアル番号は重複の元になるので、スキーマで空なら未設定にしている。
+
+## CSV の閉じていない「"」で、後ろの行が黙って消えていた（2026-09-26 JST）
+
+- 症状: 3000 行の台帳の6行目に閉じていない「"」があると、「5行・エラー0件」として通る。
+  128KB を超えると csv.Error の 500。
+- 原因: `csv.reader` のゆるい読み方は、引用の途中でファイルが終わっても何も言わない。
+- 対策: `tablefile._csv_records` で `strict=True` で読み、`unexpected end of data` のときだけ断る。
+  それ以外の strict の失敗（`"x"y` など）は、手書きの CSV を急に弾かないよう従来の読み方に戻す。
+- 見つけ方: ファイルを受け付ける 10 経路に、壊れたファイル（空、ゴミ、偽の PDF、中身の違う ZIP、
+  壊れた XML、NUL、UTF-16、2MB の1行）を5つの拡張子で送った。500 はこの件だけだった。
+
+## 黙って違う値になる取り込み（2026-09-26 JST）
+
+| 入力 | 以前 | 今 |
+|---|---|---|
+| 日付 `4/1/2026`（英語設定の Excel の月/日/年） | 1月4日として保存 | 年/月/日で書くよう行のエラー（片方が 13 以上なら読む） |
+| 保守年額 `nan`（pandas の CSV） | 数として通り、合計が壊れる | 行のエラー |
+| 保守年額 `-50000` | 保存され、その機器の契約一覧が 500 | 行のエラー |
+| JSON の `NaN`・`Infinity`・`1e400` | 保存される、または検証エラーの応答で 500 | 入口で 422（`app/strictjson.py`） |
+
+- 見つけ方: 台帳でありそうな日付・金額の書き方を並べて読み手に通し、結果を目で見た。
+  例外が出ないものほど見落としやすいので、「読めた値が正しいか」まで見る。
+- まだの候補: 金額の「48万円」「480千円」は読めずに行のエラーになる（黙っては変わらない）。
+
+## 2 万台で構成図の書き出しが止まる・遅い（2026-09-26 JST）
+
+- SVG の全体図の書き出しが、画面と違って台数で絞っておらず、900 秒たっても終わらずに
+  サーバーごと止まった（メモリ不足の強制終了と見ている。ログは残らず、確かめてはいない）。
+  `topology.auto_scoped_ids` を画面・SVG・ワークブックで共有した。
+- 結線表が、使わない図の配置（機器の数の2乗）まで計算していた。`get_graph(arrange=False)`。
+- 測り方の注意: GET を続けて送ると、重い要求が終わらないうちに次が詰まり、軽い経路まで
+  打ち切りに見える。1 つずつ、前の要求が終わってから測る。
+
+## ときどき出る SQLAlchemy の警告（2026-09-26 JST、2026-09-27 に解明）
+
+- 症状: `tests/test_background_import.py::test_the_dashboard_lists_what_ran` で、全体を流したときに
+  まれに `SAWarning: Identity map already had an identity for (Device, (1,))`（`importer.py` の flush）。
+- 原因: 試験の DB は1本の接続を全セッションで共有する（conftest の StaticPool）。この試験は
+  取り込みを2本同時に裏で走らせるので、2つのスレッドの書き込みが同じ接続の上で重なっていた。
+  スレッドの中の警告と失敗は試験を落とさないので、見えにくかった。
+- 確かめ方: 同時に2本を50回（100件）。共有の接続では失敗2件・警告1回、接続を分けたファイルの
+  SQLite では失敗0件・警告0回。本番（接続が分かれる）では起きないと見ている。
+- 対策: 一覧の並びを見る試験なので、1本目を終えてから2本目を始める。
+- 残り: PostgreSQL で同じ台帳を2本同時に取り込むと、両方が「無い」と見て同じ hostname を
+  入れようとし、片方が UNIQUE 制約で失敗しうる。制約が守るので台帳は壊れない。
+  手元に PostgreSQL が無く、確かめていない。
+
+## 配布版で配信元の外のファイルが読める（2026-09-27 JST）
+
+- 症状: `NETVISION_SERVE_FRONTEND` で画面を配るとき、`GET /../netvision.db` のような
+  パスで、配信元より上にあるファイル（データベースや設定）がそのまま返った。
+- 原因: uvicorn は `%2F` や生の `..` を解いたパスを渡す。`main._mount_frontend` の SPA の経路が
+  それを配信元に連結して、そのまま返していた。`/assets` 配下は StaticFiles が自分で防いでいた。
+- 対策: 解決したパスが配信元の中にあるときだけ返し、外なら画面の入口（index.html）を返す。
+- 試験: `tests/test_serve_frontend.py`。httpx は `..` を先に畳むので、ASGI を直接呼んで生のパスを渡す。
+- 影響: 配布版（start.sh・start.bat・standalone.py）で、この機能を開ける人すべて。
+  開発時の Vite 経由の起動は当たらない。
+
+## = で始まる値が Excel の式として書き出される（2026-09-27 JST）
+
+- 症状: 機器名や型番が `=` で始まると、xlsx の書き出しで式になった。「=== 要確認 ===」は
+  壊れた式、`=HYPERLINK(...)` は開いた人の Excel でリンクとして動いた。`#N/A` はエラー値になった。
+- 原因: openpyxl は文字列の型を推定し、`=` で始まれば式、ERROR_CODES に一致すればエラー値にする。
+- 対策: `xlsxsafe.cell_value` で、その形の文字列だけ `CellRichText` で包む。型の推定を通らずに
+  文字列として書かれ、読み戻すと元の文字列になる。`cell_value`・`row_values` を通らない書き方を
+  足すと、また式になる。
+- 試験: `tests/test_export_formula_text.py`（xlsx の5経路に `<f>` と `t="e"` が無いこと、読み戻し）。
+- 残り: CSV は値を変えないと防げないので、判断待ち（docs/reports/pending.md）。
+
+## アップロードの上限の抜け（2026-09-27 JST）
+
+- 見た経路: 台帳・拠点・結線の取り込み、syslog、文書、Config、Config 計画の突き合わせ、MIB、
+  製品リファレンス。どれも上限と 413 を持っていた。
+- 抜け: `/configs/preview`（取り込み前の確認）だけ上限が無く、取り込みで断られる大きさでも
+  読み取りまで走った。取り込みと同じ `MAX_CONFIG_BYTES` を当てた。試験は `test_configs_api.py`。
+- 残り: どの経路も全体を読んでから大きさを見る。上限の手前で打ち切る読み方にはしていない。
+
+## 別のサイトのページから台帳を書き換えられる（2026-09-27 JST）
+
+- 症状: 認証が無いので、利用者がブラウザで開いた別のサイトのページから、multipart の
+  ファイル送信（台帳の取り込みなど）と本文の無い POST（バックアップの作成など）が通った。
+  JSON の本文は CORS の事前確認で止まるが、この2つは事前確認なしに送られる。
+- 対策: `app/originguard.py`。POST・PUT・PATCH・DELETE に別のサイトの Origin が付いていれば 403。
+  通すのは、Origin 無し（curl・MCP）、`cors_origins`、手元（localhost・127.0.0.1・::1）、
+  Host と同じ宛先。試験は `tests/test_origin_guard.py`。
+- 残り: DNS リバインディング（攻撃者の名前を 127.0.0.1 に向け直す手口）では Origin と Host が
+  一致するので防げない。防ぐなら Host を許した名前に限る仕組み（TrustedHost）が要る。
+  LAN の IP で開く使い方と両立させる設定が要るので、まだ入れていない。
+
+## 投入手順に show の出力が混ざる（2026-09-27 JST）
+
+- 症状: 取り込んだ Config はログのまま（`show version` → `show running-config` → `show cdp neighbors`）
+  保存される。差分がそれをそのまま設定として比べていたため、次のことが起きた。
+  - 版数や隣接機器の表示が変わると、投入手順に `no Cisco IOS XE Software, Version ...` が入る
+  - 投入後の突き合わせが、稼働時間や版数が変わっただけで「一致しない」になる
+  - 計画と是正案の「現行フル」（故障時の復旧に貼るもの）に show の出力が入る
+- 対策: `configdiff/logtext.py` の `config_part`。プロンプト付きの設定を出すコマンド
+  （`show running-config`、`show configuration`、`display current-configuration` など）の直後から
+  次のプロンプト行までを設定とみなす。`Building configuration...` と `Current configuration : N bytes`
+  も除く。プロンプト行の無い文字列はそのまま。`configdiff.build` の入口と、計画・是正案の現行フルで使う。
+- 試験: `tests/test_configdiff_logtext.py`（直す前は 3 件落ちた）。是正案と脆弱性の試験は、見本の末尾
+  （show cdp の出力の後ろ）に設定の行を足していたので、`end` の手前に足す形に直した。
+- 続き（同日）: Config の下書き（config-draft）の依頼文も、現行をログのまま先頭から決まった長さだけ
+  載せていたため、show version で枠を使い、隣接機器の表示まで AI に渡していた。`config_part` を通す。
+  STP・HA・route-target の読み取りは行頭が設定の書き方のときだけ拾うので、そのままにした。
+- 未確認: プロンプトとコマンドの形は手元の見本（IOS・Junos）と既存の `_SHOW_OUTPUT` に合わせた。
+  各社のマニュアルでは確かめていない。形が合わないログは、今までどおりそのまま比べる。
+
+## RFC 5424 の syslog が時刻も機器名も読めない（2026-09-28 JST）
+
+- 症状: `<34>1 2026-09-27T10:00:00.000Z sw1 app - - - msg` の形の行で、時刻と機器名が空になり、
+  機器ごとの集計に入らなかった。PRI の後の版数（`1`）と、小数秒・時差付きの時刻を想定していなかった。
+  `<999>` のように範囲外の PRI も、重さ（999 % 8）として読んでいた。
+- 対策: `syslog._RFC5424`。形は RFC 5424 "The Syslog Protocol" 6 章の ABNF に合わせた（原文を確認）。
+  時差付きの時刻は、時差の無いほかの形と並ぶよう表示の時間帯に直す。PRIVAL は 0〜191（6.2.1）。
+- 試験: `tests/test_syslog.py` の末尾 3 件（直す前は 3 件とも落ちた）。
+- 崩れた入力（空・バイナリ・NUL・2MB の1行・Shift_JIS・2月30日）は、直す前から 500 にならなかった。
+
+## SNMP の Hex-STRING が値として読めない（2026-09-28 JST）
+
+- 症状: `SNMPv2-MIB::sysName.0 = Hex-STRING: 73 77 31` で、機器名が「Hex-STRING: 73 77 31」になった。
+  型名の読み取りが `-` を許していなかった。日本語の sysLocation も net-snmp は Hex-STRING で出す。
+  値の空の sysName は、機器名が空文字になった。
+- 対策: 型名は net-snmp の `snmplib/mib.c` が付けるもの（`Hex-STRING: `、`Network Address: `、
+  `Wrong Type (should be ...): ` など、ソースで確認）に合わせる。Hex-STRING は UTF-8 の文字として
+  読めるときだけ文字に戻し、MAC アドレスなどは16進のまま。空の sysName は機器名なし。
+- 試験: `tests/test_mib.py` の末尾 3 件（直す前は 3 件とも落ちた）。
+- 文書検索（`'` `%` `NEAR(` `*` など）と、崩れた MIB（空・バイナリ・3MB の1行）は 500 にならなかった。
+
+## SNMP の OID の突き合わせ（2026-09-28 JST）
+
+- 確かめたこと: `mib.NUMERIC` の OID を公式の定義と突き合わせた。ENTITY-MIB（RFC 6933）の
+  entPhysicalSoftwareRev=10・SerialNum=11・ModelName=13、IF-MIB（RFC 2863）の ifDescr=ifEntry 2・
+  ifSpeed=5・ifAdminStatus=7・ifOperStatus=8・ifHighSpeed=ifXEntry 15・ifAlias=18・ifNumber=interfaces 1。
+  いずれも一致した。HOST-RESOURCES-MIB の hrProcessorLoad（1.3.6.1.2.1.25.3.3.1.2、直近1分の平均）は
+  net-snmp 同梱の MIB、CISCO-PROCESS-MIB の cpmCPUTotal5minRev（1.3.6.1.4.1.9.9.109.1.1.1.1.8、
+  直近5分）は cisco/cisco-mibs の定義で確かめ、一致した（2026-09-28）。
+- 直したこと: ifOperStatus の値は up(1)〜lowerLayerDown(7) の 7 つある（RFC 2863）。down(2) だけを
+  「使う設定なのに落ちている」としていたので、notPresent(6)・lowerLayerDown(7) を加えた。4〜7 の表示も
+  「状態が読めません」から、それぞれの意味に直した。試験は `tests/test_mib.py`。
+- 気づいたこと: RFC 2863 の ifDescr は「メーカー・製品名・版を含む説明」と定義されていて、ポートの名前は
+  ifName（ifXEntry 1）。多くの機器は ifDescr にも名前を入れるので、今は変えていない。
+
+## AOS-S の読み手がスタックの口の範囲と口の側の VLAN を読まなかった（2026-09-28 JST）
+
+- 確かめた資料: HPE Aruba「VLAN and Link-Aggregation Interoperability ArubaOS-Switch and Cisco IOS」の作例と、
+  Airheads コミュニティの作例。表番号は未確認。
+- 直したこと: `untagged 1/1-1/4`・`A1-A3`・`trunk 1/49-1/50 trk1 lacp` のように前置きの付いた範囲を
+  1つの口として持っていたので、前置きが両端で同じときだけ開くようにした。前置きの違う `1/49-2/1` は開かない。
+  `interface Trk1` の下の `tagged vlan 20-22,25`・`untagged vlan 30` も読むようにした。試験は
+  `tests/test_configparse_arubaos.py`。

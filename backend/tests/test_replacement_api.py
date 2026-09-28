@@ -250,3 +250,37 @@ def test_the_sql_totals_agree_with_evaluating_each_device(client, db_session, de
     assert {y.fiscal_year: y.device_count for y in plan.years if y.device_count} == expected
     assert plan.unscheduled_total == unscheduled
     assert plan.total_devices == sum(expected.values())
+
+
+def test_the_links_are_read_once_for_many_devices(db_session, monkeypatch):
+    """影響台数を何台分求めても、結線の表を読むのは1回。
+
+    台ごとに読み直していたため、2万台・結線 3000 本で更改計画に 58 秒かかっていた。
+    """
+    from app.models import Device
+    from app.models.topology import Link, LinkOrigin
+    from app.services import replacement
+
+    devices = [Device(hostname=f"d{i}", vendor="Cisco", model="m") for i in range(4)]
+    db_session.add_all(devices)
+    db_session.flush()
+    for a, b in [(0, 1), (1, 2), (1, 3)]:
+        db_session.add(
+            Link(
+                a_device_id=devices[a].id,
+                a_interface="Gi0/1",
+                b_device_id=devices[b].id,
+                b_interface="Gi0/2",
+                origin=LinkOrigin.MANUAL,
+            )
+        )
+    db_session.commit()
+
+    calls = []
+    original = replacement._adjacency
+    monkeypatch.setattr(replacement, "_adjacency", lambda db: calls.append(1) or original(db))
+    counts = replacement.impact_counts(db_session)
+    assert len(calls) == 1
+    # d1 を止めると、残りで最も多くつながる機器（同数なら id の小さい d0）が基幹になり、
+    # d2・d3 がそこから辿れなくなる
+    assert counts[devices[1].id] == 2

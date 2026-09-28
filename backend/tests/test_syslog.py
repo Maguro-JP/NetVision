@@ -305,3 +305,40 @@ def test_a_native_vlan_mismatch_is_found_however_the_device_words_it() -> None:
     for line in lines:
         titles = [item.title for item in syslog.review(None, line).findings]
         assert [title for title in titles if "タグ無し VLAN" in title], line
+
+
+# RFC 5424 "The Syslog Protocol" 6. Syslog Message Format の形。
+# 以前は PRI の後の版数（`1`）で止まり、時刻も機器名も読めていなかった
+
+
+def test_an_rfc5424_line_gives_its_time_host_and_event(monkeypatch):
+    from zoneinfo import ZoneInfo
+
+    from app.services import localtime
+
+    monkeypatch.setattr(localtime, "zone", lambda: ZoneInfo("Asia/Tokyo"))
+    line = (
+        '<165>1 2026-09-27T01:00:00.123Z core-sw-01 - - - [meta sequenceId="1"] '
+        "%LINK-3-UPDOWN: Interface Gi1/0/1, changed state to down"
+    )
+    event = syslog.parse_line(line)
+
+    assert event is not None
+    assert event.host == "core-sw-01"
+    # 時差の付いた時刻は、ほかの形と並ぶよう表示の時間帯に直す
+    assert event.at is not None and (event.at.hour, event.at.minute) == (10, 0)
+    assert event.code == "LINK-3-UPDOWN"
+    assert event.message.startswith("Interface Gi1/0/1")
+
+
+def test_rfc5424_nil_values_are_left_empty():
+    event = syslog.parse_line("<34>1 - - - - - - disk full")
+    assert event is not None
+    assert event.at is None and event.host is None
+    assert event.message == "disk full"
+
+
+def test_a_priority_beyond_191_is_not_read_as_a_severity():
+    event = syslog.parse_line("<999>Sep 27 10:00:00 sw1 msg")
+    assert event is not None
+    assert event.severity is None

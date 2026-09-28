@@ -134,6 +134,12 @@ async def preview_config(
 ) -> IngestResultRead:
     """保存せずに、何が読み取れるかだけを返す。"""
     content = await file.read()
+    # 取り込みと同じ上限にする。確認だけ通って取り込みで断られると、確認の意味が無い
+    if len(content) > MAX_CONFIG_BYTES:
+        raise HTTPException(
+            status.HTTP_413_CONTENT_TOO_LARGE,
+            f"{file.filename}: ファイルサイズが大きすぎます（上限 10MB）",
+        )
     text = _decode(content)
 
     parsed = service.configparse.parse(text)

@@ -166,6 +166,7 @@ async def _run(
         update_existing=update_existing,
         commit=commit,
         keep_rows=keep_rows,
+        first_row=table.first_row,
     )
     return table, outcome
 
@@ -226,8 +227,8 @@ async def download_error_rows(
     for row in outcome.rows:
         if row.action is not importer.RowAction.ERROR:
             continue
-        # row_number はヘッダを1行目とした番号なので、データ行の添字は -2
-        original = table.rows[row.row_number - 2]
+        # row_number はファイルの行番号。最初のデータ行（first_row）からの差が添字になる
+        original = table.rows[row.row_number - table.first_row]
         messages = " / ".join(
             f"{importer.FIELD_LABELS.get(i.column or '', i.column)}: {i.message}"
             if i.column
@@ -425,6 +426,7 @@ async def commit_import_in_background(
                 update_existing=update_existing,
                 commit=True,
                 on_progress=job.advance,
+                first_row=table.first_row,
             )
             return ImportResult.model_validate(outcome, from_attributes=True)
 

@@ -114,7 +114,7 @@ export interface ImportField {
   choices: string[];
 }
 
-export type ImportRowAction = "create" | "update" | "skip" | "error";
+export type ImportRowAction = "create" | "update" | "unchanged" | "skip" | "error";
 
 export interface ImportRowIssue {
   column: string | null;
@@ -145,6 +145,8 @@ export interface ImportResult {
   total_rows: number;
   created: number;
   updated: number;
+  /** 既存の機器で、何も変わらない行の数（updated には含めない） */
+  unchanged: number;
   skipped: number;
   errors: number;
   contracts_added: number;

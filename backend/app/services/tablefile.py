@@ -26,6 +26,9 @@ class TableFileError(ValueError):
 class Table:
     headers: list[str]
     rows: list[dict[str, object]] = field(default_factory=list)
+    #: 最初のデータ行が、ファイルの何行目か。見出しの上に表題の行があると 2 ではなくなる。
+    #: 取り込みの結果で「何行目」と言うときの起点にする（人が Excel で開いて探せるように）
+    first_row: int = 2
 
 
 ZIP_MAGIC = b"PK\x03\x04"
@@ -63,10 +66,12 @@ def _read_csv(content: bytes, delimiter: str | None = None) -> Table:
         except csv.Error:
             delimiter = ","
 
-    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
-    records = [row for row in reader if any(cell.strip() for cell in row)]
+    lines, records = _csv_records(text, delimiter)
     if not records:
         raise TableFileError("データ行がありません")
+    header_at = _header_index(records)
+    first_row = lines[header_at] + 1
+    records = records[header_at:]
 
     headers = [cell.strip() for cell in records[0]]
     rows: list[dict[str, object]] = []
@@ -75,7 +80,52 @@ def _read_csv(content: bytes, delimiter: str | None = None) -> Table:
         for index, header in enumerate(headers):
             row[header] = record[index].strip() if index < len(record) else ""
         rows.append(row)
-    return Table(headers=headers, rows=rows)
+    return Table(headers=headers, rows=rows, first_row=first_row)
+
+
+def _csv_records(text: str, delimiter: str) -> tuple[list[int], list[list[str]]]:
+    """CSV の行を読む。閉じていない「"」を黙って通さない。
+
+    欄の中に閉じていない「"」が1つあると、そこから後ろが全部1つの欄になる。
+    ゆるい読み方ではそのまま通り、数千行の台帳が「5行・エラー0件」として取り込まれ、
+    残りが黙って消える。厳密に読んで「引用の途中でファイルが終わった」ことを見つけ、
+    どの行かを返す。それ以外の厳密さの違い（`"x"y` のような書き方）は、今までどおり
+    ゆるく読む（手で作った CSV を急に弾かないため）。
+    """
+    lines: list[int] = []
+    records: list[list[str]] = []
+    reader = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter, strict=True)
+    try:
+        for row in reader:
+            if any(cell.strip() for cell in row):
+                lines.append(reader.line_num)
+                records.append(row)
+        return lines, records
+    except csv.Error as exc:
+        started = reader.line_num
+        if "unexpected end of data" in str(exc):
+            raise TableFileError(
+                f"CSV を最後まで読めませんでした。見出しから数えて{len(records) + 1}件目の行で、"
+                f'欄の中の「"」が閉じていません（ファイルの終わりの{started}行目まで続いています）。'
+                '閉じていない「"」を直してから取り込んでください'
+            ) from exc
+        if "field larger than field limit" in str(exc):
+            raise TableFileError(
+                f"見出しから数えて{len(records) + 1}件目の行に、"
+                "大きすぎる欄（128KB 超）があります。"
+                '閉じていない「"」で後ろの行まで1つの欄になっていないか確かめてください'
+            ) from exc
+
+    loose = csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)
+    lines, records = [], []
+    try:
+        for row in loose:
+            if any(cell.strip() for cell in row):
+                lines.append(loose.line_num)
+                records.append(row)
+        return lines, records
+    except csv.Error as exc:
+        raise TableFileError(f"CSV を読めませんでした（{loose.line_num}行目付近: {exc}）") from exc
 
 
 def _read_excel(content: bytes) -> Table:
@@ -93,10 +143,18 @@ def _read_excel(content: bytes) -> Table:
     if sheet is None:
         raise TableFileError("シートが見つかりません")
 
-    records = [row for row in sheet.iter_rows(values_only=True) if any(_clean(c) for c in row)]
+    numbered = [
+        (number, row)
+        for number, row in enumerate(sheet.iter_rows(values_only=True), start=1)
+        if any(_clean(c) for c in row)
+    ]
     workbook.close()
-    if not records:
+    if not numbered:
         raise TableFileError("データ行がありません")
+    records = [row for _number, row in numbered]
+    header_at = _header_index(records)
+    first_row = numbered[header_at][0] + 1
+    records = records[header_at:]
 
     headers = [_clean(cell) for cell in records[0]]
     rows: list[dict[str, object]] = []
@@ -109,7 +167,26 @@ def _read_excel(content: bytes) -> Table:
             # Excel の日付セルは datetime で返るので、日付として扱えるようそのまま渡す
             row[header] = value if isinstance(value, (datetime, date)) else _clean(value)
         rows.append(row)
-    return Table(headers=[h for h in headers if h], rows=rows)
+    return Table(headers=[h for h in headers if h], rows=rows, first_row=first_row)
+
+
+#: 見出しを探す範囲。表題や作成日の行が、これより多く続く台帳は見ない
+_HEADER_SEARCH_ROWS = 10
+
+
+def _header_index(records: list) -> int:
+    """見出しの行が何行目か（0 始まり）。
+
+    日本の台帳は、1行目に表題（「機器台帳（2026年度）」など）を置き、その下に
+    見出しを書くことが多い。先頭の行をそのまま見出しにすると、どの列も対応付かず
+    「ホスト名の列がありません」になり、表題の行を手で消すまで取り込めない。
+    埋まっている欄が1つ以下の行（表題、空行）は、後ろに2欄以上の行があれば
+    見出しとみなさない。どの語が見出しかは当て推量しない（取り込みごとに語が違うため）。
+    """
+    for index, record in enumerate(records[:_HEADER_SEARCH_ROWS]):
+        if sum(1 for cell in record if _clean(cell)) >= 2:
+            return index
+    return 0
 
 
 def _clean(value: object) -> str:

@@ -29,9 +29,14 @@ from app.services import configparse, versions
 
 #: `SNMPv2-MIB::sysDescr.0 = STRING: Cisco IOS Software ...`
 #: `.1.3.6.1.2.1.1.1.0 = STRING: ...`
+#: 型名は net-snmp の snmplib/mib.c が付けるもの（`STRING: `、`Hex-STRING: `、
+#: `Network Address: `、`Wrong Type (should be INTEGER): ` など）。`-`・空白・括弧を含む
 _LINE = re.compile(
-    r"^(?P<oid>[.\w:-]+?)\s*=\s*(?:(?P<type>[A-Za-z0-9 ]+?):)?\s*(?P<value>.*)$",
+    r"^(?P<oid>[.\w:-]+?)\s*=\s*(?:(?P<type>[A-Za-z][A-Za-z0-9 ()\-]*?):)?\s*(?P<value>.*)$",
 )
+
+#: `Hex-STRING: 73 77 31` の中身
+_HEX_BYTES = re.compile(r"^(?:[0-9A-Fa-f]{2}\s*)+$")
 
 #: 末尾の添字（`.0` や `.10101`）を外して、どの値かだけを見る
 _INDEX = re.compile(r"\.(\d+)$")
@@ -109,7 +114,7 @@ MEANINGS: dict[str, Meaning] = {
     "entphysicalsoftwarerev": Meaning("ソフトの版", "その機器に入っているソフトの版です"),
     "hrprocessorload": Meaning(
         "CPU の使用率",
-        "その機器の頭がどれだけ働いているかです（％）",
+        "その機器の頭がどれだけ働いているかです（直近1分の平均、％）",
         "高いままなら、その機器に無理をさせています",
     ),
     "cpmcputotal5minrev": Meaning("CPU の使用率（5分平均）", "直近5分の平均です（％）"),
@@ -138,7 +143,19 @@ NUMERIC: dict[str, str] = {
 }
 
 #: 状態の数字を、そのまま出しても分かる言い方に
-_STATUS = {"1": "上がっています", "2": "落ちています", "3": "試験中です"}
+#: ifOperStatus の値（RFC 2863 IF-MIB の ifOperStatus の SYNTAX）
+_STATUS = {
+    "1": "上がっています",
+    "2": "落ちています",
+    "3": "試験中です",
+    "4": "状態が分かりません（機器が判断できない）",
+    "5": "待機中です（dormant）",
+    "6": "部品が欠けていて使えません（notPresent）",
+    "7": "下の層が落ちているため使えません（lowerLayerDown）",
+}
+#: 通信できない状態。down(2) のほか、部品が無い notPresent(6)、
+#: 下の層が落ちている lowerLayerDown(7) も、使う設定なら異常として拾う
+_NOT_PASSING = frozenset({"2", "6", "7"})
 _ADMIN = {"1": "使う設定です", "2": "閉じています", "3": "試験中です"}
 
 
@@ -168,7 +185,7 @@ class PortState:
     @property
     def down_but_enabled(self) -> bool:
         """使う設定なのに落ちている。いちばん見たいのはここ。"""
-        return self.admin == "1" and self.oper == "2"
+        return self.admin == "1" and self.oper in _NOT_PASSING
 
 
 @dataclass
@@ -220,6 +237,22 @@ def key_of(oid: str) -> tuple[str, str]:
     return text, ""
 
 
+def _hex_text(value: str) -> str:
+    """`73 77 31` を `sw1` に戻す。
+
+    機器名に日本語や制御文字が入っていると、net-snmp は文字列を Hex-STRING で出す。
+    文字として読めるときだけ戻し、読めなければ16進のまま返す（MAC アドレスなど）。
+    """
+    if not _HEX_BYTES.match(value.strip()):
+        return value
+    data = bytes.fromhex(value.replace(" ", "").replace("\n", ""))
+    try:
+        text = data.decode("utf-8").rstrip("\x00")
+    except UnicodeDecodeError:
+        return value
+    return text if text and text.isprintable() else value
+
+
 def parse(text: str) -> list[Value]:
     """snmpwalk / snmpget の出力を読む。読めない行は落とす。"""
     out: list[Value] = []
@@ -235,6 +268,8 @@ def parse(text: str) -> list[Value]:
         quoted = _QUOTED.match(value)
         if quoted:
             value = quoted.group(1)
+        if (matched.group("type") or "").strip() == "Hex-STRING":
+            value = _hex_text(value)
         meaning = MEANINGS.get(key)
         out.append(
             Value(
@@ -260,7 +295,7 @@ def review(db: Session, text: str) -> MibReport:
     ports: dict[str, PortState] = {}
     for value in values:
         if value.key == "sysname":
-            report.hostname = value.raw
+            report.hostname = value.raw or None
         elif value.key == "sysdescr":
             report.descr = value.raw
         elif value.key == "syslocation":

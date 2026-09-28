@@ -24,7 +24,7 @@ import ipaddress
 import re
 from dataclasses import dataclass, field
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from app.models import Device, DeviceType, Vlan
@@ -107,6 +107,22 @@ def latest_config(db: Session, device: Device) -> ConfigSnapshot | None:
         .order_by(ConfigSnapshot.id.desc())
         .limit(1)
     ).first()
+
+
+def latest_config_ids(db: Session) -> dict[int, int]:
+    """機器ごとの最新の Config の id。台帳の全機器を見る確認で使う。
+
+    機器ごとに latest_config を呼ぶと、Config の無い機器の分まで問い合わせが
+    台数ぶん走る（2万台で2万回、STP と HA の確認がそれぞれ4秒かかっていた）。
+    中身は読まないので、全台分でも小さい。中身は要る機器だけ db.get で読む。
+    """
+    return dict(
+        db.execute(
+            select(ConfigSnapshot.device_id, func.max(ConfigSnapshot.id)).group_by(
+                ConfigSnapshot.device_id
+            )
+        ).all()
+    )
 
 
 def read_upstream(db: Session, device: Device) -> tuple[ParsedConfig | None, str]:

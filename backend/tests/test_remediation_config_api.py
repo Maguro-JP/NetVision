@@ -12,10 +12,21 @@ from tests.test_exposure_api import add_device, import_advisory
 FIXTURE = Path(__file__).parent / "fixtures" / "core-sw-01.txt"
 
 
+def _with_lines(log: bytes, extra: bytes) -> bytes:
+    """設定の中（running-config の end の手前）に行を足す。
+
+    見本のログは running-config の後ろに show cdp neighbors の出力が続く。末尾に足すと
+    設定ではなく show の出力の一部になり、差分では見なくなる。
+    """
+    return log.replace(b"\nend\n", extra.rstrip(b"\n") + b"\nend\n", 1) if extra else log
+
+
 def upload(client, extra=b""):
     return client.post(
         f"{API}/configs/upload",
-        files=[("files", ("core-sw-01.txt", FIXTURE.read_bytes() + extra, "text/plain"))],
+        files=[
+            ("files", ("core-sw-01.txt", _with_lines(FIXTURE.read_bytes(), extra), "text/plain"))
+        ],
     )
 
 

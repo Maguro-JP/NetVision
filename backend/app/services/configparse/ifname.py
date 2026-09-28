@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 
 # 略記 → 正式名。長い接頭辞から順に判定する。
@@ -55,8 +56,13 @@ _JUNIPER = re.compile(r"^(ge|xe|et|fe|em|fxp|irb|ae|lo)-\d", re.IGNORECASE)
 _SPLIT = re.compile(r"^([A-Za-z\-]+)\s*([\d/\.:]+.*)?$")
 
 
+@functools.lru_cache(maxsize=65536)
 def expand(name: str) -> str:
-    """`Gi 0/1` → `GigabitEthernet0/1`。判別できない名前はそのまま返す。"""
+    """`Gi 0/1` → `GigabitEthernet0/1`。判別できない名前はそのまま返す。
+
+    文字列だけで決まるので結果を覚える。口を足すたびに既にある口と名前を
+    突き合わせるため、数千口の Config では同じ名前を何百万回も直すことになる。
+    """
     text = (name or "").strip()
     if not text:
         return ""
@@ -75,6 +81,7 @@ def expand(name: str) -> str:
     return text
 
 
+@functools.lru_cache(maxsize=65536)
 def normalize(name: str) -> str:
     """突き合わせ用のキー。大小文字と表記ゆれを吸収する。"""
     return expand(name).lower().replace(" ", "")

@@ -46,6 +46,8 @@ class ImportResult(BaseModel):
     total_rows: int
     created: int
     updated: int
+    #: 既存の機器で、何も変わらない行の数（updated には含めない）
+    unchanged: int = 0
     skipped: int
     errors: int
     contracts_added: int

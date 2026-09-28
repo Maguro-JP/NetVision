@@ -20,6 +20,7 @@ from sqlalchemy.orm import Session
 from app.models import ConfigPlan, ConfigSnapshot, Device
 from app.services import config_render
 from app.services.configdiff import DiffResult, build
+from app.services.configdiff.logtext import config_part
 from app.services.configparse.base import Vendor
 
 _VENDOR_HINTS: list[tuple[tuple[str, ...], Vendor]] = [
@@ -72,7 +73,8 @@ def outputs(db: Session, plan: ConfigPlan) -> PlanOutputs:
     base = snapshot_by_id(db, plan.base_snapshot_id) or latest_snapshot(db, plan.device_id)
     newest = latest_snapshot(db, plan.device_id)
 
-    current_full = base.content if base else ""
+    # 現行フルは故障時の復旧に貼るもの。ログに混ざった show の出力は除く
+    current_full = config_part(base.content) if base else ""
     # 明示 > 取り込んだ config の判定結果 > 台帳のベンダー名からの推測
     vendor = plan.vendor or (base.vendor if base and base.vendor else None)
     if not vendor:
@@ -95,7 +97,8 @@ def outputs(db: Session, plan: ConfigPlan) -> PlanOutputs:
     diff = build(current_full, plan.body, vendor)
     return PlanOutputs(
         current_full=current_full,
-        future_full=plan.body,
+        # 以前の計画は本文に show の出力を含むことがある。新機種に貼る将来フルからは除く
+        future_full=config_part(plan.body),
         diff=diff,
         vendor=vendor,
         base_snapshot_id=base.id if base else None,
@@ -117,7 +120,7 @@ def seed_body(db: Session, device: Device, source: str, template_id: int | None)
 
     if source == "current":
         snapshot = latest_snapshot(db, device.id)
-        return snapshot.content if snapshot else ""
+        return config_part(snapshot.content) if snapshot else ""
 
     if source == "template" and template_id is not None:
         from app.models import ConfigTemplate

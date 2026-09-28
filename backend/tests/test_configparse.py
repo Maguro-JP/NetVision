@@ -482,3 +482,65 @@ def test_a_non_numeric_native_vlan_does_not_stop_the_import() -> None:
     ports = {i.name: i for i in parsed.interfaces}
     assert ports["GigabitEthernet0/1"].native_vlan is None
     assert ports["GigabitEthernet0/2"].native_vlan == 99
+
+
+# ---------------------------------------------------------------------------
+# 口を足すときの突き合わせ（名前から口を引く表）
+# ---------------------------------------------------------------------------
+
+
+def test_the_same_port_written_twice_is_merged_into_one():
+    from app.services.configparse.base import ParsedConfig, ParsedInterface
+
+    parsed = ParsedConfig()
+    first = parsed.add_interface(ParsedInterface(name="Gi0/1", description="a"))
+    again = parsed.add_interface(ParsedInterface(name="GigabitEthernet0/1", vlan=10))
+    assert again is first
+    assert (first.description, first.vlan) == ("a", 10)
+    assert len(parsed.interfaces) == 1
+
+
+def test_the_lookup_follows_a_rebuilt_or_appended_list():
+    """読み手が一覧を作り直したり、直接足したりしても、古い表で引かない。"""
+    from app.services.configparse.base import ParsedConfig, ParsedInterface
+
+    parsed = ParsedConfig()
+    parsed.add_interface(ParsedInterface(name="Gi0/1"))
+    parsed.interfaces = []
+    fresh = parsed.add_interface(ParsedInterface(name="Gi0/1", vlan=20))
+    assert parsed.interfaces == [fresh]
+
+    direct = ParsedInterface(name="GigabitEthernet0/2")
+    parsed.interfaces.append(direct)
+    assert parsed.add_interface(ParsedInterface(name="Gi0/2", vlan=30)) is direct
+
+
+def test_a_display_name_put_back_after_adding_still_matches():
+    """VyOS / RouterOS は足したあとに本名（eth0）へ戻す。鍵は同じなので同じ口になる。"""
+    from app.services.configparse.base import ParsedConfig, ParsedInterface
+
+    parsed = ParsedConfig()
+    port = parsed.add_interface(ParsedInterface(name="eth0"))
+    port.name = "eth0"
+    assert parsed.add_interface(ParsedInterface(name="eth0", description="x")) is port
+    assert len(parsed.interfaces) == 1
+
+
+def test_many_ports_are_read_in_time():
+    """口の数の2乗で遅くならない（以前は 8000 口で 76 秒）。
+
+    時間で見ると環境で揺れるので、4000 口を十分ゆとりのある 20 秒で見る。
+    """
+    import time
+
+    lines = ["hostname big"]
+    for i in range(4000):
+        lines += [
+            f"interface GigabitEthernet{1 + i // 48}/0/{1 + i % 48}",
+            " switchport mode access",
+            "!",
+        ]
+    started = time.perf_counter()
+    parsed = parse("\n".join(lines) + "\nend\n")
+    assert len(parsed.interfaces) == 4000
+    assert time.perf_counter() - started < 20

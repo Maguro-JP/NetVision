@@ -131,3 +131,57 @@ def test_the_commands_to_get_there_can_be_written() -> None:
     diff = build(current, future, vendor=Vendor.ARUBA_OS)
     assert diff.verified
     assert "tagged 24" in diff.script
+
+
+STACKED = """; JL322A Configuration Editor; Created on release #WC.16.10.0013
+hostname "sw-aoss-02"
+trunk 1/49-1/50 trk1 lacp
+vlan 1
+   name "DEFAULT_VLAN"
+   exit
+vlan 40
+   name "OFFICE"
+   untagged 1/1-1/4,A1-A3
+   exit
+interface Trk1
+   tagged vlan 20-22,25
+   untagged vlan 30
+   exit
+interface 1/5
+   untagged vlan 40
+   exit
+"""
+
+
+def _stacked(name: str):
+    parsed = configparse.parse(STACKED)
+    return next(port for port in parsed.interfaces if port.name == name)
+
+
+def test_a_range_on_a_stack_member_is_opened() -> None:
+    """`1/1-1/4` を1つの口として持つと、間の口が台帳から消える。"""
+    for name in ("1/1", "1/2", "1/3", "1/4", "A1", "A2", "A3"):
+        assert _stacked(name).vlan == 40
+
+
+def test_bundled_ports_on_a_stack_member_are_read() -> None:
+    assert _stacked("1/49").lag_group == 1
+    assert _stacked("1/50").lag_group == 1
+
+
+def test_a_range_with_a_different_head_is_left_as_written() -> None:
+    """`1/49-2/1` は機器の中の並びでしか開けない。推し量って開かない。"""
+    from app.services.configparse.arubaos import _ports
+
+    assert _ports("1/49-2/1") == ["1/49-2/1"]
+
+
+def test_vlans_written_under_a_port_are_read() -> None:
+    """口の側に書いても VLAN の下に書いても同じ意味。片方しか読まないと抜ける。"""
+    trunk = _stacked("Trk1")
+    assert trunk.mode == "trunk"
+    assert trunk.trunk_vlans == [20, 21, 22, 25]
+    assert trunk.native_vlan == 30
+    access = _stacked("1/5")
+    assert access.mode == "access"
+    assert access.vlan == 40
