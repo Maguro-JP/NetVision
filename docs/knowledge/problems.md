@@ -250,3 +250,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   別に出る。
 - 直したこと: `peer-address heartbeat` の行は相手のアドレスとして読まない。試験は `tests/test_hareview.py`。
 - 未確認: この読み手の FortiGate HA・ASA failover・Aruba VSX・Cisco vPC・IRF・iStack / CSS・StackWise の書き方。
+
+## ASA failover で、相手のアドレスを読んでいなかった（2026-09-28 JST）
+
+- 確かめた資料: Cisco「CLI Book 1: Cisco ASA Series General Operations」の failover の作例と、技術資料
+  「Configure ASA Active/Active Failover in Firepower 4100 Series」。
+- 起きていたこと: 役割（primary / secondary）と failover 用の口は読んでいたが、相手のアドレスは空のままだった。
+- 直したこと: `failover interface ip <名前> <住所> <マスク> standby <住所>` の前の住所は primary に、standby の住所は
+  secondary に付く（同ガイドの説明）ので、自分の役割の反対側を相手のアドレスとして持つ。Stateful 用の口
+  （`failover link`）の行と取り違えないよう、`failover lan interface` の名前に合う行だけを見る。試験は
+  `tests/test_hareview.py`。
