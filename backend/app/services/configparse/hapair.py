@@ -34,7 +34,11 @@ FortiGate の HA、ASA の failover、Aruba CX の VSX、Arista の MLAG。書�
   `role primary|secondary`・`inter-switch-link lag N`・
   `keepalive peer <相手> source <自分> [vrf <名前>]`）、Aruba Developer Hub の構成例の
   `show running-config`（`system-mac` を2台で同じにする）
-- IRF・iStack / CSS は未確認
+- IRF: H3C「Automatic IRF Setup Configuration Examples」「Example for Configuring IRF Setup with
+  Indirectly Connected Members」「S12500 Ethernet Link Aggregation Configuration Examples」の
+  Configuration files（組む前の各機器にも `irf member 1 priority 1` があり、組んだあとは全メンバーの
+  `irf member N priority M` と `irf domain` が並ぶ。priority の大きいメンバーが master）
+- iStack / CSS は未確認
   （この読み手としては公式の資料に当たれていない）
 """
 
@@ -291,16 +295,20 @@ def _vpc(text: str) -> ParsedHaPair | None:
 
 
 def _irf(text: str) -> ParsedHaPair | None:
-    """IRF。`irf domain` で組を、`irf member N priority` で主を決める。"""
-    domain = _IRF_DOMAIN.search(text)
-    priority = _IRF_PRIORITY.search(text)
-    if domain is None and priority is None:
+    """IRF。`irf member N priority M` の行が2台分以上あるときだけ組とみなす。
+
+    単体の機器の設定にも `irf member 1 priority 1` が書かれる（H3C の IRF の設定例で、
+    組む前の各機器の設定に出てくる）。組んだあとの設定には、全メンバーの行が並ぶ。
+    1台分の行で組と読むと、冗長でない機器を冗長に見せてしまう。`irf domain` は組の番号。
+    優先度は大きいほうが master に選ばれやすいので、いちばん大きい値を持つ。
+    """
+    members = dict(_IRF_PRIORITY.findall(text))
+    if len(members) < 2:
         return None
-    pair = ParsedHaPair(kind="irf")
+    pair = ParsedHaPair(kind="irf", priority=max(int(value) for value in members.values()))
+    domain = _IRF_DOMAIN.search(text)
     if domain:
         pair.group = domain.group(1)
-    if priority:
-        pair.priority = int(priority.group(2))
     return pair
 
 
