@@ -26,7 +26,8 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
   （7.x / 10.2(x) / 10.3(x)）「Configuring IGMP Snooping」の設定例
   （`vlan configuration 2` の囲みの中の `ip igmp snooping`、
   `ip igmp snooping querier 172.20.52.106`、`ip igmp snooping querier-timeout 300`）
-- Arista、Junos、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
+- Junos: parse_junos の docstring に書いた資料
+- Arista、NEC QX、Aruba CX の書き方は未確認（既存の試験の形のまま）
 """
 
 from __future__ import annotations
@@ -273,43 +274,76 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
 # Junos（set 形式）
 # ---------------------------------------------------------------------------
 
-_JUNOS_PIM_IF = re.compile(
-    r"^set protocols pim interface (\S+)(?:.*\bmode\s+(sparse|dense|sparse-dense))?", re.IGNORECASE
-)
+_JUNOS_PIM_IF = re.compile(r"^set protocols pim interface (\S+)(?:\s+(.*))?$", re.IGNORECASE)
 _JUNOS_RP = re.compile(r"^set protocols pim rp static address (\S+)", re.IGNORECASE)
-_JUNOS_RP_LOCAL = re.compile(r"^set protocols pim rp (?:local|bootstrap|auto-rp)\b", re.IGNORECASE)
-_JUNOS_SNOOP = re.compile(r"^set protocols igmp-snooping vlan (\S+)", re.IGNORECASE)
+#: この機器自身が RP。`rp local address A` と `rp local family inet address A` の2通り
+_JUNOS_RP_LOCAL = re.compile(
+    r"^set protocols pim rp local (?:family inet\s+)?address (\S+)", re.IGNORECASE
+)
+#: 候補方式。どこが RP になるかは他の機器との間で決まる
+_JUNOS_RP_DYNAMIC = re.compile(r"^set protocols pim rp (?:bootstrap|auto-rp)\b", re.IGNORECASE)
+_JUNOS_SNOOP = re.compile(r"^set protocols igmp-snooping vlan (\S+)(?:\s+(.*))?$", re.IGNORECASE)
+_JUNOS_VLAN_ID = re.compile(r"^set vlans (\S+) vlan-id (\d+)\s*$", re.IGNORECASE)
 
 
 def parse_junos(text: str, found: ParsedMulticast) -> None:
-    for raw in text.splitlines():
-        line = raw.strip()
+    """Junos（set 形式）。
+
+    出典: Juniper「Enterprise Layer 3 Multicast」Implementation Guide
+    （`rp static address`、`rp local family inet address`、`interface all mode sparse`、
+    `interface fxp0.0 disable`、`igmp-snooping vlan SALES`）と、Junos OS の
+    「IGMP Snooping Overview」「vlan (IGMP Snooping)」
+    （`igmp-snooping vlan <名前> l2-querier source-address <アドレス>`、旧 EX の `disable`）。
+    igmp-snooping の vlan は名前で書くので、`set vlans <名前> vlan-id <番号>` で番号に引く。
+    """
+    lines = [raw.strip() for raw in text.splitlines()]
+    ids = {
+        match.group(1): int(match.group(2))
+        for match in (_JUNOS_VLAN_ID.match(line) for line in lines)
+        if match
+    }
+    disabled: set[str] = set()
+    for line in lines:
         interface = _JUNOS_PIM_IF.match(line)
         if interface:
             found.routing = True
-            name, mode = interface.group(1), interface.group(2)
+            name, rest = interface.group(1), (interface.group(2) or "").lower()
+            if rest.split()[:1] == ["disable"]:
+                # 管理口などを PIM から外す行。PIM の口として数えない
+                disabled.add(name)
+                found.pim_interfaces = [i for i in found.pim_interfaces if i.name != name]
+                continue
+            if name in disabled:
+                continue
+            mode = re.search(r"\bmode\s+(sparse-dense|sparse|dense)\b", rest)
             if not any(item.name == name for item in found.pim_interfaces):
                 found.pim_interfaces.append(
-                    ParsedPimInterface(name=name, mode=_mode(mode or "sparse"))
+                    ParsedPimInterface(name=name, mode=_mode(mode.group(1) if mode else "sparse"))
                 )
             continue
-        rp = _JUNOS_RP.match(line)
+        rp = _JUNOS_RP.match(line) or _JUNOS_RP_LOCAL.match(line)
         if rp:
-            found.rps.append(ParsedRp(address=rp.group(1)))
+            if not any(item.address == rp.group(1) for item in found.rps):
+                found.rps.append(ParsedRp(address=rp.group(1)))
             continue
-        if _JUNOS_RP_LOCAL.match(line):
+        if _JUNOS_RP_DYNAMIC.match(line):
             found.dynamic_rp = True
             continue
         snoop = _JUNOS_SNOOP.match(line)
         if snoop:
             found.snooping = True
-            name = snoop.group(1)
-            number = re.sub(r"\D", "", name)
-            if number:
-                _vlan(found, int(number))
-            if "querier" in line.lower():
-                for item in found.vlans:
-                    item.querier = True
+            name, rest = snoop.group(1), (snoop.group(2) or "").lower()
+            number = ids.get(name)
+            if number is None:
+                digits = re.sub(r"\D", "", name)
+                number = int(digits) if digits else None
+            if number is None:
+                continue
+            item = _vlan(found, number)
+            if rest.split()[:1] == ["disable"]:
+                item.enabled = False
+            elif rest.split()[:1] in (["l2-querier"], ["igmp-querier"]):
+                item.querier = True
 
 
 # ---------------------------------------------------------------------------
