@@ -14,6 +14,14 @@
 - 書き方はベンダーごとに違うが、意味は同じところへ落ちる。表で持ち、
   機種ごとの差は行を足して吸収する
 - 拾えたものだけ返す。「無い」のか「読めていない」のかは区別しない
+
+### 出典
+
+表の行のうち、公式の資料で確かめたのは次のもの（出典は行の上のコメント）。
+FortiGate の負荷分散、Catalyst のスタック、Arista・AOS-CX・Junos の PIM、
+Junos の IGMP スヌーピング。ほかの行は、それぞれの読み手（hapair.py、
+multicast.py、loadbalance.py など）で確かめた書き方と同じ形を拾うもの、
+または未確認（既存の試験の形のまま）。
 """
 
 from __future__ import annotations
@@ -206,11 +214,20 @@ _RULES: tuple[_Rule, ...] = (
     # マルチキャスト
     _rule(MULTICAST, "PIM", r"^\s*ip\s+pim\s+(?:sparse-mode|dense-mode|sparse-dense-mode)\b"),
     _rule(MULTICAST, "PIM", r"^\s*pim\s+(?:sm|dm)\b"),
+    # Arista `pim ipv4 sparse-mode`（EOS User Manual「Protocol Independent Multicast」）、
+    # AOS-CX `ip pim-sparse enable`（AOS-CX Multicast Guide）、Junos `set protocols pim`
+    _rule(MULTICAST, "PIM", r"^\s*pim\s+ipv[46]\s+sparse-mode\b"),
+    _rule(MULTICAST, "PIM", r"^\s*ip\s+pim-sparse\s+enable\b"),
+    _rule(MULTICAST, "PIM", r"^\s*set\s+protocols\s+pim\s"),
     _rule(MULTICAST, "IGMP スヌーピング", r"^\s*ip\s+igmp\s+snooping\b"),
     _rule(MULTICAST, "IGMP スヌーピング", r"^\s*igmp-snooping\s+enable\b"),
+    # Junos `set protocols igmp-snooping vlan <名前>`（Junos OS「IGMP Snooping Overview」）
+    _rule(MULTICAST, "IGMP スヌーピング", r"^\s*set\s+protocols\s+igmp-snooping\s"),
     # 負荷分散
     _rule(LOAD_BALANCE, "仮想サーバー", r"^\s*ltm\s+virtual\s+"),
-    _rule(LOAD_BALANCE, "仮想サーバー", r"^\s*config\s+firewall\s+vip\s*$"),
+    # FortiGate の vip は静的 NAT（ポート転送）にも使う。負荷分散なのは
+    # `set type server-load-balance` のものだけ（FortiOS CLI Reference の config firewall vip）
+    _rule(LOAD_BALANCE, "仮想サーバー", r"^\s*set\s+type\s+server-load-balance\b"),
     _rule(LOAD_BALANCE, "サーバー負荷分散", r"^\s*(?:slb|server\s+farm)\b"),
     _rule(LOAD_BALANCE, "サーバー負荷分散", r"^\s*virtual-server\s+"),
     # 機器の冗長
@@ -218,7 +235,9 @@ _RULES: tuple[_Rule, ...] = (
     # NX-OS は `hsrp 10` の下に字下げで仮想アドレスを書く
     _rule(HIGH_AVAILABILITY, "HSRP", r"^\s*hsrp\s+\d+(?:\s+ipv[46])?\s*$"),
     _rule(HIGH_AVAILABILITY, "VRRP", r"^\s*vrrp\s+(?:vrid\s+)?\d+\s+(?:ip|virtual-ip)\b"),
-    _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:switch\s+\d+\s+provision|stack-port|irf-port)\b"),
+    # `switch N provision` は単体の Catalyst にも1台分書かれる（#90）。2台分以上あるときだけ
+    # スタックとするので、この表には載せず parse の中で数える
+    _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:stack-port|irf-port)\b"),
     _rule(HIGH_AVAILABILITY, "機器間の同期", r"^\s*config\s+system\s+ha\s*$"),
     _rule(HIGH_AVAILABILITY, "フェイルオーバー", r"^failover\s+lan\s+unit\s+"),
     # Aruba CX は VSX、Arista は MLAG で2台を1台に見せる。
@@ -229,14 +248,24 @@ _RULES: tuple[_Rule, ...] = (
 )
 
 
+#: Catalyst のスタックの台。出典: Stack Manager and High Availability Configuration Guide,
+#: Cisco IOS XE（Catalyst 9300）の設定例。単体でも `switch 1 provision ...` が1行書かれる
+_PROVISION = re.compile(r"^\s*switch\s+(\d+)\s+provision\b", re.IGNORECASE)
+
+
 def parse(text: str) -> list[ParsedFeature]:
     """その Config で使っている機能を並べる。区分ごとにまとめて返す。"""
     found: dict[tuple[str, str], ParsedFeature] = {}
     details: dict[tuple[str, str], list[str]] = {}
+    provisions: dict[str, str] = {}
 
     for raw in text.splitlines():
         line = raw.rstrip()
         if not line.strip():
+            continue
+        member = _PROVISION.match(line)
+        if member:
+            provisions.setdefault(member.group(1), line.strip())
             continue
         for rule in _RULES:
             match = rule.pattern.match(line)
@@ -258,6 +287,14 @@ def parse(text: str) -> list[ParsedFeature]:
                 if value not in values:
                     values.append(value)
             break  # 同じ行を2つの規則で数えない
+
+    if len(provisions) >= 2:
+        key = (HIGH_AVAILABILITY, "スタック")
+        entry = found.setdefault(key, ParsedFeature(category=HIGH_AVAILABILITY, name="スタック"))
+        entry.count += len(provisions)
+        for line in list(provisions.values())[:5]:
+            if len(entry.evidence) < 5 and line not in entry.evidence:
+                entry.evidence.append(line)
 
     for key, values in details.items():
         rule_detail = next(

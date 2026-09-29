@@ -122,6 +122,10 @@ end
 config vpn ipsec phase1-interface
 end
 config firewall vip
+    edit "web-vip"
+        set type server-load-balance
+        set extip 203.0.113.10
+    next
 end
 """
 
@@ -241,3 +245,45 @@ def test_syslog_and_ntp_are_found_in_every_vendor_s_wording():
     for vendor, text in samples.items():
         names = {f.name for f in features.parse(text)}
         assert {"Syslog", "NTP"} <= names, (vendor, names)
+
+
+def test_a_static_nat_vip_is_not_load_balancing() -> None:
+    """FortiGate の vip は静的 NAT にも使う。負荷分散なのは server-load-balance だけ。
+
+    出典: FortiOS CLI Reference の config firewall vip（set type の選択肢に static-nat と
+    server-load-balance がある）。
+    """
+    text = """config firewall vip
+    edit "dnat-web"
+        set extip 203.0.113.10
+        set mappedip "192.168.1.10"
+    next
+end
+"""
+    assert f"{features.LOAD_BALANCE}:仮想サーバー" not in _found(text)
+
+
+def test_a_standalone_catalyst_is_not_a_stack() -> None:
+    """単体の Catalyst にも `switch 1 provision` が1行ある。2台分以上でスタックとする。
+
+    出典: Cisco IOS XE（Catalyst 9300）Stack Manager and High Availability Configuration Guide。
+    """
+    one = "hostname sw1\nswitch 1 provision c9300-48p\n"
+    two = one + "switch 2 provision c9300-48p\n"
+    assert f"{features.HIGH_AVAILABILITY}:スタック" not in _found(one)
+    assert _found(two)[f"{features.HIGH_AVAILABILITY}:スタック"].count == 2
+
+
+def test_pim_written_the_arista_aoscx_and_junos_way_is_found() -> None:
+    """Arista・AOS-CX・Junos の PIM と、Junos の IGMP スヌーピングを拾う。
+
+    出典: Arista EOS User Manual、AOS-CX Multicast Guide、Junos OS の各資料。
+    """
+    for text in (
+        "interface Vlan10\n   pim ipv4 sparse-mode\n",
+        "interface vlan10\n    ip pim-sparse enable\n",
+        "set protocols pim interface all mode sparse\n",
+    ):
+        assert f"{features.MULTICAST}:PIM" in _found(text), text
+    junos = "set protocols igmp-snooping vlan SALES\n"
+    assert f"{features.MULTICAST}:IGMP スヌーピング" in _found(junos)

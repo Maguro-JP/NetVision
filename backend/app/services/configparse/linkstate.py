@@ -19,7 +19,12 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 - Huawei VRP `display interface brief`（Interface / PHY / Protocol ...。出典は _vrp_state）
 
-出典は Huawei VRP の表だけ確かめた。ほかの表の形は未確認（既存の試験の形のまま）。
+公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
+status、Cisco show ip interface brief、Junos terse、NX-OS brief、PAN-OS、FastIron。
+未確認の表: Arista の show ip interface brief、Aruba CX、FortiGate、NEC QX、NEC IX、
+アラクサラ、`show interfaces` の段落。Aruba CX と FortiGate は公式の出力例に当たれず、
+HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC とアラクサラは
+マニュアル置き場にこの環境から届かなかった。
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
