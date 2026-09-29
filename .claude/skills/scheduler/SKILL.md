@@ -60,7 +60,7 @@ status が緑でも仕事をしたとは限らない。このアカウントの�
 | 複数回なら時刻を列挙する | `0 0,6,12 * * *` と書く。`0 */6 * * *` は使わない |
 | プロンプトにリポジトリ名、スキル名、引数を必ず入れる | 圧縮で前の文脈が薄れる。プロンプトだけで何をするか分かるようにする |
 | 名前は「スキル名 引数（リポジトリ）」にする | 一覧で何が動くか分かる。例: `long-dev（AdaptiveAIStudio）` |
-| 1リポジトリに1セッション | long-dev と dev-report の Routine は同じセッションに結びつける。同じリポジトリで2つのセッションが同時に push しない |
+| 1リポジトリに1セッション | 同じリポジトリの Routine は同じセッションに結びつける。同じリポジトリで2つのセッションが同時に push しない |
 | 消さずに無効にする | 再開が楽で、履歴も残る。ただしリポジトリ無しで作った古いものは、動く見込みが無いので無効にしてから作り直す |
 
 JST と UTC の対応。
@@ -117,14 +117,10 @@ Routine から起きたセッションは、最初に `git remote -v` を出す�
 
 | 名前 | cron（UTC） | プロンプト |
 |---|---|---|
-| `long-dev` | `0 1 * * *` | <owner/repo> で long-dev。止まっていれば再開、回っていればそのまま続ける |
-| `dev-report daily` | `0 0 * * *` | <owner/repo> で dev-report daily を実行する。日報を書く。開発はしない |
-| `dev-report weekly` | `0 0 * * 1` | <owner/repo> で dev-report weekly を実行する。週報と来週の計画。PR を整理する |
-| `dev-report monthly` | `0 0 1 * *` | <owner/repo> で dev-report monthly を実行する。月報と今月の週ごとの計画 |
+| `long-dev` | `0 0 * * *` | 形は `long-dev` の「作るもの」。報告（日付で日報・週報・月報）→ `auto-dev L= E=` |
 | `auto-dev 朝夕` | `0 0,9 * * *` | <owner/repo> で auto-dev E=1h を実行する。優先: <指示> |
 
-long-dev と報告の3つは、同じセッションに結びつけて4つ揃えて作る。
-最初の1回は `dev-report daily` を起こして確かめる。long-dev を起こすと23時間走る。
+報告と開発は long-dev の1つの Routine にまとめる。4つに分けると一覧が埋まり、順番もずれる。
 
 Raphael の配布は Actions の schedule で、Routine ではない。土曜 09:00 JST。
 
@@ -132,10 +128,7 @@ Raphael の配布は Actions の schedule で、Routine ではない。土曜 09
 
 | 周期 | 月の起動回数 |
 |---|---|
-| daily（報告） | 約30。報告だけなので短い |
-| long-dev | 約30。1回が翌朝まで続く長いセッション |
-| weekly | 4〜5 |
-| monthly | 1 |
+| long-dev | 約30。報告のあと auto-dev が E= の長さだけ回る。L= で周の間を空ければ減る |
 | 朝夕 | 約60 |
 
 変更不要の日は調査だけで終わるので軽いが、ゼロではない。
