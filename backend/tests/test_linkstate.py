@@ -577,3 +577,31 @@ def test_panos_state_with_autoneg_and_na_is_read() -> None:
         "up",
         "up",
     ]
+
+
+def test_fastiron_disable_does_not_stop_the_table() -> None:
+    """FastIron の止めた口は Link 列に `Disable` と出る。その下の口も読む。
+
+    出典: Brocade FastIron Ethernet Switch Platform and Layer 2 Switching Configuration Guide の
+    show interface brief の出力例（`1/1/3  Disable  None ...`）。
+    """
+    config = [
+        "  HW: Stackable ICX7150-48P",
+        "hostname icx1",
+        "interface ethernet 1/1/1",
+        "interface ethernet 1/1/3",
+        "interface ethernet 1/1/4",
+        "interface ethernet 1/1/5",
+    ]
+    table = [
+        "device# show interface brief",
+        "Port    Link    State   Dupl Speed Trunk Tag Pvid Pri MAC             Name",
+        "1/1/1   Down    None    None None  None  No  1    0   cc4e.2438.8080",
+        "1/1/3   Disable None    None None  6     Yes N/A  0   cc4e.2438.8080",
+        "1/1/4   Down    None    None None  None  No  1    0   cc4e.2438.8083",
+        "1/1/5   Up      Forward Full 1G    10    Yes N/A  0   cc4e.2438.8080  VXL1",
+        "mgmt1   Up      None    Full 1G    None  No  None 0   cc4e.2438.8080",
+    ]
+    parsed = configparse.parse("\n".join(config + table))
+    states = [item.link_state for item in parsed.interfaces]
+    assert states == ["down", "disabled", "down", "up"]
