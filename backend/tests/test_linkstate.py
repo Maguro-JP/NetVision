@@ -476,3 +476,40 @@ def test_junos_terse_keeps_reading_past_ready_and_address_only_rows() -> None:
     states = {normalize(item.name): item.link_state for item in parsed.interfaces}
     assert states[normalize("ae0")] == "up"
     assert states[normalize("ge-0/0/1")] == "down"
+
+
+def test_nxos_brief_follows_the_official_sample() -> None:
+    """NX-OS の show interface brief を、公式の出力例の形で読む。
+
+    出典: Cisco Nexus 6000 Series Layer 2 Command Reference の show interface brief
+    （見出し2行と罫線、`Eth1/5.2` の枝の口、Reason の SFP not inserted など）。
+    出力例に無い Status の言葉（ここでは sfpAbsent）の行でも、表は読み続ける。
+    """
+    config = [
+        "hostname nx1",
+        "feature interface-vlan",
+        "interface Ethernet1/1",
+        "interface Ethernet1/2",
+        "interface Ethernet1/3",
+        "interface Ethernet1/5.2",
+        "interface Ethernet1/6",
+    ]
+    table = [
+        "switch# show interface brief",
+        "-" * 80,
+        "Ethernet      VLAN   Type Mode   Status  Reason                   Speed     Port",
+        "Interface                                                                   Ch #",
+        "-" * 80,
+        "Eth1/1        1      eth  access down    Link not connected          10G(D) --",
+        "Eth1/2        1      eth  trunk  up      none                        10G(D) --",
+        "Eth1/3        1      eth  access sfpAbsent SFP not inserted          10G(D) --",
+        "Eth1/5.2      --     eth  routed down    Configuration Incomplete    10G(D) --",
+        "Eth1/6        1      eth  access up      none                        10G(D) --",
+    ]
+    parsed = configparse.parse("\n".join(config + table))
+    states = {normalize(item.name): item.link_state for item in parsed.interfaces}
+    assert states[normalize("Ethernet1/1")] == "down"
+    assert states[normalize("Ethernet1/2")] == "up"
+    assert states[normalize("Ethernet1/3")] is None
+    assert states[normalize("Ethernet1/5.2")] == "down"
+    assert states[normalize("Ethernet1/6")] == "up"

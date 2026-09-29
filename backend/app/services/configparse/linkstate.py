@@ -15,7 +15,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
 - Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
 - Cisco NX-OS `show interface brief`
-  （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port）
+  （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port。出典は _read_nxos）
 - NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
 - Huawei VRP `display interface brief`（Interface / PHY / Protocol ...。出典は _vrp_state）
 
@@ -406,6 +406,14 @@ def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
 
 
 def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
+    """NX-OS `show interface brief` の Ethernet の表。
+
+    出典: Cisco Nexus 5000 / 5600 / 6000 Series Interfaces Command Reference の
+    show interface brief の出力例（見出し2行と罫線、Status は up / down、Reason は
+    none・Link not connected・SFP not inserted・Configuration Incomplete、
+    `Eth1/5.2` の枝の口）。出力例に無い Status の言葉は意味を決めず、表は続ける
+    （show interfaces status と同じ扱い）。
+    """
     for row in rows:
         stripped = row.strip()
         if stripped.startswith("-") or stripped.startswith("Interface"):
@@ -417,7 +425,7 @@ def _read_nxos(rows: list[str], parsed: ParsedConfig) -> None:
             break
         status = columns[4].lower()
         if status not in ("up", "down"):
-            break
+            continue
         port = _port(parsed, columns[0])
         if port is None:
             continue
