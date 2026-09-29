@@ -71,7 +71,10 @@ _ALAXALA_PORT = re.compile(
 _BRIEF_HEADER = re.compile(r"^\s*Interface\s+IP-Address\s+.*\bStatus\s+Protocol\s*$", re.I)
 _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 
-#: `show interfaces status` の Status 列に出る言葉
+#: `show interfaces status` の Status 列に出る言葉。
+#: 出典: Interface and Hardware Components Configuration Guide, Cisco IOS XE（Catalyst 9300 /
+#: 9400、16.11.x・17.2.x）「Checking Port Status and Connectivity」の出力例（connected、
+#: notconnect、err-disabled）。ほかの言葉は既存の試験の形（未確認）
 _STATUS_WORDS = (
     "connected",
     "notconnect",
@@ -129,6 +132,10 @@ def _read_status(rows: list[str], parsed: ParsedConfig) -> None:
             (i for i, c in enumerate(columns) if i >= 1 and c.lower() in _STATUS_WORDS), None
         )
         if index is None:
+            # 知らない言葉（機種によって出る sfpAbsent など）の行でも、Config にある口の行なら
+            # 表はまだ続いている。上下は決めずに次の行へ進む。口でなければ表の終わり
+            if _port(parsed, columns[0]) is not None:
+                continue
             break
         status = columns[index].lower()
         port = _port(parsed, columns[0])
