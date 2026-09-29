@@ -396,3 +396,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
     拾えていなかった。
 - 直したこと: どちらも `router pim` の囲みの中で読む。試験は `tests/test_multicast.py`。
 - 未確認のまま: Arista の IGMP スヌーピングの書き方、既存の試験にある `ip rp address` の形、NEC QX。
+
+## 1行目に文言が続く banner の中身を、設定として読んでいた（2026-09-29 JST）
+
+- 確かめた資料: Cisco IOS Command Reference の banner motd と、Configuration Fundamentals Configuration Guide 15M&T
+  「Managing Connections, Menus, and System Banners」。
+- 起きていたこと: 閉じの印は「区切りに選んだ1文字が2回目に出たところ」なのに、`banner motd ^CWelcome` の `^CWelcome`
+  を丸ごと印として探していた。閉じが見つからないので何も外さず、文言の中の `interface GigabitEthernet0/99` が
+  無い口として台帳に載っていた。
+- 直したこと: 印は1文字（保存した設定の `^C` は2文字で1つ）とし、印の後ろに同じ行で続く文言も扱う。同じ行で閉じる
+  banner はその行だけを外す。英数字で始まるもの（ASA の `banner motd 文言`）は印とみなさない。試験は
+  `tests/test_configparse_banners.py`。
+- 未確認のまま: 保存した設定で印が `^C` と出る形（既存の試験の形に合わせた）。NEC QX のマルチキャストは、マニュアル置き場
+  （support.nec.co.jp）にこの環境から届かず確かめられなかった。
