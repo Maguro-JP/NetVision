@@ -409,3 +409,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `tests/test_configparse_banners.py`。
 - 未確認のまま: 保存した設定で印が `^C` と出る形（既存の試験の形に合わせた）。NEC QX のマルチキャストは、マニュアル置き場
   （support.nec.co.jp）にこの環境から届かず確かめられなかった。
+
+## VLAN の範囲で 0 を通していた（2026-09-29 JST）
+
+- 確かめた資料: Huawei CX320 Command Reference の port trunk allow-pass vlan、S7700 V200R024C00 Configuration Guide
+  「Assigning VLANs」、Cisco VLAN Configuration Guide「Configuring VLAN Trunks」。
+- 起きていたこと: 1つだけ書いた番号は 1〜4094 に絞っていたが、範囲（`0 to 10`）は上端しか見ておらず、機器が受け付けない
+  VLAN 0 を許可 VLAN に入れていた。
+- 直したこと: 範囲も両端を 1〜4094 に絞る。試験は `tests/test_vlan_trunk.py`。
+- 未確認のまま: NEC QX の `port trunk permit vlan`、Junos の `vlan members`、Huawei の `port trunk allow-pass only-vlan` が
+  保存した設定でどう出るか（今は読んでいない）。

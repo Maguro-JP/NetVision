@@ -6,6 +6,17 @@
 - NEC QX … `port trunk permit vlan 10 20 30 to 40`
 - Junos   … `vlan members [ v10 v20 ]`（名前で書けるので番号は別途解決）
 
+番号は 1〜4094。範囲の端がこの外にあるものは読まない（`0 to 10` は機器が受け付けない）。
+
+出典:
+- Cisco: VLAN Configuration Guide, Cisco IOS XE（Catalyst 9300）「Configuring VLAN Trunks」の
+  `switchport trunk allowed vlan { word | add | all | except | none | remove } vlan-list`
+  （`add` などの動詞の扱いは cisco.py の _apply_allowed_vlan）
+- Huawei: S7700 V200R024C00 Configuration Guide「Assigning VLANs」と CX320 Command Reference の
+  `port trunk allow-pass vlan { { vlan-id1 [ to vlan-id2 ] } &<1-10> | all }`（vlan-id は 1〜4094、
+  vlan-id2 は vlan-id1 以上）
+- NEC QX の `port trunk permit vlan` と Junos の `vlan members` は未確認
+
 上位では「番号の集合」として扱いたいので、ここで一度ならして扱う。
 DB には `10,20,30-40` の形で1カラムに入れる。数が多い現場では
 1ポートに数十 VLAN 載るため、行に展開すると量が跳ねる割に使い道が無い。
@@ -37,7 +48,7 @@ def parse_ranges(text: str) -> list[int]:
         start = int(token)
         if index + 2 < len(tokens) and tokens[index + 1] == "-" and tokens[index + 2].isdigit():
             end = int(tokens[index + 2])
-            if start <= end <= 4094:
+            if 1 <= start <= end <= 4094:
                 out.update(range(start, end + 1))
             index += 3
             continue
