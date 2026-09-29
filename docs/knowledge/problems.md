@@ -558,3 +558,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 4つの行を足した。試験は `tests/test_features.py`。
 - 未確認のまま: ヤマハの `sshd service on`（第三者の作例だけ）、Junos の `set protocols mstp` / `vstp`、H3C の
   `ssh server enable`。公式の資料に当たれていないので足していない。
+
+## Catalyst 9000 の 2.5G 口が、略記と正式名で別の口になっていた（2026-09-30 JST）
+
+- 確かめた資料: Command Reference, Cisco IOS XE 17.10.x（Catalyst 9300）の interface コマンド、Cisco「Migration Guide from
+  Cisco Catalyst」Table 5。
+- 起きていたこと: 口の名前をそろえる表（ifname.py）に `TwoGigabitEthernet`・`FiveGigabitEthernet` と略記 `Tw` が無かった。
+  `show interfaces status` の `Tw1/0/1` と CDP・Config の `TwoGigabitEthernet1/0/1` が突き合わず、同じ口が別々に扱われていた。
+- 直したこと: 3つを表に足した。25G の `Twe` とは別の口として扱う。試験は `tests/test_ifname.py`（新設）。
+- 未確認のまま: 5G の `Fi`、100G の `Hu` の略記は公式の出力例に当たれていないので足していない。
+- features.py の docstring に、確かめた行と未確認の行の区切りを書いて、機能の一覧の確認を閉じた。
