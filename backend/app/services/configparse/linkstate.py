@@ -11,7 +11,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
   （Interface / IP-Address / ... / Status / Protocol。Cisco の出典は _read_brief）
 - Junos `show interfaces terse`（Interface / Admin / Link / Proto ...。出典は _read_terse）
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
-- PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
+- PAN-OS `show interface all`（name / id / speed/duplex/state / mac address。出典は _PANOS_STATE）
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
 - Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
 - Cisco NX-OS `show interface brief`
@@ -42,7 +42,11 @@ _ARUBA_HEADER = re.compile(r"^\s*Port\s+Native\s+Mode\s+Type\s+Enabled\s+Status\
 _ARUBA_ROW = re.compile(r"^\s*(\S+)\s+.*?\b(yes|no)\s+(up|down)\b", re.IGNORECASE)
 #: PAN-OS `show interface all`。行の3列目が `1000/full/up` の形
 _PANOS_HEADER = re.compile(r"^\s*name\s+id\s+speed/duplex/state\b", re.IGNORECASE)
-_PANOS_STATE = re.compile(r"^[^/\s]+/[^/\s]+/(up|down)$", re.IGNORECASE)
+#: 出典: Palo Alto Networks Knowledge Base（KCS kA14u000000ToqhCAC、kA14u000000sapmCAA、
+#: kA1Ki000000XZB5KAO）の show interface all の出力。`1000/full/up`、`auto/auto/up`、
+#: `ukn/ukn/down(autoneg)`、`ukn/ukn/down((autoneg))`、`[n/a]/[n/a]/up` の形がある。
+#: 速さと向きの欄に `/` を含む `[n/a]` が入るので、末尾の state だけを見る
+_PANOS_STATE = re.compile(r"/(up|down)(?:\(+[\w-]*\)+)?$", re.IGNORECASE)
 #: FortiGate `get system interface physical`。`==[port1]` の見出しの下に `status: up`
 _FORTI_PHYSICAL = re.compile(r"^\s*==\s*\[\s*(\S+?)\s*\]", re.IGNORECASE)
 _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
@@ -352,7 +356,7 @@ def _read_panos(rows: list[str], parsed: ParsedConfig) -> None:
         columns = row.split()
         if len(columns) < 3:
             break
-        found = _PANOS_STATE.match(columns[2])
+        found = _PANOS_STATE.search(columns[2])
         if not found:
             break
         port = _port(parsed, columns[0])

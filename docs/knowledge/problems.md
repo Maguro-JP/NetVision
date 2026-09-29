@@ -471,3 +471,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 先頭が Config にある口なら表は続いているとみなし、その口の上下は決めずに次へ進む。試験は
   `tests/test_linkstate.py`（試験の `down (err-disabled)` は、一覧に無い値の例として置いた。実機で出る形かは未確認）。
 - 残り: Aruba CX、PAN-OS、FortiGate、NEC QX、FastIron、アラクサラの表。
+
+## PAN-OS の show interface all を、最初の行で読みやめていた（2026-09-29 JST）
+
+- 確かめた資料: Palo Alto Networks Knowledge Base の show interface all の出力（KCS kA14u000000ToqhCAC、kA14u000000sapmCAA、
+  kA1Ki000000XZB5KAO）。
+- 起きていたこと: state 欄は `1000/full/up` のほかに `ukn/ukn/down(autoneg)`、`ukn/ukn/down((autoneg))`、`[n/a]/[n/a]/up` の
+  形で出る。読み手は `速さ/向き/up|down` の3つ区切りしか受け付けず、使っていない口（down(autoneg)）が1つでも先頭に
+  あると、そこで表を読みやめていた。実機では未使用の口が先頭に並ぶことが多く、どの口の上下も分からないことがあった。
+- 直したこと: 末尾の state（up / down と、その後ろの括弧）だけを見る。`[n/a]` の中の `/` に引きずられない。試験は
+  `tests/test_linkstate.py`。
+- 未確認のまま: Aruba CX の show interface brief（公式の出力例に当たれず、HPE のラボ手引きとコミュニティの作例だけ。
+  読み手はそれらに合っていた）。新しい PAN-OS の `speed/duplex/state/fec` の形（公式の出力例に当たれていない）。

@@ -541,3 +541,39 @@ def test_ip_interface_brief_keeps_reading_past_an_unknown_protocol_value() -> No
     parsed = configparse.parse("\n".join(config + table))
     states = {item.name: item.link_state for item in parsed.interfaces}
     assert list(states.values()) == ["up", None, "disabled", "up"]
+
+
+def test_panos_state_with_autoneg_and_na_is_read() -> None:
+    """PAN-OS の state 欄の `down(autoneg)`、`down((autoneg))`、`[n/a]/[n/a]/up` を読む。
+
+    出典: Palo Alto Networks Knowledge Base（kA14u000000ToqhCAC、kA14u000000sapmCAA、
+    kA1Ki000000XZB5KAO）の show interface all の出力。
+    """
+    config = [
+        "set deviceconfig system hostname pa1",
+        "set network interface ethernet ethernet1/1 layer3 ip 10.0.0.1/24",
+        "set network interface ethernet ethernet1/2 layer3 ip 10.0.1.1/24",
+        "set network interface ethernet ethernet1/3 layer3 ip 10.0.2.1/24",
+        "set network interface ethernet ethernet1/4 layer3 ip 10.0.3.1/24",
+    ]
+    table = [
+        "admin@PA-3410> show interface all",
+        "",
+        "total configured hardware interfaces: 5",
+        "",
+        "name                    id    speed/duplex/state            mac address",
+        "-" * 80,
+        "ethernet1/1             16    ukn/ukn/down(autoneg)         60:15:2b:8d:b1:10",
+        "ethernet1/2             17    ukn/ukn/down((autoneg))       00:00:00:00:00:00",
+        "tunnel                  4     [n/a]/[n/a]/up                60:15:2b:8d:b1:04",
+        "ethernet1/3             18    1000/full/up                  60:15:2b:8d:b1:12",
+        "ethernet1/4             19    auto/auto/up                  06:62:db:00:00:01",
+    ]
+    parsed = configparse.parse("\n".join(config + table))
+    states = {normalize(item.name): item.link_state for item in parsed.interfaces}
+    assert [states[normalize(f"ethernet1/{n}")] for n in range(1, 5)] == [
+        "down",
+        "down",
+        "up",
+        "up",
+    ]
