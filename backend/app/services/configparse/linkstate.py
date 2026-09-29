@@ -17,6 +17,9 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Cisco NX-OS `show interface brief`
   （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port）
 - NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
+- Huawei VRP `display interface brief`（Interface / PHY / Protocol ...。出典は _vrp_state）
+
+出典は Huawei VRP の表だけ確かめた。ほかの表の形は未確認（既存の試験の形のまま）。
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -236,13 +239,36 @@ _LINK_WORDS = {
 }
 
 
+#: VRP の PHY 列の頭に付く印。`*` は人が止めた、`^` は控え、`~` と `#` はループ検出で止めた
+_VRP_MARKS = {"*": "disabled", "^": "down", "~": "err-disabled", "#": "err-disabled"}
+#: 末尾の `(s)` `(e)` `(dl)` などの印。線の上下そのものは印の前の語で決まる
+_VRP_SUFFIX = re.compile(r"\([a-z]+\)$", re.IGNORECASE)
+
+
+def _vrp_state(word: str) -> str | None:
+    """PHY 列の値を up / down / disabled / err-disabled にそろえる。
+
+    出典: Huawei「Troubleshooting S Series Switch Port and Interface Problems」の
+    display interface brief の凡例（*down: administratively down、^down: standby、
+    ~down: LDT down、#down: LBDT down、(l) loopback、(s) spoofing、(E) E-Trunk down、
+    (b) BFD down、(e) ETHOAM down、(dl) DLDP down、(d) Dampening Suppressed など）。
+    """
+    base = _VRP_SUFFIX.sub("", word).lower()
+    if base[:1] in _VRP_MARKS and base[1:] == "down":
+        return _VRP_MARKS[base[:1]]
+    return base if base in ("up", "down") else None
+
+
 def _read_vrp(rows: list[str], parsed: ParsedConfig) -> None:
-    """VRP は PHY の列。`*down` は人が止めたという意味で、線の話ではない。"""
+    """VRP は PHY の列。`*down` は人が止めたという意味で、線の話ではない。
+
+    印の付いた行（`^down`、`up(s)` など）で表の読み取りを止めない。
+    """
     for row in rows:
         columns = row.split()
         if len(columns) < 2:
             break
-        state = _LINK_WORDS.get(columns[1].lower())
+        state = _vrp_state(columns[1])
         if state is None:
             break
         port = _port(parsed, columns[0])

@@ -383,3 +383,38 @@ def test_a_port_shut_by_a_person_is_not_called_a_broken_link() -> None:
         ]
     )
     assert configparse.parse(text).interfaces[0].link_state == "disabled"
+
+
+def test_vrp_phy_marks_do_not_stop_the_table() -> None:
+    """VRP の PHY 列の印（^down、#down、up(s) など）で、表の読み取りを止めない。
+
+    出典: Huawei「Troubleshooting S Series Switch Port and Interface Problems」の
+    display interface brief の凡例（*down: administratively down、^down: standby、
+    ~down: LDT down、#down: LBDT down、(s): spoofing、(e): ETHOAM down）。
+    """
+    names = [f"GigabitEthernet0/0/{n}" for n in range(1, 7)]
+    config = ["sysname hw1", "#"]
+    for name in names:
+        config += [f"interface {name}", " port link-type access", "#"]
+    table = [
+        "PHY: Physical",
+        "*down: administratively down",
+        "^down: standby",
+        "Interface                   PHY   Protocol InUti OutUti   inErrors  outErrors",
+        "GigabitEthernet0/0/1        ^down down        0%     0%          0          0",
+        "GigabitEthernet0/0/2        up(s) up          0%     0%          0          0",
+        "GigabitEthernet0/0/3        #down down        0%     0%          0          0",
+        "GigabitEthernet0/0/4        *down down        0%     0%          0          0",
+        "GigabitEthernet0/0/5        down(e) down      0%     0%          0          0",
+        "GigabitEthernet0/0/6        up    up          0%     0%          0          0",
+    ]
+    text = "\n".join(["VRP (R) software, Version 5.170 (S5720 V200R011C10SPC500)"] + config + table)
+    ports = {normalize(item.name): item.link_state for item in configparse.parse(text).interfaces}
+    assert [ports[normalize(name)] for name in names] == [
+        "down",
+        "up",
+        "err-disabled",
+        "disabled",
+        "down",
+        "up",
+    ]
