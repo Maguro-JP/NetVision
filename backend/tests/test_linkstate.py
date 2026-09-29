@@ -418,3 +418,28 @@ def test_vrp_phy_marks_do_not_stop_the_table() -> None:
         "down",
         "up",
     ]
+
+
+def test_an_unknown_status_word_does_not_stop_the_status_table() -> None:
+    """知らない言葉の行があっても、その後ろの口の上下は読む。
+
+    出典: Cisco IOS XE Interface and Hardware Components Configuration Guide
+    （Catalyst 9400、16.11.x）「Checking Port Status and Connectivity」の show interface status。
+    知らない言葉（ここでは sfpAbsent）の意味は決めず、空のままにする。
+    """
+    config = "\n".join(
+        [
+            "hostname sw1",
+            "interface GigabitEthernet1/0/1",
+            "interface GigabitEthernet1/0/2",
+            "interface GigabitEthernet1/0/3",
+            "Switch# show interface status",
+            "Port      Name               Status       Vlan       Duplex  Speed Type",
+            "Gi1/0/1                      connected    1          a-full a-1000 10/100/1000BaseTX",
+            "Gi1/0/2                      sfpAbsent    1            auto   auto unknown",
+            "Gi1/0/3                      notconnect   1            auto   auto 10/100/1000BaseTX",
+            "Switch#",
+        ]
+    )
+    ports = {item.name: item.link_state for item in configparse.parse(config).interfaces}
+    assert list(ports.values()) == ["up", None, "notconnect"]

@@ -430,3 +430,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 括弧の印は外して上下を読み、頭の印は `*` を人が止めた、`^` を down、`~` と `#` を err-disabled に
   そろえる（下流の linkcheck と topology は err-disabled を「上がっていない」として扱う）。試験は `tests/test_linkstate.py`。
 - 未確認のまま: linkstate.py のほかの表（Cisco・NX-OS・Junos・Aruba CX・PAN-OS・FortiGate・NEC QX・FastIron・アラクサラ）。
+
+## show interfaces status の知らない言葉で、表の読み取りが止まっていた（2026-09-29 JST）
+
+- 確かめた資料: Cisco IOS XE Interface and Hardware Components Configuration Guide（Catalyst 9300 / 9400、16.11.x・17.2.x）
+  「Checking Port Status and Connectivity」の show interface status の出力例。
+- 起きていたこと: Status 列の言葉が手元の一覧に無い行（光モジュールが無い口の sfpAbsent など）で、表の終わりと
+  みなして読むのをやめていた。その行より下の口は、線の上下が分からないままになっていた。
+- 直したこと: 知らない言葉でも、先頭が Config にある口なら表は続いているとみなして次の行へ進む。その口の上下は
+  決めない（言葉の意味を資料で確かめられていないため）。試験は `tests/test_linkstate.py`。
+- 未確認のまま: connected / notconnect / err-disabled 以外の言葉（disabled、inactive、monitoring など）は既存の試験の形。
