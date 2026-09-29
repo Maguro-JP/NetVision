@@ -26,9 +26,34 @@ from __future__ import annotations
 
 import re
 
-#: `banner motd ^C` の形。印は種別の後ろに書かれる。
-#: 種別だけの `banner motd` は、印が無いので触らない（どこまでが文言かを決められない）
-_OPEN = re.compile(r"^\s*banner\s+[\w-]+\s+(\S+)\s*$", re.IGNORECASE)
+#: `banner motd ^C` の形。印は種別の後ろに書かれ、文言が同じ行に続くこともある
+#: （`banner motd ^CWelcome`、`banner motd #Maintenance at 6pm#`）。
+#: 種別だけの `banner motd` は、印が無いので触らない（どこまでが文言かを決められない）。
+#: 種別を省いた `banner #...#` は motd と同じ扱い。
+#:
+#: 出典: Cisco IOS Command Reference の banner motd（`banner motd d message d`。d は
+#: 区切りに選んだ1文字で、2回目に出たところで文言が終わる）と、Configuration
+#: Fundamentals Configuration Guide 15M&T「Managing Connections, Menus, and System
+#: Banners」。保存した設定で印が `^C` と出る形は、既存の試験の形に合わせた（未確認）。
+_OPEN = re.compile(
+    r"^\s*banner\s+(?:(?:motd|login|exec|incoming|slip-ppp|prompt-timeout|config-save)\s+)?"
+    r"(?P<rest>\S.*?)\s*$",
+    re.IGNORECASE,
+)
+
+
+def _mark(rest: str) -> tuple[str, str] | None:
+    """印と、印の後ろに同じ行で続く文言を返す。印と決められなければ None。
+
+    英数字で始まるものは印にしない。ASA の `banner motd 文言` のように印を使わない
+    書き方があり、1文字目を印とみなすと、その文字が次に出る所まで設定を捨ててしまう。
+    """
+    if rest.startswith("^C"):
+        return "^C", rest[2:]
+    first = rest[0]
+    if first.isalnum() or first.isspace():
+        return None
+    return first, rest[1:]
 
 
 def strip(text: str) -> str:
@@ -41,11 +66,17 @@ def strip(text: str) -> str:
     index = 0
     while index < len(lines):
         found = _OPEN.match(lines[index])
-        if found is None:
+        marked = _mark(found.group("rest")) if found else None
+        if marked is None:
             index += 1
             continue
 
-        mark = found.group(1)
+        mark, after = marked
+        if mark in after:
+            # 同じ行で閉じている。その行だけを外す
+            out[index] = ""
+            index += 1
+            continue
         close = _close(lines, index + 1, mark)
         if close is None:
             # 閉じが無い。ここから先を全部捨てると設定本体まで消える

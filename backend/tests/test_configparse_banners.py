@@ -63,3 +63,36 @@ def test_a_banner_without_a_mark_is_left_alone() -> None:
 def test_the_lines_do_not_move() -> None:
     """行番号で場所を示している読み手とずれないこと。"""
     assert len(banners.strip(WITH_BANNER).splitlines()) == len(WITH_BANNER.splitlines())
+
+
+def test_a_banner_whose_text_starts_on_the_first_line_is_still_removed() -> None:
+    """`banner motd ^CWelcome` のように、印の直後に文言が続いても閉じを見つける。
+
+    出典: Cisco IOS Command Reference の banner motd（`banner motd d message d`。
+    d は1文字で、2回目に出たところで文言が終わる）。
+    """
+    text = (
+        "hostname sw-01\nbanner motd ^CWelcome\ninterface GigabitEthernet0/99\n^C\n"
+        "interface GigabitEthernet0/1\n"
+    )
+    stripped = banners.strip(text)
+    assert "GigabitEthernet0/99" not in stripped
+    assert "interface GigabitEthernet0/1" in stripped
+    assert len(stripped.splitlines()) == len(text.splitlines())
+
+
+def test_a_delimiter_of_your_choice_is_followed() -> None:
+    """区切りは好きな1文字。公式の例は `#` と `%` と `/`。"""
+    text = (
+        "hostname sw-01\nbanner exec /\n interface GigabitEthernet0/99\n /\n"
+        "banner motd %You have entered $(hostname) %\n"
+        "interface GigabitEthernet0/1\n"
+    )
+    parsed = configparse.parse(text)
+    assert [port.name for port in parsed.interfaces] == ["GigabitEthernet0/1"]
+
+
+def test_a_banner_without_a_delimiter_is_left_alone() -> None:
+    """ASA は `banner motd 文言` と印を使わない。1文字目を印にすると設定を捨てる。"""
+    text = "hostname fw-01\nbanner motd Authorized use only\ninterface GigabitEthernet0/1\n"
+    assert banners.strip(text) == text
