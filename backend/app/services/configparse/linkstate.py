@@ -9,7 +9,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Cisco `show interfaces status`（Port / Name / Status / Vlan / Duplex / Speed / Type）
 - Cisco / Arista / NEC IX `show ip interface brief`
   （Interface / IP-Address / ... / Status / Protocol）
-- Junos `show interfaces terse`（Interface / Admin / Link / Proto ...）
+- Junos `show interfaces terse`（Interface / Admin / Link / Proto ...。出典は _read_terse）
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
@@ -177,14 +177,38 @@ def _read_brief(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "up" if status == "up" and protocol == "up" else "down"
 
 
+#: terse の続きの行の先頭。アドレス（`10.0.0.16`、`fe80::1/64`）か family の名前
+_TERSE_CONTINUATION = re.compile(
+    r"^(?:\d{1,3}(?:\.\d{1,3}){3}(?:/\d+)?"  # IPv4。`ae0.0` のような口の名前は数字で始まらない
+    r"|[0-9a-f]*:[0-9a-f:]*(?:/\d+)?"  # IPv6。`xe-0/0/0:1` のような口は - や / を含むので当たらない
+    r"|inet6?|mpls|iso|eth-switch|bridge|vpls|ccc|tnp|multiservice)$",
+    re.IGNORECASE,
+)
+
+
 def _read_terse(rows: list[str], parsed: ParsedConfig) -> None:
+    """Junos `show interfaces terse`。
+
+    出典: Junos OS CLI Reference「show interfaces terse」（Admin は up / down、Link は
+    up / down）と、Junos Software CLI Reference の show interfaces のサンプル出力。
+    サンプルには Link が `ready` の行（`st0.1  up  ready inet`）と、同じ論理口の2つ目の
+    アドレスだけを字下げして並べた行（`10.0.0.16  --> 0/0`）がある。どちらも表の途中なので、
+    読みやめない。
+    """
     for row in rows:
         columns = row.split()
+        if columns and _TERSE_CONTINUATION.match(columns[0]):
+            # 同じ論理口の続きの行（アドレスか family だけ）。口の上下は前の行で読んである。
+            # 表そのものが字下げされていることがあるので、字下げでは見分けない
+            continue
         if len(columns) < 3:
             break
         admin, link = columns[1].lower(), columns[2].lower()
-        if admin not in ("up", "down") or link not in ("up", "down"):
+        if admin not in ("up", "down"):
             break
+        if link not in ("up", "down"):
+            # `ready` などの言葉。口の上下は決めず、表は続ける
+            continue
         port = _port(parsed, columns[0].split(".")[0]) or _port(parsed, columns[0])
         if port is None:
             continue

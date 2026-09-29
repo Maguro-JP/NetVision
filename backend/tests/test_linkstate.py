@@ -443,3 +443,36 @@ def test_an_unknown_status_word_does_not_stop_the_status_table() -> None:
     )
     ports = {item.name: item.link_state for item in configparse.parse(config).interfaces}
     assert list(ports.values()) == ["up", None, "notconnect"]
+
+
+def test_junos_terse_keeps_reading_past_ready_and_address_only_rows() -> None:
+    """Link が `ready` の行と、アドレスだけが続く行で、表の読み取りを止めない。
+
+    出典: Junos Software CLI Reference「show interfaces」の show interfaces terse の
+    サンプル出力（`st0.1  up  ready inet`、字下げした `10.0.0.16  --> 0/0` の行）と、
+    Junos OS CLI Reference「show interfaces terse」の出力欄の説明。
+    表そのものが字下げされていても読むこと。
+    """
+    config = [
+        "set system host-name srx1",
+        "set interfaces ge-0/0/0 unit 0 family inet address 10.209.4.61/18",
+        "set interfaces ae0 unit 0 family inet address 10.2.2.1/30",
+        "set interfaces ge-0/0/1 unit 0 family inet address 10.1.1.1/24",
+    ]
+    table = [
+        "user@host> show interfaces terse",
+        "    Interface               Admin Link Proto    Local                 Remote",
+        "    ge-0/0/0                up    up",
+        "    ge-0/0/0.0              up    up   inet     10.209.4.61/18",
+        "    st0.1                   up    ready inet",
+        "    lo0.16385               up    up   inet     10.0.0.1            --> 0/0",
+        "                                                10.0.0.16           --> 0/0",
+        "    ae0                     up    up",
+        "    ae0.0                   up    up   inet     10.2.2.1/30",
+        "    ge-0/0/1                up    down",
+        "    ge-0/0/1.0              up    down inet     10.1.1.1/24",
+    ]
+    parsed = configparse.parse("\n".join(config + table))
+    states = {normalize(item.name): item.link_state for item in parsed.interfaces}
+    assert states[normalize("ae0")] == "up"
+    assert states[normalize("ge-0/0/1")] == "down"
