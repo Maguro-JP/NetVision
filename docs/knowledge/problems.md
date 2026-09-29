@@ -461,3 +461,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 出力例に無い言葉の行は上下を決めずに次へ進む（show interfaces status と同じ扱い）。試験は
   `tests/test_linkstate.py`。
 - 残り: Cisco show ip interface brief、Aruba CX、PAN-OS、FortiGate、NEC QX、FastIron、アラクサラの表。
+
+## show ip interface brief も、知らない Protocol の値で読みやめる作りだった（2026-09-29 JST）
+
+- 確かめた資料: Cisco IOS Interface and Hardware Component Command Reference（IOS XE 16）の show ip interface と、
+  その Table「show ip interface brief Field Descriptions」。
+- 分かったこと: Status の値は up / down / administratively down の3つで、読み手はこれに合っていた。Protocol は値の
+  一覧が無い。読み手は Protocol が up / down 以外の行で表を読みやめる作りで、#103〜#106 と同じ形だった。
+- 直したこと: 先頭が Config にある口なら表は続いているとみなし、その口の上下は決めずに次へ進む。試験は
+  `tests/test_linkstate.py`（試験の `down (err-disabled)` は、一覧に無い値の例として置いた。実機で出る形かは未確認）。
+- 残り: Aruba CX、PAN-OS、FortiGate、NEC QX、FastIron、アラクサラの表。

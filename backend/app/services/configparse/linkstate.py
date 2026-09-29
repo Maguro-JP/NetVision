@@ -8,7 +8,7 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 
 - Cisco `show interfaces status`（Port / Name / Status / Vlan / Duplex / Speed / Type）
 - Cisco / Arista / NEC IX `show ip interface brief`
-  （Interface / IP-Address / ... / Status / Protocol）
+  （Interface / IP-Address / ... / Status / Protocol。Cisco の出典は _read_brief）
 - Junos `show interfaces terse`（Interface / Admin / Link / Proto ...。出典は _read_terse）
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address）
@@ -155,6 +155,13 @@ def _read_status(rows: list[str], parsed: ParsedConfig) -> None:
 
 
 def _read_brief(rows: list[str], parsed: ParsedConfig) -> None:
+    """Cisco `show ip interface brief`。
+
+    出典: Cisco IOS Interface and Hardware Component Command Reference（IOS XE 16）の
+    show ip interface の Table「show ip interface brief Field Descriptions」（Status は
+    up / down / administratively down。Protocol は値の一覧が無い）。一覧に無い値の行でも、
+    先頭が Config にある口なら表は続いているとみなし、上下は決めずに次へ進む。
+    """
     for row in rows:
         columns = row.split()
         if len(columns) < 4:
@@ -167,6 +174,8 @@ def _read_brief(rows: list[str], parsed: ParsedConfig) -> None:
             else columns[-2].lower()
         )
         if protocol not in ("up", "down") or status not in ("up", "down", "administratively down"):
+            if _port(parsed, columns[0]) is not None:
+                continue
             break
         port = _port(parsed, columns[0])
         if port is None:
