@@ -501,3 +501,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 未確認のまま: Aruba CX と FortiGate（公式の出力例に当たれず、ラボ手引き・コミュニティ・第三者の作例とは合っていた）、
   NEC QX・NEC IX・アラクサラ（マニュアル置き場に届かない）、Arista の show ip interface brief、`show interfaces` の段落。
 - 次から: 表を読む処理を新しく書くときは、知らない値の行を表の終わりとみなさない。先頭が Config にある口なら次の行へ進む。
+
+## 機能の一覧（features.py）が、入っていない機能を載せていた（2026-09-29 JST）
+
+- 確かめた資料: FortiOS CLI Reference の config firewall vip、Cisco IOS XE（Catalyst 9300）Stack Manager and High
+  Availability Configuration Guide、Arista EOS User Manual、AOS-CX Multicast Guide、Junos OS の IGMP Snooping・PIM の資料。
+- 起きていたこと:
+  - `config firewall vip` があるだけで「負荷分散」と載せていた。vip は静的 NAT（ポート転送）にも使うので、NAT しか
+    していない FortiGate にも負荷分散が載っていた。
+  - `switch 1 provision` が1行あるだけで「スタック」と載せていた。単体の Catalyst にも1行書かれる（#90 と同じ見落とし）。
+  - Arista の `pim ipv4 sparse-mode`、AOS-CX の `ip pim-sparse enable`、Junos の `set protocols pim` と
+    `set protocols igmp-snooping` を拾えず、マルチキャストが「無い」ことになっていた。
+- 直したこと: 負荷分散は `set type server-load-balance` の行で拾う。スタックは provision が2台分以上のときだけ載せる。
+  3社の PIM と Junos の IGMP スヌーピングの行を足した。試験は `tests/test_features.py`（既存の FortiGate の試験は
+  公式の形の vip に直した）。
+- 同じ形の見落とし: 読み手（hapair.py など）で直した取り違えは、features.py の表にも同じ形で残っていないかを見る。
