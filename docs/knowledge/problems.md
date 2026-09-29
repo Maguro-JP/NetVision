@@ -451,3 +451,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 先頭がアドレス（IPv4・IPv6）か family の名前なら続きの行として飛ばす。Link が up / down 以外の行は
   上下を決めずに次へ進む。表が字下げされていても読む（字下げでは続きの行を見分けない）。`ae0.0` のような口の名前を
   アドレスと取り違えないよう、IPv4 は数字4つの形、IPv6 はコロンを含む形に絞った。試験は `tests/test_linkstate.py`。
+
+## NX-OS の show interface brief も、知らない Status の言葉で読みやめる作りだった（2026-09-29 JST）
+
+- 確かめた資料: Cisco Nexus 5000 / 5600 / 6000 Series Interfaces・Layer 2 Command Reference の show interface brief の出力例。
+- 分かったこと: 公式の出力例の形（見出し2行、罫線、Status は up / down、`Eth1/5.2` の枝の口）には、読み手は合っていた。
+  ただし Status が up / down 以外の行で表を読みやめる作りで、#103〜#105 と同じ形だった。公式の出力例には up / down
+  以外の言葉は出ていないので、実機で出るかは確かめていない（未確認）。
+- 直したこと: 出力例に無い言葉の行は上下を決めずに次へ進む（show interfaces status と同じ扱い）。試験は
+  `tests/test_linkstate.py`。
+- 残り: Cisco show ip interface brief、Aruba CX、PAN-OS、FortiGate、NEC QX、FastIron、アラクサラの表。
