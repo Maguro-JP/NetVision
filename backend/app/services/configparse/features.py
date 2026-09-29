@@ -17,11 +17,22 @@
 
 ### 出典
 
-表の行のうち、公式の資料で確かめたのは次のもの（出典は行の上のコメント）。
-FortiGate の負荷分散、Catalyst のスタック、Arista・AOS-CX・Junos の PIM、
-Junos の IGMP スヌーピング。ほかの行は、それぞれの読み手（hapair.py、
-multicast.py、loadbalance.py など）で確かめた書き方と同じ形を拾うもの、
-または未確認（既存の試験の形のまま）。
+公式の資料で確かめた行（出典は行の上のコメントと tests/test_features.py）:
+
+- ACL・NAT・SNMP: ヤマハ（ip filter / secure filter / nat descriptor / snmp host）、
+  PAN-OS（rulebase security / nat）、H3C（acl ipv6 advanced）
+- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、Junos（サーバー）、AOS-CX
+- STP・SSH・IPsec: Junos（rstp / system services ssh）、Huawei（stelnet）、PAN-OS（ipsec）
+- マルチキャスト: Arista・AOS-CX・Junos の PIM、Junos の IGMP スヌーピング
+- 負荷分散: FortiGate（server-load-balance）
+- スタック: Catalyst（provision）、H3C（irf-port）、Huawei CE（stack-port）。
+  どれも2台分以上あるときだけ載せる
+
+未確認のまま残している行: ヤマハの sshd、Junos の mstp・vstp と DHCP リレー、
+PAN-OS の DHCP、H3C の ssh server・dhcp select server。Huawei S シリーズ（V200）の
+スタックは設定が Config に出ないので、ここでは読めない。
+ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
+loadbalance.py など）で確かめた書き方と同じ形を拾うもの、または既存の試験の形のまま。
 """
 
 from __future__ import annotations

@@ -2,6 +2,10 @@
 
 同じポートが `Gi0/1` `Gig 0/1` `GigabitEthernet0/1` と書かれるため、
 突き合わせる前に正式名へ寄せる。表示は元の表記を残し、比較にだけ正規化名を使う。
+
+出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
+Cisco の Command Reference と Migration Guide で確かめた（tests/test_ifname.py）。
+ほかの略記は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -14,6 +18,10 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("ten-gigabitethernet", "TenGigabitEthernet"),
     ("tengigabitethernet", "TenGigabitEthernet"),
     ("twentyfivegige", "TwentyFiveGigE"),
+    # Catalyst 9000 の mGig（2.5G・5G）。出典: Command Reference, Cisco IOS XE 17.10.x
+    # （Catalyst 9300）の interface コマンド
+    ("twogigabitethernet", "TwoGigabitEthernet"),
+    ("fivegigabitethernet", "FiveGigabitEthernet"),
     ("forty-gigabitethernet", "FortyGigabitEthernet"),
     ("fortygigabitethernet", "FortyGigabitEthernet"),
     ("hundredgige", "HundredGigE"),
@@ -31,6 +39,9 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("loopback", "Loopback"),
     ("tunnel", "Tunnel"),
     ("twe", "TwentyFiveGigE"),
+    # 2.5G は `Tw1/0/1`（Cisco「Migration Guide from Cisco Catalyst」Table 5）。
+    # 25G の `Twe` とは別の口。5G の `Fi` と 100G の `Hu` の略記は未確認
+    ("tw", "TwoGigabitEthernet"),
     ("hun", "HundredGigE"),
     ("tengig", "TenGigabitEthernet"),
     ("fortygig", "FortyGigabitEthernet"),
