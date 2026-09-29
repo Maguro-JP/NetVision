@@ -513,3 +513,31 @@ def test_nxos_brief_follows_the_official_sample() -> None:
     assert states[normalize("Ethernet1/3")] is None
     assert states[normalize("Ethernet1/5.2")] == "down"
     assert states[normalize("Ethernet1/6")] == "up"
+
+
+def test_ip_interface_brief_keeps_reading_past_an_unknown_protocol_value() -> None:
+    """Protocol 列に一覧に無い値が出ても、その下の口の上下は読む。
+
+    出典: Cisco IOS Interface and Hardware Component Command Reference（IOS XE 16）の
+    show ip interface brief の出力例と Field Descriptions（Status は up / down /
+    administratively down）。Protocol の値は一覧が無いので、知らない値の口は空のままにする。
+    """
+    config = [
+        "hostname r1",
+        "interface GigabitEthernet0/0/0",
+        "interface GigabitEthernet0/0/1",
+        "interface Serial1/0/0",
+        "interface Loopback0",
+    ]
+    table = [
+        "Router#show ip interface brief",
+        "Interface              IP-Address      OK? Method Status                Protocol",
+        "GigabitEthernet0/0/0   192.0.2.1       YES NVRAM  up                    up",
+        "GigabitEthernet0/0/1   unassigned      YES NVRAM  down                  "
+        "down (err-disabled)",
+        "Serial1/0/0            unassigned      YES unset  administratively down down",
+        "Loopback0              10.108.200.5    YES NVRAM  up                    up",
+    ]
+    parsed = configparse.parse("\n".join(config + table))
+    states = {item.name: item.link_state for item in parsed.interfaces}
+    assert list(states.values()) == ["up", None, "disabled", "up"]
