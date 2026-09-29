@@ -101,7 +101,16 @@ def _rule(category: str, name: str, pattern: str, detail: str = "") -> _Rule:
 _RULES: tuple[_Rule, ...] = (
     # 通信の制限
     _rule(ACCESS_CONTROL, "ACL", r"^\s*(?:ip\s+|ipv6\s+|mac\s+)?access-list\s+"),
-    _rule(ACCESS_CONTROL, "ACL", r"^\s*acl\s+(?:number|name|advanced|basic)\s"),
+    # H3C Comware 7 は IPv6 を `acl ipv6 advanced 3000` と書く（EAD Authentication (IPv6) の設定例）
+    _rule(ACCESS_CONTROL, "ACL", r"^\s*acl\s+(?:ipv6\s+)?(?:number|name|advanced|basic)\s"),
+    # ヤマハは `ip filter 2000 ...` で定義し、`ip lan2 secure filter in 2000` で口に当てる
+    # （ヤマハ「NAT ディスクリプター コマンド仕様」の図と、動的 IP マスカレードの設定例）
+    _rule(ACCESS_CONTROL, "ACL", r"^\s*ip(?:v6)?\s+filter\s+\d+\s"),
+    _rule(
+        ACCESS_CONTROL,
+        "ACL の適用",
+        r"^\s*ip(?:v6)?\s+(?:lan\d+|pp|tunnel)\s+secure\s+filter\s+(?:in|out)\b",
+    ),
     _rule(ACCESS_CONTROL, "ACL の適用", r"^\s*ip\s+access-group\s"),
     # IOS のゾーンベースファイアウォール。ゾーンの対に inspect のポリシーを当てる
     _rule(ACCESS_CONTROL, "ゾーン間ポリシー（ZBFW）", r"^\s*zone-pair\s+security\s+"),
@@ -110,6 +119,8 @@ _RULES: tuple[_Rule, ...] = (
     _rule(ACCESS_CONTROL, "フィルター", r"^\s*set\s+firewall\s+family\s"),
     _rule(ACCESS_CONTROL, "ポリシー", r"^\s*config\s+firewall\s+policy\s*$"),
     _rule(ACCESS_CONTROL, "ゾーン", r"^\s*config\s+system\s+zone\s*$"),
+    # PAN-OS の set 形式（Knowledge Base「Viewing the configuration in set and XML format」）
+    _rule(ACCESS_CONTROL, "ポリシー", r"^\s*set\s+rulebase\s+security\s+rules\s"),
     # アドレス変換
     _rule(NAT, "NAT", r"^\s*ip\s+nat\s+(?:inside|outside|source|pool)\b"),
     # ASA は `nat (inside,outside) …`
@@ -117,6 +128,12 @@ _RULES: tuple[_Rule, ...] = (
     _rule(NAT, "NAT", r"^\s*nat\s+(?:outbound|server|address-group)\b"),
     _rule(NAT, "NAT", r"^\s*set\s+security\s+nat\b"),
     _rule(NAT, "NAT", r"^\s*set\s+nat\s+(?:enable|disable)\b"),
+    # ヤマハは `nat descriptor type 1 masquerade` で定義し、`ip lan2 nat descriptor 1` で当てる
+    # （ヤマハ「NAT ディスクリプター コマンド仕様」）
+    _rule(NAT, "NAT", r"^\s*nat\s+descriptor\s+type\s+\d+\s"),
+    _rule(NAT, "NAT", r"^\s*ip\s+(?:lan\d+|pp|tunnel)\s+nat\s+descriptor\s"),
+    # PAN-OS（Knowledge Base「How to Create and View NAT Policies Using the CLI」）
+    _rule(NAT, "NAT", r"^\s*set\s+rulebase\s+nat\s+rules\s"),
     # アドレス配布
     _rule(DHCP, "DHCP サーバー", r"^\s*ip\s+dhcp\s+pool\s"),
     _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+server\s+ip-pool\s"),
@@ -174,6 +191,9 @@ _RULES: tuple[_Rule, ...] = (
     _rule(MANAGEMENT, "SNMP", r"^\s*set\s+snmp\s+(?:community|trap-group)\b"),
     _rule(MANAGEMENT, "SNMP", r"^\s*config\s+system\s+snmp\s+(?:community|user)\s*$"),
     _rule(MANAGEMENT, "SNMP", r"^\s*set\s+deviceconfig\s+system\s+snmp-setting\b"),
+    # ヤマハは受け付ける相手（`snmpv2c host 192.168.1.1`）かトラップの送り先で入れる。
+    # 初期値の `none` は受け付けない（ヤマハ「SNMP」の snmp host / snmpv2c host の書式）
+    _rule(MANAGEMENT, "SNMP", r"^\s*snmp(?:v2c|v3)?\s+(?:trap\s+)?host\s+(?!none\s*$)\S"),
     _rule(MANAGEMENT, "Syslog", r"^\s*logging\s+(?:host\s+)?(\d+\.\d+\.\d+\.\d+)", "送り先"),
     _rule(MANAGEMENT, "Syslog", r"^\s*info-center\s+loghost\s+(\S+)", "送り先"),
     # ASA は口の名前が間に入る（logging host inside 10.0.0.1）
@@ -235,9 +255,9 @@ _RULES: tuple[_Rule, ...] = (
     # NX-OS は `hsrp 10` の下に字下げで仮想アドレスを書く
     _rule(HIGH_AVAILABILITY, "HSRP", r"^\s*hsrp\s+\d+(?:\s+ipv[46])?\s*$"),
     _rule(HIGH_AVAILABILITY, "VRRP", r"^\s*vrrp\s+(?:vrid\s+)?\d+\s+(?:ip|virtual-ip)\b"),
-    # `switch N provision` は単体の Catalyst にも1台分書かれる（#90）。2台分以上あるときだけ
-    # スタックとするので、この表には載せず parse の中で数える
-    _rule(HIGH_AVAILABILITY, "スタック", r"^\s*(?:stack-port|irf-port)\b"),
+    # スタック（`switch N provision`・`irf-port N/x`・`stack-port N/x`）は組む前の1台にも
+    # 自分の番号の分が書かれる（#90）。2台分以上あるときだけスタックとするので、
+    # この表には載せず parse の中で数える
     _rule(HIGH_AVAILABILITY, "機器間の同期", r"^\s*config\s+system\s+ha\s*$"),
     _rule(HIGH_AVAILABILITY, "フェイルオーバー", r"^failover\s+lan\s+unit\s+"),
     # Aruba CX は VSX、Arista は MLAG で2台を1台に見せる。
@@ -252,12 +272,21 @@ _RULES: tuple[_Rule, ...] = (
 #: Cisco IOS XE（Catalyst 9300）の設定例。単体でも `switch 1 provision ...` が1行書かれる
 _PROVISION = re.compile(r"^\s*switch\s+(\d+)\s+provision\b", re.IGNORECASE)
 
+#: IRF・スタックのポート。`N/x` の N がメンバー番号。
+#: 出典: H3C「Automatic IRF Setup Configuration Examples」「IRF Configuration Examples」の
+#: Configuration files（`irf-port 1/2`）、Huawei CloudEngine 8800/6800/5800 Configuration
+#: Guide - Virtualization「Example for Establishing a Stack of Two Switches」
+#: （物理口の下の `stack-port 1/1`）。
+#: どちらも組む前の1台の設定に、自分の番号の行だけが書かれる形がある
+_STACK_PORT = re.compile(r"^\s*(?:irf-port|stack-port)\s+(\d+)/\d+\s*$", re.IGNORECASE)
+
 
 def parse(text: str) -> list[ParsedFeature]:
     """その Config で使っている機能を並べる。区分ごとにまとめて返す。"""
     found: dict[tuple[str, str], ParsedFeature] = {}
     details: dict[tuple[str, str], list[str]] = {}
     provisions: dict[str, str] = {}
+    stack_ports: dict[str, str] = {}
 
     for raw in text.splitlines():
         line = raw.rstrip()
@@ -266,6 +295,10 @@ def parse(text: str) -> list[ParsedFeature]:
         member = _PROVISION.match(line)
         if member:
             provisions.setdefault(member.group(1), line.strip())
+            continue
+        port = _STACK_PORT.match(line)
+        if port:
+            stack_ports.setdefault(port.group(1), line.strip())
             continue
         for rule in _RULES:
             match = rule.pattern.match(line)
@@ -288,11 +321,13 @@ def parse(text: str) -> list[ParsedFeature]:
                     values.append(value)
             break  # 同じ行を2つの規則で数えない
 
-    if len(provisions) >= 2:
+    for members in (provisions, stack_ports):
+        if len(members) < 2:
+            continue
         key = (HIGH_AVAILABILITY, "スタック")
         entry = found.setdefault(key, ParsedFeature(category=HIGH_AVAILABILITY, name="スタック"))
-        entry.count += len(provisions)
-        for line in list(provisions.values())[:5]:
+        entry.count = max(entry.count, len(members))
+        for line in list(members.values())[:5]:
             if len(entry.evidence) < 5 and line not in entry.evidence:
                 entry.evidence.append(line)
 
