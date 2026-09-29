@@ -137,8 +137,22 @@ _RULES: tuple[_Rule, ...] = (
     # アドレス配布
     _rule(DHCP, "DHCP サーバー", r"^\s*ip\s+dhcp\s+pool\s"),
     _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+server\s+ip-pool\s"),
+    # ヤマハ（rtpro.yamaha.co.jp の設定例の `dhcp service server`）、FortiGate（FortiOS
+    # Administration Guide「Basic configuration」）、Huawei VRP（S200〜S600 Configuration Guide
+    # 「Example for Configuring DHCPv4 Relay」の Configuration Files。
+    # 口の下の `dhcp select global`）、Junos（Juniper Support の EX の DHCP pool の記事）
+    _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+service\s+server\s*$"),
+    _rule(DHCP, "DHCP サーバー", r"^\s*config\s+system\s+dhcp\s+server\s*$"),
+    _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+select\s+(?:global|interface)\s*$"),
+    _rule(
+        DHCP,
+        "DHCP サーバー",
+        r"^\s*set\s+system\s+services\s+dhcp-local-server\s+group\s+\S+\s+interface\s",
+    ),
     _rule(DHCP, "DHCP リレー", r"^\s*ip\s+helper-address\s+(\S+)", "転送先"),
     _rule(DHCP, "DHCP リレー", r"^\s*dhcp\s+relay\s+server-address\s+(\S+)", "転送先"),
+    # Huawei VRP は口の下に `dhcp select relay` と `dhcp relay server-ip 10.10.20.2`（同じ設定例）
+    _rule(DHCP, "DHCP リレー", r"^\s*dhcp\s+relay\s+server-ip\s+(\S+)", "転送先"),
     # ループ防止
     _rule(SPANNING_TREE, "STP", r"^\s*spanning-tree\s+mode\s+(\S+)", "モード"),
     _rule(SPANNING_TREE, "STP", r"^\s*stp\s+(?:mode|global)\s+(\S+)", "モード"),
@@ -280,6 +294,11 @@ _PROVISION = re.compile(r"^\s*switch\s+(\d+)\s+provision\b", re.IGNORECASE)
 #: どちらも組む前の1台の設定に、自分の番号の行だけが書かれる形がある
 _STACK_PORT = re.compile(r"^\s*(?:irf-port|stack-port)\s+(\d+)/\d+\s*$", re.IGNORECASE)
 
+#: AOS-CX の DHCP サーバーの塊。塊の中の `enable` で動き出し、無ければ配っていない。
+#: 出典: AOS-CX 10.12 IP Services Guide「Troubleshooting」（dhcp-server vrf default / pool /
+#: range / exit / enable の設定例と、enabled state を確かめる手順）
+_CX_DHCP_BLOCK = re.compile(r"^dhcp-server\s+vrf\s+\S+\s*$", re.IGNORECASE)
+
 
 def parse(text: str) -> list[ParsedFeature]:
     """その Config で使っている機能を並べる。区分ごとにまとめて返す。"""
@@ -287,10 +306,20 @@ def parse(text: str) -> list[ParsedFeature]:
     details: dict[tuple[str, str], list[str]] = {}
     provisions: dict[str, str] = {}
     stack_ports: dict[str, str] = {}
+    cx_dhcp_block = ""
 
     for raw in text.splitlines():
         line = raw.rstrip()
         if not line.strip():
+            continue
+        if not line[0].isspace():
+            cx_dhcp_block = line if _CX_DHCP_BLOCK.match(line) else ""
+        elif cx_dhcp_block and line.strip().lower() == "enable":
+            key = (DHCP, "DHCP サーバー")
+            entry = found.setdefault(key, ParsedFeature(category=DHCP, name="DHCP サーバー"))
+            entry.count += 1
+            if len(entry.evidence) < 5 and cx_dhcp_block not in entry.evidence:
+                entry.evidence.append(cx_dhcp_block)
             continue
         member = _PROVISION.match(line)
         if member:

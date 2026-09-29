@@ -533,3 +533,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `snmp host none`（初期値。どこからも受け付けない）は SNMP としない。試験は `tests/test_features.py`。
 - 未確認のまま: Huawei S シリーズ（V200）のスタックは設定が Flash だけに書かれ、Config に出ない（同社 Command
   Reference の display stack configuration の説明）。Config からは読めないので、読み手は足していない。
+
+## 機能の一覧で、Cisco・H3C 以外の DHCP サーバーとリレーを拾えていなかった（2026-09-29 JST）
+
+- 確かめた資料: ヤマハの設定例（rtpro.yamaha.co.jp）、FortiOS Administration Guide「Basic configuration」、Huawei
+  S200/S300/S500/S600 Configuration Guide「Example for Configuring DHCPv4 Relay」、Juniper Support「[EX] Secondary TFTP
+  cannot be configured in the same DHCP pool」、AOS-CX 10.12 IP Services Guide「Troubleshooting」。
+- 起きていたこと: ヤマハの `dhcp service server`、FortiGate の `config system dhcp server`、VRP の `dhcp select global` と
+  `dhcp relay server-ip`、Junos の `dhcp-local-server`、AOS-CX の `dhcp-server vrf` を拾えず、アドレスを配っている機器が
+  「DHCP 無し」に見えていた。
+- 直したこと: 5社分の行を足した。AOS-CX は塊の中の `enable` があるときだけ DHCP サーバーとする（enable の無い塊は配って
+  いない）。試験は `tests/test_features.py`。
+- 未確認のまま: Junos の DHCP リレー（`set forwarding-options dhcp-relay`）と PAN-OS の DHCP（`set network dhcp`）は、公式の
+  資料に当たれず第三者の作例しか無かったので足していない。H3C の口の下の `dhcp select server` も未確認。

@@ -354,3 +354,39 @@ def test_yamaha_snmp_host_none_is_not_snmp() -> None:
     出典: ヤマハ「SNMP」（rtpro.yamaha.co.jp）の snmp host の書式と初期値。
     """
     assert f"{features.MANAGEMENT}:SNMP" not in _found("snmp host none\nsnmpv2c host none\n")
+
+
+def test_dhcp_written_other_vendors_ways_is_found() -> None:
+    """ヤマハ・FortiGate・Huawei VRP・Junos・AOS-CX の DHCP サーバーと、VRP の DHCP リレーを拾う。
+
+    出典:
+    - ヤマハ「NAT ディスクリプターの設定例 (7)」ほか（`dhcp service server` と `dhcp scope 1 ...`）
+    - FortiOS Administration Guide「Basic configuration」（`config system dhcp server`）
+    - Huawei S200/S300/S500/S600 Configuration Guide「Example for Configuring DHCPv4 Relay」の
+      Configuration Files（`dhcp select global`、`dhcp select relay`、`dhcp relay server-ip`）
+    - Juniper Support「[EX] Secondary TFTP cannot be configured in the same DHCP pool」
+      （`set system services dhcp-local-server group ... interface ...`）
+    - AOS-CX 10.12 IP Services Guide「Troubleshooting」（`dhcp-server vrf default` の塊の `enable`）
+    """
+    server = f"{features.DHCP}:DHCP サーバー"
+    for text in (
+        "dhcp service server\ndhcp scope 1 192.168.0.2-192.168.0.191/24\n",
+        'config system dhcp server\n    edit 1\n        set interface "port1"\n',
+        "interface Vlanif200\n ip address 10.10.20.2 255.255.255.0\n dhcp select global\n",
+        "set system services dhcp-local-server group VOICE interface irb.688\n",
+        "dhcp-server vrf default\n    pool pool1\n        range 172.16.10.1 172.16.10.20\n"
+        "        exit\n    enable\n",
+    ):
+        assert server in _found(text), text
+    relay = _found("interface Vlanif100\n dhcp select relay\n dhcp relay server-ip 10.10.20.2\n")
+    assert relay[f"{features.DHCP}:DHCP リレー"].detail == "転送先: 10.10.20.2"
+
+
+def test_aoscx_dhcp_server_without_enable_is_not_a_server() -> None:
+    """AOS-CX の DHCP サーバーは塊の中の `enable` で動く。enable の無い塊は配っていない。
+
+    出典: AOS-CX 10.12 IP Services Guide「Troubleshooting」
+    （「is in enabled state」を確かめる手順）。
+    """
+    text = "dhcp-server vrf default\n    pool pool1\n        range 172.16.10.1 172.16.10.20\n"
+    assert f"{features.DHCP}:DHCP サーバー" not in _found(text)
