@@ -440,3 +440,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 知らない言葉でも、先頭が Config にある口なら表は続いているとみなして次の行へ進む。その口の上下は
   決めない（言葉の意味を資料で確かめられていないため）。試験は `tests/test_linkstate.py`。
 - 未確認のまま: connected / notconnect / err-disabled 以外の言葉（disabled、inactive、monitoring など）は既存の試験の形。
+
+## Junos の show interfaces terse を途中で読みやめていた（2026-09-29 JST）
+
+- 確かめた資料: Junos OS CLI Reference「show interfaces terse」の出力欄の説明と、Junos Software CLI Reference
+  「show interfaces」の show interfaces terse のサンプル出力。
+- 起きていたこと: サンプルには Link が `ready` の行（`st0.1  up  ready inet`）と、同じ論理口の2つ目のアドレスだけを
+  字下げして並べた行（`10.0.0.16  --> 0/0`）がある。読み手は Admin と Link がどちらも up / down でない行を表の終わりと
+  みなしていたので、その下の口（`ae0`、`ge-0/0/1` など）の上下が分からないままになっていた。
+- 直したこと: 先頭がアドレス（IPv4・IPv6）か family の名前なら続きの行として飛ばす。Link が up / down 以外の行は
+  上下を決めずに次へ進む。表が字下げされていても読む（字下げでは続きの行を見分けない）。`ae0.0` のような口の名前を
+  アドレスと取り違えないよう、IPv4 は数字4つの形、IPv6 はコロンを含む形に絞った。試験は `tests/test_linkstate.py`。
