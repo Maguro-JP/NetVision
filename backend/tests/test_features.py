@@ -274,6 +274,32 @@ def test_a_standalone_catalyst_is_not_a_stack() -> None:
     assert _found(two)[f"{features.HIGH_AVAILABILITY}:スタック"].count == 2
 
 
+def test_one_member_irf_or_stack_ports_are_not_a_stack() -> None:
+    """組む前の1台にも自分の番号の IRF ポート・スタックポートが書かれる。2台分以上で組とする。
+
+    出典: H3C「Automatic IRF Setup Configuration Examples」の 210235A045B05B0004354.cfg
+    （`irf-port 1/2` だけの1台分）と Configuration files（`irf-port 1/2` と `irf-port 2/1`）、
+    Huawei CloudEngine 8800/6800/5800 Configuration Guide - Virtualization「Example for
+    Establishing a Stack of Two Switches」の Configuration Files
+    （物理口の下の `stack-port 1/1`・`2/1`）。
+    """
+    irf_one = (
+        "irf member 1 priority 1\nirf-port 1/2\n port group interface Ten-GigabitEthernet1/1/1\n"
+    )
+    irf_two = irf_one + "irf-port 2/1\n port group interface Ten-GigabitEthernet2/1/1\n"
+    ce_one = (
+        "interface Stack-Port1/1\n#\n"
+        "interface 10GE1/0/1\n port mode stack\n stack-port 1/1\n"
+        "interface 10GE1/0/2\n port mode stack\n stack-port 1/1\n"
+    )
+    ce_two = ce_one + "interface 10GE2/0/1\n port mode stack\n stack-port 2/1\n"
+    key = f"{features.HIGH_AVAILABILITY}:スタック"
+    assert key not in _found(irf_one)
+    assert key not in _found(ce_one)
+    assert _found(irf_two)[key].count == 2
+    assert _found(ce_two)[key].count == 2
+
+
 def test_pim_written_the_arista_aoscx_and_junos_way_is_found() -> None:
     """Arista・AOS-CX・Junos の PIM と、Junos の IGMP スヌーピングを拾う。
 
@@ -287,3 +313,44 @@ def test_pim_written_the_arista_aoscx_and_junos_way_is_found() -> None:
         assert f"{features.MULTICAST}:PIM" in _found(text), text
     junos = "set protocols igmp-snooping vlan SALES\n"
     assert f"{features.MULTICAST}:IGMP スヌーピング" in _found(junos)
+
+
+def test_access_control_nat_and_snmp_written_other_vendors_ways_are_found() -> None:
+    """ヤマハ・PAN-OS・H3C の ACL・NAT・SNMP を拾う。
+
+    出典:
+    - ヤマハ「NAT ディスクリプター コマンド仕様」「SNMP」（rtpro.yamaha.co.jp）と
+      「ローカルルーターで複数の LAN を接続（動的 IP マスカレード）」のコマンド設定
+    - Palo Alto Networks Knowledge Base「Viewing the configuration in set and XML format」
+      「How to Create and View NAT Policies Using the CLI」
+    - H3C「EAD Authentication (IPv6) Configuration Examples」の Configuration files
+    """
+    yamaha = (
+        "ip lan2 secure filter in 2000\n"
+        "ip lan2 nat descriptor 1\n"
+        "ip filter 2000 reject * *\n"
+        "nat descriptor type 1 masquerade\n"
+        "snmpv2c host 192.168.1.1\n"
+    )
+    found = _found(yamaha)
+    assert found[f"{features.ACCESS_CONTROL}:ACL"].count == 1
+    assert found[f"{features.ACCESS_CONTROL}:ACL の適用"].count == 1
+    assert found[f"{features.NAT}:NAT"].count == 2
+    assert f"{features.MANAGEMENT}:SNMP" in found
+    panos = (
+        "set rulebase security rules rule1 action allow\n"
+        "set rulebase nat rules StaticNAT from DMZ to L3-Untrust service any\n"
+    )
+    found = _found(panos)
+    assert f"{features.ACCESS_CONTROL}:ポリシー" in found
+    assert f"{features.NAT}:NAT" in found
+    h3c = "acl ipv6 advanced 3000\n rule 0 permit ipv6\n"
+    assert f"{features.ACCESS_CONTROL}:ACL" in _found(h3c)
+
+
+def test_yamaha_snmp_host_none_is_not_snmp() -> None:
+    """`snmp host none` はどこからも受け付けない（初期値）。SNMP が入っているとは言わない。
+
+    出典: ヤマハ「SNMP」（rtpro.yamaha.co.jp）の snmp host の書式と初期値。
+    """
+    assert f"{features.MANAGEMENT}:SNMP" not in _found("snmp host none\nsnmpv2c host none\n")

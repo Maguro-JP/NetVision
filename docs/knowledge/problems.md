@@ -516,3 +516,20 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   3社の PIM と Junos の IGMP スヌーピングの行を足した。試験は `tests/test_features.py`（既存の FortiGate の試験は
   公式の形の vip に直した）。
 - 同じ形の見落とし: 読み手（hapair.py など）で直した取り違えは、features.py の表にも同じ形で残っていないかを見る。
+
+## 機能の一覧で、組む前の1台をスタックと読み、ヤマハ・PAN-OS の ACL・NAT を拾えていなかった（2026-09-29 JST）
+
+- 確かめた資料: H3C「Automatic IRF Setup Configuration Examples」「IRF Configuration Examples」、Huawei CloudEngine
+  8800/6800/5800 Configuration Guide - Virtualization「Example for Establishing a Stack of Two Switches」、ヤマハ
+  「NAT ディスクリプター コマンド仕様」「SNMP」とコマンド設定例、Palo Alto Networks Knowledge Base「Viewing the
+  configuration in set and XML format」「How to Create and View NAT Policies Using the CLI」、H3C「EAD Authentication (IPv6)
+  Configuration Examples」。
+- 起きていたこと:
+  - `irf-port` か `stack-port` の行が1行でもあれば「スタック」と載せていた。組む前の1台の設定にも自分の番号の
+    `irf-port 1/2`・`stack-port 1/1` が書かれるので、単体の機器がスタックに見えていた（#90・#92・#93 と同じ形）。
+  - ヤマハの `ip filter`・`ip lan2 secure filter`・`nat descriptor`・`snmpv2c host`、PAN-OS の `set rulebase security` と
+    `set rulebase nat`、H3C の `acl ipv6 advanced` を拾えず、ACL・NAT・SNMP が「無い」ことになっていた。
+- 直したこと: `N/x` の N（メンバー番号）が2つ以上あるときだけスタックとする。4社分の行を足した。ヤマハの
+  `snmp host none`（初期値。どこからも受け付けない）は SNMP としない。試験は `tests/test_features.py`。
+- 未確認のまま: Huawei S シリーズ（V200）のスタックは設定が Flash だけに書かれ、Config に出ない（同社 Command
+  Reference の display stack configuration の説明）。Config からは読めないので、読み手は足していない。
