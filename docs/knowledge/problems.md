@@ -546,3 +546,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   いない）。試験は `tests/test_features.py`。
 - 未確認のまま: Junos の DHCP リレー（`set forwarding-options dhcp-relay`）と PAN-OS の DHCP（`set network dhcp`）は、公式の
   資料に当たれず第三者の作例しか無かったので足していない。H3C の口の下の `dhcp select server` も未確認。
+
+## 機能の一覧で、Junos の RSTP・SSH、Huawei の STelnet、PAN-OS の IPsec を拾えていなかった（2026-09-29 JST）
+
+- 確かめた資料: Juniper「Example: Faster Convergence and Improved Network Stability with RSTP on EX Series Switches」、
+  Juniper Support「[EX] How to enable remote management access to CLI on EX switches」、Huawei S300/S500/S2700/S5700/S6700
+  V200R023C10 Configuration Guide の STelnet の例、Palo Alto Networks Knowledge Base「How to Configure an IPSEC VPN with
+  Route and Tunnel Configuration from CLI」。
+- 起きていたこと: `set protocols rstp`、`set system services ssh`、`stelnet server enable`、`set network tunnel ipsec` を
+  拾えず、ループ防止・SSH・拠点間の暗号化が「無い」ことになっていた。
+- 直したこと: 4つの行を足した。試験は `tests/test_features.py`。
+- 未確認のまま: ヤマハの `sshd service on`（第三者の作例だけ）、Junos の `set protocols mstp` / `vstp`、H3C の
+  `ssh server enable`。公式の資料に当たれていないので足していない。

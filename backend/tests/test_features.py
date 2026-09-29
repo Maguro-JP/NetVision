@@ -390,3 +390,23 @@ def test_aoscx_dhcp_server_without_enable_is_not_a_server() -> None:
     """
     text = "dhcp-server vrf default\n    pool pool1\n        range 172.16.10.1 172.16.10.20\n"
     assert f"{features.DHCP}:DHCP サーバー" not in _found(text)
+
+
+def test_stp_ssh_and_ipsec_written_other_vendors_ways_are_found() -> None:
+    """Junos の RSTP と SSH、Huawei の STelnet、PAN-OS の IPsec を拾う。
+
+    出典:
+    - Juniper「Example: Faster Convergence and Improved Network Stability with RSTP on EX Series
+      Switches」（`set protocols rstp bridge-priority 16k`）
+    - Juniper Support「[EX] How to enable remote management access to CLI on EX switches」
+      （`set system services ssh`）
+    - Huawei S300/S500/S2700/S5700/S6700 V200R023C10 Configuration Guide の STelnet の例の
+      Configuration File（`stelnet server enable`）
+    - Palo Alto Networks Knowledge Base「How to Configure an IPSEC VPN with Route and Tunnel
+      Configuration from CLI」（`set network tunnel ipsec ... auto-key ike-gateway ...`）
+    """
+    assert f"{features.SPANNING_TREE}:STP" in _found("set protocols rstp bridge-priority 16k\n")
+    for text in ("set system services ssh\n", "stelnet server enable\n"):
+        assert f"{features.MANAGEMENT}:SSH" in _found(text), text
+    panos = "set network tunnel ipsec NY auto-key ike-gateway NY\n"
+    assert f"{features.VPN}:IPsec" in _found(panos)
