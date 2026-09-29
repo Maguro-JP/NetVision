@@ -320,17 +320,29 @@ def _read_vrp(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = state
 
 
+#: FastIron の Link 列の言葉。止めた口は `Disable` と出る
+_FASTIRON_LINK = {"up": "up", "down": "down", "disable": "disabled"}
+
+
 def _read_fastiron(rows: list[str], parsed: ParsedConfig) -> None:
-    """FastIron は Link の列。State の列は STP の状態なので混ぜない。"""
+    """FastIron は Link の列。State の列は STP の状態なので混ぜない。
+
+    出典: Brocade FastIron Ethernet Switch Platform and Layer 2 Switching Configuration Guide の
+    show interface brief の出力例（Link は Up / Down / Disable。`mgmt1` の行、ve・lb の表が
+    続けて出る）と、RUCKUS FastIron Management Configuration Guide 08.0.91 / 09.0.10 の
+    show interfaces brief。知らない言葉でも、Config にある口の行なら表は続ける。
+    """
     for row in rows:
         columns = row.split()
         if len(columns) < 2:
             break
-        state = _LINK_WORDS.get(columns[1].lower())
-        if state is None:
-            break
         # 表は `1/1/1`、config 側は `ethernet 1/1/1`。同じ口なのでどちらでも引く
         port = _port(parsed, columns[0]) or _port(parsed, f"Ethernet{columns[0]}")
+        state = _FASTIRON_LINK.get(columns[1].lower()) or _LINK_WORDS.get(columns[1].lower())
+        if state is None:
+            if port is not None:
+                continue
+            break
         if port is not None:
             port.link_state = state
 

@@ -483,3 +483,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `tests/test_linkstate.py`。
 - 未確認のまま: Aruba CX の show interface brief（公式の出力例に当たれず、HPE のラボ手引きとコミュニティの作例だけ。
   読み手はそれらに合っていた）。新しい PAN-OS の `speed/duplex/state/fec` の形（公式の出力例に当たれていない）。
+
+## FastIron の止めた口（Link が Disable）で、表の読み取りが止まっていた（2026-09-29 JST）
+
+- 確かめた資料: Brocade FastIron Ethernet Switch Platform and Layer 2 Switching Configuration Guide の show interface brief の
+  出力例、RUCKUS FastIron Management Configuration Guide 08.0.91 / 09.0.10 の show interfaces brief。
+- 起きていたこと: 止めた口は Link 列に `Disable` と出る。読み手は `disabled` しか知らず、`Disable` の行で表を読みやめて
+  いたので、その下の口の上下が分からないままになっていた。
+- 直したこと: `Disable` を disabled と読む。知らない言葉でも Config にある口の行なら表は続ける（#103〜#108 と同じ扱い）。
+  試験は `tests/test_linkstate.py`。
+- 残り: FortiGate get system interface physical、NEC QX display interface brief、アラクサラ。
