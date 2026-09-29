@@ -173,3 +173,16 @@ def test_all_column_is_resolved_against_defined_vlans():
     assert vlanlist.expand_column("all except 20", {10, 20, 30}) == {10, 30}
     assert vlanlist.expand_column("10,20", {10, 20, 30}) == {10, 20}
     assert vlanlist.expand_column(None, {10}) == set()
+
+
+def test_a_range_outside_1_to_4094_is_not_read() -> None:
+    """VLAN 番号は 1〜4094。範囲の端がその外なら、機器は受け付けない。
+
+    出典: Huawei CX320 Command Reference の port trunk allow-pass vlan
+    （vlan-id1 と vlan-id2 はどちらも 1〜4094、vlan-id2 は vlan-id1 以上）。
+    """
+    assert vlanlist.parse_ranges("0 to 10") == []
+    assert vlanlist.parse_ranges("4090-4095") == []
+    assert vlanlist.parse_ranges("30 to 20") == []
+    assert vlanlist.parse_ranges("10 to 12 20") == [10, 11, 12, 20]
+    assert vlanlist.parse_ranges("10,20,30-32") == [10, 20, 30, 31, 32]
