@@ -419,3 +419,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 範囲も両端を 1〜4094 に絞る。試験は `tests/test_vlan_trunk.py`。
 - 未確認のまま: NEC QX の `port trunk permit vlan`、Junos の `vlan members`、Huawei の `port trunk allow-pass only-vlan` が
   保存した設定でどう出るか（今は読んでいない）。
+
+## VRP の PHY 列の印で、表の読み取りが止まっていた（2026-09-29 JST）
+
+- 確かめた資料: Huawei「Troubleshooting S Series Switch Port and Interface Problems」の display interface brief の凡例、
+  S Series Troubleshooting Guide「Regular Expression in display Commands」の出力例。
+- 起きていたこと: PHY 列には `*down` のほか `^down`（控え）、`~down`（LDT）、`#down`（LBDT）と、`up(s)` `down(e)` の
+  ような括弧の印が付く。読み手は `up` `down` `*down` しか知らず、知らない値の行で表を読むのをやめていた。
+  1行目が `^down` なら、その機器のどの口も線の上下が分からないままになっていた。
+- 直したこと: 括弧の印は外して上下を読み、頭の印は `*` を人が止めた、`^` を down、`~` と `#` を err-disabled に
+  そろえる（下流の linkcheck と topology は err-disabled を「上がっていない」として扱う）。試験は `tests/test_linkstate.py`。
+- 未確認のまま: linkstate.py のほかの表（Cisco・NX-OS・Junos・Aruba CX・PAN-OS・FortiGate・NEC QX・FastIron・アラクサラ）。
