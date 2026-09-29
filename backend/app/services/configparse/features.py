@@ -156,6 +156,9 @@ _RULES: tuple[_Rule, ...] = (
     # ループ防止
     _rule(SPANNING_TREE, "STP", r"^\s*spanning-tree\s+mode\s+(\S+)", "モード"),
     _rule(SPANNING_TREE, "STP", r"^\s*stp\s+(?:mode|global)\s+(\S+)", "モード"),
+    # Junos（「Example: Faster Convergence and Improved Network Stability with RSTP on EX
+    # Series Switches」の `set protocols rstp bridge-priority 16k`）。mstp・vstp は未確認
+    _rule(SPANNING_TREE, "STP", r"^\s*set\s+protocols\s+(rstp)\b", "モード"),
     _rule(
         SPANNING_TREE,
         "STP の優先度",
@@ -238,11 +241,18 @@ _RULES: tuple[_Rule, ...] = (
     # ASA は `ssh 192.168.1.0 255.255.255.0 inside`（許す元と口）
     _rule(MANAGEMENT, "SSH", r"^ssh\s+\d+\.\d+\.\d+\.\d+\s+\S+\s+\S+\s*$"),
     _rule(MANAGEMENT, "SSH", r"^\s*protocol\s+inbound\s+ssh\b"),
+    # Junos（Juniper Support「[EX] How to enable remote management access to CLI」）と
+    # Huawei（S5700 V200R023C10 Configuration Guide の STelnet の例の Configuration File）
+    _rule(MANAGEMENT, "SSH", r"^\s*set\s+system\s+services\s+ssh\b"),
+    _rule(MANAGEMENT, "SSH", r"^\s*stelnet\s+server\s+enable\s*$"),
     # 拠点間の暗号化
     _rule(VPN, "IPsec", r"^\s*crypto\s+(?:isakmp|ikev2|map|ipsec)\b"),
     _rule(VPN, "IPsec", r"^\s*ipsec\s+(?:policy|profile|transform-set)\b"),
     _rule(VPN, "IPsec", r"^\s*config\s+vpn\s+ipsec\b"),
     _rule(VPN, "IPsec", r"^\s*set\s+security\s+ipsec\b"),
+    # PAN-OS（Knowledge Base「How to Configure an IPSEC VPN with Route and Tunnel Configuration
+    # from CLI」の `set network tunnel ipsec <名前> auto-key ike-gateway ...`）
+    _rule(VPN, "IPsec", r"^\s*set\s+network\s+tunnel\s+ipsec\s"),
     # ヤマハ（tunnel select の下に ipsec を書く）と NEC IX（autokey-map）
     _rule(VPN, "IPsec", r"^\s*ipsec\s+(?:ike|sa\s+policy|autokey-map|autokey-proposal)\b"),
     # マルチキャスト
