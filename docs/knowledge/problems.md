@@ -493,3 +493,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `Disable` を disabled と読む。知らない言葉でも Config にある口の行なら表は続ける（#103〜#108 と同じ扱い）。
   試験は `tests/test_linkstate.py`。
 - 残り: FortiGate get system interface physical、NEC QX display interface brief、アラクサラ。
+
+## linkstate.py の表の確かめ方の区切り（2026-09-29 JST）
+
+- 公式の資料で確かめた表: Huawei VRP、Cisco show interfaces status、Cisco show ip interface brief、Junos terse、NX-OS brief、
+  PAN-OS、FastIron（#103〜#109）。7つのうち6つに「知らない値の行で表を読みやめる」同じ形の不具合があった。
+- 未確認のまま: Aruba CX と FortiGate（公式の出力例に当たれず、ラボ手引き・コミュニティ・第三者の作例とは合っていた）、
+  NEC QX・NEC IX・アラクサラ（マニュアル置き場に届かない）、Arista の show ip interface brief、`show interfaces` の段落。
+- 次から: 表を読む処理を新しく書くときは、知らない値の行を表の終わりとみなさない。先頭が Config にある口なら次の行へ進む。
