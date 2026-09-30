@@ -7,6 +7,10 @@
 
 Junos も `set` で始まるので、そこだけで決めると取り違える。口の名前が
 `eth0` / `switch0` の形であること、`set interfaces ethernet` と書くことで見分ける。
+
+出典: LAG の子（`set interfaces bonding bond0 member interface eth0`）は VyOS 1.5.x LTS
+Documentation「Bond / link aggregation」で確かめた。ほかの行（address・vif・description・
+disable・static route・bond-group）は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -78,6 +82,14 @@ _BOND = re.compile(
     re.IGNORECASE,
 )
 
+#: VyOS 1.3 以降は束ねる口の側に子を並べる。出典: VyOS 1.5.x (circinus) LTS Documentation
+#: 「Bond / link aggregation」（`set interfaces bonding bond0 member interface eth0`）。
+#: 上の `bond-group` は子の口の側に書く旧来の形（EdgeOS もこちら）
+_BOND_MEMBER = re.compile(
+    r"^\s*set\s+interfaces\s+bonding\s+(?P<group>\S+)\s+member\s+interface\s+'?(?P<name>[^'\s]+)'?",
+    re.IGNORECASE,
+)
+
 
 def detect(text: str) -> Vendor | None:
     if _JUNOS.search(text):
@@ -127,7 +139,7 @@ def parse(text: str) -> ParsedConfig:
         if found:
             _add(parsed, _name(found)).enabled = False
             continue
-        found = _BOND.match(raw)
+        found = _BOND.match(raw) or _BOND_MEMBER.match(raw)
         if found:
             port = _add(parsed, found.group("name"))
             port.lag_group = int(re.sub(r"\D", "", found.group("group")) or 0)

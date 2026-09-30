@@ -592,3 +592,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `blocks` が書いてあったままの値（`raw`）も持ち、並べて書く値は `items` で引用符の単位で分ける。
   `words` は呼ばれなくなったので消した。試験は `tests/test_fortitext.py`（新設）。
 - inputtext.py（BOM・行末・タブを揃える）は機器の書式ではなくファイルの保存形式の話なので、公式の資料の対象外とした。
+
+## VyOS 1.3 以降の LAG の子を読めていなかった（2026-09-30 JST）
+
+- 確かめた資料: VyOS 1.5.x (circinus) LTS Documentation「Bond / link aggregation」と rolling release の同じ章。
+- 起きていたこと: 子の口の側に書く旧来の `set interfaces ethernet eth0 bond-group bond0`（EdgeOS もこの形）しか読んで
+  いなかった。VyOS 1.3 以降は束ねる口の側に `set interfaces bonding bond0 member interface eth0` と書くので、LAG の子が
+  どこにも付かなかった。
+- 直したこと: `member interface` の行も読み、子の口に束ねる番号を付ける。旧来の形も引き続き読む。試験は
+  `tests/test_configparse_vyos.py`。
+- 未確認のまま: vyos.py のほかの行（address・vif・description・disable・static route）。
