@@ -439,6 +439,15 @@ def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
             ike_policy_proposals.setdefault(found.group(1), []).append(found.group(2))
             continue
 
+        # 相手のアドレスを書かない gateway
+        # （`dynamic hostname ...` / `dynamic user-at-hostname ...`）。
+        # 出典: Juniper「Example: Configuring Dynamic VPN」、Juniper Support「[SRX] Example - How to
+        # configure a dialup IPSec VPN with group IKE ID」。空にすると「相手が無い」に見える
+        found = re.match(r"^set security ike gateway (\S+) dynamic\s", line, re.IGNORECASE)
+        if found:
+            gateways.setdefault(found.group(1), "dynamic")
+            continue
+
         found = re.match(
             r"^set security ike gateway (\S+) (?:address|ike-policy|external-interface)\s+(\S+)",
             line,

@@ -361,3 +361,29 @@ def test_a_huawei_ipsec_policy_built_from_a_template_needs_no_peer():
     assert entry.profile == "use1"
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "上がりません" in t], titles
+
+
+def test_a_junos_ike_gateway_with_a_dynamic_peer_is_not_missing_its_peer():
+    """Junos の `set security ike gateway 名前 dynamic hostname ...` は相手のアドレスを書かない形。
+    「このままでは上がりません」とは言わない。
+
+    出典: Juniper「Example: Configuring Dynamic VPN」（`set security ike gateway dyn-vpn-local-gw
+    dynamic hostname dynvpn`）と Juniper Support「[SRX] Example - How to configure a dialup IPSec
+    VPN with group IKE ID」（`dynamic user-at-hostname`）。
+    """
+    text = (
+        "set system host-name srx-hq\n"
+        "set security ike policy POL proposals P\n"
+        "set security ike gateway GW ike-policy POL\n"
+        "set security ike gateway GW dynamic hostname branch.example.jp\n"
+        "set security ike gateway GW external-interface ge-0/0/0.0\n"
+        "set security ipsec policy IPP proposals IP\n"
+        "set security ipsec vpn VPN1 bind-interface st0.0\n"
+        "set security ipsec vpn VPN1 ike gateway GW\n"
+        "set security ipsec vpn VPN1 ike ipsec-policy IPP\n"
+    )
+    parsed = configparse.parse(text)
+    [entry] = parsed.crypto.maps
+    assert entry.peers == ["dynamic"]
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "上がりません" in t], titles
