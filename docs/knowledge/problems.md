@@ -568,3 +568,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 3つを表に足した。25G の `Twe` とは別の口として扱う。試験は `tests/test_ifname.py`（新設）。
 - 未確認のまま: 5G の `Fi`、100G の `Hu` の略記は公式の出力例に当たれていないので足していない。
 - features.py の docstring に、確かめた行と未確認の行の区切りを書いて、機能の一覧の確認を閉じた。
+
+## トンネルの読み手で、Junos の IP-IP を IPsec と読み、FortiOS の IPv6 の宛先を落としていた（2026-09-30 JST）
+
+- 確かめた資料: Juniper「Chassis Cluster Redundant Ethernet Interfaces」の IP-over-IP Tunneling、FortiOS 6.4.7 / 7.0.1 /
+  7.0.12 CLI Reference の config vpn ipsec phase1-interface。
+- 起きていたこと:
+  - Junos の `tunnel source / destination` を持つ口のうち、`gr-` 以外をすべて IPsec としていた。IP-IP は `ip-0/0/0` に
+    載るので、IP-IP トンネルが IPsec と出ていた（IPsec の st0 は `tunnel source` を持たない）。
+  - FortiOS の IPv6 の IPsec は `set remote-gw6` / `set local-gw6` に書くのに、IPv4 の行しか見ておらず、宛先が空、
+    送信元が口の名前のままだった。
+- 直したこと: Junos は `gr-` を gre、`ip-` を ipip とし、どちらでもない口は種別を空のままにする。FortiOS は IPv6 の行も
+  読む。試験は `tests/test_topology_logical.py`。
+- 未確認のまま: Cisco の `tunnel source / destination / mode / vrf`（公式の設定例に当たれず、第三者の作例だけ）。
