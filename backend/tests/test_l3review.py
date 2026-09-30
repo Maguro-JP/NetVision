@@ -506,3 +506,66 @@ def test_the_aps_of_a_controller_are_listed_with_the_ssids(db_session):
     assert "C9120AXI-Q" in aps[0]["detail"]
     assert "10.0.30.11" in aps[0]["detail"]
     assert "3F east" in aps[0]["detail"]
+
+
+def _pair(db, left_name, right_name, left_config, right_config, digests):
+    left = _device(db, left_name)
+    right = _device(db, right_name)
+    db.add(
+        Link(
+            a_device_id=left.id,
+            a_interface="Gi1/0/1",
+            b_device_id=right.id,
+            b_interface="Gi1/0/1",
+            origin=LinkOrigin.MANUAL,
+        )
+    )
+    _snapshot(db, left, left_config, digests[0])
+    _snapshot(db, right, right_config, digests[1])
+    return left
+
+
+def test_a_vrrp_address_owner_is_not_called_the_same_priority(db_session):
+    """仮想アドレスが自分の口のアドレスと同じ機器（持ち主）は、優先度が 255 に固定される。
+
+    どちらも priority を書いていなくても、「優先度が同じ」ではない。
+
+    出典: Cisco「Network Services Configuration Guide - Configuring VRRP」（IOS XE）の
+    VRRP Router Priority and Preemption（「If a VRRP router owns the IP address of the virtual
+    router and the IP address of the physical interface, this router will function as a virtual
+    primary router.」「The default priority is 100.」）と Configuring VRRP Object Tracking
+    （「If a VRRP group is the IP address owner, its priority is fixed at 255」）。
+    """
+    owner = (
+        "hostname dist-sw-31\n!\ninterface Vlan10\n ip address 10.10.10.2 255.255.255.0\n"
+        " vrrp 10 ip 10.10.10.2\n!\n"
+    )
+    backup = (
+        "hostname dist-sw-32\n!\ninterface Vlan10\n ip address 10.10.10.3 255.255.255.0\n"
+        " vrrp 10 ip 10.10.10.2\n!\n"
+    )
+    left = _pair(db_session, "dist-sw-31", "dist-sw-32", owner, backup, ("6" * 64, "7" * 64))
+    report = l3review.review(db_session, left)
+    assert not [f.title for f in report.findings if "優先度が同じ" in f.title]
+
+
+def test_an_unwritten_priority_is_the_default_100(db_session):
+    """priority を書かなければ既定の 100。片側が 100 を明示していても、同じ優先度。
+
+    出典: 上の試験と同じ（「The default priority is 100.」）と、Cisco IOS First Hop Redundancy
+    Protocols Command Reference の standby priority（既定 100）。
+    """
+    left_config = REDUNDANT.replace("dist-sw-01", "dist-sw-41").replace(
+        " standby 10 priority 110\n", " standby 10 priority 100\n"
+    )
+    right_config = (
+        REDUNDANT.replace("dist-sw-01", "dist-sw-42")
+        .replace("10.10.10.2 ", "10.10.10.3 ")
+        .replace(" standby 10 priority 110\n", "")
+    )
+    left = _pair(
+        db_session, "dist-sw-41", "dist-sw-42", left_config, right_config, ("8" * 64, "9" * 64)
+    )
+    report = l3review.review(db_session, left)
+    finding = next(f for f in report.findings if "優先度が同じ" in f.title)
+    assert any("優先度 100" in line for line in finding.evidence)

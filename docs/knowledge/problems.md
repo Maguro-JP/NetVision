@@ -746,3 +746,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 気付いたが手を付けなかったこと: NEC QX の読み手は `forbidden-ip A B` を範囲として読んでいる。H3C の資料では並べる形。
   QX の資料には届かないので未確認のまま。
+
+## VRRP のアドレスの持ち主に「優先度が同じです」と出ていた（2026-10-01 JST）
+
+- 確かめた資料: Cisco「Network Services Configuration Guide - Configuring VRRP」（IOS XE）の VRRP Router Priority and
+  Preemption と Configuring VRRP Object Tracking、Cisco IOS First Hop Redundancy Protocols Command Reference の
+  standby priority。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - 仮想アドレスが自分の口のアドレスと同じ機器（持ち主）は優先度が 255 に固定されるのに、両方とも priority を
+    書いていないと「優先度が同じです」（MEDIUM）と出していた。
+  - priority を書かないとき（None）と既定の 100 を明示したときを別の値として比べ、同じ優先度を見逃していた。
+- 直したこと: 比べる前に実際に効く優先度に直す（書かなければ 100、VRRP の持ち主は 255）。根拠の行には既定なら
+  「（既定）」と添える。試験は `backend/tests/test_l3review.py`。
+- hareview も見た。役割・優先度とも両方に書いてある値だけで判定しており、書かない形の誤りは無かった。
+- 気付いたが手を付けなかったこと: VRRP で優先度が同じときは住所の大きい側が主になる（同じ資料）。今の文言
+  「起動の順番で決まります」は HSRP には合うが VRRP には合わない。
