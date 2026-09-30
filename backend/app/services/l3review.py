@@ -557,12 +557,14 @@ def _redundancy_only_on_one_side(
         return []
 
     out = []
+    peer_parsed_of: dict[int, ParsedConfig] = {}
     for entry in parsed.redundancy:
         partner = None
         for peer in peers:
             peer_parsed, _ = read_upstream(db, peer)
             if peer_parsed is None:
                 continue
+            peer_parsed_of[peer.id] = peer_parsed
             for other in peer_parsed.redundancy:
                 if other.group == entry.group and other.protocol == entry.protocol:
                     partner = (peer, other)
@@ -571,7 +573,9 @@ def _redundancy_only_on_one_side(
                 break
         if partner is not None:
             peer, other = partner
-            if other.priority == entry.priority:
+            mine = _effective_priority(parsed, entry)
+            theirs = _effective_priority(peer_parsed_of[peer.id], other)
+            if mine == theirs:
                 out.append(
                     Finding(
                         level=MEDIUM,
@@ -580,8 +584,8 @@ def _redundancy_only_on_one_side(
                         "入れ替えのたびに主が変わり、通信の経路が変わります。"
                         "主にしたい側の優先度を上げてください。",
                         evidence=[
-                            f"{device.hostname} {entry.interface}: 優先度 {entry.priority}",
-                            f"{peer.hostname} {other.interface}: 優先度 {other.priority}",
+                            f"{device.hostname} {entry.interface}: 優先度 {_shown(entry, mine)}",
+                            f"{peer.hostname} {other.interface}: 優先度 {_shown(other, theirs)}",
                         ],
                     )
                 )
@@ -602,6 +606,33 @@ def _redundancy_only_on_one_side(
             )
         )
     return out
+
+
+#: 優先度を書かないときの値。HSRP・VRRP とも 100
+_DEFAULT_PRIORITY = 100
+#: VRRP で仮想アドレスが自分の口のアドレスと同じ機器（持ち主）の優先度
+_OWNER_PRIORITY = 255
+
+
+def _effective_priority(parsed: ParsedConfig, entry) -> int:  # noqa: ANN001
+    """実際に効く優先度。書いていなければ既定の 100、VRRP の持ち主は 255。
+
+    出典: Cisco「Network Services Configuration Guide - Configuring VRRP」（IOS XE）の
+    VRRP Router Priority and Preemption（「The default priority is 100.」）と Configuring VRRP
+    Object Tracking（「If a VRRP group is the IP address owner, its priority is fixed at
+    255」）、Cisco IOS First Hop Redundancy Protocols Command Reference の standby priority
+    （既定 100）。
+    """
+    if entry.protocol == "vrrp" and entry.virtual_ip:
+        port = next((i for i in parsed.interfaces if i.name == entry.interface), None)
+        addresses = [port.ip_address, *port.extra_addresses] if port else []
+        if any(a and a.split("/")[0] == entry.virtual_ip for a in addresses):
+            return _OWNER_PRIORITY
+    return entry.priority if entry.priority is not None else _DEFAULT_PRIORITY
+
+
+def _shown(entry, value: int) -> str:  # noqa: ANN001
+    return str(value) if entry.priority is not None else f"{value}（既定）"
 
 
 def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
