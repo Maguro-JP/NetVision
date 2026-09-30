@@ -621,3 +621,52 @@ def test_a_huawei_dhcp_relay_is_read():
     )
     parsed = configparse.parse(text)
     assert parsed.dhcp.relays == [("Vlanif10", "10.10.20.2")]
+
+
+def test_a_junos_pool_with_propagate_settings_hands_out_dns():
+    """`dhcp-attributes propagate-settings 口` は、上流から受け取った DNS などを配る形。
+
+    出典: Juniper「DHCP Attributes for Address-Assignment Pools」（propagate-settings: 「Specifies
+    the interface (acting as DHCP client) from which the DHCP options can be propagated from and
+    used by the DHCP local server.」）。
+    """
+    text = (
+        "set system host-name srx1\n"
+        "set access address-assignment pool LAN family inet network 10.2.0.0/24\n"
+        "set access address-assignment pool LAN family inet range R1 low 10.2.0.100\n"
+        "set access address-assignment pool LAN family inet range R1 high 10.2.0.200\n"
+        "set access address-assignment pool LAN family inet dhcp-attributes router 10.2.0.1\n"
+        "set access address-assignment pool LAN family inet dhcp-attributes "
+        "propagate-settings ge-0/0/0.0\n"
+    )
+    parsed = configparse.parse(text)
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "名前解決の先を配っていません" in t], titles
+
+
+def test_a_junos_legacy_dhcp_pool_is_read_with_the_global_settings():
+    """古い形（`system services dhcp pool`）を読み、全体に書いた値を受け継ぐ。
+
+    ルーターが口自身のアドレスなら、配られない。
+
+    出典: Juniper「Legacy DHCP and Extended DHCP」（「if a statement appears at both the [edit
+    system services dhcp] and [edit system services dhcp pool] hierarchy levels, the value
+    assigned to the statement at the [edit system services dhcp pool] level takes priority.」）と
+    「DHCP Server Options」の Configuring Address Pools（「Broadcast addresses, interface
+    addresses, and excluded addresses are not available.」）。
+    """
+    text = (
+        "set system host-name ex1\n"
+        "set interfaces ge-0/0/1 unit 0 family inet address 10.3.3.1/24\n"
+        "set system services dhcp name-server 10.3.3.53\n"
+        "set system services dhcp domain-name example.jp\n"
+        "set system services dhcp pool 10.3.3.0/24 router 10.3.3.1\n"
+    )
+    parsed = configparse.parse(text)
+    [pool] = parsed.dhcp.pools
+    assert pool.network == "10.3.3.0/24"
+    assert pool.default_routers == ["10.3.3.1"]
+    assert pool.dns_servers == ["10.3.3.53"]
+    assert pool.domain == "example.jp"
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "10.3.3.0/24" in t], titles
