@@ -648,3 +648,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: IOS の読み手が `dynamic 名前` を読む（種別 `ipsec-isakmp dynamic`、指す先を profile に持つ）。点検は
   種別に dynamic を含む行には相手を求めない。試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 同じ形の見落とし: #122（FortiGate のダイヤルアップ）と同じ。「相手が無い」を指摘する前に、相手を決めない形かを見る。
+
+## Huawei のテンプレートから作る IPsec に「このままでは上がりません」と出ていた（2026-09-30 JST）
+
+- 確かめた資料: Huawei AR100-S〜AR3200-S V200R010 CLI-based Configuration Guide - VPN「Configuring an IPSec Policy Using an
+  IPSec Policy Template」、NetEngine AR1000V V300R021 の「Example for Establishing an IPSec Tunnel ... Using an IPSec Policy
+  Template」。
+- 起きていたこと: `ipsec policy policy1 10 isakmp template use1`（相手のアドレスが決まっていない拠点を受ける本社側の形）の
+  `template use1` を読まず、相手も方式も範囲も空になり、点検が「このままでは上がりません」（HIGH）と出していた。
+  直す前のコードで出ることを確かめた。
+- 直したこと: `template 名前` を読み、種別を `isakmp template`、指す先を profile に持つ。点検は種別に template を含む行
+  にも相手を求めない。試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 次に見るもの: Junos の `set security ike gateway ... dynamic`（相手のアドレスを書かない gateway）も同じ形の見込み。

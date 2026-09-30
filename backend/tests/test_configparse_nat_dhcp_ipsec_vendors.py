@@ -336,3 +336,28 @@ def test_a_crypto_map_entry_that_points_to_a_dynamic_map_needs_no_peer():
         assert entry.profile == "DYN", text
         titles = [f.title for f in policyreview.review(parsed)]
         assert not [t for t in titles if "上がりません" in t], titles
+
+
+def test_a_huawei_ipsec_policy_built_from_a_template_needs_no_peer():
+    """Huawei の `ipsec policy 名前 番号 isakmp template テンプレート` は応答側専用で、
+    相手を持たない。「このままでは上がりません」とは言わない。
+
+    出典: Huawei AR100-S〜AR3200-S V200R010 CLI-based Configuration Guide - VPN
+    「Configuring an IPSec Policy Using an IPSec Policy Template」と、NetEngine AR1000V V300R021 の
+    「Example for Establishing an IPSec Tunnel ... Using an IPSec Policy Template」の
+    Configuration file of Router C。
+    """
+    text = (
+        "sysname RouterC\n#\nike peer rut1\n pre-shared-key cipher %^%#xxx%^%#\n#\n"
+        "ipsec proposal tran1\n esp authentication-algorithm sha2-256\n#\n"
+        "ipsec policy-template use1 10\n ike-peer rut1\n proposal tran1\n#\n"
+        "ipsec policy policy1 10 isakmp template use1\n#\n"
+        "interface GigabitEthernet0/0/1\n ip address 60.1.3.1 255.255.255.0\n"
+        " ipsec policy policy1\n#\n"
+    )
+    parsed = configparse.parse(text)
+    [entry] = parsed.crypto.maps
+    assert entry.kind == "isakmp template"
+    assert entry.profile == "use1"
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "上がりません" in t], titles
