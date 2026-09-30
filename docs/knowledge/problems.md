@@ -700,3 +700,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   書いていない値は、アドレスを含むいちばん狭い network のプールから受け継ぐ（VRF のプールは受け継がない）。
   試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 未確認: `host` でマスクを省いたときの扱いは資料に書かれていない。親のプールの network を借りる形にした。
+
+## Huawei の口の上の DHCP を読まず、ゲートウェイを配ると言っていた（2026-09-30 JST）
+
+- 確かめた資料: Huawei「S9300 and S9300X V200R025C00 Configuration Guide - IP Service」の「Configuring a DHCP Server」、
+  「FAT AP / Cloud AP V200R023C00 コマンドリファレンス」（中国語版）の「dhcp server gateway-list」、
+  「S200, S300, S500, and S600 V600R025C10 Configuration Guide」の「Example for Configuring a DHCPv4 Server Based on an
+  Interface Address Pool」、S シリーズ Troubleshooting Guide（V600）の DHCP の FAQ。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `ip pool` の gateway-list のアドレスは機器が自動で配らない側に入れるのに、excluded-ip-address に書いていないと
+    「ゲートウェイのアドレスも配ってしまいます」と出していた。
+  - 口の下の `dhcp select interface`（口のアドレスの区画を配る形）を読んでいなかった。`dhcp server gateway-list` を
+    書かなければ、VRRP の仮想アドレス（無ければ口のアドレス）をゲートウェイとして配る。
+  - `dhcp select relay` と `dhcp relay server-ip`（他所のサーバーへ回す形）を読んでいなかった。
+- 直したこと: プールに `gateway_reserved`（ゲートウェイは自動で配らない）を持たせ、点検はこれを見る。口の下の DHCP を
+  「interface 口の名前」のプールとして読み、リレーは relays へ入れる。書いた excluded はそのまま残し、自動の分は混ぜない。
+  試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
