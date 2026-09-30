@@ -790,3 +790,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `direct` も `connected` と同じく広告として数える。試験は `backend/tests/test_l3review.py`。
 - 未確認のまま: Huawei の BGP の `import-route`（資料に当たっていない）と、Junos の export policy の
   `from protocol direct`（policy の中身を読んで当て先まで結ぶ必要があり、今回は手を付けていない）。
+
+## FastIron に、書き方の無い「spanning-tree mode」を書けと言っていた（2026-10-01 JST）
+
+- 確かめた資料: Ruckus「FastIron 08.0.60 Layer 2 Switching Configuration Guide」の「Enabling or disabling the Spanning
+  Tree Protocol (STP)」、HPE Aruba「AOS-S 16.11 Advanced Traffic Management Guide」の「Configuring MSTP at a glance」。
+- 起きていたこと: configcheck の「STP のモードを決めていません」は機種を見ず、`spanning-tree` の行があって
+  `spanning-tree mode` の行が無いと出していた。FastIron は STP の種類を `spanning-tree`・`spanning-tree single`・
+  `spanning-tree 802-1w` で選び、`spanning-tree mode` の書き方が無い。直す前のコードで試験が落ちることを確かめた。
+- 直したこと: `spanning-tree mode` の書き方が無い機種（FastIron）には言わない。AOS-S には `spanning-tree mode mstp`
+  があるので、そのまま言う。試験は `backend/tests/test_configcheck.py`。
+- configcheck の残り（SSH の版、ポートセキュリティの violation、トランクのタグ無し VLAN 1 など）は、既定値のまま
+  書かないこと自体を指摘する作り。SSH の版は docstring に出典がある。violation の既定（shutdown）は今回は資料に
+  当たっていない。

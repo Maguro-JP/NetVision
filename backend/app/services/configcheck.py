@@ -229,7 +229,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_bundles(parsed))
     found.extend(_blocked_ports(parsed))
     found.extend(_broken_lines(parsed))
-    found.extend(_stp(text))
+    found.extend(_stp(text, parsed.vendor))
     found.extend(_port_admission(text))
     found.extend(_hsrp_version(text))
     found.extend(_etherchannel(text))
@@ -743,7 +743,14 @@ def _junos_plain_password(text: str) -> list[Finding]:
     ]
 
 
-def _stp(text: str) -> list[Finding]:
+#: `spanning-tree mode` の書き方が無い機種。STP の種類は別の書き方で選ぶ
+#: （FastIron は `spanning-tree`・`spanning-tree single`・`spanning-tree 802-1w`。出典: Ruckus
+#: 「FastIron 08.0.60 Layer 2 Switching Configuration Guide」の「Enabling or disabling the
+#: Spanning Tree Protocol (STP)」）
+_NO_STP_MODE_COMMAND = frozenset({Vendor.FASTIRON})
+
+
+def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
     """ループを止める仕組み（STP）まわりで、後から効いてくるもの。
 
     STP は「入っていれば動く」ものではない。端末をつなぐ口に、誰かが
@@ -873,8 +880,10 @@ def _stp(text: str) -> list[Finding]:
         )
 
     lines = [line.strip() for line in text.splitlines()]
-    if any(line.lower().startswith("spanning-tree ") for line in lines) and not any(
-        line.lower().startswith("spanning-tree mode ") for line in lines
+    if (
+        vendor not in _NO_STP_MODE_COMMAND
+        and any(line.lower().startswith("spanning-tree ") for line in lines)
+        and not any(line.lower().startswith("spanning-tree mode ") for line in lines)
     ):
         out.append(
             Finding(
