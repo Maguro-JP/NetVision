@@ -289,8 +289,61 @@ def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
             dhcp.pools.append(pool)
         _dhcp_detail(pool, found.group("rest"))
 
+    _parse_legacy_dhcp(text, parsed, dhcp)
     if dhcp.pools:
         parsed.dhcp = dhcp
+
+
+_LEGACY_DHCP = re.compile(
+    r"^set system services dhcp (?:pool (?P<pool>\S+) )?(?P<key>\S+)\s+(?P<value>.+)$",
+    re.IGNORECASE,
+)
+
+
+def _parse_legacy_dhcp(text: str, parsed: ParsedConfig, dhcp: ParsedDhcp) -> None:
+    """古い形の DHCP（`system services dhcp`）を読む。
+
+    全体（`system services dhcp`）に書いた値は、プールで書かなければ受け継ぐ。
+    範囲を書かなければ区画の全部を配るが、口自身のアドレスは配らない。
+    出典: Juniper「Legacy DHCP and Extended DHCP」（Table 5 と、下の階層が上の階層に勝つ
+    という注記）、「DHCP Server Options」の Configuring Address Pools。
+    """
+    shared: dict[str, list[str]] = {}
+    pools: dict[str, dict[str, list[str]]] = {}
+    for raw in text.splitlines():
+        found = _LEGACY_DHCP.match(raw.strip())
+        if not found:
+            continue
+        values = found.group("value").split()
+        pool_name = found.group("pool")
+        target = shared if pool_name is None else pools.setdefault(pool_name, {})
+        target.setdefault(found.group("key").lower(), []).extend(values)
+    own = {port.ip_address.split("/")[0] for port in parsed.interfaces if port.ip_address}
+
+    for network, settings in pools.items():
+
+        def pick(key: str, settings: dict[str, list[str]] = settings) -> list[str]:
+            return settings.get(key) or shared.get(key) or []
+
+        span = settings.get("address-range", [])
+        low = span[span.index("low") + 1] if "low" in span[:-1] else None
+        high = span[span.index("high") + 1] if "high" in span[:-1] else None
+        routers = pick("router")
+        pool = ParsedDhcpPool(
+            name=f"pool {network}",
+            network=network,
+            range_start=low,
+            range_end=high,
+            default_routers=routers,
+            dns_servers=pick("name-server"),
+            domain=(pick("domain-name") or [None])[0],
+            lease=(pick("maximum-lease-time") or pick("default-lease-time") or [None])[0],
+            imports_options=bool(pick("propagate-settings")),
+            gateway_reserved=bool(routers) and all(router in own for router in routers),
+        )
+        dhcp.pools.append(pool)
+        excluded = settings.get("exclude-address", [])
+        dhcp.excluded.extend((address, address) for address in excluded)
 
 
 def _dhcp_detail(pool: ParsedDhcpPool, rest: str) -> None:
@@ -312,6 +365,10 @@ def _dhcp_detail(pool: ParsedDhcpPool, rest: str) -> None:
     dns = re.match(r"^dhcp-attributes name-server\s+(\S+)", rest, re.IGNORECASE)
     if dns:
         pool.dns_servers.append(dns.group(1))
+        return
+    if re.match(r"^dhcp-attributes propagate-settings\s", rest, re.IGNORECASE):
+        # 上流から受け取った DNS などを配る（DHCP Attributes for Address-Assignment Pools）
+        pool.imports_options = True
         return
     lease = re.match(r"^dhcp-attributes maximum-lease-time\s+(\S+)", rest, re.IGNORECASE)
     if lease:

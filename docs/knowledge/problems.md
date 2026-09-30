@@ -716,3 +716,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: プールに `gateway_reserved`（ゲートウェイは自動で配らない）を持たせ、点検はこれを見る。口の下の DHCP を
   「interface 口の名前」のプールとして読み、リレーは relays へ入れる。書いた excluded はそのまま残し、自動の分は混ぜない。
   試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+
+## Junos の古い形の DHCP を読まず、上流から受け取る DNS を「配っていない」と言っていた（2026-09-30 JST）
+
+- 確かめた資料: Juniper「DHCP Attributes for Address-Assignment Pools」（propagate-settings）、「Legacy DHCP and Extended
+  DHCP」（Table 5 と階層の受け継ぎの注記）、「DHCP Server Options」の Configuring Address Pools。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `dhcp-attributes propagate-settings 口`（上流の DHCP で受け取った DNS などを配る）のプールに「名前解決の先を
+    配っていません」と出していた。
+  - 古い形（`set system services dhcp pool 10.3.3.0/24 ...`）を読んでいなかった。全体（`system services dhcp`）に
+    書いた name-server などは、プールで書かなければ受け継ぐ。
+- 直したこと: propagate-settings を読んで DNS の指摘を出さない。古い形のプールを読み、全体の値を受け継ぐ。範囲を
+  書かなければ口自身のアドレスは配られないので、ルーターが口自身のアドレスなら「ゲートウェイも配る」と言わない。
+  試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 未確認: H3C（Comware）の `dhcp server ip-pool` は h3c.py では読んでいない（NEC QX の読み手は読む）。ゲートウェイを
+  自動で除くかは、次の周で資料に当たる。
