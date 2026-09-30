@@ -569,3 +569,62 @@ def test_an_unwritten_priority_is_the_default_100(db_session):
     report = l3review.review(db_session, left)
     finding = next(f for f in report.findings if "優先度が同じ" in f.title)
     assert any("優先度 100" in line for line in finding.evidence)
+
+
+def test_the_same_vrrp_priority_says_the_higher_address_wins(db_session):
+    """VRRP は優先度が同じなら住所の大きい側が主になる。起動の順番では決まらない。
+
+    出典: Cisco「Network Services Configuration Guide - Configuring VRRP」（IOS XE）の VRRP Router
+    Priority and Preemption（「If Routers B and C are both configured with the priority of 100,
+    the virtual router backup with the higher IP address is elected to become the virtual primary
+    router.」）。HSRP は同じ優先度なら先に主になった側が居座る（Cisco「Network Services
+    Configuration Guide, Cisco IOS XE 17.x - Configuring HSRP」の HSRP Priority and Preemption:
+    「A standby router with equal priority but a higher IP address will not preempt the active
+    router.」）。
+    """
+    left_config = (
+        "hostname dist-sw-51\n!\ninterface Vlan10\n ip address 10.10.10.2 255.255.255.0\n"
+        " vrrp 10 ip 10.10.10.1\n!\n"
+    )
+    right_config = left_config.replace("dist-sw-51", "dist-sw-52").replace(
+        "10.10.10.2 ", "10.10.10.3 "
+    )
+    left = _pair(
+        db_session, "dist-sw-51", "dist-sw-52", left_config, right_config, ("a1" * 32, "b1" * 32)
+    )
+    report = l3review.review(db_session, left)
+    finding = next(f for f in report.findings if "優先度が同じ" in f.title)
+    assert "起動の順番" not in finding.why
+    assert "アドレスの大きい" in finding.why
+
+
+def test_the_same_hsrp_priority_still_says_the_first_one_up_stays(db_session):
+    left = _pair(
+        db_session,
+        "dist-sw-61",
+        "dist-sw-62",
+        REDUNDANT.replace("dist-sw-01", "dist-sw-61"),
+        REDUNDANT.replace("dist-sw-01", "dist-sw-62").replace("10.10.10.2 ", "10.10.10.3 "),
+        ("c1" * 32, "d1" * 32),
+    )
+    report = l3review.review(db_session, left)
+    finding = next(f for f in report.findings if "優先度が同じ" in f.title)
+    assert "先に" in finding.why
+
+
+def test_redistribute_connected_counts_as_advertised(db_session):
+    """`redistribute connected` は、network 文に入っていない区画も外へ広告する。
+
+    出典: Cisco「Redistributing Connected Networks into OSPF」「Redistribute Connected Networks
+    into OSPF with Subnet Keyword」（`router ospf 1` の下の `redistribute connected subnets`）。
+    """
+    config = (
+        "hostname core-sw-71\n!\n"
+        "interface Vlan10\n ip address 10.10.10.1 255.255.255.0\n!\n"
+        "interface Vlan20\n ip address 10.20.20.1 255.255.255.0\n!\n"
+        "router ospf 1\n network 10.10.10.0 0.0.0.255 area 0\n redistribute connected subnets\n!\n"
+    )
+    device = _device(db_session, "core-sw-71")
+    _snapshot(db_session, device, config, "e1" * 32)
+    report = l3review.review(db_session, device)
+    assert not [f.title for f in report.findings if "広告されていない" in f.title]
