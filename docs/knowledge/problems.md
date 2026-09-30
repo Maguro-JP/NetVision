@@ -660,3 +660,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `template 名前` を読み、種別を `isakmp template`、指す先を profile に持つ。点検は種別に template を含む行
   にも相手を求めない。試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 次に見るもの: Junos の `set security ike gateway ... dynamic`（相手のアドレスを書かない gateway）も同じ形の見込み。
+
+## Junos の相手のアドレスを書かない IKE gateway に「このままでは上がりません」と出ていた（2026-09-30 JST）
+
+- 確かめた資料: Juniper「Example: Configuring Dynamic VPN」、Juniper Support「[SRX] Example - How to configure a dialup
+  IPSec VPN with group IKE ID」。
+- 起きていたこと: `set security ike gateway GW dynamic hostname ...`（相手のアドレスが変わる拠点を名前で受ける形）では
+  `address` の行が無く、VPN の相手が空になり、点検が「このままでは上がりません」（HIGH）と出していた。直す前のコードで
+  出ることを確かめた。
+- 直したこと: `dynamic` の行を持つ gateway は相手を「dynamic」とする（#122 の FortiGate と同じ扱い）。試験は
+  `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- これで「相手を決めない形」の誤りは FortiGate（#122）・Cisco ASA/IOS（#123）・Huawei（#124）・Junos を直した。NEC IX は
+  資料に届かず未確認。
