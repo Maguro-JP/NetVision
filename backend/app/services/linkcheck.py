@@ -390,12 +390,16 @@ def _ospf(a: Interface, b: Interface) -> list[Finding]:
                 why="片側だけ合言葉を求めていると、隣になりません。"
                 "掛けるなら両端で、掛けないなら両端で外してください。",
                 evidence=[
-                    f"{a.name}: {left_auth or '掛けていない'}",
-                    f"{b.name}: {right_auth or '掛けていない'}",
+                    f"{a.name}: {_auth_shown(left_auth)}",
+                    f"{b.name}: {_auth_shown(right_auth)}",
                 ],
             )
         )
     return out
+
+
+def _auth_shown(value: str | None) -> str:
+    return "掛けていない" if value in (None, "none") else value
 
 
 def _runs_ospf(interface: Interface) -> bool:
@@ -434,10 +438,21 @@ def _mtu(a: Interface, b: Interface) -> list[Finding]:
     ]
 
 
+def _fixed(value: str | None) -> str | None:
+    """`auto` と書いたものは、書いていないのと同じ（既定が自動）。
+
+    出典: Cisco「Cisco IOS XE 17 - Interface Characteristics Configuration Guide」の Default
+    Ethernet interface configuration（Speed: Autonegotiate、Duplex mode: Autonegotiate）
+    """
+    if value is None or value.strip().lower() == "auto":
+        return None
+    return value
+
+
 def _speed_duplex(a: Interface, b: Interface) -> list[Finding]:
     out: list[Finding] = []
     for name, label in (("speed", "速度"), ("duplex", "二重")):
-        left, right = _both(a, b, name)
+        left, right = (_fixed(value) for value in _both(a, b, name))
         if left is None and right is None:
             continue
         if left == right:
