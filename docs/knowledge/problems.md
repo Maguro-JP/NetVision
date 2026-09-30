@@ -614,3 +614,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
     していた。
 - 直したこと: 番号の並びはそのままほどいて使う。`description-string` を読み、両方あれば長い方を説明に持つ。試験は
   `tests/test_configparse_exos.py`。
+
+## FastIron で、VLAN に載せた LAG を読めていなかった（2026-09-30 JST）
+
+- 確かめた資料: RUCKUS Support Knowledge Base 000015488「Configuring MCT Cluster」（`tagged lag 2`）。口と LAG を1行に
+  並べる形は FastIron 10.0.10 L2 ガイドの MCT の設定例（公式ではない写しで読んだ）。
+- 起きていたこと: VLAN の下のメンバーを `tagged ethe ...` の形でしか読んでおらず、`tagged lag 2` の行を捨てていた。
+  LAG で上位と繋ぐ構成では、束ねた口に VLAN が1つも付かなかった。
+- 直したこと: `lag N`（`lag N to M` も）を読み、束ねの定義（`lag "名前" dynamic id N` の下の `ports`）から口に
+  ほどいて VLAN を付ける。試験は `tests/test_configparse_fastiron.py`。
+- Arista（arista.py）は、`ip route` の name / tag の後ろの値を口や距離として読んでいないかを見た。IOS の読み手が先に
+  正しく読んでいて不具合は無かったので、変えていない。EOS の公式の資料（arista.com）にはこの環境から届かず、
+  BGP の maximum-routes の既定値（12000）と peer group の扱いは未確認のまま。

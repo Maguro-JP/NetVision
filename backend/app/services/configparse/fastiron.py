@@ -79,9 +79,13 @@ def _join_ports(line: str) -> str:
 _VLAN_HEAD = re.compile(
     r"^\s*vlan\s+(?P<id>\d+)(?:\s+name\s+(?P<name>\S+))?(?:\s+by\s+port)?\s*$", re.IGNORECASE
 )
+#: VLAN に載せる口と LAG。出典: RUCKUS Support KB 000015488「Configuring MCT Cluster」
+#: （`tagged lag 2`）。口と LAG を1行に並べる形（`tagged ethe 1/1/48 lag 1 lag 11 to 12`）は
+#: FastIron 10.0.10 L2 ガイドの MCT の設定例（公式ではない写しで読んだ）
 _MEMBERS = re.compile(
-    r"^\s+(?P<how>tagged|untagged)\s+ethe(?:rnet)?\s+(?P<ports>.+?)\s*$", re.IGNORECASE
+    r"^\s+(?P<how>tagged|untagged)\s+(?P<ports>(?:ethe(?:rnet)?|lag)\s+.+?)\s*$", re.IGNORECASE
 )
+_LAG_IDS = re.compile(r"\blag\s+(\d+)(?:\s+to\s+(\d+))?", re.IGNORECASE)
 #: `ethe 1/1/1 to 1/1/4 ethe 1/1/8` のような並び
 _RANGE = re.compile(r"(\d+/\d+/\d+)(?:\s+to\s+(\d+/\d+/\d+))?", re.IGNORECASE)
 
@@ -212,6 +216,24 @@ _LAG_HEAD = re.compile(
 _LAG_PORTS = re.compile(r"^\s+ports\s+ethe(?:rnet)?\s+(?P<ports>.+?)\s*$", re.IGNORECASE)
 
 
+def _lag_members(text: str) -> dict[int, list[str]]:
+    """束ねの番号ごとに、束ねた口を並べる。"""
+    members: dict[int, list[str]] = {}
+    group: int | None = None
+    for raw in text.splitlines():
+        head = _LAG_HEAD.match(raw)
+        if head:
+            group = int(head.group("id")) if head.group("id") else None
+            continue
+        if raw.strip() and not raw.startswith((" ", "\t")):
+            group = None
+            continue
+        ports = _LAG_PORTS.match(raw)
+        if group is not None and ports:
+            members.setdefault(group, []).extend(_ports(ports.group("ports")))
+    return members
+
+
 def _read_lag(text: str, parsed: ParsedConfig) -> None:
     """束ねを読む。FastIron は束ねの側に口を並べるので、口だけ見ても分からない。
 
@@ -304,6 +326,7 @@ def _read_vlans(text: str, parsed: ParsedConfig) -> None:
     IOS と向きが逆なので、ここを読まないと VLAN も所属も空のままになる。
     """
     current: int | None = None
+    lags = _lag_members(text)
     #: タグ無しで載せた VLAN。タグ付きの行が後から来ることがあるので、
     #: どちらの意味になるかは読み終えてから決める
     untagged: dict[str, int] = {}
@@ -324,7 +347,13 @@ def _read_vlans(text: str, parsed: ParsedConfig) -> None:
         if not members:
             continue
         tagged = members.group("how").lower() == "tagged"
-        for name in _ports(members.group("ports")):
+        written = members.group("ports")
+        # LAG を載せたときは、束ねた口それぞれに載せたのと同じ
+        from_lags: list[str] = []
+        for first, last in _LAG_IDS.findall(written):
+            for number in range(int(first), int(last or first) + 1):
+                from_lags.extend(lags.get(number, []))
+        for name in [*_ports(_LAG_IDS.sub(" ", written)), *from_lags]:
             interface = parsed.add_interface(ParsedInterface(name=name))
             if tagged:
                 interface.mode = "trunk"

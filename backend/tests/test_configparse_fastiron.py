@@ -265,3 +265,34 @@ def test_ports_written_as_a_range_are_opened_one_by_one():
     assert "Ethernet1/1/4" in ports
     assert all(ports[f"Ethernet1/1/{n}"].description == "office" for n in (1, 2, 3, 4))
     assert ports["Ethernet1/1/24"].description is None
+
+
+def test_a_lag_added_to_a_vlan_gives_the_vlan_to_its_member_ports() -> None:
+    """VLAN には口のほか LAG も載せる（`tagged lag 2`）。束ねた口それぞれに VLAN を付ける。
+
+    出典: RUCKUS Support Knowledge Base 000015488「Configuring MCT Cluster」
+    （`vlan 3000 name MCT-SESSION by port` の下で `tagged lag 2`）。口と LAG を1行に並べる形
+    （`tagged ethe 1/1/48 lag 1 lag 11 to 12`）は FastIron 10.0.10 L2 ガイドの MCT の設定例
+    （公式ではない写しで読んだ）。
+    """
+    text = (
+        "ver 08.0.95dT213\n"
+        "!\n"
+        'lag "core" dynamic id 2\n'
+        " ports ethernet 1/1/1 to 1/1/2\n"
+        "!\n"
+        'lag "edge" static id 11\n'
+        " ports ethernet 1/1/5\n"
+        "!\n"
+        "vlan 3000 name MCT-SESSION by port\n"
+        " tagged lag 2\n"
+        "!\n"
+        "vlan 10 by port\n"
+        " tagged ethe 1/1/48 lag 2 lag 11\n"
+        "!\n"
+    )
+    ports = {p.name: p for p in configparse.parse(text).interfaces}
+    assert ports["Ethernet1/1/1"].trunk_vlans == [3000, 10]
+    assert ports["Ethernet1/1/2"].trunk_vlans == [3000, 10]
+    assert ports["Ethernet1/1/5"].trunk_vlans == [10]
+    assert ports["Ethernet1/1/48"].trunk_vlans == [10]
