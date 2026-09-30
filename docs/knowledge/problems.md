@@ -686,3 +686,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （exclude-range は配らない範囲へ）。local はポートのアドレス、default は `config system dns` の primary / secondary を
   配る先とする。試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 同じ形の見落とし: 「書かない形」は既定値と別の値の組み合わせで出る。読み手は既定値を資料で確かめてから空を判定する。
+
+## Cisco の DHCP で、上流から受け取る DNS と親のプールを受け継ぐ固定割り当てを「配っていない」と言っていた（2026-09-30 JST）
+
+- 確かめた資料: Cisco「IP Addressing Configuration Guide, Cisco IOS XE 17.x」の「Configuring the Cisco IOS XE DHCP Server」
+  （DHCP Attribute Inheritance、Configuring Manual Bindings、Configuring a Remote Device to Import DHCP Server Options）と
+  「Configuring the DHCP Server On-Demand Address Pool Manager」（VRF のプールは受け継がない）。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `import all` で DNS を上流から受け取って配るプールに「名前解決の先を配っていません」と出していた。
+  - 固定割り当て（`host 10.0.0.20 255.255.255.0`）のプールは、そのアドレスを含む network のプールから既定ゲートウェイと
+    DNS を受け継ぐのに、「既定ゲートウェイを配っていません」（HIGH）と出していた。
+- 直したこと: `import all` / `import interface` を読み、DNS の指摘を出さない。`host` を読み、配るのはその1つとする。
+  書いていない値は、アドレスを含むいちばん狭い network のプールから受け継ぐ（VRF のプールは受け継がない）。
+  試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 未確認: `host` でマスクを省いたときの扱いは資料に書かれていない。親のプールの network を借りる形にした。

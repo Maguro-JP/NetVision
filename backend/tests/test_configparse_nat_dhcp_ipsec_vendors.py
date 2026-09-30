@@ -487,3 +487,54 @@ def test_a_fortigate_dhcp_server_with_dns_service_local_or_default_hands_out_dns
     ]
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "名前解決の先を配っていません" in t], titles
+
+
+def test_a_cisco_dhcp_pool_with_import_all_hands_out_dns():
+    """`import all` / `import interface` は DNS などを上流から受け取って配る形。
+    `dns-server` を書かなくても「名前解決の先を配っていません」と言わない。
+
+    出典: Cisco「IP Addressing Configuration Guide, Cisco IOS XE 17.x - Configuring the Cisco IOS
+    XE DHCP Server」の「Configuring a Remote Device to Import DHCP Server Options from a Central
+    DHCP Server」（`import {all | interface interface_name}`。「The import all command learns
+    options from all the interfaces.」）。
+    """
+    text = (
+        "hostname rt1\n"
+        "ip dhcp pool LAN\n"
+        " network 10.0.0.0 255.255.255.0\n"
+        " default-router 10.0.0.1\n"
+        " import all\n"
+        "!\n"
+    )
+    parsed = configparse.parse(text)
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "名前解決の先を配っていません" in t], titles
+
+
+def test_a_cisco_manual_binding_inherits_the_parent_pool():
+    """固定割り当て（`host`）のプールは、そのアドレスを含む network のプールの設定を受け継ぐ。
+    「既定ゲートウェイを配っていません」「名前解決の先を配っていません」と言わない。
+
+    出典: Cisco「IP Addressing Configuration Guide, Cisco IOS XE 17.x - Configuring the Cisco IOS
+    XE DHCP Server」の「DHCP Attribute Inheritance」（「Subnetworks inherit network parameters
+    and clients inherit subnetwork parameters.」）と「Configuring Manual Bindings」
+    （`host address [mask | /prefix-length]`）。
+    """
+    text = (
+        "hostname rt1\n"
+        "ip dhcp pool LAN\n"
+        " network 10.0.0.0 255.255.255.0\n"
+        " default-router 10.0.0.1\n"
+        " dns-server 10.0.0.53\n"
+        "!\n"
+        "ip dhcp pool PRINTER\n"
+        " host 10.0.0.20 255.255.255.0\n"
+        " client-identifier 0100.1122.3344.55\n"
+        "!\n"
+    )
+    parsed = configparse.parse(text)
+    printer = next(p for p in parsed.dhcp.pools if p.name == "PRINTER")
+    assert printer.default_routers == ["10.0.0.1"]
+    assert printer.dns_servers == ["10.0.0.53"]
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "PRINTER" in t], titles

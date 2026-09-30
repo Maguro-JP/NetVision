@@ -596,6 +596,9 @@ class ParsedDhcpPool:
     dns_servers: list[str] = field(default_factory=list)
     domain: str | None = None
     lease: str | None = None
+    #: DNS などを上流から受け取って配る（Cisco の `import all` / `import interface`）。
+    #: dns_servers が空でも、名前解決の先は配られる
+    imports_options: bool = False
 
 
 @dataclass
