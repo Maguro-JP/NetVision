@@ -581,3 +581,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: Junos は `gr-` を gre、`ip-` を ipip とし、どちらでもない口は種別を空のままにする。FortiOS は IPv6 の行も
   読む。試験は `tests/test_topology_logical.py`。
 - 未確認のまま: Cisco の `tunnel source / destination / mode / vrf`（公式の設定例に当たれず、第三者の作例だけ）。
+
+## FortiOS の並べて書く値を、引用符の中の空白でも割っていた（2026-09-30 JST）
+
+- 確かめた資料: FortiOS 8.0.1 Administration Guide「Explicit proxy authentication」（`set groups "NTLM-FSSO-Group"
+  "Ldap-Group"`）、7.4.10「Internet service groups in policies」（`set name "PC to Google"`）、「Configuring FSSO firewall
+  authentication」（引用符の無い `set srcaddr Windows_net`）。
+- 起きていたこと: `blocks` が値の外側の引用符を外してから、`words` が空白で割っていた。`set srcaddr "Sales LAN"` は
+  2つの名前と数えられ、NAT の対象が「名前ではない」扱いになっていた。`set service "Windows AD" "DNS"` も3つに割れていた。
+- 直したこと: `blocks` が書いてあったままの値（`raw`）も持ち、並べて書く値は `items` で引用符の単位で分ける。
+  `words` は呼ばれなくなったので消した。試験は `tests/test_fortitext.py`（新設）。
+- inputtext.py（BOM・行末・タブを揃える）は機器の書式ではなくファイルの保存形式の話なので、公式の資料の対象外とした。

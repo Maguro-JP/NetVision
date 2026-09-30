@@ -169,22 +169,22 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
         if values.get("nat", "").lower() != "enable":
             continue
         label = values.get("name") or f"policy {name}"
-        pool = fortitext.words(values.get("poolname"))
-        out = fortitext.words(values.get("dstintf"))
+        pool = fortitext.items(values, "poolname")
+        out = fortitext.items(values, "dstintf")
         nat.rules.append(
             ParsedNatRule(
                 kind="dynamic",
                 direction="inside",
-                matched=" ".join(fortitext.words(values.get("srcaddr"))) or "any",
+                matched=" ".join(fortitext.items(values, "srcaddr")) or "any",
                 # 送信元は名前で書かれる。定義が無ければ、そこは言える
-                matched_is_name=len(fortitext.words(values.get("srcaddr"))) <= 1,
+                matched_is_name=len(fortitext.items(values, "srcaddr")) <= 1,
                 translated=pool[0] if pool else (out[0] if out else "出口のアドレス"),
                 # FortiGate の NAT は、ふだんポートで束ねる（central-nat を除く）
                 overload=True,
                 raw=f"firewall policy {name} ({label}) set nat enable",
             )
         )
-        for interface in fortitext.words(values.get("srcintf")):
+        for interface in fortitext.items(values, "srcintf"):
             if interface not in nat.inside_interfaces:
                 nat.inside_interfaces.append(interface)
         for interface in out:
@@ -204,7 +204,7 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
                 raw=f"firewall vip {name}",
             )
         )
-        for interface in fortitext.words(values.get("extintf")):
+        for interface in fortitext.items(values, "extintf"):
             if interface not in nat.outside_interfaces:
                 nat.outside_interfaces.append(interface)
 
@@ -319,7 +319,7 @@ def _parse_qos(text: str, parsed: ParsedConfig) -> None:
         )
 
     for name, values in fortitext.blocks(text, "firewall shaping-policy"):
-        service = " ".join(fortitext.words(values.get("service"))) or "すべて"
+        service = " ".join(fortitext.items(values, "service")) or "すべて"
         qos.classes.append(
             ParsedQosClass(
                 name=values.get("name") or f"shaping-policy {name}",
@@ -331,7 +331,7 @@ def _parse_qos(text: str, parsed: ParsedConfig) -> None:
             if not shaper:
                 continue
             direction = "input" if key == "traffic-shaper-reverse" else "output"
-            for interface in fortitext.words(values.get("dstintf")) or ["shaping-policy"]:
+            for interface in fortitext.items(values, "dstintf") or ["shaping-policy"]:
                 qos.applied.append((interface, direction, shaper))
 
     if qos.policies or qos.classes:
@@ -348,7 +348,7 @@ def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
     crypto = ParsedCrypto()
 
     for name, values in fortitext.blocks(text, "vpn ipsec phase1-interface"):
-        proposal = fortitext.words(values.get("proposal"))
+        proposal = fortitext.items(values, "proposal")
         for item in proposal or [""]:
             encryption, _, digest = item.partition("-")
             crypto.ike_policies.append(
@@ -377,7 +377,7 @@ def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
 
     for name, values in fortitext.blocks(text, "vpn ipsec phase2-interface"):
         crypto.transform_sets.append(
-            ParsedTransformSet(name=name, transforms=fortitext.words(values.get("proposal")))
+            ParsedTransformSet(name=name, transforms=fortitext.items(values, "proposal"))
         )
         parent = values.get("phase1name")
         for entry in crypto.maps:
