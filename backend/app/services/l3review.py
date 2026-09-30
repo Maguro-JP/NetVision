@@ -481,6 +481,16 @@ def _segments_nobody_advertises(
     others = [p for p in parsed.protocols if p.name in {"eigrp", "isis", "rip", "ospfv3"}]
     if parsed.ospf is None and parsed.bgp is None and not others:
         return []  # 静的で回している構成では、載っていないのが普通
+    # `redistribute connected` は、network 文に入っていない区画もまとめて広告する。
+    # 絞り込み（route-map）が付いていても、どれが外れるかはここでは言えないので言わない。
+    # 出典: Cisco「Redistributing Connected Networks into OSPF」
+    redistributes = [
+        *(parsed.ospf.redistributes if parsed.ospf else []),
+        *(parsed.bgp.redistributes if parsed.bgp else []),
+        *(name for protocol in others for name in protocol.redistributes),
+    ]
+    if any(name.lower() == "connected" for name in redistributes):
+        return []
 
     advertised: set[str] = set()
     interfaces: set[str] = set()
@@ -580,9 +590,7 @@ def _redundancy_only_on_one_side(
                     Finding(
                         level=MEDIUM,
                         title=f"{entry.protocol.upper()} グループ {entry.group} の優先度が同じです",
-                        why="両方が同じ優先度だと、どちらが主になるかが起動の順番で決まります。"
-                        "入れ替えのたびに主が変わり、通信の経路が変わります。"
-                        "主にしたい側の優先度を上げてください。",
+                        why=_SAME_PRIORITY_WHY.get(entry.protocol, _SAME_PRIORITY_WHY["hsrp"]),
                         evidence=[
                             f"{device.hostname} {entry.interface}: 優先度 {_shown(entry, mine)}",
                             f"{peer.hostname} {other.interface}: 優先度 {_shown(other, theirs)}",
@@ -607,6 +615,21 @@ def _redundancy_only_on_one_side(
         )
     return out
 
+
+#: 優先度が同じときに、何で主が決まるか。HSRP と VRRP で違う。
+#: 出典: Cisco「Network Services Configuration Guide, Cisco IOS XE 17.x - Configuring HSRP」の
+#: HSRP Priority and Preemption（「A standby router with equal priority but a higher IP address
+#: will not preempt the active router.」）と「Network Services Configuration Guide - Configuring
+#: VRRP」の VRRP Router Priority and Preemption（「If Routers B and C are both configured with the
+#: priority of 100, the virtual router backup with the higher IP address is elected」）
+_SAME_PRIORITY_WHY = {
+    "hsrp": "両方が同じ優先度だと、先に上がった側が主になり、そのまま居座ります。"
+    "入れ替えのたびに主が変わり、通信の経路が変わります。"
+    "主にしたい側の優先度を上げてください。",
+    "vrrp": "両方が同じ優先度だと、口のアドレスの大きい側が主になります。"
+    "主にしたかった側とは限らず、Config を見ても意図が読めません。"
+    "主にしたい側の優先度を上げてください。",
+}
 
 #: 優先度を書かないときの値。HSRP・VRRP とも 100
 _DEFAULT_PRIORITY = 100

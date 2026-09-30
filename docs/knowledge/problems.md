@@ -761,3 +761,20 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - hareview も見た。役割・優先度とも両方に書いてある値だけで判定しており、書かない形の誤りは無かった。
 - 気付いたが手を付けなかったこと: VRRP で優先度が同じときは住所の大きい側が主になる（同じ資料）。今の文言
   「起動の順番で決まります」は HSRP には合うが VRRP には合わない。
+
+## redistribute connected の機器に「外へ広告されていないセグメントがあります」と出ていた（2026-10-01 JST）
+
+- 確かめた資料: Cisco「Redistributing Connected Networks into OSPF」「Redistribute Connected Networks into OSPF with
+  Subnet Keyword」、Cisco「Network Services Configuration Guide, Cisco IOS XE 17.x - Configuring HSRP」と
+  「Network Services Configuration Guide - Configuring VRRP」の Priority and Preemption。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `redistribute connected` は network 文に入っていない区画もまとめて広告するのに、読んだ redistribute を見ずに
+    「外へ広告されていないセグメントがあります」（MEDIUM）と出していた。
+  - 「優先度が同じ」の説明が HSRP と VRRP で同じ「起動の順番で決まります」だった。HSRP は先に上がった側が居座り、
+    VRRP は口のアドレスの大きい側が主になる。
+- 直したこと: OSPF・BGP・EIGRP などのどれかに `redistribute connected` があれば、広告の指摘を出さない。説明は
+  HSRP と VRRP で分けた。試験は `backend/tests/test_l3review.py`。
+- 未確認: Huawei の `import-route direct`、Junos の direct の書き出しも同じ意味の見込みだが、資料に当たっていない
+  ので扱いを変えていない。
+- l3review の残り（既定の経路・経路の向き先・同じ重み・passive）も読んだ。既定の経路は OSPF / BGP があれば言わず、
+  同じ重みは distance を書かなければ 1 として比べており、書かない形の誤りは見つからなかった。
