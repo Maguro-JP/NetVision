@@ -482,7 +482,12 @@ def _ospf_option(current: ParsedInterface, body: str) -> None:
             current.ospf_network = value[0]
         return
     if "authentication" in parts:
-        current.ospf_auth = "md5" if "message-digest" in parts else "text"
+        # `null` は認証を掛けない指定（エリアの指定を打ち消す）。出典: Cisco Nexus 6000 Series
+        # NX-OS Unicast Routing Command Reference の ip ospf authentication
+        if "null" in parts:
+            current.ospf_auth = "none"
+        else:
+            current.ospf_auth = "md5" if "message-digest" in parts else "text"
         return
     if "message-digest-key" in parts:
         current.ospf_auth = current.ospf_auth or "md5"

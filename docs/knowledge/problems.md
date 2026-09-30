@@ -801,5 +801,21 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `spanning-tree mode` の書き方が無い機種（FastIron）には言わない。AOS-S には `spanning-tree mode mstp`
   があるので、そのまま言う。試験は `backend/tests/test_configcheck.py`。
 - configcheck の残り（SSH の版、ポートセキュリティの violation、トランクのタグ無し VLAN 1 など）は、既定値のまま
-  書かないこと自体を指摘する作り。SSH の版は docstring に出典がある。violation の既定（shutdown）は今回は資料に
-  当たっていない。
+  書かないこと自体を指摘する作り。SSH の版は docstring に出典がある。violation の既定（shutdown）は次の周で
+  Security Configuration Guide, Cisco IOS XE 17.16.x の Default Port Security Configuration で確かめ、出典を足した。
+
+## linkcheck で、speed auto を「片側だけ速度を固定」、ip ospf authentication null を平文の認証と読んでいた（2026-10-01 JST）
+
+- 確かめた資料: Cisco「Cisco IOS XE 17 - Interface Characteristics Configuration Guide」の Default Ethernet interface
+  configuration（Speed / Duplex mode: Autonegotiate）、「Cisco Nexus 6000 Series NX-OS Unicast Routing Command
+  Reference」の ip ospf authentication（null は認証を掛けない）、技術資料「Configure Authentication in Open Shortest
+  Path First」。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - 片側が `speed auto` / `duplex auto`（既定の自動を書いたもの）、片側が何も書いていないと、「片側だけ速度を固定
+    しています」「片側だけ二重を固定しています」（MEDIUM）と出していた。
+  - `ip ospf authentication null` の `authentication` を見て、平文の認証（text）と読んでいた。相手が何も掛けていない
+    と「OSPF の合言葉の掛け方が両端で違います」（HIGH）になる。
+- 直したこと: linkcheck は `auto` を書いていないのと同じに扱う。Cisco の読み手は `null` を「none」（掛けていない）と
+  読む。根拠の行では none も「掛けていない」と出す。試験は `backend/tests/test_linkcheck.py`。
+- linkcheck の残り（トランクの許可 VLAN、タグ無し VLAN、アドレス、OSPF の hello / dead / network、MTU、束ね）は、
+  片側が書いていなければ言わない作りで、書かない形の誤りは無かった。

@@ -333,3 +333,37 @@ def test_nothing_is_said_when_every_link_was_looked_at(db_session):
     report = linkcheck.review(db_session)
     assert report.links_with_config == report.links_seen
     assert not any("見ていません" in note for note in report.notes)
+
+
+def test_speed_auto_written_out_is_the_same_as_not_written(db_session):
+    """`speed auto` / `duplex auto` は既定の自動と同じ。
+
+    書いていない側と比べて「片側だけ固定」と言わない。
+
+    出典: Cisco「Cisco IOS XE 17 - Interface Characteristics Configuration Guide」の
+    Default Ethernet interface configuration（Speed: Autonegotiate、Duplex mode:
+    Autonegotiate）と Set the interface speed and duplex parameters（`speed ... auto`、
+    `duplex {auto | full | half}`）。
+    """
+    _pair(db_session, {"speed": "auto", "duplex": "auto"}, {})
+    titles = " / ".join(_titles(db_session))
+    assert "片側だけ速度を固定" not in titles
+    assert "片側だけ二重を固定" not in titles
+
+
+def test_ospf_authentication_null_is_no_authentication():
+    """`ip ospf authentication null` は、認証を掛けない指定（エリアの指定を打ち消す）。
+
+    出典: Cisco「Cisco Nexus 6000 Series NX-OS Unicast Routing Command Reference」の ip ospf
+    authentication（null: 「Specifies that no authentication is used. Use this keyword to override
+    any other authentication configured for an area.」）と技術資料「Configure Authentication in
+    Open Shortest Path First」（Null Authentication は Type 0、既定）。
+    """
+    from app.services import configparse
+
+    text = (
+        "hostname r1\n!\ninterface GigabitEthernet0/1\n ip address 10.0.0.1 255.255.255.252\n"
+        " ip ospf authentication null\n ip ospf 1 area 0\n!\n"
+    )
+    [port] = [i for i in configparse.parse(text).interfaces if i.name == "GigabitEthernet0/1"]
+    assert port.ospf_auth == "none"

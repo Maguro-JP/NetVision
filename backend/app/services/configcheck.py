@@ -1527,6 +1527,9 @@ def _port_admission(text: str) -> list[Finding]:
             )
         )
 
+    # violation を書かなければ shutdown（口ごと落ちる）。出典: Security Configuration Guide,
+    # Cisco IOS XE 17.16.x（Catalyst 9500）「Port Security」の Default Port Security
+    # Configuration（Violation mode: Shutdown）
     quiet_security = [
         name
         for name, body in ports
