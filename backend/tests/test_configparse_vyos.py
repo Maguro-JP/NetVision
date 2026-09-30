@@ -130,3 +130,23 @@ def test_the_saved_form_keeps_static_routes():
         ("0.0.0.0/0", "192.0.2.254"),
         ("10.9.0.0/16", "10.0.0.9"),
     ]
+
+
+def test_bonding_members_written_the_vyos_1_3_way_are_read():
+    """VyOS は LAG の子を束ねる口の側に `member interface` で書く。子の口に束ねる番号を付ける。
+
+    出典: VyOS 1.5.x (circinus) LTS Documentation「Bond / link aggregation」
+    （`set interfaces bonding bond0 member interface eth0`）。
+    旧来の `set interfaces ethernet eth0 bond-group bond0` も引き続き読む。
+    """
+    text = (
+        "set system host-name 'vyos-01'\n"
+        "set interfaces ethernet eth0 hw-id '00:00:5e:00:53:00'\n"
+        "set interfaces bonding bond0 mode '802.3ad'\n"
+        "set interfaces bonding bond0 member interface 'eth1'\n"
+        "set interfaces bonding bond0 member interface eth2\n"
+        "set interfaces bonding bond0 vif 10 address 192.168.0.1/24\n"
+    )
+    parsed = configparse.parse(text)
+    lag = {i.name: i.lag_group for i in parsed.interfaces if i.lag_group is not None}
+    assert lag == {"eth1": 0, "eth2": 0}
