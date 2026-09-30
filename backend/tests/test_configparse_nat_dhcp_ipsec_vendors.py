@@ -307,3 +307,32 @@ def test_fortigate_ipsec_peer_written_as_ipv6_ddns_or_dialup_is_not_missing():
     assert peers == {"v6": ["2001:db8::2"], "ddns": ["branch.example.jp"], "dialup": ["dynamic"]}
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "上がりません" in t], titles
+
+
+def test_a_crypto_map_entry_that_points_to_a_dynamic_map_needs_no_peer():
+    """ダイナミッククリプトマップを指す行（`ipsec-isakmp dynamic 名前`）は相手を書かない。
+    「このままでは上がりません」とは言わない。
+
+    出典: Cisco「IPsec VPN Command Reference」の crypto map (global configuration)
+    （`crypto map map-name seq-num ipsec-isakmp [dynamic dynamic-map-name]`、set peer は
+    dynamic crypto map では要らない）と、Cisco Secure Firewall ASA VPN CLI Configuration Guide 9.23
+    「Create a Crypto Map Entry to Use the Dynamic Crypto Map」。
+    """
+    asa = (
+        "ASA Version 9.16(4)\nhostname fw-asa\n"
+        "crypto dynamic-map DYN 10 set ikev1 transform-set TS\n"
+        "crypto map OUTSIDE 65535 ipsec-isakmp dynamic DYN\n"
+        "crypto map OUTSIDE interface outside\n"
+    )
+    ios = (
+        "hostname r1\n"
+        "crypto dynamic-map DYN 10\n set transform-set TS\n!\n"
+        "crypto map VPN 100 ipsec-isakmp dynamic DYN\n!\n"
+    )
+    for text in (asa, ios):
+        parsed = configparse.parse(text)
+        [entry] = parsed.crypto.maps
+        assert entry.kind == "ipsec-isakmp dynamic", text
+        assert entry.profile == "DYN", text
+        titles = [f.title for f in policyreview.review(parsed)]
+        assert not [t for t in titles if "上がりません" in t], titles
