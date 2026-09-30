@@ -1438,7 +1438,7 @@ def _dhcp(parsed: ParsedConfig) -> list[Finding]:
                         [head, f"default-router {router}"],
                     )
                 )
-        if not pool.dns_servers:
+        if not pool.dns_servers and not pool.imports_options:
             findings.append(
                 _note(
                     LOW,

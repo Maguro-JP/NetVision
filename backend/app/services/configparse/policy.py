@@ -15,6 +15,7 @@ IPsec は方式の強さが分かっていないと、古いまま残ってい�
 
 from __future__ import annotations
 
+import ipaddress
 import re
 
 from app.services.configparse.base import (
@@ -351,6 +352,7 @@ def _dhcp(text: str) -> ParsedDhcp | None:
     dhcp = ParsedDhcp()
     seen = False
 
+    vrf_pools: set[str] = set()
     for head, body in _blocks(text, _DHCP_POOL):
         seen = True
         pool = ParsedDhcpPool(name=head.group(1))
@@ -375,7 +377,21 @@ def _dhcp(text: str) -> ParsedDhcp | None:
             lease = re.match(r"^lease\s+(.+)$", line, re.IGNORECASE)
             if lease:
                 pool.lease = lease.group(1).strip()
+                continue
+            host = re.match(r"^host\s+(\S+)(?:\s+(\S+))?", line, re.IGNORECASE)
+            if host:
+                # 固定割り当て。配るのはこの1つだけ
+                pool.range_start = pool.range_end = host.group(1)
+                if host.group(2):
+                    pool.network = f"{host.group(1)} {host.group(2)}"
+                continue
+            if re.match(r"^import\s+(all|interface\s)", line, re.IGNORECASE):
+                pool.imports_options = True
+                continue
+            if re.match(r"^vrf\s", line, re.IGNORECASE):
+                vrf_pools.add(pool.name)
         dhcp.pools.append(pool)
+    _inherit_dhcp(dhcp.pools, vrf_pools)
 
     for line in text.splitlines():
         excluded = _DHCP_EXCLUDED.match(line.strip())
@@ -392,6 +408,56 @@ def _dhcp(text: str) -> ParsedDhcp | None:
                 dhcp.relays.append((interface, relay.group(1)))
 
     return dhcp if seen else None
+
+
+def _inherit_dhcp(pools: list[ParsedDhcpPool], vrf_pools: set[str]) -> None:
+    """書いていない値を、そのアドレスを含む network のプールから受け継ぐ。
+
+    Cisco の DHCP は木の形で、下のプール（狭い network、固定割り当ての `host`）は上の
+    プールの値を受け継ぐ。下で書いた値が優先される。VRF のプールは受け継がない。
+    出典: Cisco「IP Addressing Configuration Guide, Cisco IOS XE 17.x」の「DHCP Attribute
+    Inheritance」と「Configuring the DHCP Server On-Demand Address Pool Manager」
+    （「Attribute inheritance is not supported on VRF pools.」）。
+    """
+
+    def span(pool: ParsedDhcpPool) -> ipaddress.IPv4Network | ipaddress.IPv6Network | None:
+        text = pool.network or pool.range_start
+        if not text:
+            return None
+        parts = text.split()
+        try:
+            joined = f"{parts[0]}/{parts[1]}" if len(parts) == 2 else parts[0]
+            if pool.network and pool.range_start and pool.range_start == pool.range_end:
+                joined = pool.range_start  # 固定割り当ては、その1つのアドレス
+            return ipaddress.ip_network(joined, strict=False)
+        except ValueError:
+            return None
+
+    spans = {id(pool): span(pool) for pool in pools}
+    candidates = [p for p in pools if p.name not in vrf_pools and spans[id(p)] is not None]
+    # 広いものから埋めると、狭いものは埋まった親から受け継げる
+    candidates.sort(key=lambda p: spans[id(p)].prefixlen)
+    for pool in candidates:
+        own = spans[id(pool)]
+        parents = [
+            p
+            for p in candidates
+            if p is not pool
+            and spans[id(p)].version == own.version
+            and spans[id(p)].prefixlen < own.prefixlen
+            and own.subnet_of(spans[id(p)])
+        ]
+        if not parents:
+            continue
+        parent = max(parents, key=lambda p: spans[id(p)].prefixlen)
+        if not pool.default_routers:
+            pool.default_routers = list(parent.default_routers)
+        if not pool.dns_servers:
+            pool.dns_servers = list(parent.dns_servers)
+        pool.domain = pool.domain or parent.domain
+        pool.imports_options = pool.imports_options or parent.imports_options
+        if pool.network is None and parent.network:
+            pool.network = parent.network
 
 
 # ---------------------------------------------------------------------------
