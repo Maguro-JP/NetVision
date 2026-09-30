@@ -361,7 +361,12 @@ def _parse_ipsec(text: str, parsed: ParsedConfig) -> None:
                     authentication="psk" if values.get("psksecret") else values.get("authmethod"),
                 )
             )
-        peer = values.get("remote-gw")
+        # 相手は IPv4 なら remote-gw、IPv6 なら remote-gw6、名前で引くなら remotegw-ddns。
+        # ダイヤルアップ（type dynamic）は相手を決めない。空にすると「相手が無い」に見える
+        # （FortiOS 6.4.7 / 7.0.12 CLI Reference の config vpn ipsec phase1-interface）
+        peer = values.get("remote-gw") or values.get("remote-gw6") or values.get("remotegw-ddns")
+        if not peer and values.get("type", "").lower() == "dynamic":
+            peer = "dynamic"
         crypto.maps.append(
             ParsedCryptoMapEntry(
                 name=name,

@@ -626,3 +626,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - Arista（arista.py）は、`ip route` の name / tag の後ろの値を口や距離として読んでいないかを見た。IOS の読み手が先に
   正しく読んでいて不具合は無かったので、変えていない。EOS の公式の資料（arista.com）にはこの環境から届かず、
   BGP の maximum-routes の既定値（12000）と peer group の扱いは未確認のまま。
+
+## FortiGate のダイヤルアップ・IPv6・DDNS の IPsec に「このままでは上がりません」と出ていた（2026-09-30 JST）
+
+- 確かめた資料: FortiOS 6.4.7 / 7.0.12 CLI Reference の config vpn ipsec phase1-interface（type [static|dynamic|...]、
+  remote-gw6、remotegw-ddns）。
+- 起きていたこと: 相手を `remote-gw` からしか読んでいなかった。IPv6（`remote-gw6`）、名前で引く相手（`remotegw-ddns`）、
+  相手を決めないダイヤルアップ（`set type dynamic`）では相手が空になり、点検が「相手（set peer）が書かれていません。
+  このままでは上がりません」（HIGH）と誤って指摘していた。直す前のコードで出ることを確かめた。
+- 直したこと: 相手を remote-gw → remote-gw6 → remotegw-ddns の順に読み、ダイヤルアップは相手を「dynamic」とする。
+  試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`（点検に指摘が出ないことまで見る）。
+- 同じ形の見落とし: #117 の tunnels.py（FortiOS の IPv6 の宛先）と同じ。phase1-interface を読む処理は2か所ある。
