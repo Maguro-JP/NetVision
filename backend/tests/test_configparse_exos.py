@@ -145,3 +145,42 @@ def test_a_mask_cut_off_mid_line_is_skipped_rather_than_failing() -> None:
     )
     addresses = {i.name: i.ip_address for i in parsed.interfaces if i.ip_address}
     assert addresses == {"Vlan20": "10.0.20.1/24"}
+
+
+def test_ports_added_to_a_vlan_by_its_number_are_read() -> None:
+    """VLAN は名前のほか、番号の並びでも指定できる（`configure vlan 10,20 add ports 5 tagged`）。
+
+    出典: ExtremeXOS Command Reference Guide 22.1 / 31.7、Switch Engine v33.2.1 Command References
+    の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`、
+    「The vlan_list option was added in ExtremeXOS 16.1.」）。
+    """
+    text = (
+        'configure snmp sysName "sw-exos"\n'
+        "create vlan 10\n"
+        "create vlan 20\n"
+        "configure vlan 10,20 add ports 5 tagged\n"
+        "configure vlan 30 add ports 6 untagged\n"
+    )
+    ports = {p.name: p for p in configparse.parse(text).interfaces}
+    assert ports["Port5"].mode == "trunk"
+    assert ports["Port5"].trunk_vlans == [10, 20]
+    assert ports["Port6"].vlan == 30
+
+
+def test_the_description_string_is_read() -> None:
+    """口の説明は `display-string`（短い表示名）のほか `description-string` にも書ける。
+
+    両方あれば長い方（description-string）を説明に持つ。
+
+    出典: ExtremeXOS Command Reference Guide 30.1 の一覧（configure port description-string /
+    configure ports display-string）。
+    """
+    text = (
+        'configure snmp sysName "sw-exos"\n'
+        "configure ports 1 display-string uplink\n"
+        'configure ports 1 description-string "Uplink to core-sw-01 Te1/1/1"\n'
+        'configure ports 2 description-string "Printer"\n'
+    )
+    ports = {p.name: p for p in configparse.parse(text).interfaces}
+    assert ports["Port1"].description == "Uplink to core-sw-01 Te1/1/1"
+    assert ports["Port2"].description == "Printer"

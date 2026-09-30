@@ -602,3 +602,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `member interface` の行も読み、子の口に束ねる番号を付ける。旧来の形も引き続き読む。試験は
   `tests/test_configparse_vyos.py`。
 - 未確認のまま: vyos.py のほかの行（address・vif・description・disable・static route）。
+
+## EXOS で、番号で指定した VLAN と description-string を読めていなかった（2026-09-30 JST）
+
+- 確かめた資料: ExtremeXOS Command Reference Guide 22.1 / 31.7、Switch Engine v33.2.1 Command References の configure vlan
+  add ports、ExtremeXOS Command Reference Guide 30.1 の一覧（configure port description-string）。
+- 起きていたこと:
+  - `configure vlan 10,20 add ports 5 tagged` のように VLAN を番号の並びで書くと（ExtremeXOS 16.1 から）、名前で番号を
+    引けず、口が1つも付かなかった。
+  - `configure ports 1 description-string "..."`（長い説明）を読まず、`display-string`（20字までの表示名）だけを説明に
+    していた。
+- 直したこと: 番号の並びはそのままほどいて使う。`description-string` を読み、両方あれば長い方を説明に持つ。試験は
+  `tests/test_configparse_exos.py`。
