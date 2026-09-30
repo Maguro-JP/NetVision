@@ -778,3 +778,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   ので扱いを変えていない。
 - l3review の残り（既定の経路・経路の向き先・同じ重み・passive）も読んだ。既定の経路は OSPF / BGP があれば言わず、
   同じ重みは distance を書かなければ 1 として比べており、書かない形の誤りは見つからなかった。
+
+## Huawei の import-route direct を読まず、「外へ広告されていないセグメント」と出ていた（2026-10-01 JST）
+
+- 確かめた資料: Huawei「S9300 and S9300X V200R024C00 Command Reference」の「import-route (OSPF)」（`direct` は直結の
+  経路を取り込む。管理口の区画まで取り込まれる、との注意書きつき）。
+- 起きていたこと: undo 書式（Huawei・H3C・NEC QX）の OSPF の読み手が `import-route` を読まず、l3review も `direct` を
+  広告として数えていなかった。`import-route direct` の機器に「外へ広告されていないセグメントがあります」（MEDIUM）と
+  出ていた。直す前のコードで試験が落ちることを確かめた。
+- 直したこと: OSPF の `import-route 種類` を redistributes に入れ（`limit` は種類ではないので除く）、l3review は
+  `direct` も `connected` と同じく広告として数える。試験は `backend/tests/test_l3review.py`。
+- 未確認のまま: Huawei の BGP の `import-route`（資料に当たっていない）と、Junos の export policy の
+  `from protocol direct`（policy の中身を読んで当て先まで結ぶ必要があり、今回は手を付けていない）。

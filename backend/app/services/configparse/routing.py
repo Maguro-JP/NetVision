@@ -608,6 +608,12 @@ def parse_undoform(text: str, parsed: ParsedConfig) -> None:
                 prefix = to_prefix(network.group(1), network.group(2), wildcard=True)
                 if prefix:
                     _add_area(ospf, area, prefix)
+                continue
+            # 他の経路を取り込む。`direct` は直結の区画
+            # （Huawei「S9300 and S9300X V200R024C00 Command Reference」の import-route (OSPF)）
+            imported = re.match(r"^import-route\s+(\S+)", line, re.IGNORECASE)
+            if imported and imported.group(1).lower() != "limit":
+                ospf.redistributes.append(imported.group(1).lower())
         for entry in ospf.areas:  # 見出しだけの空欄を落とす
             entry.networks = [n for n in entry.networks if n]
         parsed.ospf = ospf

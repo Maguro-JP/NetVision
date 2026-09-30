@@ -628,3 +628,25 @@ def test_redistribute_connected_counts_as_advertised(db_session):
     _snapshot(db_session, device, config, "e1" * 32)
     report = l3review.review(db_session, device)
     assert not [f.title for f in report.findings if "広告されていない" in f.title]
+
+
+def test_huawei_import_route_direct_counts_as_advertised(db_session):
+    """Huawei の `ospf 1` の下の `import-route direct` は、直結の区画を OSPF へ取り込む。
+
+    出典: Huawei「S9300 and S9300X V200R024C00 Command Reference」の「import-route (OSPF)」
+    （「direct: Specifies the direct protocol whose routes are imported.」「After the import-route
+    direct command is executed, routes to the network segment where the IP address of the
+    management interface belongs are also imported in the OSPF routing table.」）。
+    """
+    config = (
+        "sysname core-sw-81\n#\n"
+        "interface Vlanif10\n ip address 10.10.10.1 255.255.255.0\n#\n"
+        "interface Vlanif20\n ip address 10.20.20.1 255.255.255.0\n#\n"
+        "ospf 1\n import-route direct\n area 0.0.0.0\n  network 10.10.10.0 0.0.0.255\n#\n"
+        "return\n"
+    )
+    device = _device(db_session, "core-sw-81")
+    _snapshot(db_session, device, config, "f1" * 32)
+    report = l3review.review(db_session, device)
+    assert report.ospf["redistributes"] == ["direct"]
+    assert not [f.title for f in report.findings if "広告されていない" in f.title]

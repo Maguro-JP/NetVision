@@ -481,15 +481,17 @@ def _segments_nobody_advertises(
     others = [p for p in parsed.protocols if p.name in {"eigrp", "isis", "rip", "ospfv3"}]
     if parsed.ospf is None and parsed.bgp is None and not others:
         return []  # 静的で回している構成では、載っていないのが普通
-    # `redistribute connected` は、network 文に入っていない区画もまとめて広告する。
-    # 絞り込み（route-map）が付いていても、どれが外れるかはここでは言えないので言わない。
-    # 出典: Cisco「Redistributing Connected Networks into OSPF」
+    # `redistribute connected`（Huawei は `import-route direct`）は、network 文に入っていない
+    # 区画もまとめて広告する。絞り込み（route-map）が付いていても、どれが外れるかはここでは
+    # 言えないので言わない。
+    # 出典: Cisco「Redistributing Connected Networks into OSPF」、Huawei「S9300 and S9300X
+    # V200R024C00 Command Reference」の import-route (OSPF)
     redistributes = [
         *(parsed.ospf.redistributes if parsed.ospf else []),
         *(parsed.bgp.redistributes if parsed.bgp else []),
         *(name for protocol in others for name in protocol.redistributes),
     ]
-    if any(name.lower() == "connected" for name in redistributes):
+    if any(name.lower() in {"connected", "direct"} for name in redistributes):
         return []
 
     advertised: set[str] = set()
