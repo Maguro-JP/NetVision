@@ -213,19 +213,25 @@ def _parse_nat(text: str, parsed: ParsedConfig) -> None:
 
 
 def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
-    """配るアドレスを読む。範囲は `config ip-range` の中に入れ子で書かれる。"""
+    """配るアドレスを読む。範囲は `config ip-range` の中に入れ子で書かれる。
+
+    `set status disable` のサーバーは使われないので読まない。
+    出典: FortiOS CLI Reference「config system dhcp server」（7.0.1 / 7.4.0）。
+    `status` の既定は enable、disable は「Do not use this DHCP server configuration.」。
+    """
     dhcp = ParsedDhcp()
     ranges = _dhcp_ranges(text)
+    system_dns = _system_dns(text)
     for name, values in fortitext.blocks(text, "system dhcp server"):
-        start, end = ranges.get(name, (None, None))
+        if values.get("status", "").lower() == "disable":
+            continue
+        found = ranges.get(name, {})
+        start, end = (found.get("ip-range") or [(None, None)])[0]
+        dhcp.excluded.extend(found.get("exclude-range", []))
         network = values.get("netmask")
         gateway = values.get("default-gateway")
-        dns = [
-            values[key]
-            for key in ("dns-server1", "dns-server2", "dns-server3")
-            if values.get(key) and values[key] != "0.0.0.0"
-        ]
         interface = values.get("interface")
+        dns = _dhcp_dns(values, interface, parsed, system_dns)
         dhcp.pools.append(
             ParsedDhcpPool(
                 name=f"dhcp {name}" + (f" ({interface})" if interface else ""),
@@ -241,42 +247,105 @@ def _parse_dhcp(text: str, parsed: ParsedConfig) -> None:
         parsed.dhcp = dhcp
 
 
-def _dhcp_ranges(text: str) -> dict[str, tuple[str | None, str | None]]:
-    """`config ip-range` は dhcp server の中の入れ子なので、別に読む。
+def _system_dns(text: str) -> list[str]:
+    """`config system dns` の primary / secondary。`edit` の無い表なので直接読む。
+
+    出典: FortiOS CLI Reference「config system dns」（7.6.3。`set primary` / `set secondary`）。
+    """
+    found = re.search(r"^\s*config system dns\s*$(.*?)^\s*end\s*$", text, re.M | re.S | re.I)
+    if not found:
+        return []
+    return [
+        address
+        for address in re.findall(r"^\s*set (?:primary|secondary)\s+(\S+)", found.group(1), re.M)
+        if address != "0.0.0.0"
+    ]
+
+
+def _dhcp_dns(
+    values: fortitext.Settings,
+    interface: str | None,
+    parsed: ParsedConfig,
+    system_dns: list[str],
+) -> list[str]:
+    """DHCP で配る名前解決の先。`dns-service` で配り方が3つに分かれる。
+
+    出典: FortiOS CLI Reference「config system dhcp server」（7.4.0）。既定は specify。
+    - specify: dns-server1〜3 に書いたもの
+    - local: DHCP サーバーを置いたポート自身のアドレス
+    - default: FortiGate 自身に設定した DNS（`config system dns`）
+    local / default は dns-server を書かない形なので、書いていないのを「配っていない」としない。
+    """
+    service = values.get("dns-service", "specify").lower()
+    if service == "local":
+        port = next((i for i in parsed.interfaces if i.name == interface), None)
+        address = port.ip_address.split("/")[0] if port and port.ip_address else None
+        return [address or f"{interface or '?'} のアドレス"]
+    if service == "default":
+        return system_dns or ["FortiGate の DNS 設定"]
+    return [
+        values[key]
+        for key in ("dns-server1", "dns-server2", "dns-server3")
+        if values.get(key) and values[key] != "0.0.0.0"
+    ]
+
+
+_DHCP_RANGE_TABLES = ("ip-range", "exclude-range")
+
+
+def _dhcp_ranges(text: str) -> dict[str, dict[str, list[tuple[str, str]]]]:
+    """dhcp server の中の入れ子 `config ip-range` と `config exclude-range` を読む。
 
     ここを読まないと「ゲートウェイのアドレスまで配っている」を言い間違える。
     FortiGate は配る範囲をそのまま書くので、範囲の外は配られない。
+    exclude-range は配らない範囲。どちらも `edit <id>` と `set start-ip` /
+    `set end-ip` を持つので、入れ子の `edit` をサーバーの `edit` と取り違えない。
+    出典: FortiOS CLI Reference「config system dhcp server」（7.4.0）。
+    返す形: {サーバー名: {"ip-range": [(開始, 終了)], "exclude-range": [...]}}
     """
-    out: dict[str, tuple[str | None, str | None]] = {}
+    out: dict[str, dict[str, list[tuple[str, str]]]] = {}
+    inside = False
     server: str | None = None
-    in_range = False
+    #: 入れ子の `config` の名前。ip-range / exclude-range 以外も積んで数える
+    nested: list[str] = []
     start = end = None
     for raw in text.splitlines():
-        line = raw.strip()
-        lowered = line.lower()
-        if lowered == "config system dhcp server":
-            server, in_range = None, False
+        lowered = raw.strip().lower()
+        if not inside:
+            inside = lowered == "config system dhcp server"
+            server, nested = None, []
             continue
-        edit = re.match(r'^edit\s+"?([^"]+)"?$', line)
-        if edit and not in_range:
-            server = edit.group(1)
+        if lowered.startswith("config "):
+            nested.append(lowered.removeprefix("config ").strip())
             start = end = None
             continue
-        if lowered == "config ip-range":
-            in_range = True
+        if lowered == "end":
+            if nested:
+                nested.pop()
+            else:
+                inside = False
             continue
-        if in_range:
-            if lowered == "end":
-                in_range = False
-                if server is not None:
-                    out[server] = (start, end)
-                continue
-            found = re.match(r"^set\s+(start-ip|end-ip)\s+(\S+)", lowered)
-            if found:
-                if found.group(1) == "start-ip":
-                    start = found.group(2)
-                else:
-                    end = found.group(2)
+        if not nested:
+            edit = re.match(r'^edit\s+"?([^"]+)"?$', raw.strip())
+            if edit:
+                server = edit.group(1)
+            continue
+        table = nested[-1]
+        if len(nested) != 1 or table not in _DHCP_RANGE_TABLES or server is None:
+            continue
+        if lowered.startswith("edit "):
+            start = end = None
+            continue
+        found = re.match(r"^set\s+(start-ip|end-ip)\s+(\S+)", lowered)
+        if found:
+            if found.group(1) == "start-ip":
+                start = found.group(2)
+            else:
+                end = found.group(2)
+            continue
+        if lowered == "next" and start and end:
+            out.setdefault(server, {}).setdefault(table, []).append((start, end))
+            start = end = None
     return out
 
 

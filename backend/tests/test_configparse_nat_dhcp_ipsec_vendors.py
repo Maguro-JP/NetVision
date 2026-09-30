@@ -387,3 +387,103 @@ def test_a_junos_ike_gateway_with_a_dynamic_peer_is_not_missing_its_peer():
     assert entry.peers == ["dynamic"]
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "上がりません" in t], titles
+
+
+def test_a_disabled_fortigate_dhcp_server_is_not_counted_as_serving():
+    """`set status disable` の DHCP サーバーは使われない。配っていることにしない。
+
+    出典: FortiOS CLI Reference「config system dhcp server」（7.0.1 / 7.4.0）。
+    `status` は「Enable/disable this DHCP configuration.」、既定は enable、
+    disable は「Do not use this DHCP server configuration.」。
+    """
+    text = (
+        "config system global\n    set hostname fgt\nend\n"
+        "config system dhcp server\n"
+        "    edit 1\n"
+        '        set interface "port1"\n'
+        "        set default-gateway 10.0.0.1\n"
+        "        set netmask 255.255.255.0\n"
+        "        set status disable\n"
+        "    next\n"
+        "    edit 2\n"
+        '        set interface "port3"\n'
+        "        set default-gateway 10.3.0.1\n"
+        "        set netmask 255.255.255.0\n"
+        "    next\n"
+        "end\n"
+    )
+    pools = configparse.parse(text).dhcp.pools
+    assert [p.name for p in pools] == ["dhcp 2 (port3)"]
+
+
+def test_a_fortigate_exclude_range_does_not_steal_the_ip_range():
+    """`config exclude-range` の `edit 1` を、DHCP サーバーの `edit` と取り違えない。
+
+    出典: FortiOS CLI Reference「config system dhcp server」（7.4.0）。
+    `config exclude-range` と `config ip-range` はどちらも `edit <id>` と
+    `set start-ip` / `set end-ip` を持つ入れ子。exclude-range は配らない範囲。
+    """
+    text = (
+        "config system global\n    set hostname fgt\nend\n"
+        "config system dhcp server\n"
+        "    edit 7\n"
+        '        set interface "port1"\n'
+        "        set default-gateway 10.0.0.1\n"
+        "        set netmask 255.255.255.0\n"
+        "        config exclude-range\n"
+        "            edit 1\n"
+        "                set start-ip 10.0.0.150\n"
+        "                set end-ip 10.0.0.160\n"
+        "            next\n"
+        "        end\n"
+        "        config ip-range\n"
+        "            edit 1\n"
+        "                set start-ip 10.0.0.100\n"
+        "                set end-ip 10.0.0.200\n"
+        "            next\n"
+        "        end\n"
+        "    next\n"
+        "end\n"
+    )
+    dhcp = configparse.parse(text).dhcp
+    [pool] = dhcp.pools
+    assert (pool.range_start, pool.range_end) == ("10.0.0.100", "10.0.0.200")
+    assert dhcp.excluded == [("10.0.0.150", "10.0.0.160")]
+
+
+def test_a_fortigate_dhcp_server_with_dns_service_local_or_default_hands_out_dns():
+    """`set dns-service local` / `default` は dns-server を書かない形。「配っていない」と言わない。
+
+    出典: FortiOS CLI Reference「config system dhcp server」（7.4.0）。`dns-service` の既定は
+    specify。local は「IP address of the interface the DHCP server is added to becomes the
+    client's DNS server IP address.」、default は「Clients are assigned the FortiGate's
+    configured DNS servers.」。
+    """
+    text = (
+        "config system global\n    set hostname fgt\nend\n"
+        "config system dns\n    set primary 192.0.2.53\n    set secondary 192.0.2.54\nend\n"
+        "config system interface\n"
+        '    edit "port1"\n        set ip 10.0.0.1 255.255.255.0\n    next\n'
+        "end\n"
+        "config system dhcp server\n"
+        "    edit 1\n"
+        '        set interface "port1"\n'
+        "        set default-gateway 10.0.0.1\n"
+        "        set netmask 255.255.255.0\n"
+        "        set dns-service local\n"
+        "    next\n"
+        "    edit 2\n"
+        '        set interface "port3"\n'
+        "        set default-gateway 10.3.0.1\n"
+        "        set netmask 255.255.255.0\n"
+        "        set dns-service default\n"
+        "    next\n"
+        "end\n"
+    )
+    parsed = configparse.parse(text)
+    assert [p.dns_servers for p in parsed.dhcp.pools] == [
+        ["10.0.0.1"],
+        ["192.0.2.53", "192.0.2.54"],
+    ]
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "名前解決の先を配っていません" in t], titles

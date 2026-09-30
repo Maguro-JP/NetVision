@@ -672,3 +672,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - これで「相手を決めない形」の誤りは FortiGate（#122）・Cisco ASA/IOS（#123）・Huawei（#124）・Junos を直した。NEC IX は
   資料に届かず未確認。
+
+## FortiGate の DHCP サーバーを3か所で読み違えていた（2026-09-30 JST）
+
+- 確かめた資料: FortiOS CLI Reference「config system dhcp server」（7.0.1 / 7.4.0）、「config system dns」（7.6.3）。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `set status disable`（使わない設定。既定は enable）のサーバーも、配っていることにしていた。
+  - `config exclude-range` の `edit 1` を DHCP サーバーの `edit` と取り違え、あとの `config ip-range` を別のサーバーの
+    範囲として覚えていた。配る範囲が空になり、配らない範囲も読んでいなかった。
+  - `set dns-service local`（ポート自身のアドレスを配る）と `default`（FortiGate 自身の DNS を配る）は dns-server を
+    書かない形なのに、「名前解決の先を配っていません」と出していた。既定は specify。
+- 直したこと: disable のサーバーは読まない。入れ子の `config` を積んで数え、ip-range と exclude-range を分けて読む
+  （exclude-range は配らない範囲へ）。local はポートのアドレス、default は `config system dns` の primary / secondary を
+  配る先とする。試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 同じ形の見落とし: 「書かない形」は既定値と別の値の組み合わせで出る。読み手は既定値を資料で確かめてから空を判定する。
