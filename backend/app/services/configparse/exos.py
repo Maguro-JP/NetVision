@@ -12,6 +12,10 @@
 - 落とすのは `disable ports 21`
 
 タグ付きと一緒に載っているタグ無しは、その口のタグ無し VLAN（native）。
+
+出典: VLAN を番号の並びで書く形と description-string は ExtremeXOS Command Reference Guide
+（22.1 / 30.1 / 31.7）で確かめた。LLDP は `_lldp_detail` の docstring。
+ほかの行は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -53,10 +57,18 @@ _VLAN_IP = re.compile(
     r"(?P<ip>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>\d+\.\d+\.\d+\.\d+|\d{1,2})(?![\d.])",
     re.IGNORECASE,
 )
+#: 口の名前。`display-string` は短い表示名、`description-string` は長い説明（ifAlias）。
+#: 出典: ExtremeXOS Command Reference Guide 30.1 の一覧（configure port description-string /
+#: configure ports display-string）。両方あれば長い方を説明に持つ
 _DISPLAY = re.compile(
-    r'^\s*configure\s+ports?\s+(?P<ports>[\d\-,:]+)\s+display-string\s+"?(?P<name>[^"\n]+?)"?\s*$',
+    r"^\s*configure\s+ports?\s+(?P<ports>[\d\-,:]+)\s+(?P<kind>display|description)-string\s+"
+    r'"?(?P<name>[^"\n]+?)"?\s*$',
     re.IGNORECASE,
 )
+#: VLAN を番号の並びで書いた形（`configure vlan 10,20 add ports 5 tagged`）。
+#: 出典: ExtremeXOS Command Reference Guide 22.1 / 31.7 の configure vlan add ports
+#: （`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`、vlan_list は 16.1 から）
+_VLAN_LIST = re.compile(r"[\d,\-]+")
 _DISABLE = re.compile(r"^\s*disable\s+ports?\s+(?P<ports>[\d\-,:]+)", re.IGNORECASE)
 _SHARING = re.compile(
     r"^\s*enable\s+sharing\s+(?P<master>[\d:]+)\s+grouping\s+(?P<ports>[\d\-,:]+)", re.IGNORECASE
@@ -96,6 +108,8 @@ def parse(text: str) -> ParsedConfig:
         create = _CREATE_VLAN.match(raw)
         if create:
             name = create.group("name")
+            for number in _vlan_numbers(name):
+                parsed.vlans.setdefault(number, "")
             if create.group("tag"):
                 number = int(create.group("tag"))
                 tags[name] = number
@@ -108,11 +122,26 @@ def parse(text: str) -> ParsedConfig:
             parsed.vlans[number] = tag.group("name")
             continue
 
+    #: description-string を書いた口。display-string で上書きしない
+    described: set[str] = set()
+
+    def numbers_of(vlan: str) -> list[int]:
+        """名前なら番号を引き、番号の並びならそのままほどく。引けなければ空。"""
+        listed = _vlan_numbers(vlan)
+        if listed:
+            return listed
+        return [tags[vlan]] if vlan in tags else []
+
     for raw in text.splitlines():
         display = _DISPLAY.match(raw)
         if display:
+            long_form = display.group("kind").lower() == "description"
             for name in _ports(display.group("ports")):
+                if name in described and not long_form:
+                    continue
                 parsed.add_interface(ParsedInterface(name=name)).description = display.group("name")
+                if long_form:
+                    described.add(name)
             continue
         disabled = _DISABLE.match(raw)
         if disabled:
@@ -130,28 +159,32 @@ def parse(text: str) -> ParsedConfig:
             continue
         address = _VLAN_IP.match(raw)
         if address:
-            number = tags.get(address.group("name"))
-            if number is None:
+            found_numbers = numbers_of(address.group("name"))
+            if len(found_numbers) != 1:
                 continue
+            number = found_numbers[0]
             port = parsed.add_interface(ParsedInterface(name=f"Vlan{number}"))
             port.vlan = number
             port.ip_address = f"{address.group('ip')}/{_prefixlen(address.group('mask'))}"
             continue
         members = _ADD_PORTS.match(raw)
         if members:
-            number = tags.get(members.group("name"))
-            if number is None:
+            found_numbers = numbers_of(members.group("name"))
+            if not found_numbers:
                 continue
+            for number in found_numbers:
+                parsed.vlans.setdefault(number, "")
             # 書いていなければタグ無し。EXOS の既定はそちら
             tagged = (members.group("how") or "untagged").lower() == "tagged"
             for name in _ports(members.group("ports")):
                 port = parsed.add_interface(ParsedInterface(name=name))
-                if tagged:
-                    port.mode = "trunk"
-                    if number not in port.trunk_vlans:
-                        port.trunk_vlans.append(number)
-                else:
-                    untagged.setdefault(name, number)
+                for number in found_numbers:
+                    if tagged:
+                        port.mode = "trunk"
+                        if number not in port.trunk_vlans:
+                            port.trunk_vlans.append(number)
+                    else:
+                        untagged.setdefault(name, number)
             continue
         route = _ROUTE.match(raw)
         if route:
@@ -265,6 +298,22 @@ def _port_name(name: str) -> str:
     """番号だけの口に、台帳で見分けの付く名前を付ける。"""
     name = name.strip()
     return f"Port{name}" if re.fullmatch(r"[\d:]+", name) else name
+
+
+def _vlan_numbers(written: str) -> list[int]:
+    """`10,20` や `10-12` の番号の並びをほどく。名前（数字で始まらない）なら空。"""
+    if not _VLAN_LIST.fullmatch(written):
+        return []
+    numbers: list[int] = []
+    for part in written.split(","):
+        start, _, end = part.partition("-")
+        if not start.isdigit() or (end and not end.isdigit()):
+            return []
+        low, high = int(start), int(end or start)
+        if not 1 <= low <= high <= 4094:
+            return []
+        numbers.extend(range(low, high + 1))
+    return numbers
 
 
 def _group_number(master: str) -> int:
