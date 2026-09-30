@@ -670,3 +670,76 @@ def test_a_junos_legacy_dhcp_pool_is_read_with_the_global_settings():
     assert pool.domain == "example.jp"
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "10.3.3.0/24" in t], titles
+
+
+# H3C の DHCP の試験の出典:
+# - H3C「05-DHCP configuration」（Comware 7、2025-09 版、h3c.com/en/d_202509/2650805_294551_0.htm）
+#   の Configuring an IP pool（`network network-address [ mask-length | mask mask ]`、
+#   `address range`、`forbidden-ip ip-address&<1-8>`、`forbidden-ip-range`、`dhcp server
+#   forbidden-ip`。「By default, except for the DHCP server IP address, all IP addresses in the
+#   IP pool are assignable.」）と Configuring the DHCP relay agent（`dhcp select relay`、
+#   `dhcp relay server-address`）
+# - H3C「17-DHCP Quick Start Configuration Guide」（`dhcp server ip-pool` の設定例）
+
+_H3C_DHCP = (
+    "#\n"
+    " version 7.1.070, Release 6616\n"
+    "# H3C Comware Software\n"
+    "sysname h3c-core\n"
+    "#\n"
+    " dhcp enable\n"
+    " dhcp server forbidden-ip 192.168.5.100\n"
+    "dhcp server forbidden-ip 192.168.6.2 192.168.6.9 vpn-instance red\n"
+    "#\n"
+    "interface Vlan-interface5\n"
+    " ip address 192.168.5.254 255.255.255.0\n"
+    "#\n"
+    "interface Vlan-interface9\n"
+    " ip address 192.168.9.1 255.255.255.0\n"
+    " dhcp select relay\n"
+    " dhcp relay server-address 10.0.0.9\n"
+    "#\n"
+    "dhcp server ip-pool 5\n"
+    " gateway-list 192.168.5.254\n"
+    " network 192.168.5.0 mask 255.255.255.0\n"
+    " dns-list 192.168.5.100\n"
+    " forbidden-ip 192.168.5.10 192.168.5.11\n"
+    "#\n"
+    "ip pool 6\n"
+    " network 192.168.6.0 24\n"
+    " address range 192.168.6.100 192.168.6.200\n"
+    " gateway-list 192.168.6.1\n"
+    " dns-list 192.168.6.53\n"
+    " expired day 10 hour 12\n"
+    "#\n"
+    "return\n"
+)
+
+
+def test_h3c_dhcp_pools_are_read():
+    parsed = configparse.parse(_H3C_DHCP)
+    assert parsed.vendor.value == "h3c"
+    pools = {p.name: p for p in parsed.dhcp.pools}
+    first = pools["ip-pool 5"]
+    assert first.network == "192.168.5.0 255.255.255.0"
+    assert first.default_routers == ["192.168.5.254"]
+    assert first.dns_servers == ["192.168.5.100"]
+    second = pools["ip pool 6"]
+    assert second.network == "192.168.6.0/24"
+    assert (second.range_start, second.range_end) == ("192.168.6.100", "192.168.6.200")
+    assert second.lease == "day 10 hour 12"
+    assert ("192.168.5.100", "192.168.5.100") in parsed.dhcp.excluded
+    assert ("192.168.6.2", "192.168.6.9") in parsed.dhcp.excluded
+    assert ("192.168.5.10", "192.168.5.10") in parsed.dhcp.excluded
+    assert ("192.168.5.11", "192.168.5.11") in parsed.dhcp.excluded
+    assert parsed.dhcp.relays == [("Vlan-interface9", "10.0.0.9")]
+
+
+def test_h3c_does_not_hand_out_its_own_address_as_a_client_address():
+    """ゲートウェイが機器自身のアドレスなら、配られない。「ゲートウェイも配る」と言わない。"""
+    parsed = configparse.parse(_H3C_DHCP)
+    assert [p.name for p in parsed.dhcp.pools] == ["ip-pool 5", "ip pool 6"]
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "ip-pool 5" in t], titles
+    # ip pool 6 のゲートウェイ 192.168.6.1 は機器自身のアドレスではなく、範囲の外。指摘しない
+    assert not [t for t in titles if "ip pool 6" in t], titles

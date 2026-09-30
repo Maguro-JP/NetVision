@@ -731,3 +731,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
 - 未確認: H3C（Comware）の `dhcp server ip-pool` は h3c.py では読んでいない（NEC QX の読み手は読む）。ゲートウェイを
   自動で除くかは、次の周で資料に当たる。
+
+## H3C の読み手が DHCP を読んでいなかった（2026-09-30 JST）
+
+- 確かめた資料: H3C「05-DHCP configuration」（Comware 7、2025-09 版）の Configuring an IP pool と Configuring the DHCP
+  relay agent、「17-DHCP Quick Start Configuration Guide」。
+- 起きていたこと: h3c.py は `dhcp server ip-pool` / `ip pool` を読まず、DHCP の点検と一覧から H3C の配布が抜けていた
+  （NEC QX の読み手は読んでいた）。直す前のコードで試験が落ちることを確かめた。
+- 直したこと: 2つのプールの書き方、`network` の `mask 255.255.255.0` と `24` の2つの書き方、`address range`、
+  `gateway-list`・`dns-list`・`domain-name`・`expired`、配らないアドレス（プールの `forbidden-ip` は並べる形、
+  `forbidden-ip-range` と全体の `dhcp server forbidden-ip` は範囲）、口の下の `dhcp relay server-address` を読む。
+  資料に「DHCP サーバー自身のアドレスは配らない」とあるので、ゲートウェイが機器自身のアドレスなら「ゲートウェイも
+  配る」と言わない（Huawei と違い、gateway-list を自動で除くとは書かれていない）。試験は
+  `backend/tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 気付いたが手を付けなかったこと: NEC QX の読み手は `forbidden-ip A B` を範囲として読んでいる。H3C の資料では並べる形。
+  QX の資料には届かないので未確認のまま。

@@ -31,6 +31,8 @@ from app.services.configparse import policy, routing, tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
+    ParsedDhcp,
+    ParsedDhcpPool,
     ParsedInterface,
     ParsedNeighbor,
     ParsedVrf,
@@ -176,6 +178,7 @@ def parse(text: str) -> ParsedConfig:
     _read_vpn_instances(text, parsed)
     _read_lldp(text, parsed)
     _read_lldp_list(text, parsed)
+    _read_dhcp(text, parsed)
 
     # 経路と経路の道具、トンネルは、undo 書式の共通読み手に渡す
     tunnels.parse_block_style(text, parsed)
@@ -452,6 +455,109 @@ def _read_lldp_list(text: str, parsed: ParsedConfig) -> None:
                     protocol=NeighborProtocol.LLDP,
                 )
             )
+
+
+# --- 配布（DHCP） -------------------------------------------------------------
+
+#: プールの見出し。スイッチの `dhcp server ip-pool 名前` と、ルーターの `ip pool 名前`
+_DHCP_POOL = re.compile(r"^(dhcp server ip-pool|ip pool)\s+(\S+)\s*$", re.IGNORECASE)
+_DHCP_FORBIDDEN = re.compile(
+    r"^\s*dhcp server forbidden-ip\s+(\S+)(?:\s+(?!vpn-instance\b)(\S+))?", re.IGNORECASE
+)
+_DHCP_RELAY = re.compile(r"^\s+dhcp relay server-address\s+(\S+)", re.IGNORECASE)
+
+
+def _read_dhcp(text: str, parsed: ParsedConfig) -> None:
+    """配るアドレスと、他所へ回す指定を読む。
+
+    - プールは `dhcp server ip-pool` と `ip pool` の2つの書き方がある
+    - `network` は `mask 255.255.255.0` と `24` の2つの書き方がある。`secondary` は読まない
+    - 配らないアドレス: プールの `forbidden-ip`（アドレスを並べる）・`forbidden-ip-range`
+      （範囲）と、全体の `dhcp server forbidden-ip`（範囲）
+    - 機器自身のアドレスは配られない。ゲートウェイが機器自身のアドレスなら配られない
+    - リレーは口の下の `dhcp relay server-address`
+
+    出典: H3C「05-DHCP configuration」（Comware 7、2025-09 版）の Configuring an IP pool
+    （「By default, except for the DHCP server IP address, all IP addresses in the IP pool
+    are assignable.」）と Configuring the DHCP relay agent、「17-DHCP Quick Start
+    Configuration Guide」。
+    """
+    dhcp = ParsedDhcp()
+    current: ParsedDhcpPool | None = None
+    interface: str | None = None
+    own = {port.ip_address.split("/")[0] for port in parsed.interfaces if port.ip_address}
+
+    for raw in text.splitlines():
+        head = _DHCP_POOL.match(raw)
+        if head:
+            label = "ip-pool" if head.group(1).lower().startswith("dhcp") else "ip pool"
+            current = ParsedDhcpPool(name=f"{label} {head.group(2)}")
+            dhcp.pools.append(current)
+            continue
+        found = _DHCP_FORBIDDEN.match(raw)
+        if found:
+            dhcp.excluded.append((found.group(1), found.group(2) or found.group(1)))
+            continue
+        if not raw.startswith((" ", "\t")):
+            current = None
+            port = re.match(r"^interface\s+(\S+)", raw, re.IGNORECASE)
+            interface = port.group(1) if port else None
+            continue
+        found = _DHCP_RELAY.match(raw)
+        if found and interface is not None:
+            dhcp.relays.append((interface, found.group(1)))
+            continue
+        if current is not None:
+            _dhcp_pool_line(current, dhcp, raw.strip())
+
+    for pool in dhcp.pools:
+        pool.gateway_reserved = bool(pool.default_routers) and all(
+            router in own for router in pool.default_routers
+        )
+    if dhcp.pools or dhcp.relays or dhcp.excluded:
+        parsed.dhcp = dhcp
+
+
+def _dhcp_pool_line(pool: ParsedDhcpPool, dhcp: ParsedDhcp, body: str) -> None:
+    found = re.match(r"^network\s+(\S+)(?:\s+(mask\s+\S+|\d+))?\s*$", body, re.IGNORECASE)
+    if found:
+        mask = found.group(2) or ""
+        if mask.lower().startswith("mask"):
+            pool.network = f"{found.group(1)} {mask.split()[1]}"
+        elif mask:
+            pool.network = f"{found.group(1)}/{mask}"
+        else:
+            pool.network = found.group(1)
+        return
+    found = re.match(r"^address range\s+(\S+)\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.range_start, pool.range_end = found.group(1), found.group(2)
+        return
+    found = re.match(r"^(gateway-list|dns-list)\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        # `gateway-list 10.1.1.1 export-route` の後ろの語は住所ではない
+        addresses = [w for w in found.group(2).split() if re.match(r"^[\d.]+$", w)]
+        if found.group(1).lower() == "gateway-list":
+            pool.default_routers.extend(addresses)
+        else:
+            pool.dns_servers.extend(addresses)
+        return
+    found = re.match(r"^domain-name\s+(\S+)", body, re.IGNORECASE)
+    if found:
+        pool.domain = found.group(1)
+        return
+    found = re.match(r"^expired\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        pool.lease = found.group(1).strip()
+        return
+    found = re.match(r"^forbidden-ip\s+(.+)$", body, re.IGNORECASE)
+    if found:
+        # アドレスを並べる形（範囲ではない）
+        dhcp.excluded.extend((address, address) for address in found.group(1).split())
+        return
+    found = re.match(r"^forbidden-ip-range\s+(\S+)(?:\s+(\S+))?", body, re.IGNORECASE)
+    if found:
+        dhcp.excluded.append((found.group(1), found.group(2) or found.group(1)))
 
 
 def _prefixlen(mask: str) -> int:
