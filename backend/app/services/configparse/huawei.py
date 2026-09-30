@@ -158,7 +158,12 @@ _TRAFFIC_APPLY = re.compile(r"^\s*traffic-policy\s+(\S+)\s+(inbound|outbound)", 
 _IKE_PROPOSAL = re.compile(r"^ike proposal\s+(\S+)", re.IGNORECASE)
 _IKE_PEER = re.compile(r"^ike peer\s+(\S+)", re.IGNORECASE)
 _IPSEC_PROPOSAL = re.compile(r"^ipsec proposal\s+(\S+)", re.IGNORECASE)
-_IPSEC_POLICY = re.compile(r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?", re.IGNORECASE)
+#: `ipsec policy policy1 10 isakmp template use1` はテンプレートから作る応答側専用の形で、
+#: 相手を持たない。出典: Huawei AR V200R010 CLI-based Configuration Guide - VPN
+#: 「Configuring an IPSec Policy Using an IPSec Policy Template」
+_IPSEC_POLICY = re.compile(
+    r"^ipsec policy\s+(\S+)\s+(\S+)(?:\s+(\S+))?(?:\s+template\s+(\S+))?", re.IGNORECASE
+)
 _IPSEC_APPLY = re.compile(r"^\s+ipsec policy\s+(\S+)\s*$", re.IGNORECASE)
 _IKE_KEY = re.compile(r"^\s*pre-shared-key\s+(?:cipher|simple)?\s*\S+", re.IGNORECASE)
 
@@ -576,6 +581,9 @@ def _read_ipsec(text: str, parsed: ParsedConfig) -> None:
             entry = ParsedCryptoMapEntry(
                 name=head.group(1), seq=head.group(2), kind=(head.group(3) or "isakmp").lower()
             )
+            if head.group(4):
+                entry.kind = f"{entry.kind} template"
+                entry.profile = head.group(4)
             crypto.maps.append(entry)
             ike = transform = interface = peer_name = None
             continue

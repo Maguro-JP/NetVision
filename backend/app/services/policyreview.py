@@ -1641,9 +1641,12 @@ def _crypto(parsed: ParsedConfig) -> list[Finding]:
         label = f"{entry.name} の {entry.seq} 番" if entry.seq else f"{entry.name} "
         head = f"crypto map {entry.name} {entry.seq}" if entry.seq else f"crypto map {entry.name}"
         missing = []
-        # ダイナミッククリプトマップを指す行は相手を書かない（相手の分からない接続を受ける形）。
-        # 出典: Cisco「IPsec VPN Command Reference」の set peer（dynamic crypto map では要らない）
-        if not entry.peers and "dynamic" not in (entry.kind or ""):
+        # ダイナミッククリプトマップを指す行と Huawei のテンプレートから作る行は相手を書かない
+        # （相手の分からない接続を受ける形）。出典: Cisco「IPsec VPN Command Reference」の
+        # set peer、Huawei AR Configuration Guide「Configuring an IPSec Policy Using an IPSec
+        # Policy Template」
+        kind = entry.kind or ""
+        if not entry.peers and "dynamic" not in kind and "template" not in kind:
             missing.append("相手（set peer）")
         if not entry.transform_sets and not entry.profile:
             missing.append("方式（set transform-set）")
