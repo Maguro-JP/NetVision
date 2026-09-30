@@ -29,6 +29,8 @@ def is_tunnel(name: str) -> bool:
 def parse_block_style(text: str, parsed: ParsedConfig) -> None:
     """`interface TunnelN` … の形（Cisco IOS / NEC IX / NEC QX）を読む。
 
+    Cisco の行（tunnel source / destination / mode / vrf）は公式の資料に当たれていない（未確認）。
+
     書式の細かい差（`tunnel source` と `source`）は両方受ける。
     どちらか片方しか見ないと、ベンダーを跨いだ瞬間に黙って空になる。
     """
@@ -69,14 +71,26 @@ _SET_TUNNEL = re.compile(
 )
 
 
+#: Junos の口の名前から分かる種別。出典: Juniper「Chassis Cluster Redundant Ethernet
+#: Interfaces」の IP-over-IP Tunneling（GRE は gr-0/0/0、IP-IP は ip-0/0/0 を使う）。
+#: IPsec の st0 は `tunnel source` を持たず、宛先は IKE の gateway に書くのでここには来ない
+_JUNOS_TUNNEL_KIND = (("gr-", "gre"), ("ip-", "ipip"))
+
+
 def parse_junos(text: str, parsed: ParsedConfig) -> None:
-    """Junos の set 形式。`gr-0/0/0` や `st0` にトンネルが載る。"""
+    """Junos の set 形式。`gr-0/0/0`（GRE）と `ip-0/0/0`（IP-IP）の tunnel source / destination。
+
+    種別は口の名前で決める。どちらでもない口は種別を空のままにする（推測で埋めない）。
+    """
     for interface, unit, field, value in _SET_TUNNEL.findall(text):
         name = f"{interface}.{unit}" if unit else interface
         tunnel = parsed.add_tunnel(ParsedTunnel(name=name))
         setattr(tunnel, field, value)
         if tunnel.kind is None:
-            tunnel.kind = "gre" if interface.startswith("gr-") else "ipsec"
+            tunnel.kind = next(
+                (kind for prefix, kind in _JUNOS_TUNNEL_KIND if interface.startswith(prefix)),
+                None,
+            )
 
 
 _FORTI_BLOCK = re.compile(r"config vpn ipsec phase1-interface(.*?)^end", re.MULTILINE | re.DOTALL)
@@ -84,7 +98,11 @@ _FORTI_EDIT = re.compile(r'^\s*edit\s+"?([^"\n]+)"?', re.MULTILINE)
 
 
 def parse_fortios(text: str, parsed: ParsedConfig) -> None:
-    """FortiOS の IPsec（phase1-interface）。宛先は `set remote-gw`。"""
+    """FortiOS の IPsec（phase1-interface）。宛先は `set remote-gw`（IPv6 は `remote-gw6`）。
+
+    出典: FortiOS 6.4.7 / 7.0.1 / 7.0.12 CLI Reference の config vpn ipsec phase1-interface
+    （interface・local-gw・local-gw6・remote-gw・remote-gw6・comments）。
+    """
     for block in _FORTI_BLOCK.findall(text):
         current: ParsedTunnel | None = None
         for raw in block.splitlines():
@@ -95,9 +113,10 @@ def parse_fortios(text: str, parsed: ParsedConfig) -> None:
             if current is None:
                 continue
             body = raw.strip().strip('"')
-            if body.startswith("set remote-gw "):
+            # IPv6 で張るときは remote-gw6 / local-gw6（CLI Reference の phase1-interface）
+            if body.startswith(("set remote-gw ", "set remote-gw6 ")):
                 current.destination = body.split()[-1].strip('"')
-            elif body.startswith("set local-gw "):
+            elif body.startswith(("set local-gw ", "set local-gw6 ")):
                 current.source = body.split()[-1].strip('"')
             elif body.startswith("set interface "):
                 # 送信元が IP で書かれていない場合は、出ていくポート名を残す。

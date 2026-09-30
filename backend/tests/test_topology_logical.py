@@ -156,3 +156,41 @@ def test_each_vendor_syntax_is_read():
 
     parsed = configparse.parse(IX)
     assert parsed.tunnels and parsed.tunnels[0].destination == "10.1.0.1"
+
+
+def test_junos_ip_ip_tunnel_is_not_read_as_ipsec():
+    """Junos の IP-IP トンネルは ip-0/0/0、GRE は gr-0/0/0 に載る。IP-IP を IPsec と読まない。
+
+    出典: Juniper「Chassis Cluster Redundant Ethernet Interfaces」の IP-over-IP Tunneling
+    （GRE tunnels use the gr-0/0/0 interface. IP-IP tunnels use the ip-0/0/0 interface.）。
+    """
+    text = (
+        "set interfaces gr-0/0/0 unit 0 tunnel source 10.1.4.1\n"
+        "set interfaces gr-0/0/0 unit 0 tunnel destination 10.1.4.2\n"
+        "set interfaces ip-0/0/0 unit 0 tunnel source 10.1.4.1\n"
+        "set interfaces ip-0/0/0 unit 0 tunnel destination 10.1.4.2\n"
+    )
+    kinds = {t.name: t.kind for t in configparse.parse(text).tunnels}
+    assert kinds == {"gr-0/0/0.0": "gre", "ip-0/0/0.0": "ipip"}
+
+
+def test_fortios_ipv6_gateways_are_read():
+    """FortiOS の IPv6 の IPsec は `set remote-gw6` / `set local-gw6` に書く。宛先を空にしない。
+
+    出典: FortiOS 6.4.7 / 7.0.1 CLI Reference の config vpn ipsec phase1-interface
+    （remote-gw6: IPv6 address of the remote gateway's external interface）。
+    """
+    text = (
+        "config vpn ipsec phase1-interface\n"
+        '    edit "toHQ6"\n'
+        "        set ip-version 6\n"
+        '        set interface "wan1"\n'
+        "        set local-gw6 2001:db8::1\n"
+        "        set remote-gw6 2001:db8::2\n"
+        "    next\n"
+        "end\n"
+    )
+    parsed = configparse.parse('config system global\nset hostname "fw-01"\nend\n' + text)
+    assert [(t.name, t.source, t.destination) for t in parsed.tunnels] == [
+        ("toHQ6", "2001:db8::1", "2001:db8::2")
+    ]
