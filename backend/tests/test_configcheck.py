@@ -1722,3 +1722,29 @@ def test_ssh_that_still_accepts_version_1_is_called_out(db_session):
 
     fixed = base.replace("sw-ssh", "sw-ssh2") + "ip ssh version 2\n"
     assert not [t for t in _titles(configcheck.check(db_session, fixed)) if "版 1 でも" in t]
+
+
+def test_fastiron_is_not_told_to_write_a_spanning_tree_mode(db_session):
+    """FastIron には `spanning-tree mode` の書き方が無い。STP の種類は `spanning-tree`
+    （VLAN ごとの 802.1D）・`spanning-tree single`・`spanning-tree 802-1w` で選ぶ。
+
+    出典: Ruckus「FastIron 08.0.60 Layer 2 Switching Configuration Guide」の「Enabling or
+    disabling the Spanning Tree Protocol (STP)」（Spanning-tree single / Per VLAN spanning tree /
+    Spanning-tree single 802.1w）。
+    """
+    text = "\n".join(
+        [
+            "  HW: Stackable ICX7150-48P",
+            "hostname icx1",
+            "vlan 10 by port",
+            " tagged ethe 1/1/1",
+            " spanning-tree 802-1w",
+            "!",
+            "interface ethernet 1/1/2",
+            " spanning-tree 802-1w admin-edge-port",
+            "!",
+        ]
+    )
+    result = configcheck.check(db_session, text, filename="icx1.txt")
+    assert result.vendor == "fastiron"
+    assert not [t for t in _titles(result) if "STP のモード" in t]
