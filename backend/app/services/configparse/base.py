@@ -599,6 +599,9 @@ class ParsedDhcpPool:
     #: DNS などを上流から受け取って配る（Cisco の `import all` / `import interface`）。
     #: dns_servers が空でも、名前解決の先は配られる
     imports_options: bool = False
+    #: ゲートウェイのアドレスを、機器が自動で配らない側に入れる（Huawei）。
+    #: excluded に書かなくても、ゲートウェイは端末に配られない
+    gateway_reserved: bool = False
 
 
 @dataclass

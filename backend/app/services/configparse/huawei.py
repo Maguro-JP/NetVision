@@ -478,8 +478,94 @@ def _read_dhcp(text: str, parsed: ParsedConfig) -> None:
         if found:
             current.lease = found.group(1)
 
-    if dhcp.pools:
+    for pool in dhcp.pools:
+        # gateway-list のアドレスは、機器が自動で配らない側に入れる
+        pool.gateway_reserved = True
+    _read_interface_dhcp(text, parsed, dhcp)
+
+    if dhcp.pools or dhcp.relays:
         parsed.dhcp = dhcp
+
+
+_INTERFACE_HEAD = re.compile(r"^interface\s+(\S+)", re.IGNORECASE)
+_INTERFACE_DHCP = re.compile(
+    r"^(dhcp select (?P<select>interface|relay|global)"
+    r"|dhcp server (?P<key>gateway-list|dns-list|domain-name|lease|excluded-ip-address)"
+    r"\s+(?P<value>.+)"
+    r"|dhcp relay server-ip\s+(?P<relay>\S+)"
+    r"|vrrp vrid \d+ virtual-ip\s+(?P<vip>\S+))\s*$",
+    re.IGNORECASE,
+)
+
+
+def _read_interface_dhcp(text: str, parsed: ParsedConfig, dhcp: ParsedDhcp) -> None:
+    """口の下に書く DHCP を読む。口のアドレスの区画を配る形（interface）と、他所へ回す形（relay）。
+
+    - `dhcp select interface`: 口のアドレスの区画を配る。`dhcp server gateway-list` を書かなければ、
+      VRRP の仮想アドレス（最初の1つ）、無ければ口のアドレスをゲートウェイとして配る
+    - ゲートウェイのアドレスは、機器が自動で配らない側に入れる
+    - `dhcp select relay` と `dhcp relay server-ip`: 他所のサーバーへ回す
+
+    出典:
+    - Huawei「S9300 and S9300X V200R025C00 Configuration Guide - IP Service」の
+      「Configuring a DHCP Server」
+    - 「FAT AP / Cloud AP V200R023C00 コマンドリファレンス」（中国語版）の
+      「dhcp server gateway-list」
+    - 「S200, S300, S500, and S600 V600R025C10 Configuration Guide」の
+      「Example for Configuring a DHCPv4 Server Based on an Interface Address Pool」
+    - S シリーズ Troubleshooting Guide（V600）の DHCP の FAQ
+    """
+    addresses = {port.name: port.ip_address for port in parsed.interfaces}
+    name: str | None = None
+    lines: list[re.Match[str]] = []
+
+    def close() -> None:
+        if name is None:
+            return
+        found: dict[str, str] = {}
+        selects = [m.group("select").lower() for m in lines if m.group("select")]
+        vips = [m.group("vip") for m in lines if m.group("vip")]
+        for m in lines:
+            if m.group("relay"):
+                dhcp.relays.append((name, m.group("relay")))
+            if m.group("key"):
+                found[m.group("key").lower()] = m.group("value").strip()
+        if "interface" not in selects:
+            return
+        address = addresses.get(name)
+        gateways = found.get("gateway-list", "").split() or vips[:1]
+        if not gateways and address:
+            gateways = [address.split("/")[0]]
+        pool = ParsedDhcpPool(
+            name=f"interface {name}",
+            network=address,
+            default_routers=gateways,
+            dns_servers=found.get("dns-list", "").split(),
+            domain=found.get("domain-name"),
+            lease=found.get("lease"),
+            gateway_reserved=True,
+        )
+        dhcp.pools.append(pool)
+        for m in lines:
+            if (m.group("key") or "").lower() == "excluded-ip-address":
+                ends = m.group("value").split()
+                dhcp.excluded.append((ends[0], ends[-1]))
+
+    for raw in text.splitlines():
+        head = _INTERFACE_HEAD.match(raw)
+        if head:
+            close()
+            name, lines = head.group(1), []
+            continue
+        if not raw.startswith((" ", "\t")):
+            close()
+            name, lines = None, []
+            continue
+        if name is not None:
+            found = _INTERFACE_DHCP.match(raw.strip())
+            if found:
+                lines.append(found)
+    close()
 
 
 # --- 優先制御 -------------------------------------------------------------------

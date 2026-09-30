@@ -1428,7 +1428,7 @@ def _dhcp(parsed: ParsedConfig) -> list[Finding]:
                         [head, f"default-router {router}"],
                     )
                 )
-            elif _serves(pool, router) and router not in excluded:
+            elif _serves(pool, router) and router not in excluded and not pool.gateway_reserved:
                 findings.append(
                     _note(
                         MEDIUM,

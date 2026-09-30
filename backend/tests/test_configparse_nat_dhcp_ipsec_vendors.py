@@ -538,3 +538,86 @@ def test_a_cisco_manual_binding_inherits_the_parent_pool():
     assert printer.dns_servers == ["10.0.0.53"]
     titles = [f.title for f in policyreview.review(parsed)]
     assert not [t for t in titles if "PRINTER" in t], titles
+
+
+# Huawei の DHCP の試験の出典:
+# - Huawei「S9300 and S9300X V200R025C00 Configuration Guide - IP Service」の
+#   「Configuring a DHCP Server」（「The device automatically adds the gateway address into
+#   the list of IP addresses that cannot be automatically allocated.」）
+# - Huawei「FAT AP / Cloud AP V200R023C00 コマンドリファレンス」（中国語版）の
+#   「dhcp server gateway-list」（未指定なら VRRP の仮想アドレス、無ければ口の実アドレスを
+#   ゲートウェイとして配る）
+# - Huawei「S200, S300, S500, and S600 V600R025C10 Configuration Guide」の
+#   「Example for Configuring a DHCPv4 Server Based on an Interface Address Pool」と、
+#   S シリーズ Troubleshooting Guide（V600）の DHCP の FAQ（`dhcp select relay` /
+#   `dhcp relay server-ip`）
+
+
+def test_a_huawei_ip_pool_does_not_hand_out_its_own_gateway():
+    """Huawei は gateway-list のアドレスを自動で配らない側に入れる。
+
+    「ゲートウェイも配る」と言わない。
+    """
+    text = (
+        "sysname sw1\n"
+        "#\n"
+        "ip pool 1\n"
+        " gateway-list 10.10.10.1\n"
+        " network 10.10.10.0 mask 255.255.255.0\n"
+        " dns-list 10.8.8.8\n"
+        "#\n"
+        "interface Vlanif10\n"
+        " ip address 10.10.10.1 255.255.255.0\n"
+        " dhcp select global\n"
+        "#\n"
+    )
+    parsed = configparse.parse(text)
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "ゲートウェイのアドレスも配って" in t], titles
+
+
+def test_a_huawei_interface_address_pool_is_read():
+    """`dhcp select interface` は口のアドレスの区画を配る形。
+
+    ゲートウェイを書かなければ、VRRP の仮想アドレスか口のアドレスを配る。
+    """
+    text = (
+        "sysname sw1\n"
+        "#\n"
+        "interface Vlanif10\n"
+        " ip address 10.10.10.1 255.255.255.0\n"
+        " dhcp select interface\n"
+        " dhcp server dns-list 10.8.8.8\n"
+        " dhcp server excluded-ip-address 10.10.10.10 10.10.10.50\n"
+        "#\n"
+        "interface Vlanif11\n"
+        " ip address 10.1.2.2 255.255.255.0\n"
+        " vrrp vrid 1 virtual-ip 10.1.2.1\n"
+        " dhcp select interface\n"
+        " dhcp server dns-list 10.8.8.8\n"
+        "#\n"
+    )
+    parsed = configparse.parse(text)
+    pools = {p.name: p for p in parsed.dhcp.pools}
+    first = pools["interface Vlanif10"]
+    assert first.network == "10.10.10.1/24"
+    assert first.default_routers == ["10.10.10.1"]
+    assert first.dns_servers == ["10.8.8.8"]
+    assert parsed.dhcp.excluded == [("10.10.10.10", "10.10.10.50")]
+    assert pools["interface Vlanif11"].default_routers == ["10.1.2.1"]
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "Vlanif1" in t], titles
+
+
+def test_a_huawei_dhcp_relay_is_read():
+    text = (
+        "sysname sw1\n"
+        "#\n"
+        "interface Vlanif10\n"
+        " ip address 192.168.30.1 255.255.255.0\n"
+        " dhcp select relay\n"
+        " dhcp relay server-ip 10.10.20.2\n"
+        "#\n"
+    )
+    parsed = configparse.parse(text)
+    assert parsed.dhcp.relays == [("Vlanif10", "10.10.20.2")]
