@@ -283,3 +283,27 @@ def test_a_vip_nobody_points_at_is_mentioned_when_the_text_is_available():
     assert not [t for t in found if "VIP web-in" in t]
     # 元の Config が無いときは、グループ越しの参照を確かめられないので言わない
     assert not [t for t in titles(FORTIGATE) if "VIP web-in" in t]
+
+
+def test_fortigate_ipsec_peer_written_as_ipv6_ddns_or_dialup_is_not_missing():
+    """FortiGate の IPsec の相手は remote-gw のほか remote-gw6・remotegw-ddns にも書き、
+    ダイヤルアップ（type dynamic）は相手を決めない。どれも「相手が無い」とは言わない。
+
+    出典: FortiOS 6.4.7 / 7.0.12 CLI Reference の config vpn ipsec phase1-interface
+    （type [static|dynamic|...]、remote-gw6、remotegw-ddns）。
+    """
+    text = (
+        'config system global\n    set hostname "fw-01"\nend\n'
+        "config vpn ipsec phase1-interface\n"
+        '    edit "v6"\n        set interface "wan1"\n'
+        "        set remote-gw6 2001:db8::2\n    next\n"
+        '    edit "ddns"\n        set interface "wan1"\n        set type ddns\n'
+        '        set remotegw-ddns "branch.example.jp"\n    next\n'
+        '    edit "dialup"\n        set interface "wan1"\n        set type dynamic\n    next\n'
+        "end\n"
+    )
+    parsed = configparse.parse(text)
+    peers = {entry.name: entry.peers for entry in parsed.crypto.maps}
+    assert peers == {"v6": ["2001:db8::2"], "ddns": ["branch.example.jp"], "dialup": ["dynamic"]}
+    titles = [f.title for f in policyreview.review(parsed)]
+    assert not [t for t in titles if "上がりません" in t], titles
