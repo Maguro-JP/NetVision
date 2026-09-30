@@ -637,3 +637,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 相手を remote-gw → remote-gw6 → remotegw-ddns の順に読み、ダイヤルアップは相手を「dynamic」とする。
   試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`（点検に指摘が出ないことまで見る）。
 - 同じ形の見落とし: #117 の tunnels.py（FortiOS の IPv6 の宛先）と同じ。phase1-interface を読む処理は2か所ある。
+
+## ダイナミッククリプトマップを指す行に「このままでは上がりません」と出ていた（2026-09-30 JST）
+
+- 確かめた資料: Cisco「IPsec VPN Command Reference」の crypto map (global configuration) と set peer、Cisco Secure
+  Firewall ASA VPN CLI Configuration Guide 9.23「Create a Crypto Map Entry to Use the Dynamic Crypto Map」。
+- 起きていたこと: `crypto map OUTSIDE 65535 ipsec-isakmp dynamic DYN` のような、相手の分からない接続を受けるための
+  行は相手を書かない（書けない）のに、点検が「相手（set peer）が書かれていません。このままでは上がりません」（HIGH）と
+  出していた。ASA・IOS の両方で出ることを直す前のコードで確かめた。IOS の読み手は `dynamic 名前` を読んでもいなかった。
+- 直したこと: IOS の読み手が `dynamic 名前` を読む（種別 `ipsec-isakmp dynamic`、指す先を profile に持つ）。点検は
+  種別に dynamic を含む行には相手を求めない。試験は `tests/test_configparse_nat_dhcp_ipsec_vendors.py`。
+- 同じ形の見落とし: #122（FortiGate のダイヤルアップ）と同じ。「相手が無い」を指摘する前に、相手を決めない形かを見る。

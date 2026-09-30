@@ -456,8 +456,13 @@ _ISAKMP_POLICY = re.compile(r"^crypto isakmp policy\s+(\S+)", re.IGNORECASE)
 _IKEV2_PROPOSAL = re.compile(r"^crypto ikev2 proposal\s+(\S+)", re.IGNORECASE)
 _IKEV2_KEYRING = re.compile(r"^crypto ikev2 keyring\s+(\S+)", re.IGNORECASE)
 _TRANSFORM_SET = re.compile(r"^crypto ipsec transform-set\s+(\S+)\s+(.+)$", re.IGNORECASE)
+#: `crypto map VPN 100 ipsec-isakmp dynamic DYN` はダイナミッククリプトマップを指す行。
+#: 出典: Cisco「IPsec VPN Command Reference」の crypto map (global configuration)
+#: （`crypto map map-name seq-num ipsec-isakmp [dynamic dynamic-map-name]`）
 _CRYPTO_MAP = re.compile(
-    r"^crypto map\s+(?P<name>\S+)\s+(?P<seq>\d+)\s+(?P<kind>\S+)", re.IGNORECASE
+    r"^crypto map\s+(?P<name>\S+)\s+(?P<seq>\d+)\s+(?P<kind>\S+)"
+    r"(?:\s+dynamic\s+(?P<dynamic>\S+))?",
+    re.IGNORECASE,
 )
 _ISAKMP_KEY = re.compile(r"^crypto isakmp key\s+\S+\s+address\s+(\S+)", re.IGNORECASE)
 
@@ -494,6 +499,9 @@ def _crypto(text: str) -> ParsedCrypto | None:
         entry = ParsedCryptoMapEntry(
             name=head.group("name"), seq=head.group("seq"), kind=head.group("kind").lower()
         )
+        if head.group("dynamic"):
+            entry.kind = f"{entry.kind} dynamic"
+            entry.profile = head.group("dynamic")
         for line in body:
             peer = re.match(r"^set peer\s+(\S+)", line, re.IGNORECASE)
             if peer:
