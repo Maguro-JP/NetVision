@@ -1009,3 +1009,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 読み手で defaults の preference を読み、経路にも転送先にも preference が無い経路の距離に当てる。試験は
   `backend/tests/test_l3review.py` の末尾。
 - 残り: 論理システム・ルーティングインスタンスの中の static は、前と同じく読んでいない。中括弧の書式も読んでいない。
+
+## Huawei・H3C で既定の距離を書き換えた機器に、決まらない「同じ重み」を言っていた（2026-10-04 JST）
+
+- 確かめた資料: H3C「13-Static Routing Commands」の ip route-static default-preference（If no preference is specified for a static
+  route, the default preference applies. When the default preference is reconfigured, it applies to only newly added static
+  routes.）、Huawei の Command Reference の同コマンド（the new default preference is valid for subsequent rather than existing
+  IPv4 static routes）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `ip route-static default-preference 70` を書いた機器でも、
+  preference を書いていない経路を既定の 60 と読み、明示の 60 と並べて「同じ重みで複数あります」と言っていた。その経路は
+  書き換えの後に足していれば 70 で、重みは違う。
+- 直したこと: 読み手で書き換えた値を `ParsedConfig.static_default_preference` に控える。l3review は、書き換えがある機器で
+  preference を書いていない経路を含む組を判定しない（決めつけない）。試験は `backend/tests/test_l3review.py` の末尾。
+- 未確認: 保存した Config の行の並びが、経路を足した順を保つか。保つと確かめられれば、書き換えの行より後の経路に新しい値を当てられる。

@@ -227,6 +227,10 @@ class ParsedConfig:
     load_balance: object | None = None
     #: 2台で1台に見せる仕組み（HA / failover / VSX / MLAG）。読めなければ None
     ha_pair: object | None = None
+    #: 静的経路の既定の距離を書き換えた値（Huawei・H3C の `ip route-static default-preference N`）。
+    #: 書き換えた後に足した経路にだけ効くので、preference を書いていない経路の距離は
+    #: Config から決まらない
+    static_default_preference: int | None = None
 
     def add_tunnel(self, tunnel: ParsedTunnel) -> ParsedTunnel:
         """同じトンネルが複数箇所に出てきたらまとめる。"""

@@ -899,3 +899,26 @@ def test_junos_static_defaults_preference_makes_equal_weights(db_session):
     )
     titles = _routes_config_findings(db_session, "srx-b4", config, "b4" * 32)
     assert any("同じ重みで複数" in t for t in titles), titles
+
+
+def test_a_rewritten_static_default_leaves_unwritten_preferences_undecided(db_session):
+    """`ip route-static default-preference` は、書き換えた後に足した経路にだけ効く。
+
+    出典: H3C「13-Static Routing Commands」の ip route-static default-preference（When the default
+    preference is reconfigured, it applies to only newly added static routes.）、Huawei の Command
+    Reference の同コマンド（valid for subsequent rather than existing IPv4 static routes）。
+    preference を書いていない経路が 60 か 70 かは Config から決まらないので、明示の 60 と
+    「同じ重み」とは言わない。
+    """
+    from app.services import configparse
+
+    config = (
+        "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\n"
+        "sysname core-sw-d1\n#\n"
+        "ip route-static default-preference 70\n"
+        "ip route-static 0.0.0.0 0 10.0.0.1 preference 60\n"
+        "ip route-static 0.0.0.0 0 10.0.1.1\n#\nreturn\n"
+    )
+    assert configparse.parse(config).static_default_preference == 70
+    titles = _routes_config_findings(db_session, "core-sw-d1", config, "d1" * 32)
+    assert not any("同じ重みで複数" in t for t in titles), titles
