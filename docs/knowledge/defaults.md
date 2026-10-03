@@ -12,7 +12,7 @@
 |---|---|---|---|
 | HSRP・VRRP の優先度 | 100 | l3review「優先度が同じです」「一度切り替わると戻りません」 | Cisco Configuring VRRP（IOS XE）、FHRP Command Reference |
 | VRRP の持ち主の優先度 | 255 | l3review「優先度が同じです」 | Cisco Configuring VRRP の Object Tracking |
-| 静的経路の距離 | Cisco・AOS-CX 1、Huawei・H3C 60、FortiGate 10、Junos 5 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static、Juniper Configure Static Routes、AOS-CX 10.13 IP Routing Guide の ip route distance |
+| 静的経路の距離 | Cisco・AOS-CX・Arista 1、Huawei・H3C 60、FortiGate 10、Junos 5 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static、Juniper Configure Static Routes、AOS-CX 10.13 IP Routing Guide の ip route distance、Arista EOS User Manual「IPv4」の ip route |
 | 速度・二重 | 自動（`auto` と同じ） | linkcheck「片側だけ固定しています」 | Cisco Interface Characteristics Configuration Guide 17 |
 | OSPF の口の認証 | 掛けない（`null` と同じ） | linkcheck「合言葉の掛け方が両端で違います」 | Cisco Configure Authentication in OSPF |
 
@@ -31,6 +31,7 @@
 
 ## 未確認
 
-- 静的経路の距離の NEC QX・NEC IX・Arista の既定（資料に届かない）。いまは Cisco の 1 として扱う
+- 静的経路の距離の NEC QX・NEC IX の既定（資料に届かない）。いまは Cisco の 1 として扱う
+- Aruba CX の STP の既定のモード（AOS-CX の資料はこの環境から 403 で開けない。検索結果の要約では MSTP だが、原文を見ていない）
 - Junos の `static defaults preference` で既定を変えた機器（読んでいない）
 - `ip route-static default-preference` で既定を変えた機器（読んでいない）

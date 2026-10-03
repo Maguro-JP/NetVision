@@ -988,3 +988,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   行の末尾を上限と読んでいた。`maximum 1 vlan voice` のような VLAN ごとの行が先にあると末尾が `voice` になって数として読めず、
   口全体の上限が既定の1のままでも「覚えられる数が足りません」を出さなかった。
 - 直したこと: 口全体の上限は `maximum N` だけの行から読み、無ければ既定の1とする。試験は `backend/tests/test_configcheck.py` の末尾。
+
+## Arista の静的経路の距離の出典を「未確認」と出していた（2026-10-04 JST）
+
+- 確かめた資料: Arista「EOS User Manual」の IPv4 の ip route（By default, the administrative distance assigned to static routes
+  is 1.）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Arista の静的経路の既定は Cisco と同じ 1 で値は合っていたが、
+  資料で確かめていなかったため、「同じ重みで複数あります」の出典が「未確認: …」になっていた。
+- 直したこと: defaults.py の静的経路の出典に Arista の資料を足した（値は変えていない）。試験は `backend/tests/test_defaults.py`。
+- 未確認のまま: Aruba CX の STP の既定のモード。AOS-CX の資料（arubanetworking.hpe.com・arubanetworks.com の techdocs、
+  CLI ガイドの PDF）はこの環境から 403 で開けなかった。検索結果の要約は MSTP と言っているが、原文を見ていないので出典にしない。
