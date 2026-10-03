@@ -104,6 +104,34 @@ OSPF_AUTH_SOURCE = (
 )
 
 
+#: Config 点検（configcheck.py）が頼る既定。値は点検の側で持つが、画面に出す資料の名前はここに置く。
+#: どれも configcheck.py の各点検の docstring・コメントにある出典を、画面に出す長さに縮めたもの
+ACCESS_VLAN_SOURCE = (
+    "Cisco IOS XE 17 Interface Characteristics Configuration Guide の"
+    " Default Ethernet interface configuration: アクセスの口の既定 VLAN は 1"
+)
+DHCP_SNOOPING_UNTRUSTED_SOURCE = (
+    "Cisco Catalyst 3560 Software Configuration Guide 15.0(2)SE"
+    "「Configuring DHCP Features and IP Source Guard」: DHCP サーバーへの口は trust が要る"
+)
+DHCP_OPTION82_SOURCE = (
+    "Cisco Catalyst 6500 Sup2T Software Configuration Guide"
+    "「Default Configuration for DHCP Snooping」: option 82 の挿入は既定で有効"
+)
+ARP_INSPECTION_UNTRUSTED_SOURCE = (
+    "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9300）"
+    "「Configuring Dynamic ARP Inspection」: 口は既定ですべて untrusted"
+)
+HSRP_VERSION_SOURCE = (
+    "Cisco Network Services Configuration Guide, IOS XE 17.x「HSRP Version 2」:"
+    " 既定の版1のグループ番号は 0〜255"
+)
+PORT_SECURITY_VIOLATION_SOURCE = (
+    "Cisco Security Configuration Guide, IOS XE 17.16.x（Catalyst 9500）「Port Security」の"
+    " Default Port Security Configuration: violation の既定は shutdown"
+)
+
+
 def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:
     """実際に効く HSRP・VRRP の優先度。書いていなければ 100、VRRP の持ち主は 255。"""
     if entry.protocol == "vrrp" and entry.virtual_ip:

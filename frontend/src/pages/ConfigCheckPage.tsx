@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 import { api } from "../api/client";
 import type { AskBackAnswer, ConfigCheck, L3Finding } from "../api/types";
 import ConfigEditor from "../components/ConfigEditor";
-import { LEVEL_LABEL, sortFindings } from "../components/L3Panel";
+import { LEVEL_LABEL, sortFindings, sourcesLine } from "../components/L3Panel";
 
 /**
  * Config を放り込んで、その場で見てもらう。
@@ -57,6 +57,11 @@ function Findings({ items, title }: { items: L3Finding[]; title: string }) {
                 {finding.evidence.length > 0 && (
                   <div className="muted" style={{ marginTop: 4 }}>
                     見たところ: {finding.evidence.join(" / ")}
+                  </div>
+                )}
+                {sourcesLine(finding.sources) && (
+                  <div className="muted" style={{ marginTop: 4 }}>
+                    {sourcesLine(finding.sources)}
                   </div>
                 )}
               </td>

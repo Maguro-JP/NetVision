@@ -10,7 +10,7 @@ import pytest
 
 from app.models import Device
 from app.models.topology import ConfigSnapshot
-from app.services import configcheck, configparse
+from app.services import configcheck, configparse, defaults
 from app.services.l3review import HIGH, LOW, MEDIUM
 from tests.conftest import API
 
@@ -1748,3 +1748,69 @@ def test_fastiron_is_not_told_to_write_a_spanning_tree_mode(db_session):
     result = configcheck.check(db_session, text, filename="icx1.txt")
     assert result.vendor == "fastiron"
     assert not [t for t in _titles(result) if "STP のモード" in t]
+
+
+# 既定値に拠った指摘には、拠った資料の名前を添える（docs/knowledge/finding-sources.md）。
+# 既定値は Config に書いていないので、根拠の行だけでは読み手が確かめに行けない。
+
+
+def _sources_of(db_session, text: str, word: str) -> list[str]:
+    result = configcheck.check(db_session, text)
+    return next(f for f in result.findings if word in f.title).sources
+
+
+@pytest.mark.parametrize(
+    ("text", "word", "source"),
+    [
+        (
+            "hostname sw-src1\ninterface GigabitEthernet1/0/1\n switchport mode access\n",
+            "既定の VLAN 1",
+            defaults.ACCESS_VLAN_SOURCE,
+        ),
+        (
+            "hostname sw-src2\nip dhcp snooping\nip dhcp snooping vlan 10\n",
+            "DHCP の見張りで、信用する口",
+            defaults.DHCP_SNOOPING_UNTRUSTED_SOURCE,
+        ),
+        (
+            "hostname sw-src3\nip dhcp snooping\nip dhcp snooping vlan 10\n"
+            "interface GigabitEthernet1/0/24\n switchport mode trunk\n ip dhcp snooping trust\n",
+            "上位で落とされる形",
+            defaults.DHCP_OPTION82_SOURCE,
+        ),
+        (
+            "hostname sw-src4\nip arp inspection vlan 10\n",
+            "ARP の見張りで、信用する口",
+            defaults.ARP_INSPECTION_UNTRUSTED_SOURCE,
+        ),
+        (
+            "hostname sw-src5\ninterface Vlan300\n ip address 10.0.30.2 255.255.255.0\n"
+            " standby 300 ip 10.0.30.1\n",
+            "版1で使える範囲",
+            defaults.HSRP_VERSION_SOURCE,
+        ),
+        (
+            "hostname sw-src6\ninterface GigabitEthernet1/0/2\n switchport mode access\n"
+            " switchport access vlan 10\n switchport port-security\n",
+            "破ったときの動き",
+            defaults.PORT_SECURITY_VIOLATION_SOURCE,
+        ),
+    ],
+    ids=["access-vlan", "dhcp-snooping-trust", "option82", "arp-trust", "hsrp-v1", "violation"],
+)
+def test_a_finding_that_leans_on_a_default_names_its_source(db_session, text, word, source):
+    assert _sources_of(db_session, text, word) == [source]
+
+
+def test_a_finding_that_does_not_lean_on_a_default_has_no_source(db_session):
+    """telnet を開けている、は書いてある行そのものの指摘。資料の名前は要らない。"""
+    result = configcheck.check(db_session, MESSY)
+    assert any(f.sources == [] for f in result.findings)
+    assert all(not f.sources for f in result.findings if "telnet" in f.title.lower())
+
+
+def test_the_config_check_api_carries_the_sources(client):
+    text = "hostname sw-src7\ninterface GigabitEthernet1/0/1\n switchport mode access\n"
+    body = client.post(f"{API}/config-check", json={"text": text}).json()
+    finding = next(f for f in body["findings"] if "既定の VLAN 1" in f["title"])
+    assert finding["sources"] == [defaults.ACCESS_VLAN_SOURCE]

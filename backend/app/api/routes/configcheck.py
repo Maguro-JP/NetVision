@@ -28,6 +28,8 @@ class FindingRead(BaseModel):
     title: str
     why: str
     evidence: list[str]
+    #: 既定値に拠った指摘の、拠った資料の名前。無ければ空
+    sources: list[str] = []
 
 
 class CheckRead(BaseModel):
@@ -54,7 +56,13 @@ class CheckBody(BaseModel):
 
 def _read(result: service.CheckResult) -> CheckRead:
     def finding(item) -> FindingRead:  # noqa: ANN001
-        return FindingRead(level=item.level, title=item.title, why=item.why, evidence=item.evidence)
+        return FindingRead(
+            level=item.level,
+            title=item.title,
+            why=item.why,
+            evidence=item.evidence,
+            sources=item.sources,
+        )
 
     return CheckRead(
         filename=result.filename,

@@ -21,7 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.models import Device
-from app.services import configparse, l3review, policyreview
+from app.services import configparse, defaults, l3review, policyreview
 from app.services import conventions as conventions_module
 from app.services.configparse import ParsedConfig, Vendor, banners, inputtext
 from app.services.l3review import HIGH, LOW, MEDIUM, Finding
@@ -1017,6 +1017,7 @@ def _dhcp_snooping(text: str) -> list[Finding]:
                 "（上位へのトランクを含む）を信用する設定にしないと、"
                 "配られるはずのアドレスまで落ちて、端末がアドレスを取れません。",
                 evidence=["ip dhcp snooping vlan はあるが ip dhcp snooping trust が無い"],
+                sources=[defaults.DHCP_SNOOPING_UNTRUSTED_SOURCE],
             )
         )
         return out
@@ -1064,6 +1065,7 @@ def _dhcp_snooping_option82(lines: list[str]) -> list[Finding]:
                 "ip dhcp snooping vlan はあるが、no ip dhcp snooping information option も "
                 "ip helper-address も無い"
             ],
+            sources=[defaults.DHCP_OPTION82_SOURCE],
         )
     ]
 
@@ -1149,6 +1151,7 @@ def _access_on_vlan1(text: str) -> list[Finding]:
             "管理用の通信も流れる帯なので、端末をここに置くと、分けたつもりの帯が"
             "混ざります。意図した VLAN を switchport access vlan で書いてください。",
             evidence=[f"{name}: switchport access vlan が無い" for name in loose[:5]],
+            sources=[defaults.ACCESS_VLAN_SOURCE],
         )
     ]
 
@@ -1264,6 +1267,7 @@ def _arp_inspection(text: str) -> list[Finding]:
                 "そこから来た ARP まで捨てて不通になります。"
                 "上位へ向かう口に ip arp inspection trust を入れてください。",
                 evidence=["ip arp inspection vlan はあるが ip arp inspection trust が無い"],
+                sources=[defaults.ARP_INSPECTION_UNTRUSTED_SOURCE],
             )
         )
     snooping = any(re.match(r"^ip dhcp snooping vlan\b", line, re.IGNORECASE) for line in lines)
@@ -1411,6 +1415,7 @@ def _hsrp_version(text: str) -> list[Finding]:
                 "256 以上を使うなら、そのポートに standby version 2 が要ります。"
                 "VLAN 番号に合わせて番号を振ったときに起きます。",
                 evidence=too_big[:5],
+                sources=[defaults.HSRP_VERSION_SOURCE],
             )
         )
     return out
@@ -1545,6 +1550,7 @@ def _port_admission(text: str) -> list[Finding]:
                 "決めていないと、端末を入れ替えただけで口が落ちて、"
                 "現場では原因の分からない不通になります。",
                 evidence=[f"{name}: violation の指定なし" for name in quiet_security[:5]],
+                sources=[defaults.PORT_SECURITY_VIOLATION_SOURCE],
             )
         )
 
