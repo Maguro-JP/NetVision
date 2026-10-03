@@ -564,6 +564,14 @@ _QX_ROUTE = re.compile(
 )
 _QX_OSPF = re.compile(r"^ospf(?:\s+(\d+))?(?:\s+router-id\s+(\S+))?\s*$", re.IGNORECASE)
 _QX_BGP = re.compile(r"^bgp\s+(\S+)\s*$", re.IGNORECASE)
+#: `ip route-static` の後ろで値を伴う語と、値を伴わない語。
+#: 出典: Huawei「SME Network Fat AP and Cloud AP V200R025C10 Command Reference」の ip route-static
+#: （`[ preference preference | tag tag ] * [ permanent | inherit-cost ] [ description text ]`）、
+#: H3C「02-Static routing commands」（Comware 7）の ip route-static
+#: （`backup-interface`・`backup-nexthop`・`bfd { control-packet | echo-packet | static 名前 }`・
+#: `track`）
+_UNDO_ROUTE_VALUED = frozenset({"tag", "track", "backup-nexthop", "backup-interface"})
+_UNDO_ROUTE_FLAGS = frozenset({"permanent", "inherit-cost", "no-install", "ldp-sync"})
 _QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 
 
@@ -578,13 +586,32 @@ def parse_undoform(text: str, parsed: ParsedConfig) -> None:
         if destination is None:
             continue
         route = ParsedRoute(destination=destination, vrf=match.group("vrf"))
-        for token in match.group("rest").split():
+        words = match.group("rest").split()
+        index = 0
+        while index < len(words):
+            token = words[index]
+            lowered = token.lower()
+            if lowered == "preference" and index + 1 < len(words) and words[index + 1].isdigit():
+                route.distance = int(words[index + 1])
+                index += 2
+                continue
+            if lowered == "bfd":
+                # `bfd static 名前` は2語、`bfd control-packet` は1語を伴う
+                following = words[index + 1].lower() if index + 1 < len(words) else ""
+                index += 3 if following == "static" else 2
+                continue
+            if lowered in _UNDO_ROUTE_VALUED:
+                index += 2  # 値を伴う語。値を距離や口の名前と取り違えない
+                continue
+            if lowered == "description":
+                break  # 後ろは説明文
             if _is_ip(token):
                 route.next_hop = token
             elif token.isdigit():
                 route.distance = int(token)
-            elif re.match(r"^[A-Za-z]", token) and token.lower() not in {"preference"}:
+            elif re.match(r"^[A-Za-z]", token) and lowered not in _UNDO_ROUTE_FLAGS:
                 route.interface = expand(token)
+            index += 1
         parsed.routes.append(route)
 
     # この書式はエリアが入れ子（ospf 1 → area 0.0.0.0 → network ...）

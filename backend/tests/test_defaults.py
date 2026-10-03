@@ -51,3 +51,11 @@ def test_ospf_authentication_null_is_no_authentication():
     assert defaults.ospf_auth(None) is None
     assert defaults.ospf_auth("none") is None
     assert defaults.ospf_auth("md5") == "md5"
+
+
+def test_the_static_distance_default_depends_on_the_vendor():
+    assert defaults.static_distance(None, "huawei") == 60
+    assert defaults.static_distance(None, "h3c") == 60
+    assert defaults.static_distance(None, "fortinet") == 10
+    assert defaults.static_distance(None, "cisco_ios") == 1
+    assert defaults.static_distance(5, "huawei") == 5

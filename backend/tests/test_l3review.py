@@ -681,3 +681,61 @@ def test_huawei_bgp_import_route_direct_counts_as_advertised(db_session):
     other = _device(db_session, "core-sw-92")
     _snapshot(db_session, other, v6_only.replace("core-sw-91", "core-sw-92"), "f3" * 32)
     assert l3review.review(db_session, other).bgp["redistributes"] == []
+
+
+def _routes_config_findings(db_session, hostname, config, digest):
+    device = _device(db_session, hostname)
+    _snapshot(db_session, device, config, digest)
+    return [f.title for f in l3review.review(db_session, device).findings]
+
+
+def test_huawei_static_preference_60_is_the_default(db_session):
+    """Huawei・H3C の静的経路の preference は、書かなければ 60。明示の 60 と同じ重み。
+
+    出典: Huawei「SME Network Fat AP and Cloud AP V200R025C10 Command Reference」の ip
+    route-static（「If no preference is configured for a static route, the static route uses the
+    default preference 60.」）、H3C「02-Static routing commands」（Comware 7）の ip route-static
+    （「The default is 60.」）。
+    """
+    config = (
+        "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\n"
+        "sysname core-sw-a1\n#\n"
+        "ip route-static 0.0.0.0 0 10.0.0.1 preference 60\n"
+        "ip route-static 0.0.0.0 0 10.0.1.1\n#\nreturn\n"
+    )
+    titles = _routes_config_findings(db_session, "core-sw-a1", config, "a2" * 32)
+    assert any("同じ重みで複数" in t for t in titles), titles
+
+
+def test_a_huawei_static_route_tag_is_not_a_distance_or_a_port():
+    """`tag 100` の 100 は距離ではなく、`tag` は口の名前ではない。"""
+    from app.services import configparse
+
+    for rest in (
+        "10.0.0.1 tag 100",
+        "10.0.0.1 bfd static S1",
+        "10.0.0.1 track 3 permanent",
+        "10.0.0.1 description to WAN 2",
+    ):
+        parsed = configparse.parse(f"sysname r1\n#\nip route-static 10.9.0.0 16 {rest}\n#\n")
+        [route] = parsed.routes
+        assert route.distance is None, rest
+        assert route.interface is None, rest
+        assert route.next_hop == "10.0.0.1", rest
+
+
+def test_fortigate_static_distance_10_is_the_default(db_session):
+    """FortiGate の `config router static` の distance は、書かなければ 10。
+
+    出典: FortiOS CLI Reference「config router static」（7.0.1。distance: Default 10）。
+    """
+    config = (
+        "config system global\n    set hostname fgt-a3\nend\n"
+        "config router static\n"
+        '    edit 1\n        set gateway 10.0.0.1\n        set device "port1"\n'
+        "        set distance 10\n    next\n"
+        '    edit 2\n        set gateway 10.0.1.1\n        set device "port2"\n    next\n'
+        "end\n"
+    )
+    titles = _routes_config_findings(db_session, "fgt-a3", config, "a3" * 32)
+    assert any("同じ重みで複数" in t for t in titles), titles
