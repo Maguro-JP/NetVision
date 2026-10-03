@@ -1814,3 +1814,58 @@ def test_the_config_check_api_carries_the_sources(client):
     body = client.post(f"{API}/config-check", json={"text": text}).json()
     finding = next(f for f in body["findings"] if "既定の VLAN 1" in f["title"])
     assert finding["sources"] == [defaults.ACCESS_VLAN_SOURCE]
+
+
+VOICE_PORT = """
+hostname sw-voice-src
+radius-server host 10.0.0.53 key secret
+!
+interface GigabitEthernet1/0/10
+ switchport mode access
+ switchport access vlan 10
+ switchport voice vlan 20
+ switchport port-security
+ switchport port-security violation restrict
+!
+"""
+
+
+def test_a_voice_port_left_at_the_default_maximum_names_its_source(db_session):
+    """上限を書いていない口は、既定の1で数えている。
+
+    出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9500）「Port Security」の
+    Default Port Security Configuration
+    （Maximum number of secure MAC addresses per port: One address）。
+    """
+    assert _sources_of(db_session, VOICE_PORT, "覚えられる数が足りません") == [
+        defaults.PORT_SECURITY_MAXIMUM_SOURCE
+    ]
+
+
+def test_a_voice_port_with_a_written_maximum_of_one_needs_no_source(db_session):
+    text = VOICE_PORT.replace(
+        " switchport port-security violation restrict\n",
+        " switchport port-security maximum 1\n switchport port-security violation restrict\n",
+    )
+    assert _sources_of(db_session, text, "覚えられる数が足りません") == []
+
+
+def test_a_missing_stp_mode_on_ios_names_the_catalyst_default(db_session):
+    """出典: Layer 2 Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）
+    「Configuring Spanning Tree Protocol」の Default Spanning-Tree Configuration
+    （Spanning-tree mode: Rapid PVST+ (PVST+ and MSTP are disabled.)）。
+    """
+    text = STP_LOOSE.replace("spanning-tree mode rapid-pvst\n", "")
+    assert configparse.parse(text).vendor is configparse.Vendor.CISCO_IOS
+    assert _sources_of(db_session, text, "STP のモードを決めていません") == [
+        defaults.STP_MODE_SOURCE
+    ]
+
+
+def test_a_missing_stp_mode_on_another_vendor_gets_no_catalyst_source(db_session):
+    """既定のモードは機種で違いうる。確かめていない機種に Catalyst の資料を出さない。"""
+    text = "! device: sw-a1 (DCS-7050SX3-48YC8, EOS-4.29.2F)\n" + STP_LOOSE.replace(
+        "spanning-tree mode rapid-pvst\n", ""
+    )
+    assert configparse.parse(text).vendor is configparse.Vendor.ARISTA
+    assert _sources_of(db_session, text, "STP のモードを決めていません") == []

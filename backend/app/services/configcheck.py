@@ -893,6 +893,9 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
                 evidence=["spanning-tree mode の行なし"],
+                # 既定のモードは機種と版で違いうる。
+                # 資料で確かめたのは Catalyst 9300（IOS XE 17.17.x）だけ
+                sources=[defaults.STP_MODE_SOURCE] if vendor is Vendor.CISCO_IOS else [],
             )
         )
     return out
@@ -1598,8 +1601,9 @@ def _port_admission(text: str) -> list[Finding]:
             ),
             "1",
         )
+        written = any(line.startswith("switchport port-security maximum") for line in lowered_body)
         if maximum.isdigit() and int(maximum) < 2:
-            voice_one.append((name, maximum))
+            voice_one.append((name, maximum, written))
     if voice_one:
         out.append(
             Finding(
@@ -1608,8 +1612,13 @@ def _port_admission(text: str) -> list[Finding]:
                 why="電話と、その先の PC で MAC が2つ出ます。覚えられる数が1のままだと、"
                 "つないだ瞬間に口が落ちます。電話を置く口は2つ以上にしてください。",
                 evidence=[
-                    f"{name}: maximum {value}（voice vlan あり）" for name, value in voice_one[:5]
+                    f"{name}: maximum {value}（voice vlan あり）"
+                    for name, value, _written in voice_one[:5]
                 ],
+                # 上限を書いていない口は、既定の 1 で数えている
+                sources=[defaults.PORT_SECURITY_MAXIMUM_SOURCE]
+                if any(not written for _name, _value, written in voice_one)
+                else [],
             )
         )
 
