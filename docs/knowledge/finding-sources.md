@@ -88,7 +88,7 @@ policyreview.py と l3review.py の既定に拠る指摘を見た。
 | configcheck「上位で落とされる形の DHCP が出ます」 | `no ip dhcp snooping information option`、`ip helper-address` | 読んでいる |
 | configcheck「HSRP のグループ番号が、版1で使える範囲を超えています」 | 口ごとの `standby version 2` | 読んでいる |
 | configcheck「ポートセキュリティの、破ったときの動きを決めていません」 | `switchport port-security violation …` | 読んでいる |
-| configcheck「電話をつなぐ口で、覚えられる数が足りません」 | `switchport port-security maximum N` | 読んでいる。VLAN ごとの上限（`maximum N vlan voice`）は見ていない |
+| configcheck「電話をつなぐ口で、覚えられる数が足りません」 | 口全体の `switchport port-security maximum N` | VLAN ごとの行（`maximum N vlan voice`）だけの口で、全体の上限が既定の1のままなのを見逃していた。全体の行だけを読むよう直した |
 | configcheck「STP のモードを決めていません」 | `spanning-tree mode …` | 読んでいる |
 | configcheck「タグ無しの VLAN を、許可の一覧から外しています」 | 機種の既定（AlliedWare Plus は既定のタグ無し VLAN 1 を一覧に入れなくても一員になる） | Allied にも出していた。Allied の VLAN 1 では言わない |
 
