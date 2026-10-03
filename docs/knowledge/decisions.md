@@ -84,3 +84,16 @@
   かえって紛らわしい）。
 - 触る場所: `backend/app/services/defaults.py`（`*_SOURCE`、`static_distance_source`）、
   `backend/app/services/reviewnote.py`、`frontend/src/components/L3Panel.tsx`（`sourcesLine`）。
+
+## Junos の論理システム（logical-systems）の中の静的経路は、口と一緒に読めるまで読まない（2026-10-04 JST）
+
+- 決めたこと: `set logical-systems LS routing-options static …`（と、その中の routing-instances の static）は、いまは読まない。
+  論理システムを読むときは、口（`set logical-systems LS interfaces …`）と経路を一緒に読み、別の機器として扱う。
+- 理由: Juniper「Understanding Logical Systems for Routers and Switches」に「Logical systems perform a subset of the actions of
+  the main router and have their own unique routing tables, interfaces, policies, and routing instances.」とある。経路だけを
+  全体の機器に足すと、policyreview の「次の相手へ行けません」が、論理システムの口の帯を知らないまま判断して誤った HIGH を出す。
+  routing-instances（#156）は口を全体の `set interfaces` に持つので、この問題は起きない。
+- 採らなかった案: 論理システムの経路を vrf=LS として全体の機器に足す（口が無いので届く先の点検が誤る）。経路だけ足して届く先の
+  点検から外す（点検ごとに例外が増え、論理システムの口・OSPF・BGP も同じ扱いを要する）。
+- 触る場所: `backend/app/services/configparse/routing.py` の `_junos_static`、`backend/app/services/configparse/juniper.py`
+  （論理システムを1台として切り出すなら、ここで Config を論理システムごとに分ける）。

@@ -1043,3 +1043,10 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: インスタンスの行も読み、経路に `vrf=インスタンス名` を付けて全体の経路と分けて持つ。`static defaults
   preference` もインスタンスごとに持つ。角括弧の並びもインスタンスの行で開く。試験は `backend/tests/test_l3review.py` の末尾。
 - 残り: 論理システム（`set logical-systems …`）の中の static は読んでいない。
+
+## Junos の論理システムの中の静的経路（調べただけ。直していない）（2026-10-04 JST）
+
+- 確かめた資料: Juniper「Understanding Logical Systems for Routers and Switches」（論理システムは自分の経路表・口・ポリシー・
+  routing-instances を持つ）、「Routing, Interfaces, and NAT for User Logical Systems」の設定例。
+- 見たこと: いまの読み手は `set logical-systems …` の行を読まない（経路も口も）。経路だけを読むと、口の帯を知らない
+  「次の相手へ行けません」が誤った指摘を出すので、口と一緒に別の機器として読むまで手を付けない。判断は decisions.md。
