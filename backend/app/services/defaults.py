@@ -51,7 +51,7 @@ STATIC_ROUTE_DISTANCE = 1
 #: - FortiGate: FortiOS CLI Reference「config router static」（7.0.1。distance の既定 10）
 #: - Junos: Juniper「Configure Static Routes」（「In Junos OS, static routes have a global
 #:   preference (administrative distance) of 5.」）。`static defaults preference` で変えた機器は
-#:   まだ読んでいない
+#:   読み手（configparse/routing.py の _junos_static）が経路ごとの距離として入れる
 #: Arista は Cisco と同じ 1（EOS User Manual「IPv4」の ip route: By default, the administrative
 #: distance assigned to static routes is 1）なので、上の表には置かず出典だけを持つ。
 #: 未確認: NEC QX（H3C の OEM だが資料に届かない）。

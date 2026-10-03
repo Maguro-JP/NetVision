@@ -818,6 +818,13 @@ _JUNOS_STATIC = re.compile(
 )
 
 
+#: `set routing-options static defaults preference 10`（論理システム・ルーティングインスタンスの
+#: 中の static は見ない。_JUNOS_STATIC と同じく全体の routing-options だけ）
+_JUNOS_STATIC_DEFAULT = re.compile(
+    r"^set\s+routing-options\s+static\s+defaults\s+preference\s+(\d+)\s*$", re.IGNORECASE
+)
+
+
 def _junos_static(text: str, parsed: ParsedConfig) -> None:
     """Junos の静的経路。経路の preference と、転送先ごとの qualified-next-hop を読む。
 
@@ -825,12 +832,21 @@ def _junos_static(text: str, parsed: ParsedConfig) -> None:
     - `route X preference P`: その経路の next-hop すべてに効く
     - `route X qualified-next-hop Y [preference P]`: その転送先だけの preference。
       書かなければ経路の preference
+    - `static defaults preference P`: 全部の静的経路の既定。経路・転送先の preference が勝つ
     出典: Juniper「Static Route Preferences and Qualified Next Hops」（「The qualified next-hop
-    preference and metric override the route preference」）
+    preference and metric override the route preference」）、CLI Reference「static (Routing
+    Options)」の defaults（Specify global static route options. These options only set default
+    attributes inherited by all newly created static routes. / route の options は override any
+    options you configured in the defaults part of the static statement）
     """
     hops: dict[str, list[tuple[str, int | None]]] = {}
     route_pref: dict[str, int] = {}
+    defaults_pref: int | None = None
     for line in text.splitlines():
+        default = _JUNOS_STATIC_DEFAULT.match(line.strip())
+        if default:
+            defaults_pref = int(default.group(1))
+            continue
         found = _JUNOS_STATIC.match(line.strip())
         if not found:
             continue
@@ -848,7 +864,7 @@ def _junos_static(text: str, parsed: ParsedConfig) -> None:
         entries.append((hop, int(own) if own else None))
     for destination, entries in hops.items():
         for hop, own in entries:
-            distance = own if own is not None else route_pref.get(destination)
+            distance = own if own is not None else route_pref.get(destination, defaults_pref)
             parsed.routes.append(
                 ParsedRoute(destination=destination, next_hop=hop, distance=distance)
             )

@@ -998,3 +998,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: defaults.py の静的経路の出典に Arista の資料を足した（値は変えていない）。試験は `backend/tests/test_defaults.py`。
 - 未確認のまま: Aruba CX の STP の既定のモード。AOS-CX の資料（arubanetworking.hpe.com・arubanetworks.com の techdocs、
   CLI ガイドの PDF）はこの環境から 403 で開けなかった。検索結果の要約は MSTP と言っているが、原文を見ていないので出典にしない。
+
+## Junos の static defaults preference を読んでいなかった（2026-10-04 JST）
+
+- 確かめた資料: Juniper「CLI Reference」の static (Routing Options) の defaults（Specify global static route options. These options
+  only set default attributes inherited by all newly created static routes。route に書いた options は defaults より優先する）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `set routing-options static defaults preference 10` で既定を
+  変えた機器でも、preference を書いていない経路を Junos の既定 5 と読んでいた。明示の 10 と並ぶ経路を「重みが違う」と見て、
+  l3review「同じ重みで複数あります」を見逃していた。
+- 直したこと: 読み手で defaults の preference を読み、経路にも転送先にも preference が無い経路の距離に当てる。試験は
+  `backend/tests/test_l3review.py` の末尾。
+- 残り: 論理システム・ルーティングインスタンスの中の static は、前と同じく読んでいない。中括弧の書式も読んでいない。
