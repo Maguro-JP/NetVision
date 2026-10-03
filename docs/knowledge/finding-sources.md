@@ -82,3 +82,11 @@ policyreview.py と l3review.py の既定に拠る指摘を見た。
 | l3review「一度切り替わると戻りません」（HSRP） | `standby N preempt` | 読んでいる |
 | l3review「口が全部 passive のままです」 | `no passive-interface X` | 読んでいる |
 | asareview「security-level が同じ口が」 | `same-security-traffic permit inter-interface` | #146 で直した |
+| configcheck「VLAN だけ書いて mode を書いていない口が、相手次第でトランクになります」 | 機種の既定（Arista EOS は static access で DTP が無い） | Arista にも出していた。既定の dynamic auto を確かめた IOS だけに絞った |
+| configcheck「VLAN を書いていないアクセスの口が、既定の VLAN 1 に乗っています」 | `switchport access vlan` | 読んでいる |
+| configcheck「DHCP の見張りで、信用する口を1つも決めていません」「ARP の見張りで…」 | 口ごとの `ip dhcp snooping trust`・`ip arp inspection trust` | 読んでいる |
+| configcheck「上位で落とされる形の DHCP が出ます」 | `no ip dhcp snooping information option`、`ip helper-address` | 読んでいる |
+| configcheck「HSRP のグループ番号が、版1で使える範囲を超えています」 | 口ごとの `standby version 2` | 読んでいる |
+| configcheck「ポートセキュリティの、破ったときの動きを決めていません」 | `switchport port-security violation …` | 読んでいる |
+| configcheck「電話をつなぐ口で、覚えられる数が足りません」 | `switchport port-security maximum N` | 読んでいる。VLAN ごとの上限（`maximum N vlan voice`）は見ていない |
+| configcheck「STP のモードを決めていません」 | `spanning-tree mode …` | 読んでいる |

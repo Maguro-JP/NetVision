@@ -237,7 +237,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
-    found.extend(_negotiable_ports(text))
+    found.extend(_negotiable_ports(text, parsed.vendor))
     found.extend(_ssh_version(text))
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
@@ -1160,7 +1160,7 @@ def _access_on_vlan1(text: str) -> list[Finding]:
     ]
 
 
-def _negotiable_ports(text: str) -> list[Finding]:
+def _negotiable_ports(text: str, vendor: Vendor | None = Vendor.CISCO_IOS) -> list[Finding]:
     """VLAN は書いたのに mode を書いておらず、相手次第でトランクになる口。
 
     Catalyst（IOS / IOS-XE）の L2 の口は、mode を書かなければ dynamic auto で、
@@ -1168,11 +1168,16 @@ def _negotiable_ports(text: str) -> list[Finding]:
     アクセスのつもりでいると、挿された機器次第で全 VLAN が流れ込む。
 
     NX-OS は既定がアクセスで DTP を使わないので、NX-OS の資料では言わない。
+    Arista EOS も既定は static access で、switchport mode に動的な形が無い（EOS User Manual
+    「Virtual LANs (VLANs)」）。既定の dynamic auto を確かめたのは Catalyst（IOS）だけなので、
+    IOS の資料でだけ言う。
 
     出典: Cisco IOS XE 17 Interface Characteristics Configuration Guide
     「Default Ethernet interface configuration」（VLAN trunking: Switchport mode
     dynamic auto (supports DTP)）
     """
+    if vendor is not Vendor.CISCO_IOS:
+        return []
     if re.search(r"\bNX-OS\b|^\s*feature\s+\S+", text, re.IGNORECASE | re.MULTILINE):
         return []
     loose = [
@@ -1194,6 +1199,7 @@ def _negotiable_ports(text: str) -> list[Finding]:
             "トランクになります。アクセスのつもりでも、挿された機器次第で全 VLAN が"
             "流れ込みます。switchport mode access を書いてください。",
             evidence=[f"{name}: switchport access vlan はあるが mode が無い" for name in loose[:5]],
+            sources=[defaults.DTP_DYNAMIC_AUTO_SOURCE],
         )
     ]
 

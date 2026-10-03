@@ -943,3 +943,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 読み手で2つの書き方を読み（peer-group からも引き継ぐ）、点検はどれかがあれば言わない。指摘に出典を付けた。
   既定の経路の指摘は、動的な経路のプロトコルが1つでもあれば控える。試験は `backend/tests/test_policyreview.py`、
   `backend/tests/test_configcheck.py` の末尾。確かめた範囲の一覧は `docs/knowledge/finding-sources.md`。
+
+## Arista にも「相手次第でトランクになります」と言っていた（2026-10-03 JST）
+
+- 確かめた資料: Arista「EOS User Manual」の Virtual LANs (VLANs)（Ethernet and port channel interfaces are configured as
+  switched ports by default。表示例は Administrative Mode: static access。switchport mode は access・trunk・dot1q-tunnel で、
+  DTP の記載が無い）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: configcheck の「VLAN だけ書いて mode を書いていない口が、
+  相手次第でトランクになります」は NX-OS だけを外していて、EOS の Config にも出ていた。EOS の口は既定でアクセスなので、
+  直す必要の無いものを直させる指摘だった。
+- 直したこと: 既定の dynamic auto を資料で確かめた Cisco IOS のときだけ言う。指摘に出典を付けた。試験は
+  `backend/tests/test_configcheck.py` の末尾。configcheck の他の既定に拠る指摘は、既定を変える書き方を読んでいた
+  （一覧は `docs/knowledge/finding-sources.md` の末尾の表）。
