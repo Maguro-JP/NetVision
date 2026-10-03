@@ -7,7 +7,7 @@
 
 from pathlib import Path
 
-from app.services import configparse, policyreview
+from app.services import configparse, defaults, policyreview
 from app.services.configparse import asa
 from app.services.configparse.base import Vendor
 
@@ -266,3 +266,34 @@ def test_asa_nat_ssh_and_failover_show_up_as_features():
     assert ("nat", "NAT") in names
     assert ("management", "SSH") in names
     assert ("high_availability", "フェイルオーバー") in names
+
+
+# 出典: CLI Book 1: Cisco ASA Series General Operations CLI Configuration Guide, 9.16
+# 「Routed and Transparent Mode Interfaces」（By default, interfaces on the same security level
+# cannot communicate with each other. / same-security-traffic permit inter-interface で通す。
+# 低い security-level から高い側へは、ACL で通さないかぎり通らない）
+
+
+def _finding(text: str, word: str):
+    return next(f for f in policyreview.review(configparse.parse(text), text) if word in f.title)
+
+
+def test_same_level_ports_that_are_allowed_to_talk_are_not_called_out():
+    """same-security-traffic permit inter-interface を書いてあれば、同じ数字どうしは通れる。"""
+    text = (
+        load().replace(" security-level 50", " security-level 100")
+        + "same-security-traffic permit inter-interface\n"
+    )
+    assert not [t for t in titles(text) if "security-level が同じ口が" in t]
+
+
+def test_the_same_level_finding_names_its_source():
+    text = load().replace(" security-level 50", " security-level 100")
+    finding = _finding(text, "security-level が同じ口が")
+    assert finding.sources == [defaults.ASA_SAME_SECURITY_SOURCE]
+
+
+def test_the_unguarded_outside_finding_names_its_source():
+    text = load().replace("access-group OUTSIDE-IN in interface outside\n", "")
+    finding = _finding(text, "入る側の制限がありません")
+    assert finding.sources == [defaults.ASA_LOWER_TO_HIGHER_SOURCE]

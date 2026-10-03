@@ -80,7 +80,7 @@ def review(parsed: ParsedConfig, text: str | None = None) -> list[Finding]:
     findings.extend(wirelessreview.review(parsed))
     findings.extend(multicastreview.review(parsed))
     findings.extend(loadbalancereview.review(parsed))
-    findings.extend(asareview.review(parsed))
+    findings.extend(asareview.review(parsed, text))
     if text is not None:
         findings.extend(_management_access(text, parsed))
         findings.extend(_missing_applied_acls(text, parsed))

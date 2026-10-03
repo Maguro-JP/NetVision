@@ -134,11 +134,31 @@ PORT_SECURITY_MAXIMUM_SOURCE = (
     "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9500）「Port Security」の"
     " Default Port Security Configuration: 覚えられる MAC の数の既定は1"
 )
-#: 既定のモードは機種と版で違いうる。確かめたのは Catalyst 9300 の IOS XE 17.17.x だけ
+#: ASA の security-level の既定の扱い。asareview.py が頼る
+ASA_SAME_SECURITY_SOURCE = (
+    "Cisco ASA Series General Operations CLI Configuration Guide 9.16"
+    "「Routed and Transparent Mode Interfaces」: 同じ security-level の口どうしは既定で通れない"
+)
+ASA_LOWER_TO_HIGHER_SOURCE = (
+    "Cisco ASA Series General Operations CLI Configuration Guide 9.16"
+    "「Routed and Transparent Mode Interfaces」: 低い security-level から高い側へは既定で通さない"
+)
+#: 既定のモードは機種と版で違いうる。確かめた機種だけを並べる
 STP_MODE_SOURCE = (
     "Cisco Layer 2 Configuration Guide, IOS XE 17.17.x（Catalyst 9300）の"
     " Default Spanning-Tree Configuration: Catalyst 9300 の既定は Rapid PVST+。機種と版で違う"
 )
+_STP_MODE_SOURCES: dict[str, str] = {
+    "cisco_ios": STP_MODE_SOURCE,
+    "cisco_nxos": "Cisco Nexus 9000 Series NX-OS Layer 2 Switching Configuration Guide 10.2(x)"
+    "「Configuring Rapid PVST+」の Default Settings: 既定は Rapid PVST+",
+    "arista": "Arista EOS User Manual「Spanning Tree Protocol」: MSTP is the default STP version",
+}
+
+
+def stp_mode_source(vendor: str | None) -> str | None:
+    """STP の既定のモードを、どの資料で確かめたか。確かめていない機種は None（出典を出さない）。"""
+    return _STP_MODE_SOURCES.get(str(vendor or ""))
 
 
 def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:

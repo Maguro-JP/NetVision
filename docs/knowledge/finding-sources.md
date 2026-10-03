@@ -52,7 +52,9 @@ API の欄は既定を空にしてあり、古い画面が受け取っても壊�
 | configcheck「HSRP のグループ番号が、版1で使える範囲を超えています」 | 常に（版を書かなければ版1） | `HSRP_VERSION_SOURCE` |
 | configcheck「ポートセキュリティの、破ったときの動きを決めていません」 | 常に（既定は shutdown） | `PORT_SECURITY_VIOLATION_SOURCE` |
 | configcheck「電話をつなぐ口で、覚えられる数が足りません」 | 上限を書いていない口が1つでもある（既定は1） | `PORT_SECURITY_MAXIMUM_SOURCE` |
-| configcheck「STP のモードを決めていません」 | 機種が Cisco IOS のときだけ（確かめたのは Catalyst 9300 の既定 Rapid PVST+） | `STP_MODE_SOURCE` |
+| configcheck「STP のモードを決めていません」 | 既定を資料で確かめた機種だけ（IOS: Catalyst 9300 は Rapid PVST+、NX-OS: Nexus 9000 は Rapid PVST+、Arista EOS: MSTP） | `stp_mode_source` |
+| asareview「security-level が同じ口が … つあります」 | 常に（`same-security-traffic permit inter-interface` を書いてあれば指摘そのものを出さない） | `ASA_SAME_SECURITY_SOURCE` |
+| asareview「外に面した … に、入る側の制限がありません」 | 常に（低い security-level から高い側へは既定で通さない） | `ASA_LOWER_TO_HIGHER_SOURCE` |
 
 Config 点検の資料はどれも Cisco のもの。点検が Cisco 型の書き方（`switchport`・`ip dhcp snooping` など）の行を見て出す指摘なので、
 その書き方の資料を添えている。同じ書き方の他社（Arista など）で既定が違うかは確かめていない。
@@ -60,7 +62,8 @@ Config 点検の資料はどれも Cisco のもの。点検が Cisco 型の書�
 ## 次に広げる順
 
 1. VLAN・STP・冗長・ログの点検（`topology.py` の各 `FindingRead`）。いまはどの指摘も既定値に拠った資料を持たないので、欄だけ通しても何も出ない。既定値に拠る指摘を見つけたときに、欄と一緒に足す。
-   STP のモードの既定を、IOS 以外（NX-OS・Arista など）でも資料で確かめる。
+   STP のモードの既定を、残りの機種（Aruba CX・Dell OS10 など）でも資料で確かめる。
+   VLAN・STP・冗長・無線の点検（vlanreview・stpreview・hareview・wirelessreview）を洗った範囲では、既定に拠る指摘は見つからなかった（2026-10-03 JST）。
 2. 既定値ではなく「機種の振る舞い」に拠る指摘（HSRP は既定で取り返さない、など）。出典はいまコメントにだけある。
 3. 画面以外に指摘を出す場所ができたら（報告書の書き出しなど）、そこにも同じ行を出す。
 
