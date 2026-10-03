@@ -870,3 +870,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   当てる。defaults.py に Junos の既定 5 を足した。試験は `backend/tests/test_l3review.py`。
 - 未確認のまま: `static defaults preference` で既定を変えた機器。中括弧の書式（set 形式でない Config）の静的経路は、
   前と同じく読んでいない。
+
+## Aruba CX・Arista・ヤマハ・NEC IX の静的経路の距離を見た（直すものは無かった）（2026-10-03 JST）
+
+- 確かめた資料: HPE Aruba Networking「AOS-CX 10.13 IP Routing Guide」（8400）の ip route distance（既定 1、
+  `distance N` と書く）と ip route tag。Arista は EOS User Manual にこの環境から届かず、Arista が出している Ansible の
+  arista.eos コレクションの eos_static_routes で書き方（数字だけが距離、tag・name は値を伴う）を見た。
+- 見たこと: Aruba CX と Arista の `ip route` は、先に IOS の読み手が拾い、その読み手は tag・name・distance を値を伴う語と
+  して読んでいた。機種ごとの読み手は同じ経路を読み飛ばすので、`tag 10` を距離と読む形は表に出ない。試験を足したが、
+  直す前のコードでも通ったので取り下げた（作り話の改善をしない）。
+- ヤマハの metric は経路のメトリックで距離ではない（読み手の docstring のとおり）。NEC IX は `distance N` を読んでいる。
+- 残り: 機種ごとの読み手（arista.py・aruba.py の _parse_routes）には、数字なら何でも距離と読む書き方が残っている。いまは
+  IOS の読み手が先に拾うので害は無いが、IOS の読み手が拾えない書き方が来たときに表に出る。
+- 未確認: NEC IX・NEC QX・Arista の静的経路の既定の距離（資料に届かない）。
