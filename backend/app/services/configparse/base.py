@@ -394,6 +394,11 @@ class ParsedBgpNeighbor:
     next_hop_self: bool = False
     #: 直結していない相手と張るときの許容ホップ数
     ebgp_multihop: int | None = None
+    #: 直結の確認を外したか（`neighbor X disable-connected-check`）。
+    #: 1ホップ先のループバックと張るときに使う
+    disable_connected_check: bool = False
+    #: `neighbor X ttl-security hops N` の N。ebgp-multihop の代わりに、N ホップ先まで張れる
+    ttl_security_hops: int | None = None
     #: 受け取る経路数の上限。無いと、相手の事故がこちらのメモリを食い潰す
     maximum_prefix: int | None = None
     #: 合言葉を掛けているか（値は持たない）

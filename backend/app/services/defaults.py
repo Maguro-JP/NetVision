@@ -134,6 +134,11 @@ PORT_SECURITY_MAXIMUM_SOURCE = (
     "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9500）「Port Security」の"
     " Default Port Security Configuration: 覚えられる MAC の数の既定は1"
 )
+#: eBGP は既定で直結の相手としか張らない。policyreview.py の update-source の指摘が頼る
+EBGP_CONNECTED_CHECK_SOURCE = (
+    "Cisco IOS IP Routing: BGP Command Reference の neighbor disable-connected-check:"
+    " 1ホップの eBGP は既定で相手が同じ帯に直結しているかを確かめる"
+)
 #: ASA の security-level の既定の扱い。asareview.py が頼る
 ASA_SAME_SECURITY_SOURCE = (
     "Cisco ASA Series General Operations CLI Configuration Guide 9.16"

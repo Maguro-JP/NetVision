@@ -348,6 +348,7 @@ _PEER_GROUP_INHERITED = (
     "filter_list_in",
     "filter_list_out",
     "ebgp_multihop",
+    "ttl_security_hops",
     "maximum_prefix",
 )
 
@@ -368,7 +369,7 @@ def _inherit_peer_groups(bgp: ParsedBgp) -> None:
         for name in _PEER_GROUP_INHERITED:
             if getattr(neighbor, name) is None:
                 setattr(neighbor, name, getattr(template, name))
-        for name in ("next_hop_self", "password"):
+        for name in ("next_hop_self", "password", "disable_connected_check"):
             if getattr(template, name):
                 setattr(neighbor, name, True)
 
@@ -455,6 +456,16 @@ def _add_neighbor(bgp: ParsedBgp, address: str, rest: str, family: str | None = 
     multihop = re.match(r"^ebgp-multihop(?:\s+(\d+))?", rest, re.IGNORECASE)
     if multihop:
         found.ebgp_multihop = int(multihop.group(1)) if multihop.group(1) else 255
+        return
+    # どちらも ebgp-multihop の代わりになる。出典: Cisco IOS IP Routing: BGP Command Reference の
+    # neighbor disable-connected-check（single-hop eBGP peering sessions … configured on a
+    # loopback interface）と neighbor ttl-security（neighbor-address ttl-security hops hop-count）
+    if re.match(r"^disable-connected-check\s*$", rest, re.IGNORECASE):
+        found.disable_connected_check = True
+        return
+    ttl = re.match(r"^ttl-security\s+hops\s+(\d+)", rest, re.IGNORECASE)
+    if ttl:
+        found.ttl_security_hops = int(ttl.group(1))
         return
     maximum = re.match(r"^maximum-prefix\s+(\d+)", rest, re.IGNORECASE)
     if maximum:

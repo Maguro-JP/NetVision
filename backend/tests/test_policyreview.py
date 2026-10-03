@@ -5,7 +5,7 @@ ACL、overload の無い NAT、上がらない crypto map は、書いた人が�
 ここで見るのは、動かさなくても言える粗を、根拠つきで挙げられているか。
 """
 
-from app.services import configparse, policyreview
+from app.services import configparse, defaults, policyreview
 from app.services.reviewnote import HIGH, LOW, MEDIUM
 
 
@@ -980,3 +980,46 @@ def test_a_wide_inbound_rule_is_named_not_quoted_whole():
     assert "srcaddr all" not in found.title
     # 中身は根拠に出す
     assert [line for line in found.evidence if "srcaddr all" in line]
+
+
+# ebgp-multihop の代わりになる書き方。出典: Cisco IOS IP Routing: BGP Command Reference の
+# neighbor disable-connected-check（disable the connection verification process for eBGP peering
+# sessions that are reachable by a single hop but are configured on a loopback interface）と
+# neighbor ttl-security（neighbor neighbor-address ttl-security hops hop-count。ebgp-multihop とは
+# 同時に書けない）
+
+
+def test_a_loopback_peering_with_connected_check_disabled_is_fine():
+    text = (
+        EBGP
+        + " neighbor 203.0.113.1 update-source Loopback0\n"
+        + " neighbor 203.0.113.1 disable-connected-check\n"
+    )
+    assert "接続が張れません" not in _titles(_review(text))
+
+
+def test_a_loopback_peering_with_ttl_security_is_fine():
+    text = (
+        EBGP
+        + " neighbor 203.0.113.1 update-source Loopback0\n"
+        + " neighbor 203.0.113.1 ttl-security hops 2\n"
+    )
+    assert "接続が張れません" not in _titles(_review(text))
+
+
+def test_a_peer_group_carries_disable_connected_check_to_its_members():
+    text = (
+        "router bgp 65001\n"
+        " neighbor EDGE peer-group\n"
+        " neighbor EDGE remote-as 65100\n"
+        " neighbor EDGE update-source Loopback0\n"
+        " neighbor EDGE disable-connected-check\n"
+        " neighbor 203.0.113.1 peer-group EDGE\n"
+    )
+    assert "203.0.113.1 とは、このままでは接続が張れません" not in _titles(_review(text))
+
+
+def test_the_loopback_peering_finding_names_its_source():
+    text = EBGP + " neighbor 203.0.113.1 update-source Loopback0\n"
+    item = _one(_review(text), "接続が張れません")
+    assert item.sources == [defaults.EBGP_CONNECTED_CHECK_SOURCE]

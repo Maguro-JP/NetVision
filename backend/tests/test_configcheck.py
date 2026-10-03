@@ -1895,3 +1895,19 @@ def test_an_unverified_vendor_gets_no_stp_mode_source():
     """確かめていない機種には、他社の資料を出さない。"""
     assert defaults.stp_mode_source("aruba_cx") is None
     assert defaults.stp_mode_source(None) is None
+
+
+@pytest.mark.parametrize(
+    "protocol",
+    [
+        "router eigrp 10\n network 10.0.0.0\n",
+        "router rip\n version 2\n network 10.0.0.0\n",
+    ],
+    ids=["eigrp", "rip"],
+)
+def test_a_dynamic_protocol_may_bring_the_default_route(db_session, protocol):
+    """OSPF・BGP と同じく、EIGRP・RIP も既定の経路を受け取れる。書いていないとは言えない。"""
+    text = "hostname r-dyn\nip route 10.9.0.0 255.255.0.0 10.0.0.1\n" + protocol
+    assert not [
+        t for t in _titles(configcheck.check(db_session, text)) if "既定の経路が見当たり" in t
+    ]

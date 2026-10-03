@@ -931,3 +931,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   ASA の2つの指摘に出典を付け、STP のモードの出典は機種ごとに引く（`defaults.stp_mode_source`）。試験は
   `backend/tests/test_configparse_asa.py`、`backend/tests/test_configcheck.py` の末尾。
 - 未確認: Aruba CX・Dell OS10 ほかの STP の既定のモード。
+
+## 既定を変える書き方を読まずに出していた指摘（eBGP の直結確認、動的経路での既定経路）（2026-10-03 JST）
+
+- 確かめた資料: Cisco「Cisco IOS IP Routing: BGP Command Reference」の neighbor disable-connected-check（1ホップの eBGP は
+  既定で直結を確かめる。ループバックと張るときに外す）と neighbor ttl-security（`ttl-security hops N`。ebgp-multihop とは
+  同時に書けない）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: update-source を指定した eBGP の相手に、
+  `disable-connected-check` や `ttl-security hops` を書いてあっても「このままでは接続が張れません」と言っていた。
+  「既定の経路が見当たりません」は OSPF・BGP のときだけ控え、EIGRP・RIP で既定の経路を受け取る機器にも出していた。
+- 直したこと: 読み手で2つの書き方を読み（peer-group からも引き継ぐ）、点検はどれかがあれば言わない。指摘に出典を付けた。
+  既定の経路の指摘は、動的な経路のプロトコルが1つでもあれば控える。試験は `backend/tests/test_policyreview.py`、
+  `backend/tests/test_configcheck.py` の末尾。確かめた範囲の一覧は `docs/knowledge/finding-sources.md`。

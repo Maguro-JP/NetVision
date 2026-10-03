@@ -402,8 +402,9 @@ def _no_default_route(parsed: ParsedConfig) -> list[Finding]:
         return []
     if any(route.is_default for route in parsed.routes):
         return []
-    if parsed.ospf is not None or parsed.bgp is not None:
-        return []  # 動的に受け取っている可能性があるので言わない
+    # 動的に受け取っている可能性があるので言わない。EIGRP・RIP・IS-IS も既定の経路を運べる
+    if parsed.ospf is not None or parsed.bgp is not None or parsed.protocols:
+        return []
     return [
         Finding(
             level=MEDIUM,

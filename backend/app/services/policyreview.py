@@ -22,6 +22,7 @@ from dataclasses import dataclass
 from app.services import (
     aclcheck,
     asareview,
+    defaults,
     loadbalancereview,
     multicastreview,
     wirelessreview,
@@ -162,8 +163,16 @@ def _other_protocols(parsed: ParsedConfig) -> list[Finding]:
     return findings
 
 
-def _note(level: str, title: str, why: str, evidence: list[str]) -> Finding:
-    return Finding(level=level, title=title, why=why, evidence=[e for e in evidence if e][:5])
+def _note(
+    level: str, title: str, why: str, evidence: list[str], sources: list[str] | None = None
+) -> Finding:
+    return Finding(
+        level=level,
+        title=title,
+        why=why,
+        evidence=[e for e in evidence if e][:5],
+        sources=sources or [],
+    )
 
 
 def _serves(pool, address: str) -> bool:  # noqa: ANN001
@@ -319,14 +328,22 @@ def _bgp_neighbor(bgp: ParsedBgp, neighbor: ParsedBgpNeighbor, tools: set[str]) 
                     [f"{where} remote-as {neighbor.remote_as}"],
                 )
             )
-        if neighbor.update_source and neighbor.ebgp_multihop is None:
+        if (
+            neighbor.update_source
+            and neighbor.ebgp_multihop is None
+            # どちらも ebgp-multihop の代わりに、直結でない相手と張れるようにする書き方
+            and not neighbor.disable_connected_check
+            and neighbor.ttl_security_hops is None
+        ):
             findings.append(
                 _note(
                     HIGH,
                     f"{neighbor.address} とは、このままでは接続が張れません",
                     f"update-source {neighbor.update_source} を指定した外の AS 相手には、"
-                    "ebgp-multihop が要ります。既定では隣り合った機器としか張らないためです。",
+                    "ebgp-multihop が要ります。既定では隣り合った機器としか張らないためです。"
+                    "1ホップ先のループバックと張るなら disable-connected-check でも足ります。",
                     [f"{where} update-source {neighbor.update_source}"],
+                    sources=[defaults.EBGP_CONNECTED_CHECK_SOURCE],
                 )
             )
 
