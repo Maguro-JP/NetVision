@@ -1274,6 +1274,8 @@ export interface L3Finding {
   title: string;
   why: string;
   evidence: string[];
+  /** 既定値に拠った指摘の、拠った資料の名前。古い応答には無い */
+  sources?: string[];
 }
 
 /** 機器の L3（経路・OSPF・BGP・冗長）と、気になるところ。 */
@@ -1567,6 +1569,8 @@ export interface LinkFinding {
   title: string;
   why: string;
   evidence: string[];
+  /** 既定値に拠った指摘の、拠った資料の名前。古い応答には無い */
+  sources?: string[];
 }
 
 export interface LinkReport {

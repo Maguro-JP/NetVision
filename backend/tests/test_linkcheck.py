@@ -7,7 +7,7 @@
 
 from app.models import Device
 from app.models.topology import Interface, Link
-from app.services import linkcheck
+from app.services import defaults, linkcheck
 from app.services.configparse import normalize
 from app.services.l3review import HIGH, MEDIUM
 from tests.conftest import API
@@ -393,3 +393,37 @@ def test_ospf_authentication_key_chain_is_not_plain_text():
 
     assert auth_of("ip ospf authentication key-chain OSPF-KEYS") == "key-chain"
     assert auth_of("ip ospf authentication") == "text"
+
+
+def _finding(db, word: str):
+    return next(
+        item.finding for item in linkcheck.review(db).findings if word in item.finding.title
+    )
+
+
+def test_one_side_left_on_auto_names_the_source_of_the_default(db_session):
+    """書いていない側を「自動」と読んだのは既定値に拠る。拠った資料の名前を添える。"""
+    _pair(db_session, {"speed": "1000"}, {})
+    assert _finding(db_session, "片側だけ速度を固定").sources == [defaults.NEGOTIATED_SOURCE]
+
+
+def test_authentication_left_off_names_the_source_of_the_default(db_session):
+    _pair(db_session, {"ospf_area": "0", "ospf_auth": "md5"}, {"ospf_area": "0"})
+    assert _finding(db_session, "合言葉").sources == [defaults.OSPF_AUTH_SOURCE]
+
+
+def test_two_written_authentications_need_no_source(db_session):
+    """両端とも掛け方を書いてあれば、既定値には拠っていない。"""
+    _pair(
+        db_session,
+        {"ospf_area": "0", "ospf_auth": "md5"},
+        {"ospf_area": "0", "ospf_auth": "text"},
+    )
+    assert _finding(db_session, "合言葉").sources == []
+
+
+def test_the_api_carries_the_sources(client, db_session):
+    _pair(db_session, {"speed": "1000"}, {})
+    body = client.get(f"{API}/topology/link-check").json()
+    finding = next(f for f in body["findings"] if "片側だけ速度" in f["title"])
+    assert finding["sources"] == [defaults.NEGOTIATED_SOURCE]

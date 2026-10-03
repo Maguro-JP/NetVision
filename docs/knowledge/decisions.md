@@ -74,3 +74,13 @@
 - 採らなかった案: CSV はそのまま出し、画面で xlsx を案内する（事故は防げない）。何もしない。
 - 再発防止: CSV はすべて `csvsafe.writer` で書く。`csv.writer` を直接使うと `tests/test_export_csv_formula.py` が落ちる。
 - 触る場所: `backend/app/services/csvsafe.py`（付ける条件）、`backend/app/services/tablefile.py`（取り込みで外す）。
+
+## 指摘の出典は資料の名前で持ち、既定値に拠ったときだけ付ける（2026-10-03 JST）
+
+- 決めたこと: `Finding.sources`（文字列の並び）を足し、資料の名前は defaults.py に既定値と並べて置く。既定値に拠った
+  指摘にだけ付け、資料に届いていない機種は「未確認: …」と出す。まず L3 と結線の点検の API と画面に出した。
+- 理由: 既定値は Config に書いていないので、根拠の行だけでは読み手が確かめられない。名前は版が変わっても探せる。
+- 採らなかった案: URL で持つ（版ごとに変わり、届かない環境がある）。すべての指摘に付ける（拠っていない資料を出すと
+  かえって紛らわしい）。
+- 触る場所: `backend/app/services/defaults.py`（`*_SOURCE`、`static_distance_source`）、
+  `backend/app/services/reviewnote.py`、`frontend/src/components/L3Panel.tsx`（`sourcesLine`）。

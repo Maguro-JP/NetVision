@@ -21,9 +21,14 @@ class Finding:
 
     `why` は「なぜ気になるのか」、`evidence` は「どこを見てそう言ったか」。
     どちらも無いものは指摘として出さない。
+
+    `sources` は「その判断が拠った資料の名前」。書いていない設定を既定値で読んで
+    指摘したときに付ける。既定値は Config のどこにも書いていないので、根拠の行だけでは
+    読み手が確かめに行けない。資料に届いていない既定は「未確認」と書いて出す。
     """
 
     level: str
     title: str
     why: str
     evidence: list[str] = field(default_factory=list)
+    sources: list[str] = field(default_factory=list)

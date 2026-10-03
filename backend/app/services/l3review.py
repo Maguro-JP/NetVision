@@ -466,6 +466,10 @@ def _same_destination_twice(parsed: ParsedConfig) -> list[Finding]:
                     f"（distance {route.distance or '既定'}）"
                     for route in routes
                 ],
+                # 距離を書いていない経路があるときだけ、既定値に拠って同じ重みと言っている
+                sources=[defaults.static_distance_source(vendor)]
+                if any(route.distance is None for route in routes)
+                else [],
             )
         )
     return out
@@ -598,6 +602,7 @@ def _redundancy_only_on_one_side(
                             f"{device.hostname} {entry.interface}: 優先度 {_shown(entry, mine)}",
                             f"{peer.hostname} {other.interface}: 優先度 {_shown(other, theirs)}",
                         ],
+                        sources=_priority_sources((entry, mine), (other, theirs)),
                     )
                 )
             continue
@@ -616,6 +621,21 @@ def _redundancy_only_on_one_side(
                 ],
             )
         )
+    return out
+
+
+def _priority_sources(*pairs: tuple) -> list[str]:
+    """優先度を書いていない側、持ち主として 255 になった側があれば、その既定の資料を返す。"""
+    out: list[str] = []
+    for entry, effective in pairs:
+        if effective == defaults.VRRP_OWNER_PRIORITY and entry.priority != effective:
+            source = defaults.VRRP_OWNER_PRIORITY_SOURCE
+        elif entry.priority is None:
+            source = defaults.FHRP_PRIORITY_SOURCE
+        else:
+            continue
+        if source not in out:
+            out.append(source)
     return out
 
 
