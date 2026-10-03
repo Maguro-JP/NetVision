@@ -98,3 +98,16 @@ long-dev が止まる条件に当たって脇に置いた件。答えは各項�
   「NETVISION_ALLOWED_HOSTS にこの名前を足す」と出す。
 - 止まっているもの: なし
 - 答え:
+
+## CI を main への push でも走らせるのをやめるか（2026-10-03 JST）
+
+- 何を決めてほしいか: `.github/workflows/ci.yml` は pull_request と main への push の両方で走る。squash マージの
+  運用では、PR 1 本ごとに「PR の CI」と「マージ後の main の CI」の 2 回が動く。9 月はこれで枠の消費が倍になり、
+  月の途中で枠を使い切った。main への push の起動を外してよいか。
+- 選択肢:
+  1. `push: branches: [main]` を外し、pull_request だけで走らせる（消費はほぼ半分）
+  2. このまま残す
+- 推す案: 1。PR の CI はマージ後と同じ中身（squash は PR の差分そのもの）を見ているので、main で同じ試験を
+  もう一度回す意味が薄い。main の状態は、次の PR の CI がいつも main を土台に回ることで見続けられる。
+- 止まっているもの: なし
+- 答え:
