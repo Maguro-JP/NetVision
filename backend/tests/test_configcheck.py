@@ -1967,3 +1967,35 @@ def test_allied_missing_stp_mode_names_the_rstp_default(db_session):
     [source] = _sources_of(db_session, ALLIED_FIXTURE.read_text(), "STP のモードを決めていません")
     assert source == defaults.stp_mode_source("allied")
     assert "RSTP" in source
+
+
+# 出典: Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9500）「Port Security」の設定例
+# （set the total maximum number of secure addresses to 20 (10 for data VLAN and 10 for voice VLAN):
+# switchport port-security maximum 20 / maximum 10 vlan access / maximum 10 vlan voice）。
+# 口全体の上限は `maximum N` の行で、書かなければ既定の1。
+
+
+def test_per_vlan_maximums_alone_leave_the_port_total_at_one(db_session):
+    text = VOICE_PORT.replace(
+        " switchport port-security violation restrict\n",
+        " switchport port-security maximum 1 vlan access\n"
+        " switchport port-security maximum 1 vlan voice\n"
+        " switchport port-security violation restrict\n",
+    )
+    finding = next(
+        f
+        for f in configcheck.check(db_session, text).findings
+        if "覚えられる数が足りません" in f.title
+    )
+    assert finding.sources == [defaults.PORT_SECURITY_MAXIMUM_SOURCE]
+
+
+def test_a_port_total_of_two_with_per_vlan_lines_is_enough(db_session):
+    text = VOICE_PORT.replace(
+        " switchport port-security violation restrict\n",
+        " switchport port-security maximum 1 vlan voice\n"
+        " switchport port-security maximum 2\n"
+        " switchport port-security violation restrict\n",
+    )
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "覚えられる数が足りません" in t]

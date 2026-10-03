@@ -978,3 +978,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   言っていた。
 - 直したこと: `_GLOBAL_BPDU_GUARD` に Allied の書き方を足した。「STP のモードを決めていません」に Allied の既定（RSTP）の
   出典を足した。試験は `backend/tests/test_configcheck.py` の末尾。
+
+## 電話の口で VLAN ごとの上限だけを書いた口を見逃していた（2026-10-03 JST）
+
+- 確かめた資料: Cisco「Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9500）」の Port Security の設定例（set the
+  total maximum number of secure addresses to 20 (10 for data VLAN and 10 for voice VLAN)。`switchport port-security
+  maximum 20` と `maximum 10 vlan access`・`maximum 10 vlan voice`）と、voice VLAN の口は上限を2にする旨のガイドライン。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: configcheck は `switchport port-security maximum` で始まる最初の
+  行の末尾を上限と読んでいた。`maximum 1 vlan voice` のような VLAN ごとの行が先にあると末尾が `voice` になって数として読めず、
+  口全体の上限が既定の1のままでも「覚えられる数が足りません」を出さなかった。
+- 直したこと: 口全体の上限は `maximum N` だけの行から読み、無ければ既定の1とする。試験は `backend/tests/test_configcheck.py` の末尾。

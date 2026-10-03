@@ -1611,15 +1611,17 @@ def _port_admission(text: str) -> list[Finding]:
             continue
         if not any(line.startswith("switchport voice vlan") for line in lowered_body):
             continue
-        maximum = next(
-            (
-                line.split()[-1]
-                for line in lowered_body
-                if line.startswith("switchport port-security maximum")
-            ),
-            "1",
-        )
-        written = any(line.startswith("switchport port-security maximum") for line in lowered_body)
+        # 口全体の上限は `maximum N` の行。`maximum N vlan access|voice` は VLAN ごとの上限で、
+        # 全体の上限は別に効く（出典: 同ガイドの設定例: set the total maximum number of secure
+        # addresses to 20 (10 for data VLAN and 10 for voice VLAN) — `maximum 20` と
+        # `maximum 10 vlan access`・`maximum 10 vlan voice`）
+        totals = [
+            found.group(1)
+            for line in lowered_body
+            if (found := re.match(r"^switchport port-security maximum (\d+)\s*$", line))
+        ]
+        written = bool(totals)
+        maximum = totals[0] if totals else "1"
         if maximum.isdigit() and int(maximum) < 2:
             voice_one.append((name, maximum, written))
     if voice_one:
