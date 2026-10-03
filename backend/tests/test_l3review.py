@@ -922,3 +922,49 @@ def test_a_rewritten_static_default_leaves_unwritten_preferences_undecided(db_se
     assert configparse.parse(config).static_default_preference == 70
     titles = _routes_config_findings(db_session, "core-sw-d1", config, "d1" * 32)
     assert not any("同じ重みで複数" in t for t in titles), titles
+
+
+JUNOS_BRACE_STATIC = """\
+system {
+    host-name srx-c1;
+}
+routing-options {
+    static {
+        route 172.16.1.0/24 next-hop [ 192.168.1.2 192.168.2.2 192.168.3.2 ];
+        route 10.9.0.0/16 {
+            next-hop [ 10.0.0.1 10.0.1.1 ];
+            preference 20;
+        }
+        route 0.0.0.0/0 {
+            next-hop 10.0.0.1;
+            qualified-next-hop 10.0.1.1 {
+                preference 10;
+            }
+        }
+    }
+}
+"""
+
+
+def test_junos_brace_static_routes_read_like_the_set_form():
+    """出典: Juniper「ECMP Flow-Based Forwarding」の設定例（show routing-options:
+    route 172.16.1.0/24 next-hop [ 192.168.1.2 192.168.2.2 192.168.3.2 ];）と、
+    「Static Route Preferences and Qualified Next Hops」の囲みの例
+    （qualified-next-hop … { preference …; }）。
+    角括弧で並べた転送先を開かないと、その経路が丸ごと抜ける。
+    """
+    from app.services import configparse
+
+    routes = {
+        (r.destination, r.next_hop): r.distance
+        for r in configparse.parse(JUNOS_BRACE_STATIC).routes
+    }
+    assert routes == {
+        ("172.16.1.0/24", "192.168.1.2"): None,
+        ("172.16.1.0/24", "192.168.2.2"): None,
+        ("172.16.1.0/24", "192.168.3.2"): None,
+        ("10.9.0.0/16", "10.0.0.1"): 20,
+        ("10.9.0.0/16", "10.0.1.1"): 20,
+        ("0.0.0.0/0", "10.0.0.1"): None,
+        ("0.0.0.0/0", "10.0.1.1"): 10,
+    }
