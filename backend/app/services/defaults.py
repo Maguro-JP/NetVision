@@ -134,6 +134,10 @@ PORT_SECURITY_MAXIMUM_SOURCE = (
     "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9500）「Port Security」の"
     " Default Port Security Configuration: 覚えられる MAC の数の既定は1"
 )
+DTP_DYNAMIC_AUTO_SOURCE = (
+    "Cisco IOS XE 17 Interface Characteristics Configuration Guide の"
+    " Default Ethernet interface configuration: L2 の口の既定は dynamic auto（DTP を使う）"
+)
 #: eBGP は既定で直結の相手としか張らない。policyreview.py の update-source の指摘が頼る
 EBGP_CONNECTED_CHECK_SOURCE = (
     "Cisco IOS IP Routing: BGP Command Reference の neighbor disable-connected-check:"

@@ -1911,3 +1911,23 @@ def test_a_dynamic_protocol_may_bring_the_default_route(db_session, protocol):
     assert not [
         t for t in _titles(configcheck.check(db_session, text)) if "既定の経路が見当たり" in t
     ]
+
+
+def test_an_eos_port_without_a_mode_is_not_said_to_become_a_trunk(db_session):
+    """EOS の口の既定は static access で、switchport mode に動的な形が無い。
+
+    出典: Arista EOS User Manual「Virtual LANs (VLANs)」（Ethernet and port channel interfaces are
+    configured as switched ports by default。表示例は Administrative Mode: static access。
+    switchport mode は access・trunk・dot1q-tunnel で、DTP の記載が無い）。
+    """
+    text = (
+        "! device: sw-a1 (DCS-7050SX3-48YC8, EOS-4.29.2F)\nhostname sw-a1\n"
+        "interface Ethernet1\n   switchport access vlan 10\n"
+    )
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "相手次第でトランク" in t]
+
+
+def test_the_negotiable_port_finding_names_its_source(db_session):
+    text = "hostname sw-neg\ninterface GigabitEthernet1/0/1\n switchport access vlan 10\n"
+    assert _sources_of(db_session, text, "相手次第でトランク") == [defaults.DTP_DYNAMIC_AUTO_SOURCE]
