@@ -833,3 +833,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   入れる。字下げを外した行で読むので、`ipv4-family` / `ipv6-family` の見出しで家族を切り替え、IPv4 の unicast
   （と BGP の直下）のものだけ数える。試験は `backend/tests/test_linkcheck.py`、`backend/tests/test_l3review.py`。
 - 未確認のまま: NEC QX の `forbidden-ip A B` が範囲か並べる形か（NEC の資料にこの環境から届かない）。
+
+## 点検ごとに既定値を書き直していたのを、defaults.py に集めた（2026-10-03 JST）
+
+- 起きていたこと: 既定値（HSRP・VRRP の優先度、静的経路の距離、速度・二重の自動、OSPF の認証なし）を、l3review と
+  linkcheck がそれぞれの中で書いていた。同じ 100 が2か所にあり、出典も点検ごとに散っていた。9 月後半の誤った指摘の
+  多くは「既定値を確かめずに空を判定した」形で、既定値の置き場所が決まっていないことが根にあった。
+- 直したこと: `backend/app/services/defaults.py` に既定値と出典を集め、点検はそこから引く。振る舞いは変えていない
+  （既存の試験がそのまま通る）。どの点検がどの既定値に頼っているかは docs/knowledge/defaults.md に表にした。
+  静的経路の距離の既定 1 は、今回 Cisco の資料（Basic IP Routing の Table 1）で確かめて出典を足した。
+- 次から: 既定値に頼る点検を書くときは、先に defaults.py に定数と出典を置く。

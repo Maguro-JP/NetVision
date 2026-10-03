@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device
 from app.models.topology import Interface, Link
+from app.services import defaults
 from app.services.configparse import expand, normalize, vlanlist
 from app.services.l3review import HIGH, LOW, MEDIUM, Finding
 
@@ -382,7 +383,7 @@ def _ospf(a: Interface, b: Interface) -> list[Finding]:
         )
 
     left_auth, right_auth = _both(a, b, "ospf_auth")
-    if (left_auth or "none") != (right_auth or "none"):
+    if defaults.ospf_auth(left_auth) != defaults.ospf_auth(right_auth):
         out.append(
             Finding(
                 level=HIGH,
@@ -399,7 +400,7 @@ def _ospf(a: Interface, b: Interface) -> list[Finding]:
 
 
 def _auth_shown(value: str | None) -> str:
-    return "掛けていない" if value in (None, "none") else value
+    return defaults.ospf_auth(value) or "掛けていない"
 
 
 def _runs_ospf(interface: Interface) -> bool:
@@ -438,21 +439,10 @@ def _mtu(a: Interface, b: Interface) -> list[Finding]:
     ]
 
 
-def _fixed(value: str | None) -> str | None:
-    """`auto` と書いたものは、書いていないのと同じ（既定が自動）。
-
-    出典: Cisco「Cisco IOS XE 17 - Interface Characteristics Configuration Guide」の Default
-    Ethernet interface configuration（Speed: Autonegotiate、Duplex mode: Autonegotiate）
-    """
-    if value is None or value.strip().lower() == "auto":
-        return None
-    return value
-
-
 def _speed_duplex(a: Interface, b: Interface) -> list[Finding]:
     out: list[Finding] = []
     for name, label in (("speed", "速度"), ("duplex", "二重")):
-        left, right = (_fixed(value) for value in _both(a, b, name))
+        left, right = (defaults.negotiated(value) for value in _both(a, b, name))
         if left is None and right is None:
             continue
         if left == right:

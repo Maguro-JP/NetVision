@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 
 from app.models import Device
 from app.models.topology import Link
-from app.services import aclcheck, capabilities, configparse, policyreview
+from app.services import aclcheck, capabilities, configparse, defaults, policyreview
 from app.services.addition import read_upstream
 from app.services.configparse import ParsedConfig
 from app.services.configparse.routing import to_prefix
@@ -450,7 +450,7 @@ def _same_destination_twice(parsed: ParsedConfig) -> list[Finding]:
     for (destination, _vrf), routes in seen.items():
         if len(routes) < 2:
             continue
-        distances = {route.distance or 1 for route in routes}
+        distances = {defaults.static_distance(route.distance) for route in routes}
         if len(distances) > 1:
             continue  # 距離が違うなら、待機側を用意した形。意図が読める
         out.append(
@@ -585,8 +585,8 @@ def _redundancy_only_on_one_side(
                 break
         if partner is not None:
             peer, other = partner
-            mine = _effective_priority(parsed, entry)
-            theirs = _effective_priority(peer_parsed_of[peer.id], other)
+            mine = defaults.fhrp_priority(entry, parsed.interfaces)
+            theirs = defaults.fhrp_priority(other, peer_parsed_of[peer.id].interfaces)
             if mine == theirs:
                 out.append(
                     Finding(
@@ -633,28 +633,6 @@ _SAME_PRIORITY_WHY = {
     "主にしたい側の優先度を上げてください。",
 }
 
-#: 優先度を書かないときの値。HSRP・VRRP とも 100
-_DEFAULT_PRIORITY = 100
-#: VRRP で仮想アドレスが自分の口のアドレスと同じ機器（持ち主）の優先度
-_OWNER_PRIORITY = 255
-
-
-def _effective_priority(parsed: ParsedConfig, entry) -> int:  # noqa: ANN001
-    """実際に効く優先度。書いていなければ既定の 100、VRRP の持ち主は 255。
-
-    出典: Cisco「Network Services Configuration Guide - Configuring VRRP」（IOS XE）の
-    VRRP Router Priority and Preemption（「The default priority is 100.」）と Configuring VRRP
-    Object Tracking（「If a VRRP group is the IP address owner, its priority is fixed at
-    255」）、Cisco IOS First Hop Redundancy Protocols Command Reference の standby priority
-    （既定 100）。
-    """
-    if entry.protocol == "vrrp" and entry.virtual_ip:
-        port = next((i for i in parsed.interfaces if i.name == entry.interface), None)
-        addresses = [port.ip_address, *port.extra_addresses] if port else []
-        if any(a and a.split("/")[0] == entry.virtual_ip for a in addresses):
-            return _OWNER_PRIORITY
-    return entry.priority if entry.priority is not None else _DEFAULT_PRIORITY
-
 
 def _shown(entry, value: int) -> str:  # noqa: ANN001
     return str(value) if entry.priority is not None else f"{value}（既定）"
@@ -682,7 +660,7 @@ def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
         if entry.protocol != "hsrp" or entry.preempt:
             continue
         # 既定の優先度は 100。上げていない機器は、そもそも主を狙っていない
-        if entry.priority is None or entry.priority <= 100:
+        if entry.priority is None or entry.priority <= defaults.FHRP_PRIORITY:
             continue
         out.append(
             Finding(
