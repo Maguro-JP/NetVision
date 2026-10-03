@@ -955,3 +955,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 既定の dynamic auto を資料で確かめた Cisco IOS のときだけ言う。指摘に出典を付けた。試験は
   `backend/tests/test_configcheck.py` の末尾。configcheck の他の既定に拠る指摘は、既定を変える書き方を読んでいた
   （一覧は `docs/knowledge/finding-sources.md` の末尾の表）。
+
+## Allied に「タグ無しの VLAN を、許可の一覧から外しています」と言っていた（2026-10-03 JST）
+
+- 確かめた資料: Allied Telesis「VLAN Feature Overview and Configuration Guide」C613-22001-00 REV P の Setting native VLAN
+  in trunk mode（By default, a Trunk mode switch port's native VLAN … is VLAN 1. … The new native VLAN must already be
+  allowed for this switch port.）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Cisco では許可の一覧に無い VLAN はタグ無しでも通らないので
+  指摘は正しいが、AlliedWare Plus の既定のタグ無し VLAN 1 は一覧に入れなくても一員になる。Allied の fixture
+  （`allowed vlan add 10,20` と `native vlan 1`）に、直す必要の無い HIGH の指摘を出していた。
+- 直したこと: Allied でタグ無し VLAN が 1 のときは言わない。試験は `backend/tests/test_configcheck.py` の末尾。
+  他社の fixture で流した結果は `docs/knowledge/finding-sources.md` の末尾の表。
+- 未確認: Dell OS10・Cisco SB・Alaxala（fixture が無い）。Allied の全体の BPDU guard の書き方。

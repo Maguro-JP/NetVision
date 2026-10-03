@@ -90,3 +90,14 @@ policyreview.py と l3review.py の既定に拠る指摘を見た。
 | configcheck「ポートセキュリティの、破ったときの動きを決めていません」 | `switchport port-security violation …` | 読んでいる |
 | configcheck「電話をつなぐ口で、覚えられる数が足りません」 | `switchport port-security maximum N` | 読んでいる。VLAN ごとの上限（`maximum N vlan voice`）は見ていない |
 | configcheck「STP のモードを決めていません」 | `spanning-tree mode …` | 読んでいる |
+| configcheck「タグ無しの VLAN を、許可の一覧から外しています」 | 機種の既定（AlliedWare Plus は既定のタグ無し VLAN 1 を一覧に入れなくても一員になる） | Allied にも出していた。Allied の VLAN 1 では言わない |
+
+### Cisco と同じ書き方の他社で出る指摘（2026-10-03 JST に fixture で流した範囲）
+
+| 機種（fixture） | 出た指摘 | 判断 |
+|---|---|---|
+| Allied x530（allied-x530-01.txt） | タグ無しの VLAN を、許可の一覧から外しています | 誤り。直した（Allied VLAN Feature Overview C613-22001-00 REV P） |
+| Allied x530 | 端末用の口に、BPDU guard が入っていません | 正しい。口ごとの `spanning-tree portfast bpdu-guard enable` は拾える。全体の書き方は未確認 |
+| Allied x530・Arista | トランクのタグ無し VLAN が 1 のままです / STP のモードを決めていません | 機種に依らない勧め。出典は付けていない（STP は Arista だけ付く） |
+| Dell OS10・Cisco SB・Alaxala | fixture が無い | 未確認 |
+
