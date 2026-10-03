@@ -904,3 +904,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   画面に出した。試験は `backend/tests/test_configcheck.py` の末尾。
 - 付けなかったもの: STP のモード（既定のモードを資料で確かめていない）、電話の口のポートセキュリティの上限（既定の 1 を
   既定値表で確かめていない）。
+
+## STP の既定のモードとポートセキュリティの既定の上限を資料で確かめ、出典を付けた（2026-10-03 JST）
+
+- 確かめた資料: Cisco「Layer 2 Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9300）」の Configuring Spanning Tree
+  Protocol の Default Spanning-Tree Configuration（Spanning-tree mode: Rapid PVST+ (PVST+ and MSTP are disabled.)）。
+  Cisco「Security Configuration Guide, Cisco IOS XE 17.17.x（Catalyst 9500）」の Port Security の Default Port Security
+  Configuration（Maximum number of secure MAC addresses per port: One address）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「STP のモードを決めていません」「電話をつなぐ口で、
+  覚えられる数が足りません」は既定に拠った指摘なのに、出典が出ていなかった。
+- 直したこと: STP のモードは機種が Cisco IOS のときだけ出典を付ける（他の機種の既定は確かめていない）。電話の口は、
+  上限を書いていない口があるときだけ付ける。試験は `backend/tests/test_configcheck.py` の末尾。
+- 未確認: NX-OS・Arista ほか IOS 以外の STP の既定のモード。

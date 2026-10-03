@@ -130,6 +130,15 @@ PORT_SECURITY_VIOLATION_SOURCE = (
     "Cisco Security Configuration Guide, IOS XE 17.16.x（Catalyst 9500）「Port Security」の"
     " Default Port Security Configuration: violation の既定は shutdown"
 )
+PORT_SECURITY_MAXIMUM_SOURCE = (
+    "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9500）「Port Security」の"
+    " Default Port Security Configuration: 覚えられる MAC の数の既定は1"
+)
+#: 既定のモードは機種と版で違いうる。確かめたのは Catalyst 9300 の IOS XE 17.17.x だけ
+STP_MODE_SOURCE = (
+    "Cisco Layer 2 Configuration Guide, IOS XE 17.17.x（Catalyst 9300）の"
+    " Default Spanning-Tree Configuration: Catalyst 9300 の既定は Rapid PVST+。機種と版で違う"
+)
 
 
 def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:
