@@ -1008,7 +1008,7 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   l3review「同じ重みで複数あります」を見逃していた。
 - 直したこと: 読み手で defaults の preference を読み、経路にも転送先にも preference が無い経路の距離に当てる。試験は
   `backend/tests/test_l3review.py` の末尾。
-- 残り: 論理システム・ルーティングインスタンスの中の static は、前と同じく読んでいない。
+- 残り: 論理システムの中の static は読んでいない（ルーティングインスタンスは次の項で読むようにした）。
 
 ## Huawei・H3C で既定の距離を書き換えた機器に、決まらない「同じ重み」を言っていた（2026-10-04 JST）
 
@@ -1031,4 +1031,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 角括弧の並びは set 形式に直しても1行に残り、静的経路の読み手
   の形（転送先は1語）に合わずに経路ごと捨てていた。図にも経路の表にも出ず、点検も効かなかった。
 - 直したこと: 静的経路の読み手の前で、角括弧の並びを転送先1つにつき1行に開く。試験は `backend/tests/test_l3review.py` の末尾。
-- 残り: 論理システム・ルーティングインスタンスの中の static は、前と同じく読んでいない。
+- 残り: 論理システムの中の static は読んでいない（ルーティングインスタンスは次の項で読むようにした）。
+
+## Junos のルーティングインスタンスの中の静的経路を読んでいなかった（2026-10-04 JST）
+
+- 確かめた資料: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の設定例（`set routing-instances pd-vr1
+  routing-options static route 12.12.1.0/24 next-hop 10.0.1.1`）。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 静的経路の読み手は `set routing-options static …` で始まる
+  全体の行だけを見ていて、`set routing-instances NAME routing-options static …` の経路が経路の表から丸ごと抜けていた。
+  インスタンスの中の「同じ重みで複数あります」も効かなかった。
+- 直したこと: インスタンスの行も読み、経路に `vrf=インスタンス名` を付けて全体の経路と分けて持つ。`static defaults
+  preference` もインスタンスごとに持つ。角括弧の並びもインスタンスの行で開く。試験は `backend/tests/test_l3review.py` の末尾。
+- 残り: 論理システム（`set logical-systems …`）の中の static は読んでいない。

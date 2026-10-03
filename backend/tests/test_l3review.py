@@ -968,3 +968,39 @@ def test_junos_brace_static_routes_read_like_the_set_form():
         ("0.0.0.0/0", "10.0.0.1"): None,
         ("0.0.0.0/0", "10.0.1.1"): 10,
     }
+
+
+# 出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の設定例
+# （set routing-instances pd-vr1 routing-options static route 12.12.1.0/24 next-hop 10.0.1.1）。
+# インスタンスの経路は全体の経路と別の表に入るので、混ぜずに vrf を付けて持つ。
+JUNOS_INSTANCE_STATIC = (
+    "set system host-name srx-e1\n"
+    "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n"
+    "set routing-instances pd-vr1 instance-type virtual-router\n"
+    "set routing-instances pd-vr1 routing-options static defaults preference 30\n"
+    "set routing-instances pd-vr1 routing-options static route 0.0.0.0/0 next-hop 10.0.1.1\n"
+    "set routing-instances pd-vr1 routing-options static route 12.12.1.0/24 next-hop 10.0.1.3\n"
+    "set routing-instances pd-vr1 routing-options static route 12.12.1.0/24 next-hop 10.0.1.4\n"
+)
+
+
+def test_junos_routing_instance_static_routes_are_read_per_instance():
+    from app.services import configparse
+
+    routes = {
+        (r.vrf, r.destination, r.next_hop): r.distance
+        for r in configparse.parse(JUNOS_INSTANCE_STATIC).routes
+    }
+    assert routes == {
+        (None, "0.0.0.0/0", "10.0.0.1"): None,
+        ("pd-vr1", "0.0.0.0/0", "10.0.1.1"): 30,
+        ("pd-vr1", "12.12.1.0/24", "10.0.1.3"): 30,
+        ("pd-vr1", "12.12.1.0/24", "10.0.1.4"): 30,
+    }
+
+
+def test_equal_weights_inside_a_routing_instance_are_caught(db_session):
+    titles = _routes_config_findings(db_session, "srx-e1", JUNOS_INSTANCE_STATIC, "e1" * 32)
+    assert any("12.12.1.0/24 への経路が同じ重みで複数" in t for t in titles), titles
+    # 全体の 0.0.0.0/0 とインスタンスの 0.0.0.0/0 は別の表。混ぜて「同じ宛先」と言わない
+    assert not any("0.0.0.0/0 への経路が同じ重みで複数" in t for t in titles), titles

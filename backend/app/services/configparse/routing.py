@@ -823,17 +823,22 @@ def _ix_ospf(text: str, parsed: ParsedConfig) -> None:
 
 
 _JUNOS_STATIC = re.compile(
-    r"^set routing-options static route\s+(?P<dest>\S+)\s+"
+    r"^set\s+(?:routing-instances\s+(?P<vrf>\S+)\s+)?"
+    r"routing-options static route\s+(?P<dest>\S+)\s+"
     r"(?:(?P<kind>next-hop|qualified-next-hop)\s+(?P<hop>\S+)(?:\s+preference\s+(?P<hop_pref>\d+))?"
     r"|preference\s+(?P<route_pref>\d+))\s*$",
     re.IGNORECASE,
 )
 
 
-#: `set routing-options static defaults preference 10`（論理システム・ルーティングインスタンスの
-#: 中の static は見ない。_JUNOS_STATIC と同じく全体の routing-options だけ）
+#: `set routing-options static defaults preference 10`。ルーティングインスタンスの中の
+#: `set routing-instances NAME routing-options static …` も読み、インスタンスごとに持つ
+#: （出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の設定例:
+#: set routing-instances pd-vr1 routing-options static route 12.12.1.0/24 next-hop 10.0.1.1）
 _JUNOS_STATIC_DEFAULT = re.compile(
-    r"^set\s+routing-options\s+static\s+defaults\s+preference\s+(\d+)\s*$", re.IGNORECASE
+    r"^set\s+(?:routing-instances\s+(?P<vrf>\S+)\s+)?"
+    r"routing-options\s+static\s+defaults\s+preference\s+(?P<pref>\d+)\s*$",
+    re.IGNORECASE,
 )
 
 
@@ -841,7 +846,7 @@ _JUNOS_STATIC_DEFAULT = re.compile(
 #: 出典: Juniper「ECMP Flow-Based Forwarding」の設定例（show routing-options:
 #: route 172.16.1.0/24 next-hop [ 192.168.1.2 192.168.2.2 192.168.3.2 ];）
 _JUNOS_STATIC_LIST = re.compile(
-    r"^(?P<head>set routing-options static route\s+\S+\s+next-hop)"
+    r"^(?P<head>set\s+(?:routing-instances\s+\S+\s+)?routing-options static route\s+\S+\s+next-hop)"
     r"\s+\[\s*(?P<hops>[^\]]+?)\s*\]\s*$",
     re.IGNORECASE,
 )
@@ -878,13 +883,14 @@ def _junos_static(text: str, parsed: ParsedConfig) -> None:
     attributes inherited by all newly created static routes. / route の options は override any
     options you configured in the defaults part of the static statement）
     """
-    hops: dict[str, list[tuple[str, int | None]]] = {}
-    route_pref: dict[str, int] = {}
-    defaults_pref: int | None = None
+    # 経路はルーティングインスタンスごとに分けて持つ（None は全体の表）。既定もインスタンスごと
+    hops: dict[tuple[str | None, str], list[tuple[str, int | None]]] = {}
+    route_pref: dict[tuple[str | None, str], int] = {}
+    defaults_pref: dict[str | None, int] = {}
     for line in _junos_static_lines(text):
         default = _JUNOS_STATIC_DEFAULT.match(line)
         if default:
-            defaults_pref = int(default.group(1))
+            defaults_pref[default.group("vrf")] = int(default.group("pref"))
             continue
         found = _JUNOS_STATIC.match(line)
         if not found:
@@ -892,20 +898,25 @@ def _junos_static(text: str, parsed: ParsedConfig) -> None:
         destination = to_prefix(found.group("dest"))
         if destination is None:
             continue
+        key = (found.group("vrf"), destination)
         if found.group("route_pref"):
-            route_pref[destination] = int(found.group("route_pref"))
+            route_pref[key] = int(found.group("route_pref"))
             continue
         own = found.group("hop_pref")
-        entries = hops.setdefault(destination, [])
+        entries = hops.setdefault(key, [])
         hop = found.group("hop")
         # 同じ転送先の preference だけを別の行で足す書き方もあるので、後の行で上書きする
         entries[:] = [(h, p) for h, p in entries if h != hop]
         entries.append((hop, int(own) if own else None))
-    for destination, entries in hops.items():
+    for (vrf, destination), entries in hops.items():
         for hop, own in entries:
-            distance = own if own is not None else route_pref.get(destination, defaults_pref)
+            distance = (
+                own
+                if own is not None
+                else route_pref.get((vrf, destination), defaults_pref.get(vrf))
+            )
             parsed.routes.append(
-                ParsedRoute(destination=destination, next_hop=hop, distance=distance)
+                ParsedRoute(destination=destination, next_hop=hop, distance=distance, vrf=vrf)
             )
 
 
