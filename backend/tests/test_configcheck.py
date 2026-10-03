@@ -1950,3 +1950,20 @@ def test_allied_default_native_vlan_needs_no_place_in_the_allowed_list(db_sessio
     assert configparse.parse(text).vendor is configparse.Vendor.ALLIED
     titles = _titles(configcheck.check(db_session, text))
     assert not [t for t in titles if "タグ無しの VLAN を、許可の一覧から外して" in t]
+
+
+# 出典: Allied Telesis「STP Feature Overview and Configuration Guide」C613-22026-00 REV A
+# （Step 4. Configure BPDU Guard: awplus(config)# spanning-tree portfast bpdu-guard — If required,
+# enable the BPDU Guard feature. / By default, the device operates in RSTP mode.）
+
+
+def test_allied_global_bpdu_guard_covers_the_edge_ports(db_session):
+    text = ALLIED_FIXTURE.read_text() + "spanning-tree portfast bpdu-guard\n"
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "BPDU guard が入っていません" in t]
+
+
+def test_allied_missing_stp_mode_names_the_rstp_default(db_session):
+    [source] = _sources_of(db_session, ALLIED_FIXTURE.read_text(), "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source("allied")
+    assert "RSTP" in source

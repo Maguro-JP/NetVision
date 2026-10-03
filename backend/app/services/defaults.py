@@ -162,6 +162,8 @@ _STP_MODE_SOURCES: dict[str, str] = {
     "cisco_nxos": "Cisco Nexus 9000 Series NX-OS Layer 2 Switching Configuration Guide 10.2(x)"
     "「Configuring Rapid PVST+」の Default Settings: 既定は Rapid PVST+",
     "arista": "Arista EOS User Manual「Spanning Tree Protocol」: MSTP is the default STP version",
+    "allied": "Allied Telesis STP Feature Overview and Configuration Guide C613-22026-00 REV A:"
+    " By default, the device operates in RSTP mode",
 }
 
 

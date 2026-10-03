@@ -657,7 +657,11 @@ _GLOBAL_BPDU_GUARD = re.compile(
     #: 同じく `portfast edge bpduguard default`（出典: 同「spanning-tree portfast edge
     #: bpduguard default」）
     r"|spanning-tree\s+portfast(?:\s+edge)?\s+bpduguard\s+default"
-    r"|spanning-tree\s+bpdu-guard\s*$)",
+    r"|spanning-tree\s+bpdu-guard\s*$"
+    #: AlliedWare Plus はグローバル設定で `spanning-tree portfast bpdu-guard`（出典: Allied
+    #: Telesis「STP Feature Overview and Configuration Guide」C613-22026-00 REV A の
+    #: Step 4. Configure BPDU Guard）
+    r"|spanning-tree\s+portfast\s+bpdu-guard\s*$)",
     re.IGNORECASE | re.MULTILINE,
 )
 
