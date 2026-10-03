@@ -967,3 +967,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: Allied でタグ無し VLAN が 1 のときは言わない。試験は `backend/tests/test_configcheck.py` の末尾。
   他社の fixture で流した結果は `docs/knowledge/finding-sources.md` の末尾の表。
 - 未確認: Dell OS10・Cisco SB・Alaxala（fixture が無い）。Allied の全体の BPDU guard の書き方。
+
+## Allied の全体の BPDU guard（spanning-tree portfast bpdu-guard）を読んでいなかった（2026-10-03 JST）
+
+- 確かめた資料: Allied Telesis「STP Feature Overview and Configuration Guide」C613-22026-00 REV A の Step 4. Configure BPDU
+  Guard（グローバル設定で `spanning-tree portfast bpdu-guard`）と Spanning Tree modes（By default, the device operates in
+  RSTP mode.）。PDF は WebFetch では 403 なので、curl で取得して pypdf で読んだ。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: configcheck の全体の BPDU guard の判定は Cisco・VRP・
+  Aruba CX の書き方だけで、AlliedWare Plus のグローバルの1行を拾わず、守ってある端末口に「BPDU guard が入っていません」と
+  言っていた。
+- 直したこと: `_GLOBAL_BPDU_GUARD` に Allied の書き方を足した。「STP のモードを決めていません」に Allied の既定（RSTP）の
+  出典を足した。試験は `backend/tests/test_configcheck.py` の末尾。

@@ -52,7 +52,7 @@ API の欄は既定を空にしてあり、古い画面が受け取っても壊�
 | configcheck「HSRP のグループ番号が、版1で使える範囲を超えています」 | 常に（版を書かなければ版1） | `HSRP_VERSION_SOURCE` |
 | configcheck「ポートセキュリティの、破ったときの動きを決めていません」 | 常に（既定は shutdown） | `PORT_SECURITY_VIOLATION_SOURCE` |
 | configcheck「電話をつなぐ口で、覚えられる数が足りません」 | 上限を書いていない口が1つでもある（既定は1） | `PORT_SECURITY_MAXIMUM_SOURCE` |
-| configcheck「STP のモードを決めていません」 | 既定を資料で確かめた機種だけ（IOS: Catalyst 9300 は Rapid PVST+、NX-OS: Nexus 9000 は Rapid PVST+、Arista EOS: MSTP） | `stp_mode_source` |
+| configcheck「STP のモードを決めていません」 | 既定を資料で確かめた機種だけ（IOS: Catalyst 9300 は Rapid PVST+、NX-OS: Nexus 9000 は Rapid PVST+、Arista EOS: MSTP、AlliedWare Plus: RSTP） | `stp_mode_source` |
 | policyreview「… とは、このままでは接続が張れません」 | 常に（`disable-connected-check`・`ttl-security hops` を書いてあれば指摘そのものを出さない） | `EBGP_CONNECTED_CHECK_SOURCE` |
 | asareview「security-level が同じ口が … つあります」 | 常に（`same-security-traffic permit inter-interface` を書いてあれば指摘そのものを出さない） | `ASA_SAME_SECURITY_SOURCE` |
 | asareview「外に面した … に、入る側の制限がありません」 | 常に（低い security-level から高い側へは既定で通さない） | `ASA_LOWER_TO_HIGHER_SOURCE` |
@@ -97,7 +97,7 @@ policyreview.py と l3review.py の既定に拠る指摘を見た。
 | 機種（fixture） | 出た指摘 | 判断 |
 |---|---|---|
 | Allied x530（allied-x530-01.txt） | タグ無しの VLAN を、許可の一覧から外しています | 誤り。直した（Allied VLAN Feature Overview C613-22001-00 REV P） |
-| Allied x530 | 端末用の口に、BPDU guard が入っていません | 正しい。口ごとの `spanning-tree portfast bpdu-guard enable` は拾える。全体の書き方は未確認 |
-| Allied x530・Arista | トランクのタグ無し VLAN が 1 のままです / STP のモードを決めていません | 機種に依らない勧め。出典は付けていない（STP は Arista だけ付く） |
+| Allied x530 | 端末用の口に、BPDU guard が入っていません | 正しい。口ごとの書き方は拾える。全体の `spanning-tree portfast bpdu-guard` を拾えていなかったので直した（Allied STP Feature Overview C613-22026-00 REV A） |
+| Allied x530・Arista | トランクのタグ無し VLAN が 1 のままです / STP のモードを決めていません | 機種に依らない勧め。STP のモードは Arista（MSTP）と Allied（RSTP）に出典が付く |
 | Dell OS10・Cisco SB・Alaxala | fixture が無い | 未確認 |
 
