@@ -33,4 +33,4 @@
 
 - 静的経路の距離の NEC QX・NEC IX の既定（資料に届かない）。いまは Cisco の 1 として扱う
 - Aruba CX の STP の既定のモード（AOS-CX の資料はこの環境から 403 で開けない。検索結果の要約では MSTP だが、原文を見ていない）
-- `ip route-static default-preference` で既定を変えた機器（読んでいない）
+- `ip route-static default-preference` で既定を変えた機器で、preference を書いていない経路が変更の前と後のどちらに足されたか（Config からは決まらない。l3review はその経路を含む組を判定しない）

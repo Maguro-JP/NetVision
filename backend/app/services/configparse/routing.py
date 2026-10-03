@@ -584,12 +584,24 @@ _QX_BGP = re.compile(r"^bgp\s+(\S+)\s*$", re.IGNORECASE)
 _UNDO_ROUTE_VALUED = frozenset({"tag", "track", "backup-nexthop", "backup-interface"})
 _UNDO_ROUTE_FLAGS = frozenset({"permanent", "inherit-cost", "no-install", "ldp-sync"})
 _QX_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+#: 静的経路の既定の距離を書き換える行。書き換えた後に足した経路にだけ効く。
+#: 出典: H3C「13-Static Routing Commands」の ip route-static default-preference（When the default
+#: preference is reconfigured, it applies to only newly added static routes.）、Huawei の
+#: Command Reference の同コマンド（the new default preference is valid for subsequent rather than
+#: existing IPv4 static routes）
+_UNDO_ROUTE_DEFAULT = re.compile(
+    r"^ip route-static\s+default-preference\s+(\d+)\s*$", re.IGNORECASE
+)
 
 
 def parse_undoform(text: str, parsed: ParsedConfig) -> None:
     parse_other_protocols(text, parsed)
     parse_policies(text, parsed)
     for line in text.splitlines():
+        default = _UNDO_ROUTE_DEFAULT.match(line.strip())
+        if default:
+            parsed.static_default_preference = int(default.group(1))
+            continue
         match = _QX_ROUTE.match(line.strip())
         if not match:
             continue

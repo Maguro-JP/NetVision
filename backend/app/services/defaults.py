@@ -55,7 +55,8 @@ STATIC_ROUTE_DISTANCE = 1
 #: Arista は Cisco と同じ 1（EOS User Manual「IPv4」の ip route: By default, the administrative
 #: distance assigned to static routes is 1）なので、上の表には置かず出典だけを持つ。
 #: 未確認: NEC QX（H3C の OEM だが資料に届かない）。
-#: `ip route-static default-preference` で既定を変えた機器は、まだ読んでいない
+#: `ip route-static default-preference` で既定を変えた機器は、書き換えた後に足した経路にだけ効くため
+#: preference を書いていない経路の距離が決まらない。l3review はその経路を含む組を判定しない
 STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
     "huawei": 60,
     "h3c": 60,

@@ -452,6 +452,12 @@ def _same_destination_twice(parsed: ParsedConfig) -> list[Finding]:
         if len(routes) < 2:
             continue
         vendor = parsed.vendor.value
+        if parsed.static_default_preference is not None and any(
+            route.distance is None for route in routes
+        ):
+            # 既定を書き換えた機器では、preference を書いていない経路が書き換えの前に足したもの
+            # （元の既定）か後に足したもの（書き換えた値）かが Config から分からない。決めつけない
+            continue
         distances = {defaults.static_distance(route.distance, vendor) for route in routes}
         if len(distances) > 1:
             continue  # 距離が違うなら、待機側を用意した形。意図が読める
