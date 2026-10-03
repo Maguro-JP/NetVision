@@ -621,7 +621,22 @@ def parse_undoform(text: str, parsed: ParsedConfig) -> None:
     for head, body in _blocks(text, _QX_BGP):
         bgp = parsed.bgp or ParsedBgp()
         bgp.local_as = bgp.local_as or head.group(1)
+        # どの家族の中か。字下げは外して渡されるので、家族の見出しで切り替える
+        family = "ipv4"
         for line in body:
+            heading = re.match(r"^(ipv4|ipv6)-family(?:\s+(\S+))?", line, re.IGNORECASE)
+            if heading:
+                unicast = (heading.group(2) or "unicast").lower() == "unicast"
+                family = heading.group(1).lower() if unicast else "other"
+                continue
+            # 他の経路を取り込む。`direct` は直結の区画。IPv4 の家族（と BGP の直下）だけ数える
+            # （Huawei「S7700 V200R023C10 Command Reference」の import-route (BGP)）
+            imported = re.match(r"^import-route\s+(\S+)", line, re.IGNORECASE)
+            if imported:
+                name = imported.group(1).lower()
+                if family == "ipv4" and name not in bgp.redistributes:
+                    bgp.redistributes.append(name)
+                continue
             router_id = re.match(r"^router-id\s+(\S+)", line, re.IGNORECASE)
             if router_id:
                 bgp.router_id = router_id.group(1)

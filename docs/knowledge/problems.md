@@ -819,3 +819,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   読む。根拠の行では none も「掛けていない」と出す。試験は `backend/tests/test_linkcheck.py`。
 - linkcheck の残り（トランクの許可 VLAN、タグ無し VLAN、アドレス、OSPF の hello / dead / network、MTU、束ね）は、
   片側が書いていなければ言わない作りで、書かない形の誤りは無かった。
+
+## Cisco の ip ospf authentication key-chain を平文と読み、Huawei の BGP の import-route を読んでいなかった（2026-10-03 JST）
+
+- 確かめた資料: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x - OSPFv2 Cryptographic Authentication」、
+  Huawei「S7700 V200R023C10 Command Reference」の「import-route (BGP)」。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - `ip ospf authentication key-chain 名前`（鍵の束による暗号の認証、HMAC-SHA）を、`message-digest` が無いので
+    平文（text）と読んでいた。相手が平文の認証だと隣にならないのに、linkcheck は「同じ」と見ていた。
+  - undo 書式の BGP の読み手が `import-route` を読まず、`import-route direct` の機器に「外へ広告されていない
+    セグメントがあります」と出ていた。
+- 直したこと: key-chain は「key-chain」として読む（平文とも MD5 とも別）。BGP の `import-route` を redistributes に
+  入れる。字下げを外した行で読むので、`ipv4-family` / `ipv6-family` の見出しで家族を切り替え、IPv4 の unicast
+  （と BGP の直下）のものだけ数える。試験は `backend/tests/test_linkcheck.py`、`backend/tests/test_l3review.py`。
+- 未確認のまま: NEC QX の `forbidden-ip A B` が範囲か並べる形か（NEC の資料にこの環境から届かない）。

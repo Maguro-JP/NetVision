@@ -367,3 +367,29 @@ def test_ospf_authentication_null_is_no_authentication():
     )
     [port] = [i for i in configparse.parse(text).interfaces if i.name == "GigabitEthernet0/1"]
     assert port.ospf_auth == "none"
+
+
+def test_ospf_authentication_key_chain_is_not_plain_text():
+    """`ip ospf authentication key-chain 名前` は鍵の束による暗号の認証（HMAC-SHA）。
+
+    平文ではない。平文の相手とは隣にならないので、読み分ける。
+
+    出典: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x - OSPFv2 Cryptographic
+    Authentication」（「There are two methods of authentication that are defined for OSPFv2:
+    plain text authentication and cryptographic authentication.」「Use the ip ospf
+    authentication key-chain command to configure key chains for OSPFv2 cryptographic
+    authentication.」「If OSPFv2 is configured to use a key chain, all MD5 keys ... are
+    ignored.」）。
+    """
+    from app.services import configparse
+
+    def auth_of(line: str) -> str | None:
+        text = (
+            "hostname r1\n!\ninterface GigabitEthernet0/1\n ip address 10.0.0.1 255.255.255.252\n"
+            f" {line}\n ip ospf message-digest-key 1 md5 key1\n!\n"
+        )
+        ports = configparse.parse(text).interfaces
+        return next(i.ospf_auth for i in ports if i.name == "GigabitEthernet0/1")
+
+    assert auth_of("ip ospf authentication key-chain OSPF-KEYS") == "key-chain"
+    assert auth_of("ip ospf authentication") == "text"

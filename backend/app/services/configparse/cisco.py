@@ -486,6 +486,10 @@ def _ospf_option(current: ParsedInterface, body: str) -> None:
         # NX-OS Unicast Routing Command Reference の ip ospf authentication
         if "null" in parts:
             current.ospf_auth = "none"
+        elif "key-chain" in parts:
+            # 鍵の束による暗号の認証（HMAC-SHA）。平文ではない。出典: Cisco「IP Routing
+            # Configuration Guide, Cisco IOS XE 17.x - OSPFv2 Cryptographic Authentication」
+            current.ospf_auth = "key-chain"
         else:
             current.ospf_auth = "md5" if "message-digest" in parts else "text"
         return
