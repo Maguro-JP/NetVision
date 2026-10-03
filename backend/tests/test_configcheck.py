@@ -5,6 +5,7 @@
 """
 
 import io
+from pathlib import Path
 
 import pytest
 
@@ -1931,3 +1932,21 @@ def test_an_eos_port_without_a_mode_is_not_said_to_become_a_trunk(db_session):
 def test_the_negotiable_port_finding_names_its_source(db_session):
     text = "hostname sw-neg\ninterface GigabitEthernet1/0/1\n switchport access vlan 10\n"
     assert _sources_of(db_session, text, "相手次第でトランク") == [defaults.DTP_DYNAMIC_AUTO_SOURCE]
+
+
+ALLIED_FIXTURE = Path(__file__).parent / "fixtures" / "allied-x530-01.txt"
+
+
+def test_allied_default_native_vlan_needs_no_place_in_the_allowed_list(db_session):
+    """AlliedWare Plus は、既定のタグ無し VLAN 1 を許可の一覧に入れなくても一員になる。
+
+    出典: Allied Telesis「VLAN Feature Overview and Configuration Guide」C613-22001-00 REV P の
+    Setting native VLAN in trunk mode（By default, a Trunk mode switch port's native VLAN … is
+    VLAN 1. … If required, you can change the native VLAN from the default. The new native VLAN must
+    already be allowed for this switch port.）。fixture は `allowed vlan add 10,20` と
+    `native vlan 1` の組。
+    """
+    text = ALLIED_FIXTURE.read_text()
+    assert configparse.parse(text).vendor is configparse.Vendor.ALLIED
+    titles = _titles(configcheck.check(db_session, text))
+    assert not [t for t in titles if "タグ無しの VLAN を、許可の一覧から外して" in t]

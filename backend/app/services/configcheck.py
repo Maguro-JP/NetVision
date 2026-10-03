@@ -518,6 +518,12 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
     # 「Configuring VLAN Trunks」: A trunk port can become a member of a VLAN
     # if the VLAN is enabled, if VTP knows of the VLAN, and if the VLAN is in
     # the allowed list for the port）
+    # AlliedWare Plus は、既定のタグ無し VLAN（1）を許可の一覧に入れなくても一員になる。
+    # 既定から変えるときだけ、先に許可しておく必要がある（出典: Allied Telesis「VLAN Feature
+    # Overview and Configuration Guide」C613-22001-00 REV P の Setting native VLAN in trunk mode:
+    # By default, a Trunk mode switch port's native VLAN … is VLAN 1. … If required, you can change
+    # the native VLAN from the default. The new native VLAN must already be allowed for this
+    # switch port.）
     native_dropped = [
         i
         for i in trunks
@@ -525,6 +531,7 @@ def _layer2(parsed: ParsedConfig) -> list[Finding]:
         and i.trunk_vlans
         and not i.trunk_all
         and i.native_vlan not in i.trunk_vlans
+        and not (parsed.vendor is Vendor.ALLIED and i.native_vlan == 1)
     ]
     if native_dropped:
         out.append(
