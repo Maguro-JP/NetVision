@@ -863,3 +863,39 @@ def test_the_l3_api_carries_the_sources(client, db_session):
     body = client.get(f"{API}/devices/{device.id}/l3").json()
     finding = next(f for f in body["findings"] if "同じ重みで複数" in f["title"])
     assert finding["sources"] == [defaults.static_distance_source("huawei")]
+
+
+def test_junos_static_defaults_preference_applies_to_routes_without_their_own():
+    """出典: Juniper CLI Reference「static (Routing Options)」の defaults
+
+    （Specify global static route options. These options only set default attributes inherited
+    by all newly created static routes. 経路に書いた options は defaults より優先する）。
+    """
+    from app.services import configparse
+
+    text = (
+        "set system host-name srx-b3\n"
+        "set routing-options static defaults preference 10\n"
+        "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n"
+        "set routing-options static route 0.0.0.0/0 qualified-next-hop 10.0.1.1 preference 20\n"
+        "set routing-options static route 10.9.0.0/16 next-hop 10.0.0.1\n"
+        "set routing-options static route 10.9.0.0/16 preference 30\n"
+    )
+    routes = {(r.destination, r.next_hop): r.distance for r in configparse.parse(text).routes}
+    assert routes == {
+        ("0.0.0.0/0", "10.0.0.1"): 10,
+        ("0.0.0.0/0", "10.0.1.1"): 20,
+        ("10.9.0.0/16", "10.0.0.1"): 30,
+    }
+
+
+def test_junos_static_defaults_preference_makes_equal_weights(db_session):
+    """既定を 10 に変えた機器で、明示の 10 と並ぶ経路は同じ重み。既定 5 と読むと見逃す。"""
+    config = (
+        "set system host-name srx-b4\n"
+        "set routing-options static defaults preference 10\n"
+        "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n"
+        "set routing-options static route 0.0.0.0/0 qualified-next-hop 10.0.1.1 preference 10\n"
+    )
+    titles = _routes_config_findings(db_session, "srx-b4", config, "b4" * 32)
+    assert any("同じ重みで複数" in t for t in titles), titles
