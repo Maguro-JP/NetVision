@@ -858,3 +858,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   引く。undo 書式の読み手は、値を伴う語（preference・tag・track・backup-nexthop・backup-interface・bfd）を語ごとに
   読み、description の後ろは読まない。試験は `backend/tests/test_l3review.py`、`backend/tests/test_defaults.py`。
 - 未確認のまま: Junos の static の preference、NEC QX の既定。`ip route-static default-preference` で既定を変えた機器。
+
+## Junos の静的経路の preference と qualified-next-hop を読んでいなかった（2026-10-03 JST）
+
+- 確かめた資料: Juniper「Configure Static Routes」（静的経路の既定の preference は 5）、「Static Route Preferences and
+  Qualified Next Hops」。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Junos の読み手は `route X next-hop Y` だけを読み、
+  経路の `preference` も、待機の経路を書く `qualified-next-hop Y preference Z` も読んでいなかった。待機の経路は経路の
+  一覧から抜け、l3review「同じ重みで複数あります」は Junos の既定 5 と書いた 5 の組も見逃していた。
+- 直したこと: 経路の preference はその経路の next-hop すべてに、qualified-next-hop の preference はその転送先だけに
+  当てる。defaults.py に Junos の既定 5 を足した。試験は `backend/tests/test_l3review.py`。
+- 未確認のまま: `static defaults preference` で既定を変えた機器。中括弧の書式（set 形式でない Config）の静的経路は、
+  前と同じく読んでいない。
