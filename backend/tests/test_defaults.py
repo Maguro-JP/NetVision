@@ -59,3 +59,12 @@ def test_the_static_distance_default_depends_on_the_vendor():
     assert defaults.static_distance(None, "fortinet") == 10
     assert defaults.static_distance(None, "cisco_ios") == 1
     assert defaults.static_distance(5, "huawei") == 5
+
+
+def test_arista_static_distance_has_its_own_source():
+    """出典: Arista EOS User Manual「IPv4」の ip route（By default, the administrative distance
+    assigned to static routes is 1.）。値は Cisco と同じ 1 だが、資料は Arista のものを出す。"""
+    assert defaults.static_distance(None, "arista") == 1
+    source = defaults.static_distance_source("arista")
+    assert not source.startswith("未確認")
+    assert "Arista" in source

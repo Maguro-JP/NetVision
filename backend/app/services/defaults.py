@@ -52,6 +52,8 @@ STATIC_ROUTE_DISTANCE = 1
 #: - Junos: Juniper「Configure Static Routes」（「In Junos OS, static routes have a global
 #:   preference (administrative distance) of 5.」）。`static defaults preference` で変えた機器は
 #:   まだ読んでいない
+#: Arista は Cisco と同じ 1（EOS User Manual「IPv4」の ip route: By default, the administrative
+#: distance assigned to static routes is 1）なので、上の表には置かず出典だけを持つ。
 #: 未確認: NEC QX（H3C の OEM だが資料に届かない）。
 #: `ip route-static default-preference` で既定を変えた機器は、まだ読んでいない
 STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
@@ -76,6 +78,7 @@ _STATIC_DISTANCE_SOURCES: dict[str, str] = {
     "cisco_ios": "Cisco IP Routing Configuration Guide, IOS XE 17.x Basic IP Routing の Table 1"
     "「Default Administrative Distances」: 静的経路は 1",
     "aruba_cx": "AOS-CX 10.13 IP Routing Guide の ip route（distance の既定 1）",
+    "arista": "Arista EOS User Manual「IPv4」の ip route: 静的経路の距離の既定は 1",
     "huawei": "Huawei Command Reference の ip route-static: preference の既定 60",
     "h3c": "H3C Comware 7「02-Static routing commands」の ip route-static: preference の既定 60",
     "fortinet": "FortiOS CLI Reference「config router static」: distance の既定 10",
