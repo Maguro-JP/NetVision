@@ -837,6 +837,33 @@ _JUNOS_STATIC_DEFAULT = re.compile(
 )
 
 
+#: 囲みの形で転送先を並べた `route X next-hop [ A B C ];` を、set 形式に直したあとの1行。
+#: 出典: Juniper「ECMP Flow-Based Forwarding」の設定例（show routing-options:
+#: route 172.16.1.0/24 next-hop [ 192.168.1.2 192.168.2.2 192.168.3.2 ];）
+_JUNOS_STATIC_LIST = re.compile(
+    r"^(?P<head>set routing-options static route\s+\S+\s+next-hop)"
+    r"\s+\[\s*(?P<hops>[^\]]+?)\s*\]\s*$",
+    re.IGNORECASE,
+)
+
+
+def _junos_static_lines(text: str) -> list[str]:
+    """静的経路の行を、転送先1つにつき1行に開いて返す。
+
+    set 形式では転送先ごとに1行だが、囲みの形では角括弧で並べて1行に書く。
+    開かないと、その経路が丸ごと読めない。
+    """
+    out: list[str] = []
+    for raw in text.splitlines():
+        line = raw.strip()
+        found = _JUNOS_STATIC_LIST.match(line)
+        if found:
+            out.extend(f"{found.group('head')} {hop}" for hop in found.group("hops").split())
+        else:
+            out.append(line)
+    return out
+
+
 def _junos_static(text: str, parsed: ParsedConfig) -> None:
     """Junos の静的経路。経路の preference と、転送先ごとの qualified-next-hop を読む。
 
@@ -854,12 +881,12 @@ def _junos_static(text: str, parsed: ParsedConfig) -> None:
     hops: dict[str, list[tuple[str, int | None]]] = {}
     route_pref: dict[str, int] = {}
     defaults_pref: int | None = None
-    for line in text.splitlines():
-        default = _JUNOS_STATIC_DEFAULT.match(line.strip())
+    for line in _junos_static_lines(text):
+        default = _JUNOS_STATIC_DEFAULT.match(line)
         if default:
             defaults_pref = int(default.group(1))
             continue
-        found = _JUNOS_STATIC.match(line.strip())
+        found = _JUNOS_STATIC.match(line)
         if not found:
             continue
         destination = to_prefix(found.group("dest"))
