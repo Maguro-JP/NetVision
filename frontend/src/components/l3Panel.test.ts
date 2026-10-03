@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { L3Finding } from "../api/types";
-import { LEVEL_LABEL, sortFindings, tools } from "./L3Panel";
+import { LEVEL_LABEL, sortFindings, sourcesLine, tools } from "./L3Panel";
 
 function finding(level: L3Finding["level"], title: string): L3Finding {
   return { level, title, why: "理由", evidence: ["根拠"] };
@@ -51,5 +51,16 @@ describe("相手ごとに掛けている道具", () => {
   it("何も掛けていないことが、そう読める", () => {
     // 空欄にすると「読めていない」と区別できない
     expect(tools(null, null)).toBe("絞っていません");
+  });
+});
+
+describe("出典の行", () => {
+  it("資料の名前を並べて出す", () => {
+    expect(sourcesLine(["資料A", "資料B"])).toBe("出典: 資料A / 資料B");
+  });
+
+  it("出典の無い指摘や古い応答では行ごと出さない", () => {
+    expect(sourcesLine([])).toBeNull();
+    expect(sourcesLine(undefined)).toBeNull();
   });
 });

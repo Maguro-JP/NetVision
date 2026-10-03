@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 
 import { api } from "../api/client";
 import type { LinkFinding } from "../api/types";
-import { LEVEL_LABEL } from "./L3Panel";
+import { LEVEL_LABEL, sourcesLine } from "./L3Panel";
 
 /**
  * 線の両端で、設定がそろっているか。
@@ -85,6 +85,11 @@ export default function LinkCheckPanel() {
                   {finding.evidence.length > 0 && (
                     <div className="muted" style={{ marginTop: 4 }}>
                       見たところ: {finding.evidence.join(" / ")}
+                    </div>
+                  )}
+                  {sourcesLine(finding.sources) && (
+                    <div className="muted" style={{ marginTop: 4 }}>
+                      {sourcesLine(finding.sources)}
                     </div>
                   )}
                 </td>

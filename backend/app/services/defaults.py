@@ -62,6 +62,48 @@ STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
 }
 
 
+#: 指摘に添える資料の名前。読み手が確かめに行けるよう、文書名と箇所まで書く。
+#: 上のコメントの出典と同じものを、画面に出す長さに縮めてある
+FHRP_PRIORITY_SOURCE = (
+    "Cisco Network Services Configuration Guide（IOS XE）Configuring VRRP / Configuring HSRP:"
+    " 優先度の既定は 100"
+)
+VRRP_OWNER_PRIORITY_SOURCE = (
+    "Cisco Network Services Configuration Guide（IOS XE）Configuring VRRP Object Tracking:"
+    " 仮想アドレスの持ち主は優先度 255"
+)
+_STATIC_DISTANCE_SOURCES: dict[str, str] = {
+    "cisco_ios": "Cisco IP Routing Configuration Guide, IOS XE 17.x Basic IP Routing の Table 1"
+    "「Default Administrative Distances」: 静的経路は 1",
+    "aruba_cx": "AOS-CX 10.13 IP Routing Guide の ip route（distance の既定 1）",
+    "huawei": "Huawei Command Reference の ip route-static: preference の既定 60",
+    "h3c": "H3C Comware 7「02-Static routing commands」の ip route-static: preference の既定 60",
+    "fortinet": "FortiOS CLI Reference「config router static」: distance の既定 10",
+    "juniper": "Juniper「Configure Static Routes」: 静的経路の preference は 5",
+}
+
+
+def static_distance_source(vendor: str | None) -> str:
+    """静的経路の距離の既定を、どの資料で確かめたか。届いていない機種は未確認と書く。"""
+    found = _STATIC_DISTANCE_SOURCES.get(str(vendor or ""))
+    if found:
+        return found
+    return (
+        "未確認: この機種の静的経路の距離の既定は資料で確かめていません"
+        f"（{STATIC_ROUTE_DISTANCE} として見ています）"
+    )
+
+
+#: 速度・二重を書かないときに自動で決まること、OSPF の口の認証が既定で掛かっていないことの資料
+NEGOTIATED_SOURCE = (
+    "Cisco IOS XE 17 Interface Characteristics Configuration Guide の"
+    " Default Ethernet interface configuration: 速度も二重も既定は自動"
+)
+OSPF_AUTH_SOURCE = (
+    "Cisco「Configure Authentication in Open Shortest Path First」: 既定は認証なし（Type 0）"
+)
+
+
 def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:
     """実際に効く HSRP・VRRP の優先度。書いていなければ 100、VRRP の持ち主は 255。"""
     if entry.protocol == "vrrp" and entry.virtual_ip:

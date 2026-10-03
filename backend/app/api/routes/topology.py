@@ -880,6 +880,8 @@ class LinkFindingRead(BaseModel):
     title: str
     why: str
     evidence: list[str]
+    #: 既定値に拠った指摘の、拠った資料の名前。無ければ空
+    sources: list[str] = []
 
 
 class LinkReportRead(BaseModel):
@@ -1025,6 +1027,7 @@ def check_links(db: DbSession) -> LinkReportRead:
                 title=item.finding.title,
                 why=item.finding.why,
                 evidence=item.finding.evidence,
+                sources=item.finding.sources,
             )
             for item in report.findings
         ],

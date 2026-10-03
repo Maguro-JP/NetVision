@@ -28,6 +28,17 @@ export function sortFindings(findings: L3Finding[]): L3Finding[] {
 }
 
 /**
+ * 指摘が拠った資料を一行に。書いていない設定を既定値で読んだ指摘にだけ付く。
+ *
+ * 既定値は Config のどこにも書いていないので、「見たところ」の行だけでは確かめに行けない。
+ * 無ければ null を返し、行ごと出さない。
+ */
+export function sourcesLine(sources: string[] | undefined): string | null {
+  if (!sources || sources.length === 0) return null;
+  return `出典: ${sources.join(" / ")}`;
+}
+
+/**
  * 相手ごとに掛けている道具。
  *
  * route-map と prefix-list は別物なので、まとめずに並べる。両方とも無い
@@ -103,6 +114,11 @@ export default function L3Panel({ deviceId }: { deviceId: number }) {
                     {finding.evidence.length > 0 && (
                       <div className="muted" style={{ marginTop: 4 }}>
                         見たところ: {finding.evidence.join(" / ")}
+                      </div>
+                    )}
+                    {sourcesLine(finding.sources) && (
+                      <div className="muted" style={{ marginTop: 4 }}>
+                        {sourcesLine(finding.sources)}
                       </div>
                     )}
                   </td>

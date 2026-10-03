@@ -651,6 +651,8 @@ class FindingRead(BaseModel):
     title: str
     why: str
     evidence: list[str]
+    #: 既定値に拠った指摘の、拠った資料の名前。無ければ空
+    sources: list[str] = []
 
 
 class L3Read(BaseModel):
@@ -694,7 +696,9 @@ def read_l3(device_id: int, db: DbSession) -> L3Read:
         controls=report.controls,
         features=report.features,
         findings=[
-            FindingRead(level=f.level, title=f.title, why=f.why, evidence=f.evidence)
+            FindingRead(
+                level=f.level, title=f.title, why=f.why, evidence=f.evidence, sources=f.sources
+            )
             for f in report.findings
         ],
     )

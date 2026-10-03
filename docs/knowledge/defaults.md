@@ -16,6 +16,8 @@
 | 速度・二重 | 自動（`auto` と同じ） | linkcheck「片側だけ固定しています」 | Cisco Interface Characteristics Configuration Guide 17 |
 | OSPF の口の認証 | 掛けない（`null` と同じ） | linkcheck「合言葉の掛け方が両端で違います」 | Cisco Configure Authentication in OSPF |
 
+上の出典は、指摘の `sources` として画面にも出す（資料の名前は defaults.py の `*_SOURCE`）。既定値を変えたら名前も一緒に直す。形は [finding-sources.md](finding-sources.md)。
+
 ## 読み手の側で既定値を入れているもの（defaults.py には置いていない）
 
 読み手が機種ごとの書き方を読む場所で決めているので、そのまま残している。

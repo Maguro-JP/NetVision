@@ -394,6 +394,10 @@ def _ospf(a: Interface, b: Interface) -> list[Finding]:
                     f"{a.name}: {_auth_shown(left_auth)}",
                     f"{b.name}: {_auth_shown(right_auth)}",
                 ],
+                # 掛けていない側を「掛けていない」と読んだのは既定値に拠る
+                sources=[defaults.OSPF_AUTH_SOURCE]
+                if None in (defaults.ospf_auth(left_auth), defaults.ospf_auth(right_auth))
+                else [],
             )
         )
     return out
@@ -459,6 +463,7 @@ def _speed_duplex(a: Interface, b: Interface) -> list[Finding]:
                         f"{a.name}: {left or '自動'}",
                         f"{b.name}: {right or '自動'}",
                     ],
+                    sources=[defaults.NEGOTIATED_SOURCE],
                 )
             )
         else:

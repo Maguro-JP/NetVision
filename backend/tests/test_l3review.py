@@ -8,7 +8,7 @@ import pytest
 
 from app.models import Device
 from app.models.topology import Link, LinkOrigin
-from app.services import l3review
+from app.services import defaults, l3review
 from tests.conftest import API
 
 
@@ -776,3 +776,90 @@ def test_junos_static_preference_5_is_the_default(db_session):
     )
     titles = _routes_config_findings(db_session, "srx-b2", config, "b2" * 32)
     assert any("同じ重みで複数" in t for t in titles), titles
+
+
+# 指摘の出典。書いていない設定を既定値で読んで指摘したときは、拠った資料の名前を添える。
+# 既定値は Config のどこにも書いていないので、根拠の行だけでは読み手が確かめに行けない。
+
+
+def _findings_of(db_session, hostname, config, digest):
+    device = _device(db_session, hostname)
+    _snapshot(db_session, device, config, digest)
+    return l3review.review(db_session, device).findings
+
+
+def test_a_static_route_without_a_distance_names_the_source_of_the_default(db_session):
+    config = (
+        "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\n"
+        "sysname core-sw-c1\n#\n"
+        "ip route-static 0.0.0.0 0 10.0.0.1 preference 60\n"
+        "ip route-static 0.0.0.0 0 10.0.1.1\n#\nreturn\n"
+    )
+    findings = _findings_of(db_session, "core-sw-c1", config, "c3" * 32)
+    finding = next(f for f in findings if "同じ重みで複数" in f.title)
+    assert finding.sources == [defaults.static_distance_source("huawei")]
+    assert "60" in finding.sources[0]
+
+
+def test_static_routes_with_written_distances_need_no_source(db_session):
+    """両方とも距離を書いてあれば、既定値には拠っていない。"""
+    config = (
+        "hostname r-c2\n"
+        "ip route 10.9.0.0 255.255.0.0 10.0.0.1 5\n"
+        "ip route 10.9.0.0 255.255.0.0 10.0.1.1 5\n"
+    )
+    findings = _findings_of(db_session, "r-c2", config, "c4" * 32)
+    finding = next(f for f in findings if "同じ重みで複数" in f.title)
+    assert finding.sources == []
+
+
+def test_the_same_priority_left_at_the_default_names_its_source(db_session):
+    left = _pair(
+        db_session,
+        "dist-sw-71",
+        "dist-sw-72",
+        REDUNDANT.replace("dist-sw-01", "dist-sw-71").replace(" standby 10 priority 110\n", ""),
+        REDUNDANT.replace("dist-sw-01", "dist-sw-72")
+        .replace("10.10.10.2 ", "10.10.10.3 ")
+        .replace(" standby 10 priority 110\n", ""),
+        ("c5" * 32, "c6" * 32),
+    )
+    finding = next(
+        f for f in l3review.review(db_session, left).findings if "優先度が同じ" in f.title
+    )
+    assert finding.sources == [defaults.FHRP_PRIORITY_SOURCE]
+
+
+def test_the_same_written_priority_needs_no_source(db_session):
+    left = _pair(
+        db_session,
+        "dist-sw-73",
+        "dist-sw-74",
+        REDUNDANT.replace("dist-sw-01", "dist-sw-73"),
+        REDUNDANT.replace("dist-sw-01", "dist-sw-74").replace("10.10.10.2 ", "10.10.10.3 "),
+        ("c7" * 32, "c8" * 32),
+    )
+    finding = next(
+        f for f in l3review.review(db_session, left).findings if "優先度が同じ" in f.title
+    )
+    assert finding.sources == []
+
+
+def test_an_unverified_vendor_default_says_it_is_unverified():
+    """資料に届いていない機種は、確かめたふりをせず「未確認」と出す。"""
+    assert defaults.static_distance_source("nec_qx").startswith("未確認")
+    assert not defaults.static_distance_source("cisco_ios").startswith("未確認")
+
+
+def test_the_l3_api_carries_the_sources(client, db_session):
+    config = (
+        "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\n"
+        "sysname core-sw-c9\n#\n"
+        "ip route-static 0.0.0.0 0 10.0.0.1\n"
+        "ip route-static 0.0.0.0 0 10.0.1.1\n#\nreturn\n"
+    )
+    device = _device(db_session, "core-sw-c9")
+    _snapshot(db_session, device, config, "c9" * 32)
+    body = client.get(f"{API}/devices/{device.id}/l3").json()
+    finding = next(f for f in body["findings"] if "同じ重みで複数" in f["title"])
+    assert finding["sources"] == [defaults.static_distance_source("huawei")]
