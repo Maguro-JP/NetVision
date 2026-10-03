@@ -650,3 +650,34 @@ def test_huawei_import_route_direct_counts_as_advertised(db_session):
     report = l3review.review(db_session, device)
     assert report.ospf["redistributes"] == ["direct"]
     assert not [f.title for f in report.findings if "広告されていない" in f.title]
+
+
+def test_huawei_bgp_import_route_direct_counts_as_advertised(db_session):
+    """Huawei の `bgp` の下（`ipv4-family unicast` の中）の `import-route direct`。
+
+    直結の区画を BGP へ取り込む。IPv6 の家族（`ipv6-family`）の中のものは、IPv4 の区画には
+    効かないので数えない。
+
+    出典: Huawei「S7700 V200R023C10 Command Reference」の「import-route (BGP)」（BGP view と
+    BGP-IPv4 unicast address family view で direct を取れる。「After the import-route direct command
+    is executed, routes to the network segment where the IP address of the management interface
+    belongs are also imported in the BGP routing table.」）。
+    """
+    config = (
+        "sysname core-sw-91\n#\n"
+        "interface Vlanif10\n ip address 10.10.10.1 255.255.255.0\n#\n"
+        "interface Vlanif20\n ip address 10.20.20.1 255.255.255.0\n#\n"
+        "bgp 65001\n peer 10.10.10.2 as-number 65002\n #\n"
+        " ipv4-family unicast\n  import-route direct\n  peer 10.10.10.2 enable\n#\n"
+        "return\n"
+    )
+    device = _device(db_session, "core-sw-91")
+    _snapshot(db_session, device, config, "f2" * 32)
+    report = l3review.review(db_session, device)
+    assert report.bgp["redistributes"] == ["direct"]
+    assert not [f.title for f in report.findings if "広告されていない" in f.title]
+
+    v6_only = config.replace(" ipv4-family unicast\n", " ipv6-family unicast\n")
+    other = _device(db_session, "core-sw-92")
+    _snapshot(db_session, other, v6_only.replace("core-sw-91", "core-sw-92"), "f3" * 32)
+    assert l3review.review(db_session, other).bgp["redistributes"] == []
