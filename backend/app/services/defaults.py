@@ -39,9 +39,23 @@ VRRP_OWNER_PRIORITY = 255
 #: 静的経路の距離（administrative distance）を書かないときの値。Cisco の値。
 #: 出典: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x - Basic IP Routing」の
 #: Table 1「Default Administrative Distances」（Static route: 1）
-#: 未確認: 他社の既定（Huawei の preference、Junos の preference、FortiGate の distance）は
-#: 資料に当たっていないので、同じ値として扱っている
 STATIC_ROUTE_DISTANCE = 1
+
+#: 機種ごとの静的経路の距離の既定。ここに無い機種は STATIC_ROUTE_DISTANCE（Cisco の 1）。
+#: 出典:
+#: - Huawei: 「SME Network Fat AP and Cloud AP V200R025C10 Command Reference」の ip route-static
+#:   （「If no preference is configured for a static route, the static route uses the default
+#:   preference 60.」）、「S7700 V200R023C10 Command Reference」の ip route-static
+#:   default-preference（既定 60）
+#: - H3C: 「02-Static routing commands」（Comware 7）の ip route-static（preference の既定 60）
+#: - FortiGate: FortiOS CLI Reference「config router static」（7.0.1。distance の既定 10）
+#: 未確認: Junos の static の preference、NEC QX（H3C の OEM だが資料に届かない）。
+#: `ip route-static default-preference` で既定を変えた機器は、まだ読んでいない
+STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
+    "huawei": 60,
+    "h3c": 60,
+    "fortinet": 10,
+}
 
 
 def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:
@@ -54,9 +68,11 @@ def fhrp_priority(entry: _Redundancy, ports: list[_Port]) -> int:
     return entry.priority if entry.priority is not None else FHRP_PRIORITY
 
 
-def static_distance(distance: int | None) -> int:
-    """実際に効く静的経路の距離。"""
-    return distance if distance is not None else STATIC_ROUTE_DISTANCE
+def static_distance(distance: int | None, vendor: str | None = None) -> int:
+    """実際に効く静的経路の距離。書いていなければ機種の既定。"""
+    if distance is not None:
+        return distance
+    return STATIC_ROUTE_DISTANCE_BY_VENDOR.get(str(vendor or ""), STATIC_ROUTE_DISTANCE)
 
 
 def negotiated(value: str | None) -> str | None:

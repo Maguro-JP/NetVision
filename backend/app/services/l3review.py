@@ -450,7 +450,8 @@ def _same_destination_twice(parsed: ParsedConfig) -> list[Finding]:
     for (destination, _vrf), routes in seen.items():
         if len(routes) < 2:
             continue
-        distances = {defaults.static_distance(route.distance) for route in routes}
+        vendor = parsed.vendor.value
+        distances = {defaults.static_distance(route.distance, vendor) for route in routes}
         if len(distances) > 1:
             continue  # 距離が違うなら、待機側を用意した形。意図が読める
         out.append(

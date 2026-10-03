@@ -843,3 +843,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （既存の試験がそのまま通る）。どの点検がどの既定値に頼っているかは docs/knowledge/defaults.md に表にした。
   静的経路の距離の既定 1 は、今回 Cisco の資料（Basic IP Routing の Table 1）で確かめて出典を足した。
 - 次から: 既定値に頼る点検を書くときは、先に defaults.py に定数と出典を置く。
+
+## Huawei・H3C・FortiGate の静的経路の既定の距離を Cisco の 1 として比べ、tag の値を距離と読んでいた（2026-10-03 JST）
+
+- 確かめた資料: Huawei「SME Network Fat AP and Cloud AP V200R025C10 Command Reference」の ip route-static と
+  「S7700 V200R023C10 Command Reference」の ip route-static default-preference、H3C「02-Static routing commands」
+  （Comware 7）、FortiOS CLI Reference「config router static」（7.0.1）。
+- 起きていたこと（どれも直す前のコードで試験が落ちることを確かめた）:
+  - l3review「同じ重みで複数あります」は、書いていない距離を機種を問わず 1 として比べていた。Huawei・H3C の既定は 60、
+    FortiGate の既定は 10 なので、片側だけ既定値を明示した組（`preference 60` と書かない経路）を見逃していた。
+  - undo 書式の `ip route-static ... tag 100` の 100 を距離、`tag` を口の名前と読んでいた。`description` の後ろの語や
+    `track`・`bfd` の値も同じく取り違えていた。
+- 直したこと: defaults.py に機種ごとの静的経路の既定（Huawei・H3C 60、FortiGate 10）を置き、l3review は機種を渡して
+  引く。undo 書式の読み手は、値を伴う語（preference・tag・track・backup-nexthop・backup-interface・bfd）を語ごとに
+  読み、description の後ろは読まない。試験は `backend/tests/test_l3review.py`、`backend/tests/test_defaults.py`。
+- 未確認のまま: Junos の static の preference、NEC QX の既定。`ip route-static default-preference` で既定を変えた機器。
