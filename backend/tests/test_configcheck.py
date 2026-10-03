@@ -1862,10 +1862,36 @@ def test_a_missing_stp_mode_on_ios_names_the_catalyst_default(db_session):
     ]
 
 
-def test_a_missing_stp_mode_on_another_vendor_gets_no_catalyst_source(db_session):
-    """既定のモードは機種で違いうる。確かめていない機種に Catalyst の資料を出さない。"""
+def test_a_missing_stp_mode_on_eos_names_the_arista_default(db_session):
+    """出典: Arista EOS User Manual「Spanning Tree Protocol」
+    （By default, Arista switches use MSTP. / MSTP is the default STP version.）。
+    Catalyst の資料（既定は Rapid PVST+）を出すと、既定のモードを取り違えさせる。
+    """
     text = "! device: sw-a1 (DCS-7050SX3-48YC8, EOS-4.29.2F)\n" + STP_LOOSE.replace(
         "spanning-tree mode rapid-pvst\n", ""
     )
     assert configparse.parse(text).vendor is configparse.Vendor.ARISTA
-    assert _sources_of(db_session, text, "STP のモードを決めていません") == []
+    [source] = _sources_of(db_session, text, "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source("arista")
+    assert "MSTP" in source
+
+
+def test_a_missing_stp_mode_on_nxos_names_the_nexus_default(db_session):
+    """出典: Cisco Nexus 9000 Series NX-OS Layer 2 Switching Configuration Guide, Release 10.2(x)
+    「Configuring Rapid PVST+」の Default Settings（Spanning Tree mode: Rapid PVST+）。
+    """
+    text = (
+        "hostname nx-a1\nfeature lacp\nfeature interface-vlan\n"
+        "interface Ethernet1/1\n  switchport\n  switchport access vlan 10\n"
+        "  spanning-tree port type edge\n"
+    )
+    assert configparse.parse(text).vendor is configparse.Vendor.CISCO_NXOS
+    [source] = _sources_of(db_session, text, "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source("cisco_nxos")
+    assert "Nexus" in source
+
+
+def test_an_unverified_vendor_gets_no_stp_mode_source():
+    """確かめていない機種には、他社の資料を出さない。"""
+    assert defaults.stp_mode_source("aruba_cx") is None
+    assert defaults.stp_mode_source(None) is None

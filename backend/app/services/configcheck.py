@@ -893,9 +893,10 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
                 evidence=["spanning-tree mode の行なし"],
-                # 既定のモードは機種と版で違いうる。
-                # 資料で確かめたのは Catalyst 9300（IOS XE 17.17.x）だけ
-                sources=[defaults.STP_MODE_SOURCE] if vendor is Vendor.CISCO_IOS else [],
+                # 既定のモードは機種と版で違いうる。資料で確かめた機種だけ出典を付ける
+                sources=[source]
+                if (source := defaults.stp_mode_source(vendor.value if vendor else None))
+                else [],
             )
         )
     return out

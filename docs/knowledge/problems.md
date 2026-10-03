@@ -916,3 +916,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: STP のモードは機種が Cisco IOS のときだけ出典を付ける（他の機種の既定は確かめていない）。電話の口は、
   上限を書いていない口があるときだけ付ける。試験は `backend/tests/test_configcheck.py` の末尾。
 - 未確認: NX-OS・Arista ほか IOS 以外の STP の既定のモード。
+
+## ASA で同じ security-level の口を通す指定を書いても「同じ数字どうしは通れない」と言っていた（2026-10-03 JST）
+
+- 確かめた資料: Cisco「CLI Book 1: Cisco ASA Series General Operations CLI Configuration Guide, 9.16」の Routed and
+  Transparent Mode Interfaces（By default, interfaces on the same security level cannot communicate with each other。
+  `same-security-traffic permit inter-interface` で通す。低い security-level から高い側へは ACL で通さないかぎり通らない）。
+  あわせて NX-OS（Nexus 9000 Layer 2 Switching Configuration Guide 10.2(x): 既定は Rapid PVST+）と Arista（EOS User
+  Manual「Spanning Tree Protocol」: MSTP is the default STP version）の STP の既定のモードを確かめた。
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: asareview の「security-level が同じ口が … つあります」は、
+  `same-security-traffic permit inter-interface` を書いてある機器にも出ていた。通れる設定なのに「通れません」と言っていた。
+  ASA の2つの指摘と、NX-OS・Arista の「STP のモードを決めていません」には、拠った資料の名前も出ていなかった。
+- 直したこと: asareview に元の Config を渡し、`same-security-traffic permit inter-interface` があれば同じ数字の指摘を出さない。
+  ASA の2つの指摘に出典を付け、STP のモードの出典は機種ごとに引く（`defaults.stp_mode_source`）。試験は
+  `backend/tests/test_configparse_asa.py`、`backend/tests/test_configcheck.py` の末尾。
+- 未確認: Aruba CX・Dell OS10 ほかの STP の既定のモード。
