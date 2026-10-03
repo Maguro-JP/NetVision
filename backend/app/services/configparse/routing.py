@@ -799,22 +799,57 @@ def _ix_ospf(text: str, parsed: ParsedConfig) -> None:
 # ---------------------------------------------------------------------------
 
 
+_JUNOS_STATIC = re.compile(
+    r"^set routing-options static route\s+(?P<dest>\S+)\s+"
+    r"(?:(?P<kind>next-hop|qualified-next-hop)\s+(?P<hop>\S+)(?:\s+preference\s+(?P<hop_pref>\d+))?"
+    r"|preference\s+(?P<route_pref>\d+))\s*$",
+    re.IGNORECASE,
+)
+
+
+def _junos_static(text: str, parsed: ParsedConfig) -> None:
+    """Junos の静的経路。経路の preference と、転送先ごとの qualified-next-hop を読む。
+
+    - `route X next-hop Y`: 経路の preference（無ければ既定）で入る
+    - `route X preference P`: その経路の next-hop すべてに効く
+    - `route X qualified-next-hop Y [preference P]`: その転送先だけの preference。
+      書かなければ経路の preference
+    出典: Juniper「Static Route Preferences and Qualified Next Hops」（「The qualified next-hop
+    preference and metric override the route preference」）
+    """
+    hops: dict[str, list[tuple[str, int | None]]] = {}
+    route_pref: dict[str, int] = {}
+    for line in text.splitlines():
+        found = _JUNOS_STATIC.match(line.strip())
+        if not found:
+            continue
+        destination = to_prefix(found.group("dest"))
+        if destination is None:
+            continue
+        if found.group("route_pref"):
+            route_pref[destination] = int(found.group("route_pref"))
+            continue
+        own = found.group("hop_pref")
+        entries = hops.setdefault(destination, [])
+        hop = found.group("hop")
+        # 同じ転送先の preference だけを別の行で足す書き方もあるので、後の行で上書きする
+        entries[:] = [(h, p) for h, p in entries if h != hop]
+        entries.append((hop, int(own) if own else None))
+    for destination, entries in hops.items():
+        for hop, own in entries:
+            distance = own if own is not None else route_pref.get(destination)
+            parsed.routes.append(
+                ParsedRoute(destination=destination, next_hop=hop, distance=distance)
+            )
+
+
 def parse_junos(text: str, parsed: ParsedConfig) -> None:
     #: まとまり（group）側に書いた相手の AS。相手の行より先に出てくる
     group_peer_as: dict[str, str] = {}
+    _junos_static(text, parsed)
     # set 形式（現場で貼られるのはたいていこちら）
     for line in text.splitlines():
         stripped = line.strip()
-        route = re.match(
-            r"^set routing-options static route\s+(\S+)\s+next-hop\s+(\S+)",
-            stripped,
-            re.IGNORECASE,
-        )
-        if route:
-            destination = to_prefix(route.group(1))
-            if destination:
-                parsed.routes.append(ParsedRoute(destination=destination, next_hop=route.group(2)))
-            continue
         area = re.match(
             r"^set protocols ospf area\s+(\S+)\s+interface\s+(\S+)", stripped, re.IGNORECASE
         )

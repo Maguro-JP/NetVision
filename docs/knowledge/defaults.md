@@ -12,7 +12,7 @@
 |---|---|---|---|
 | HSRP・VRRP の優先度 | 100 | l3review「優先度が同じです」「一度切り替わると戻りません」 | Cisco Configuring VRRP（IOS XE）、FHRP Command Reference |
 | VRRP の持ち主の優先度 | 255 | l3review「優先度が同じです」 | Cisco Configuring VRRP の Object Tracking |
-| 静的経路の距離 | Cisco 1、Huawei・H3C 60、FortiGate 10 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static |
+| 静的経路の距離 | Cisco 1、Huawei・H3C 60、FortiGate 10、Junos 5 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static、Juniper Configure Static Routes |
 | 速度・二重 | 自動（`auto` と同じ） | linkcheck「片側だけ固定しています」 | Cisco Interface Characteristics Configuration Guide 17 |
 | OSPF の口の認証 | 掛けない（`null` と同じ） | linkcheck「合言葉の掛け方が両端で違います」 | Cisco Configure Authentication in OSPF |
 
@@ -29,5 +29,6 @@
 
 ## 未確認
 
-- 静的経路の距離の Junos の既定と NEC QX の既定。いまは Cisco の 1 として扱う
+- 静的経路の距離の NEC QX の既定。いまは Cisco の 1 として扱う
+- Junos の `static defaults preference` で既定を変えた機器（読んでいない）
 - `ip route-static default-preference` で既定を変えた機器（読んでいない）

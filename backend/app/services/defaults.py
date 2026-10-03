@@ -49,12 +49,16 @@ STATIC_ROUTE_DISTANCE = 1
 #:   default-preference（既定 60）
 #: - H3C: 「02-Static routing commands」（Comware 7）の ip route-static（preference の既定 60）
 #: - FortiGate: FortiOS CLI Reference「config router static」（7.0.1。distance の既定 10）
-#: 未確認: Junos の static の preference、NEC QX（H3C の OEM だが資料に届かない）。
+#: - Junos: Juniper「Configure Static Routes」（「In Junos OS, static routes have a global
+#:   preference (administrative distance) of 5.」）。`static defaults preference` で変えた機器は
+#:   まだ読んでいない
+#: 未確認: NEC QX（H3C の OEM だが資料に届かない）。
 #: `ip route-static default-preference` で既定を変えた機器は、まだ読んでいない
 STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
     "huawei": 60,
     "h3c": 60,
     "fortinet": 10,
+    "juniper": 5,
 }
 
 

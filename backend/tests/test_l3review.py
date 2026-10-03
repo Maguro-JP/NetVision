@@ -739,3 +739,40 @@ def test_fortigate_static_distance_10_is_the_default(db_session):
     )
     titles = _routes_config_findings(db_session, "fgt-a3", config, "a3" * 32)
     assert any("同じ重みで複数" in t for t in titles), titles
+
+
+# Junos の静的経路の試験の出典: Juniper「Configure Static Routes」（「In Junos OS, static routes
+# have a global preference (administrative distance) of 5.」）と「Static Route Preferences and
+# Qualified Next Hops」（経路の preference はその経路のすべての next-hop に効き、
+# qualified-next-hop の preference はその転送先だけに効く。「The qualified next-hop preference and
+# metric override the route preference」）
+
+
+def test_junos_qualified_next_hops_and_preferences_are_read():
+    from app.services import configparse
+
+    text = (
+        "set system host-name srx-b1\n"
+        "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n"
+        "set routing-options static route 0.0.0.0/0 qualified-next-hop 10.0.1.1 preference 10\n"
+        "set routing-options static route 10.9.0.0/16 next-hop 10.0.0.1\n"
+        "set routing-options static route 10.9.0.0/16 preference 20\n"
+        "set routing-options static route 10.9.0.0/16 qualified-next-hop 10.0.1.1\n"
+    )
+    routes = {(r.destination, r.next_hop): r.distance for r in configparse.parse(text).routes}
+    assert routes == {
+        ("0.0.0.0/0", "10.0.0.1"): None,
+        ("0.0.0.0/0", "10.0.1.1"): 10,
+        ("10.9.0.0/16", "10.0.0.1"): 20,
+        ("10.9.0.0/16", "10.0.1.1"): 20,
+    }
+
+
+def test_junos_static_preference_5_is_the_default(db_session):
+    config = (
+        "set system host-name srx-b2\n"
+        "set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1\n"
+        "set routing-options static route 0.0.0.0/0 qualified-next-hop 10.0.1.1 preference 5\n"
+    )
+    titles = _routes_config_findings(db_session, "srx-b2", config, "b2" * 32)
+    assert any("同じ重みで複数" in t for t in titles), titles
