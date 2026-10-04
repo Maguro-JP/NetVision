@@ -1235,3 +1235,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   まとまりの中の none だけを言う（Huawei の `aaa` の下の authentication-scheme にも同じ字面の行があるため）。
   試験は `test_configcheck.py` の末尾（password・scheme・aaa の下の none で出ないことは見張り）。
 - 見なかったこと: 書いていない AUX（既定で none）。Huawei の user-interface の none は資料で確かめていない（行があれば同じく言う）。
+
+## FTP サーバーを開く `ftp server enable` を、指摘していなかった（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: telnet や暗号化しない web は言っていたのに、
+  同じく中身が丸見えの FTP サーバーを開く行は何も言っていなかった。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」4.1.8 ftp server enable（既定は無効）・
+  6.1.3 sftp server enable。
+- 直したこと: `backend/app/services/configcheck.py` の行の規則に「FTP サーバーが開いています」（HIGH）を足した。
+  行頭から見るので `sftp server enable` には当たらない。試験は `test_configcheck.py` の末尾（sftp と undo の形は見張り）。
+- 見なかったこと: Huawei・H3C も同じ字面で当たるが、その資料には当たっていない（未確認）。Cisco などほかの書き方は足していない。
