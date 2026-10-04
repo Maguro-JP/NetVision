@@ -275,6 +275,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_dhcp_snooping(text))
     found.extend(_undo_dhcp_snooping(text, parsed.vendor))
     found.extend(_undo_arp_inspection(text, parsed.vendor))
+    found.extend(_login_without_authentication(text))
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
@@ -1474,6 +1475,46 @@ def _arp_inspection(text: str) -> list[Finding]:
             )
         )
     return out
+
+
+#: 機器に入る口のまとまり（行頭から）。
+#: NEC QX・H3C は `line vty 0 63`、VRP は `user-interface vty 0 4`
+_LOGIN_LINE_BLOCK = re.compile(r"^(?:line|user-interface)\s+\S+", re.IGNORECASE)
+
+
+def _login_without_authentication(text: str) -> list[Finding]:
+    """口のまとまりの中の `authentication-mode none`。その口からは認証なしで入れる。
+
+    同じ字面の行は AAA の認証方式（Huawei の `aaa` の下の authentication-scheme）にもあるので、
+    行だけでは見ない。`line …` / `user-interface …` のまとまりの中にあるときだけ言う。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.1 authentication-mode
+    （`authentication-mode { none | password | scheme }`、none: 認証を無効にします。User line view。
+    既定は VTY が password、AUX line が none）。既定のままの AUX は書いていないので言わない。
+    未確認: Huawei の user-interface の none
+    （公式資料で確かめたのは aaa と password の書き方まで）。
+    """
+    names: list[str] = []
+    current: str | None = None
+    for raw in text.splitlines():
+        if raw and not raw.startswith((" ", "\t")):
+            head = _LOGIN_LINE_BLOCK.match(raw.strip())
+            current = raw.strip() if head else None
+            continue
+        if current and re.match(r"^authentication-mode\s+none\s*$", raw.strip(), re.I):
+            names.append(current)
+    if not names:
+        return []
+    return [
+        Finding(
+            level=HIGH,
+            title="機器に入る口で、認証を求めていません",
+            why="その口からは合言葉なしで入れます。"
+            "書き換えの途中で残ったものが、そのまま運用に入ることがあります。"
+            "authentication-mode password か scheme にしてください。",
+            evidence=[f"{name}: authentication-mode none" for name in names[:5]],
+        )
+    ]
 
 
 #: H3C・NEC QX の ARP の見張り（VLAN か口の中の `arp detection enable`）と、信用する口
