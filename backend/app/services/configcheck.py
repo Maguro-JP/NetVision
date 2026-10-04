@@ -66,7 +66,15 @@ _HYGIENE = (
         re.compile(
             r"^\s*(?:ip http server\s*$"  # Cisco IOS
             r"|set system services web-management http\b"  # Junos（https は別）
-            r"|set allowaccess\b.*\bhttp\b(?!s))",  # FortiGate
+            r"|set allowaccess\b.*\bhttp\b(?!s)"  # FortiGate
+            # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.18
+            # ip http enable、既定は無効。https は 2.1.22 ip https enable で別の行）
+            r"|ip http enable\s*$"
+            # Huawei（出典: Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の
+            # http server enable / http ipv6 server enable。https は http secure-server enable）。
+            # 既定で有効の版もある（「S5700 and S6700 V200R024C10 Web-based Configuration Guide」）
+            # ので、書いていない機器を「閉じている」とは見ていない。行があるときだけ言う
+            r"|http (?:ipv6 )?server enable\s*$)",
             re.IGNORECASE,
         ),
         HIGH,

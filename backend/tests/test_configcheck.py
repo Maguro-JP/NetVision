@@ -2468,3 +2468,31 @@ def test_qx_idle_timeout_with_seconds_is_not_unlimited(db_session):
     text = _QX_HEAD + "line vty 0 63\n idle-timeout 0 30\n#\n"
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert "入ったままの画面が、いつまでも閉じません" not in titles
+
+
+@pytest.mark.parametrize(
+    ("head", "line"),
+    [
+        # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.18 ip http enable
+        # （既定は無効）
+        (_QX_HEAD, "ip http enable"),
+        # 出典: Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の
+        # http server enable
+        (_VRP_HEAD, "http server enable"),
+        (_VRP_HEAD, "http ipv6 server enable"),
+    ],
+)
+def test_undo_style_http_server_is_found(db_session, head, line):
+    """NEC QX・Huawei で暗号化しない管理用 web を開く行も見つける。"""
+    titles = [f.title for f in configcheck.check(db_session, head + line + "\n#\n").findings]
+    assert "管理用の web が開いています" in titles
+
+
+@pytest.mark.parametrize(
+    ("head", "line"),
+    [(_QX_HEAD, "ip https enable"), (_VRP_HEAD, "http secure-server enable")],
+)
+def test_undo_style_https_server_is_quiet(db_session, head, line):
+    """https は暗号化されるので言わない（見張り）。"""
+    titles = [f.title for f in configcheck.check(db_session, head + line + "\n#\n").findings]
+    assert "管理用の web が開いています" not in titles

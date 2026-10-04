@@ -1212,3 +1212,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の該当の正規表現。`idle-timeout 0 30`（30 秒）は言わない。
   試験は `test_configcheck.py` の末尾（`0 30` で出ないことは見張り）。
 - 残り: Huawei・H3C は同じ書き方だが、この周では資料に当たっていない（正規表現は機種を問わず同じ行に当たる）。
+
+## NEC QX・Huawei の管理用 web（http）を開く行を、指摘していなかった（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「管理用の web が開いています」は IOS・Junos・FortiGate の
+  書き方だけを見ていた。NEC QX の `ip http enable`、Huawei の `http server enable`・`http ipv6 server enable` は通っていた。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.18 ip http enable（既定は無効）・2.1.22 ip https enable、
+  Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の http server enable / http secure-server enable、
+  「S5700 and S6700 V200R024C10 Web-based Configuration Guide」（IPv4 の HTTP は既定で有効）。
+- 直したこと: `backend/app/services/configcheck.py` の該当の正規表現。https（ip https enable / http secure-server enable）は言わない。
+  試験は `test_configcheck.py` の末尾（https で出ないことは見張り）。
+- 見なかったこと: Huawei で行が無いのに既定で開いている形。既定は版で違うので、行が無い機器を「開いている」とも
+  「閉じている」とも言わない。H3C の ip http enable の既定は資料に当たっていない（行があれば同じ正規表現に当たる）。
