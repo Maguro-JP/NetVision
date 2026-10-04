@@ -2549,3 +2549,30 @@ def test_sftp_and_disabled_ftp_are_quiet(db_session, line):
     """SFTP（6.1.3 sftp server enable）と止めた形は言わない（見張り）。"""
     titles = [f.title for f in configcheck.check(db_session, _QX_HEAD + line + "\n#\n").findings]
     assert _FTP_TITLE not in titles
+
+
+_DIRECTED_BROADCAST_TITLE = "外から、その網の全員あての通信を送り込めます"
+_IOS_SVI = "hostname r-db1\ninterface Vlan10\n ip address 192.0.2.1 255.255.255.0\n"
+
+
+def test_ios_directed_broadcast_is_found(db_session):
+    """ACL を付けない `ip directed-broadcast` は、網あての一斉送信を広げる行として言う。
+
+    出典: Cisco「Cisco IOS IP Application Services Command Reference」の ip directed-broadcast
+    （既定は無効。ICMP の一斉送信が悪用されてきたので、要らない口では止めることを勧めている）。
+    """
+    text = _IOS_SVI + " ip directed-broadcast\n!\n"
+    found = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == _DIRECTED_BROADCAST_TITLE
+    ]
+    assert found and found[0].level == MEDIUM
+
+
+@pytest.mark.parametrize("line", ["ip directed-broadcast 110", "no ip directed-broadcast"])
+def test_directed_broadcast_with_acl_or_disabled_is_quiet(db_session, line):
+    """ACL で絞った形と止めた形は言わない（見張り）。"""
+    text = _IOS_SVI + f" {line}\n!\n"
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert _DIRECTED_BROADCAST_TITLE not in titles
