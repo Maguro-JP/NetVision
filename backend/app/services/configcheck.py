@@ -249,6 +249,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
     found.extend(_undo_dhcp_snooping(text, parsed.vendor))
+    found.extend(_undo_arp_inspection(text, parsed.vendor))
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
@@ -1448,6 +1449,67 @@ def _arp_inspection(text: str) -> list[Finding]:
             )
         )
     return out
+
+
+#: H3C・NEC QX の ARP の見張り（VLAN か口の中の `arp detection enable`）と、信用する口
+_ARP_DETECTION_ON = re.compile(r"^\s+arp\s+detection\s+enable\s*$", re.IGNORECASE | re.MULTILINE)
+_ARP_DETECTION_TRUST = re.compile(r"^\s+arp\s+detection\s+trust\s*$", re.IGNORECASE | re.MULTILINE)
+#: Huawei の DAI と、その判断のもと（DHCP の見張り・静的な対応表）
+_HUAWEI_DAI_ON = re.compile(
+    r"^\s*arp\s+anti-attack\s+check\s+user-bind\s+enable\s*$", re.IGNORECASE | re.MULTILINE
+)
+_HUAWEI_DAI_BASIS = re.compile(
+    r"^(?:dhcp\s+snooping\s+enable\b|user-bind\s+static\b)", re.IGNORECASE | re.MULTILINE
+)
+
+
+def _undo_arp_inspection(text: str, vendor: Vendor | None) -> list[Finding]:
+    """`arp detection` / `arp anti-attack check user-bind` で書く機種の、ARP の見張りで
+    通信が落ちる形。
+
+    出典:
+    - H3C「20-ARP attack protection configuration」（User validity check does not check ARP
+      packets received on ARP trusted interfaces … If no match is found, the device discards the
+      ARP packet / arp detection trust: By default, an interface is untrusted。設定例では上位の口を
+      trusted にしている）。照合のもとが無いときの扱いは資料の版で書き方が違うので、ここでは見ない
+    - NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.6.1 arp detection enable（VLAN view）、
+      8.6.3 arp detection trust（既定は非 ARP トラステッドポート）
+    - Huawei「S300, S500, S2700, S5700, and S6700 V200R024C00 Configuration Guide - Security」の
+      Configuring DAI（If the ARP packet matches no binding entry … discards the packet。
+      DHCP snooping か静的な対応表が要る）
+    """
+    if vendor in (Vendor.H3C, Vendor.NEC_QX):
+        if not _ARP_DETECTION_ON.search(text) or _ARP_DETECTION_TRUST.search(text):
+            return []
+        return [
+            Finding(
+                level=HIGH,
+                title="ARP の見張りで、信用する口を1つも決めていません",
+                why="口は既定で「信用しない」です。機器どうしをつなぐ口を信用しないままだと、"
+                "対応表に無い相手（上位の機器など）から来た ARP まで捨てて不通になります。"
+                "上位へ向かう口に arp detection trust を入れてください。",
+                evidence=["arp detection enable はあるが arp detection trust が無い"],
+                sources=[defaults.ARP_DETECTION_UNTRUSTED_SOURCES[vendor.value]],
+            )
+        ]
+    if vendor is Vendor.HUAWEI and _HUAWEI_DAI_ON.search(text):
+        if _HUAWEI_DAI_BASIS.search(text):
+            return []
+        return [
+            Finding(
+                level=HIGH,
+                title="ARP の見張りに、判断のもとがありません",
+                why="この仕組みは、DHCP の見張りが作る対応表か、手で書いた対応表と照らし合わせて"
+                "良し悪しを決めます。どちらも無いと、対応表に無い ARP として全部捨て、"
+                "つながらなくなります。",
+                evidence=[
+                    "arp anti-attack check user-bind enable はあるが "
+                    "dhcp snooping enable / user-bind static が無い"
+                ],
+                sources=[defaults.HUAWEI_DAI_BINDING_SOURCE],
+            )
+        ]
+    return []
 
 
 #: 合言葉の保存のしかた（Cisco の「タイプ」）。番号ごとに強さが違う
