@@ -2013,3 +2013,28 @@ def test_arp_inspection_without_a_basis_names_its_source(db_session):
     assert _sources_of(db_session, text, "判断のもとがありません") == [
         defaults.ARP_INSPECTION_BINDING_SOURCE
     ]
+
+
+def test_junos_logical_systems_are_said_to_be_unread(db_session):
+    """論理システムは自分の口と経路表を持つ。読まずに黙ると、その中が「無い」ことになる。
+
+    出典: Juniper「Understanding Logical Systems for Routers and Switches」（Logical systems … have
+    their own unique routing tables, interfaces, policies, and routing instances.）。
+    """
+    text = (
+        "set system host-name mx-l1\n"
+        "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/24\n"
+        "set logical-systems LS1 interfaces ge-0/0/1 unit 0 family inet address 10.1.0.1/24\n"
+        "set logical-systems LS1 routing-options static route 0.0.0.0/0 next-hop 10.1.0.254\n"
+    )
+    result = configcheck.check(db_session, text)
+    assert any("論理システム" in note for note in result.notes), result.notes
+
+
+def test_junos_without_logical_systems_gets_no_such_note(db_session):
+    text = (
+        "set system host-name mx-l2\n"
+        "set interfaces ge-0/0/0 unit 0 family inet address 10.0.0.1/24\n"
+    )
+    result = configcheck.check(db_session, text)
+    assert not any("論理システム" in note for note in result.notes)

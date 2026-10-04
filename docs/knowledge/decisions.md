@@ -97,3 +97,19 @@
   点検から外す（点検ごとに例外が増え、論理システムの口・OSPF・BGP も同じ扱いを要する）。
 - 触る場所: `backend/app/services/configparse/routing.py` の `_junos_static`、`backend/app/services/configparse/juniper.py`
   （論理システムを1台として切り出すなら、ここで Config を論理システムごとに分ける）。
+
+## Junos の論理システムは、読めるまで「読んでいない」と結果に出す。読むときは1ファイルを複数の機器に分ける（2026-10-04 JST）
+
+- 決めたこと: 論理システムの行（`set logical-systems …` か囲みの形の `logical-systems {`）がある Junos の設定は、
+  設定の点検の結果の notes に「論理システムの中は読んでいない」と出す。黙って抜けると、その中の口・経路・誤りが
+  「無い」ことになるため。
+- 読むときの設計（下調べ。未着手）: `configparse/juniper.py` で平らにした set 行を、`logical-systems NAME` で始まる行と
+  それ以外に分け、`logical-systems NAME ` を外した行を同じ読み手に通して、論理システムごとに別の ParsedConfig を作る。
+  ホスト名は「全体のホスト名/NAME」とする。いまの取り込みは1ファイル→1台なので、parse が複数の ParsedConfig を
+  返せる入口（例: `parse_all`）を足し、取り込み（pipeline・configcheck）は1台目を従来どおり扱い、残りを別の機器として
+  足す形にする。口の名前は全体と論理システムで重なりうる（同じ物理口の別 unit）ため、機器を分けて持つ。
+- 理由: 論理システムは自分の口・経路表・ポリシーを持つ（Juniper「Understanding Logical Systems for Routers and
+  Switches」）。全体の機器に混ぜると、口の帯を知らないまま経路を判断して誤った指摘になる（前の項）。
+- 採らなかった案: 何も出さずに読まない（黙って抜ける）。論理システムの行を警告（warning）にする（設定の誤りではない）。
+- 触る場所: `backend/app/services/configcheck.py` の `_JUNOS_LOGICAL_SYSTEM`、読むときは `configparse/juniper.py` と
+  `configparse/__init__.py` の `parse`。
