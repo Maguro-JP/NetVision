@@ -12,7 +12,7 @@
 |---|---|---|---|
 | HSRP・VRRP の優先度 | 100 | l3review「優先度が同じです」「一度切り替わると戻りません」 | Cisco Configuring VRRP（IOS XE）、FHRP Command Reference |
 | VRRP の持ち主の優先度 | 255 | l3review「優先度が同じです」 | Cisco Configuring VRRP の Object Tracking |
-| 静的経路の距離 | Cisco・AOS-CX・Arista・NEC IX 1、Huawei・H3C・NEC QX 60、FortiGate 10、Junos 5 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static、Juniper Configure Static Routes、AOS-CX 10.13 IP Routing Guide の ip route distance、Arista EOS User Manual「IPv4」の ip route、NEC QX-S1100G シリーズ コマンドマニュアル 1.9版の ip route-static、NEC IX-R/IX-V コマンドリファレンス 1.3 のスタティックルート追加 |
+| 静的経路の距離 | Cisco・AOS-CX・Arista・NEC IX 1、AlaxalA 2、Huawei・H3C・NEC QX 60、FortiGate 10、Junos 5 | l3review「同じ重みで複数あります」 | Cisco IP Routing Configuration Guide 17.x の Table 1、Huawei / H3C の ip route-static、FortiOS CLI Reference の config router static、Juniper Configure Static Routes、AOS-CX 10.13 IP Routing Guide の ip route distance、Arista EOS User Manual「IPv4」の ip route、NEC QX-S1100G シリーズ コマンドマニュアル 1.9版の ip route-static、NEC IX-R/IX-V コマンドリファレンス 1.3 のスタティックルート追加、アラクサラ AX3660S コンフィグレーションコマンドレファレンス Vol.2（Ver.12.2）の ip route |
 | 速度・二重 | 自動（`auto` と同じ） | linkcheck「片側だけ固定しています」 | Cisco Interface Characteristics Configuration Guide 17 |
 | OSPF の口の認証 | 掛けない（`null` と同じ） | linkcheck「合言葉の掛け方が両端で違います」 | Cisco Configure Authentication in OSPF |
 
@@ -31,5 +31,5 @@
 
 ## 未確認
 
-- 静的経路の距離の NEC IX2000/IX3000 の既定（IX-R/IX-V の資料では 1。IX2000/IX3000 の資料は開いていない）
+- 静的経路の距離の NEC IX2000/IX3000 の既定（IX-R/IX-V の資料では 1、ip route の項に IX2000/IX3000 との差分の記載は無い。IX2000/IX3000 の資料そのものは開いていない）
 - `ip route-static default-preference` で既定を変えた機器で、preference を書いていない経路が変更の前と後のどちらに足されたか（Config からは決まらない。l3review はその経路を含む組を判定しない）

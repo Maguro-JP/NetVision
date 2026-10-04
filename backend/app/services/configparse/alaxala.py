@@ -87,8 +87,58 @@ def _to_ios(text: str) -> str:
             if kind:
                 rows.append(f"{found.group('head')}{kind}{found.group('number')}")
                 continue
+        route = _IP_ROUTE.match(raw)
+        if route:
+            rows.append(route.group("head") + _route_options_to_ios(route.group("rest")))
+            continue
         rows.append(_join_ports(raw))
     return "\n".join(rows)
+
+
+#: IPv4 の静的経路の行。宛先とマスクの後ろを、IOS の読み手が読める形に直す
+_IP_ROUTE = re.compile(
+    r"^(?P<head>\s*ip route\s+(?:vrf\s+\S+\s+)?\S+\s+\S+\s+)(?P<rest>.+)$", re.IGNORECASE
+)
+#: 経路の後ろに付く語のうち、値を1つ連れているものと、値を連れないもの。
+#: 出典: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+#: （`[<distance>] [weight <weight>] [tag <tag>] [{noinstall | reject}] [poll] [noresolve]`、
+#: ネクストホップの VRF は `{vrf <nexthop vrf id> | global}`）。weight は同じ宛先の中で選ぶ順で、
+#: ディスタンスではない（コンフィグレーションガイド Vol.3「9.1.2 経路選択基準」）
+_AX_ROUTE_VALUED = frozenset({"weight", "vrf"})
+_AX_ROUTE_FLAGS = frozenset({"noinstall", "reject", "poll", "noresolve", "global"})
+#: ネクストホップを解決する口（VLAN）と、捨てる先（Null）。`interface vlan 10` と同じく種別と番号を
+#: 離して書く前提（経路の行での口の書き方そのものは「パラメータに指定できる値」を
+#: 開いておらず未確認）
+_AX_ROUTE_PORT_KINDS = {"vlan": "Vlan", "null": "Null"}
+
+
+def _route_options_to_ios(rest: str) -> str:
+    """AX の経路の後ろの語を、IOS の読み手が取り違えない形にする。
+
+    weight の値をディスタンスと、`poll` などの語を口の名前と、`vlan 10` の 10 を
+    ディスタンスと読まないよう、それらを外すか、口の名前を1語につなげる。
+    tag は IOS の読み手が値ごと読み飛ばすので、そのまま渡す。
+    """
+    words = rest.split()
+    kept: list[str] = []
+    index = 0
+    while index < len(words):
+        word = words[index]
+        lowered = word.lower()
+        following = words[index + 1] if index + 1 < len(words) else ""
+        if lowered in _AX_ROUTE_VALUED:
+            index += 2
+            continue
+        if lowered in _AX_ROUTE_FLAGS:
+            index += 1
+            continue
+        if lowered in _AX_ROUTE_PORT_KINDS and following.isdigit():
+            kept.append(f"{_AX_ROUTE_PORT_KINDS[lowered]}{following}")
+            index += 2
+            continue
+        kept.append(_join_ports(word))
+        index += 1
+    return " ".join(kept)
 
 
 def _join_ports(line: str) -> str:

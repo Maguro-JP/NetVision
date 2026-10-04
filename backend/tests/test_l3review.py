@@ -1076,3 +1076,44 @@ def test_nec_ix_static_distance_names_the_ix_reference(db_session):
     ]
     assert finding.sources == [defaults.static_distance_source("nec_ix")]
     assert "未確認" not in finding.sources[0]
+
+
+def _same_weight_finding(db_session, hostname, config, digest):
+    device = _device(db_session, hostname)
+    _snapshot(db_session, device, config, digest)
+    found = [f for f in l3review.review(db_session, device).findings if "同じ重みで複数" in f.title]
+    return found[0] if found else None
+
+
+def test_alaxala_static_distance_2_is_the_default(db_session):
+    """AlaxalA の静的経路のディスタンスは、書かなければ 2。明示の 2 と同じ重み。
+
+    出典: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+    （<distance>: 本パラメータ省略時の初期値 2）。Cisco の 1 として見ると、2 を書いた経路と
+    書いていない経路を重みが違う（待機の形）と取り違えて、指摘を落とす。
+    """
+    config = (
+        'hostname "ax-a1"\n! AX3660S\n'
+        "ip route 0.0.0.0 0.0.0.0 10.0.0.1 2\n"
+        "ip route 0.0.0.0 0.0.0.0 10.0.1.1\n"
+    )
+    finding = _same_weight_finding(db_session, "ax-a1", config, "a9" * 32)
+    assert finding is not None
+    assert finding.sources == [defaults.static_distance_source("alaxala")]
+
+
+def test_alaxala_weight_is_not_a_distance(db_session):
+    """`weight 100` の 100 はディスタンスではない。weight は同じディスタンスの組の中で選ぶ順で、
+    マルチパスの最大（既定 6）までは両方使われる。
+
+    出典: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+    （weight <weight>: 同一宛先間の優先度）、
+    「コンフィグレーションガイド Vol.3」の「9.1.2 経路選択基準」（同一のディスタンス値の組の中から、
+    weight の大きい順にマルチパス数の最大まで選ぶ。最大の既定は 6）。
+    """
+    config = (
+        'hostname "ax-a2"\n! AX3660S\n'
+        "ip route 0.0.0.0 0.0.0.0 10.0.0.1 weight 100\n"
+        "ip route 0.0.0.0 0.0.0.0 10.0.1.1\n"
+    )
+    assert _same_weight_finding(db_session, "ax-a2", config, "b1" * 32) is not None

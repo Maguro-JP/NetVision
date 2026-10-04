@@ -61,7 +61,12 @@ STATIC_ROUTE_DISTANCE = 1
 #: 「IX-R/IX-V コマンドリファレンス 1.3」IPv4 編のスタティックルート追加
 #: （DISTANCE のデフォルト値: 1）、
 #: 「IX-R/IX-V 機能説明書」2.15 ルーティングの設定の既定のディスタンス表（Static: 1）。
-#: 未確認: IX2000/IX3000 の資料。
+#: 未確認: IX2000/IX3000 の資料（IX-R/IX-V の資料は IX2000/IX3000 との差分を項ごとに書くが、
+#: ip route の項には差分の記載が無い）。
+#: - AlaxalA: 「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+#:   （<distance> の「本パラメータ省略時の初期値 2」）、
+#:   「コンフィグレーションガイド Vol.3」Ver.12.2 の表24-3 ディスタンスのデフォルト値
+#:   （スタティック経路 2）
 #: `ip route-static default-preference` で既定を変えた機器は、書き換えた後に足した経路にだけ効くため
 #: preference を書いていない経路の距離が決まらない。l3review はその経路を含む組を判定しない
 STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
@@ -70,6 +75,7 @@ STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
     "fortinet": 10,
     "juniper": 5,
     "nec_qx": 60,
+    "alaxala": 2,
 }
 
 
@@ -96,6 +102,8 @@ _STATIC_DISTANCE_SOURCES: dict[str, str] = {
     " preference の既定 60",
     "nec_ix": "NEC IX-R/IX-V コマンドリファレンス 1.3 の ip route（スタティックルート追加）:"
     " distance の既定 1",
+    "alaxala": "アラクサラ AX3660S コンフィグレーションコマンドレファレンス Vol.2（Ver.12.2）の"
+    " ip route: distance の初期値 2",
 }
 
 
