@@ -1245,3 +1245,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の行の規則に「FTP サーバーが開いています」（HIGH）を足した。
   行頭から見るので `sftp server enable` には当たらない。試験は `test_configcheck.py` の末尾（sftp と undo の形は見張り）。
 - 見なかったこと: Huawei・H3C も同じ字面で当たるが、その資料には当たっていない（未確認）。Cisco などほかの書き方は足していない。
+
+## Cisco の `ip directed-broadcast` を、指摘していなかった（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 口に `ip directed-broadcast` があっても、何も言っていなかった。
+  外から網あての一斉送信を送り込まれ、増幅攻撃の踏み台になる。
+- 確かめた資料: Cisco「Cisco IOS IP Application Services Command Reference」の ip directed-broadcast
+  （既定は無効、ACL を付けると許したものだけを流す）、「IP Addressing Configuration Guide, Cisco IOS XE 17.x」
+  （12.0 から既定で無効）。
+- 直したこと: `backend/app/services/configcheck.py` の行の規則に MEDIUM で足した。ACL を付けた形と no の形は言わない。
+  試験は `test_configcheck.py` の末尾（ACL 付き・no の形は見張り）。
+- 見なかったこと: ほかのメーカーの同じ働きの書き方（Huawei・H3C・NEC QX などは資料に当たっていない）。

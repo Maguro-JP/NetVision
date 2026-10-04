@@ -193,6 +193,17 @@ _HYGIENE = (
         "本来この機器が決める道順を、荷物の側から指定できます。"
         "使う用途はほとんど無いので、閉じておくのが既定です（no ip source-route）。",
     ),
+    (
+        # Cisco IOS（出典: Cisco「Cisco IOS IP Application Services Command Reference」の
+        # ip directed-broadcast、既定は無効で 12.0 から変わった）。ACL を付けた形は、許した
+        # ものだけを流すので言わない
+        re.compile(r"^\s*ip directed-broadcast\s*$", re.IGNORECASE),
+        MEDIUM,
+        "外から、その網の全員あての通信を送り込めます",
+        "ip directed-broadcast は、網あての一斉送信をその網の中に広げます。"
+        "ICMP を使った増幅攻撃の踏み台に使われてきたため、要らないなら消してください"
+        "（no ip directed-broadcast）。要るなら ACL を付けて送り元を絞ります。",
+    ),
 )
 
 
