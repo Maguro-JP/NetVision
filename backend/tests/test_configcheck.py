@@ -2441,3 +2441,30 @@ def test_h3c_snmp_cipher_community_is_not_read_as_default(db_session):
     )
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert "SNMP の合言葉が既定のままです" not in titles
+
+
+_QX_HEAD = "# QX-S1108GT-2G\nsysname qx-l1\n#\n"
+
+
+@pytest.mark.parametrize(
+    ("body", "title"),
+    [
+        # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.16 idle-timeout
+        # （タイムアウト時間を 0 にすると、セッションがタイムアウトしません）
+        ("line vty 0 63\n idle-timeout 0 0\n#\n", "入ったままの画面が、いつまでも閉じません"),
+        ("line vty 0 63\n idle-timeout 0\n#\n", "入ったままの画面が、いつまでも閉じません"),
+        # 出典: 同 6.1.8 ssh server compatible-ssh1x enable（SSH1 クライアントをサポート）
+        ("ssh server compatible-ssh1x enable\n#\n", "SSH が古い方式のままです"),
+    ],
+)
+def test_qx_login_lines_are_read(db_session, body, title):
+    """NEC QX の時間切れなし・SSH1 互換の書き方も見つける。"""
+    titles = [f.title for f in configcheck.check(db_session, _QX_HEAD + body).findings]
+    assert title in titles
+
+
+def test_qx_idle_timeout_with_seconds_is_not_unlimited(db_session):
+    """`idle-timeout 0 30` は 30 秒で切れる。時間切れなしとは言わない（見張り）。"""
+    text = _QX_HEAD + "line vty 0 63\n idle-timeout 0 30\n#\n"
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "入ったままの画面が、いつまでも閉じません" not in titles
