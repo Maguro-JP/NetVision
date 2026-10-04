@@ -225,7 +225,9 @@ def test_ax_static_route_words_are_not_ports_or_distances(rest, interface, dista
 
     出典: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
     （`[<distance>] [weight <weight>] [tag <tag>] [{noinstall | reject}] [poll] [noresolve]`、
-    ネクストホップの VRF は `{vrf <nexthop vrf id> | global}`）。
+    ネクストホップの VRF は `{vrf <nexthop vrf id> | global}`）、
+    同レファレンスの「パラメータに指定できる値」表1-7
+    （VLAN インタフェースは `vlan <vlan id>`、Null インタフェースは `null 0`）。
     """
     parsed = configparse.parse(
         f'hostname "ax01"\n! AX3660S\nip route 10.9.0.0 255.255.0.0 {rest}\n'

@@ -207,6 +207,13 @@ _STP_MODE_SOURCES: dict[str, str] = {
     " By default, the device operates in RSTP mode",
     "aruba_cx": "AOS-CX 10.12 Layer-2 Bridging Guide（8400）の spanning-tree mode:"
     " no 形で既定の mstp に戻る",
+    "alaxala": "アラクサラ AX3660S コンフィグレーションガイド Vol.1（Ver.12.1）"
+    "27.2.2 動作モードの設定:"
+    " 動作モードを設定しない場合，pvst モードで動作します",
+    "dell_os10": "Dell SmartFabric OS10 User Guide Release 10.6.0「Enable Rapid-PVST」:"
+    " By default, Rapid-PVST is enabled",
+    "cisco_sb": "Cisco Business Switches 350 Series CLI Guide「Spanning Tree Commands」の"
+    " spanning-tree mode: The default is RSTP",
 }
 
 

@@ -106,9 +106,9 @@ _IP_ROUTE = re.compile(
 #: ディスタンスではない（コンフィグレーションガイド Vol.3「9.1.2 経路選択基準」）
 _AX_ROUTE_VALUED = frozenset({"weight", "vrf"})
 _AX_ROUTE_FLAGS = frozenset({"noinstall", "reject", "poll", "noresolve", "global"})
-#: ネクストホップを解決する口（VLAN）と、捨てる先（Null）。`interface vlan 10` と同じく種別と番号を
-#: 離して書く前提（経路の行での口の書き方そのものは「パラメータに指定できる値」を
-#: 開いておらず未確認）
+#: ネクストホップを解決する口（VLAN）と、捨てる先（Null）。種別と番号を離して書く
+#: （出典: 同レファレンスの「パラメータに指定できる値」表1-7 インタフェースの指定方法:
+#: VLAN インタフェースは `vlan <vlan id>`、Null インタフェースは `null 0`）
 _AX_ROUTE_PORT_KINDS = {"vlan": "Vlan", "null": "Null"}
 
 

@@ -1097,3 +1097,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `backend/app/services/defaults.py` に既定 2 と出典を足した。試験は `test_l3review.py`・`test_configparse_alaxala.py` の末尾。
 - 残り: 経路の行での口の書き方（`vlan 10`）は、コマンドレファレンスの「パラメータに指定できる値」を開いておらず未確認。
   NEC IX2000/IX3000 の資料そのものも開いていない（IX-R/IX-V の資料の ip route の項に、差分の記載は無い）。
+
+## STP の既定のモードの出典が、AlaxalA・Dell OS10・Cisco Business で出ていなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「STP のモードを決めていません」の指摘に、
+  この3機種では既定のモードの資料が付いていなかった（確かめていない機種には出さない作りのため）。
+- 確かめた資料: アラクサラ「AX3660S コンフィグレーションガイド Vol.1」Ver.12.1 27.2.2（設定しない場合 pvst）、
+  Dell「SmartFabric OS10 User Guide Release 10.6.0」Enable Rapid-PVST（By default, Rapid-PVST is enabled）、
+  Cisco「Business Switches 350 Series CLI Guide」spanning-tree mode（The default is RSTP）。
+  あわせて AlaxalA の経路の行での口の書き方を、コマンドレファレンスの「パラメータに指定できる値」表1-7
+  （`vlan <vlan id>`・`null 0`）で確かめ、前の項の「未確認」を外した。
+- 直したこと: `backend/app/services/defaults.py` の `_STP_MODE_SOURCES` に3機種を足した。試験は `test_configcheck.py` の末尾。
+- 残り: AOS-S（aruba_os）の STP の既定は資料に当たっていない。Huawei・H3C は `stp mode` で書くため、この指摘の対象外。
