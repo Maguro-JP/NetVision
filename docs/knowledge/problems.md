@@ -1149,3 +1149,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   stp port bpdu-protection、Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter。
   NEC QX のこの資料には BPDU フィルタのコマンドは無い。
 - 直したこと: `backend/app/services/configcheck.py` の `_stp`。試験は `test_configcheck.py` の末尾。
+
+## Huawei・H3C・NEC QX の DHCP の見張りの決め忘れを、指摘していなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: DHCP snooping の点検は IOS の `ip dhcp snooping` だけを見ていた。
+  `dhcp snooping enable` で書く3機種では、信用する口が1つも無い（本物の DHCP サーバーの応答まで落とす）設定も黙って通っていた。
+- 確かめた資料: Huawei「S5700 and S6700 V200R025C00 Command Reference」の dhcp snooping enable（全体で有効にしたうえで、
+  VLAN・口・BD でも有効にする）と dhcp snooping trusted（既定で全部の口が信用しない口）、
+  H3C「DHCP snooping configuration」（全体で有効にすると全部の口で有効。有効にすると全部の口が信用しない口）、
+  NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」7.1.2 dhcp snooping enable・7.1.7 dhcp snooping trust。
+- 直したこと: `backend/app/services/configcheck.py` に `_undo_dhcp_snooping` を足した。Huawei は VLAN・口で有効に
+  していなければ「どの VLAN にも掛けていません」、3機種とも信用する口が無ければ HIGH。出典は `defaults.py`。
+  試験は `test_configcheck.py` の末尾（信用する口があるときに出ないことは新しい分岐の見張り）。
+- 残り: ARP 検査（Huawei の arp anti-attack check user-bind、H3C の arp detection）と port-security の undo 系の書き方は、
+  まだ見ていない。
