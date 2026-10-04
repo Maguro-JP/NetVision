@@ -1201,3 +1201,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見なかったこと: H3C・NEC QX・Huawei の利用者のパスワードの保存形式。H3C Comware 7 は simple で入れても hash して保存する
   （「Fundamentals Command Reference」set authentication password）ので、保存済みの設定に平文は残らない。
   Huawei の local-user の書き方（simple の有無）は資料に当たっていない。
+
+## NEC QX の時間切れなし・SSH1 互換の書き方を、指摘していなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「入ったままの画面が、いつまでも閉じません」は IOS の
+  `exec-timeout 0 0`、「SSH が古い方式のままです」は `ip ssh version 1` だけを見ていた。NEC QX の `idle-timeout 0`（0 0）と
+  `ssh server compatible-ssh1x enable` は通っていた。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.16 idle-timeout（既定 10 分。0 にするとタイムアウトしない）、
+  6.1.8 ssh server compatible-ssh1x enable（既定は無効。SSH1 クライアントをサポートする）。
+- 直したこと: `backend/app/services/configcheck.py` の該当の正規表現。`idle-timeout 0 30`（30 秒）は言わない。
+  試験は `test_configcheck.py` の末尾（`0 30` で出ないことは見張り）。
+- 残り: Huawei・H3C は同じ書き方だが、この周では資料に当たっていない（正規表現は機種を問わず同じ行に当たる）。

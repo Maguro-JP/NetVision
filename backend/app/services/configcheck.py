@@ -126,7 +126,13 @@ _HYGIENE = (
         "設定を変えられます。監視で要るのは読むほうだけなので、RO で足ります。",
     ),
     (
-        re.compile(r"^\s*ip ssh version 1\s*$", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:ip ssh version 1\s*$"
+            # NEC QX: SSH1 のクライアントも受け入れる（出典: NEC「QX-S1100G シリーズ
+            # コマンドマニュアル 1.9版」6.1.8 ssh server compatible-ssh1x enable、既定は無効）
+            r"|ssh server compatible-ssh1x enable\s*$)",
+            re.IGNORECASE,
+        ),
         HIGH,
         "SSH が古い方式のままです",
         "version 1 は解読の方法が知られています。version 2 にしてください。",
@@ -139,7 +145,14 @@ _HYGIENE = (
         "service password-encryption を入れてください（強くはありませんが、素見えは防げます）。",
     ),
     (
-        re.compile(r"^\s*exec-timeout 0 0\s*$", re.IGNORECASE),
+        re.compile(
+            r"^\s*(?:exec-timeout 0 0\s*$"
+            # NEC QX の user line: 0 にすると時間切れにならない（出典: NEC「QX-S1100G シリーズ
+            # コマンドマニュアル 1.9版」2.1.16 idle-timeout、既定は 10 分）。
+            # `0 30` は 30 秒なので言わない
+            r"|idle-timeout 0(?:\s+0)?\s*$)",
+            re.IGNORECASE,
+        ),
         MEDIUM,
         "入ったままの画面が、いつまでも閉じません",
         "席を離れても操作できる状態が残ります。"
