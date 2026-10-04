@@ -101,6 +101,16 @@ _HYGIENE = (
         "ssh だけに絞ってください（transport input ssh）。",
     ),
     (
+        # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」4.1.8
+        # ftp server enable、既定は無効）。暗号化する sftp server enable（6.1.3）は別の行なので
+        # 行頭から見る。Huawei・H3C も同じ字面だが、その資料には当たっていない（未確認）
+        re.compile(r"^\s*ftp server enable\s*$", re.IGNORECASE),
+        HIGH,
+        "FTP サーバーが開いています",
+        "FTP は telnet と同じく中身が丸見えで、入るときのパスワードもそのまま流れます。"
+        "ファイルの受け渡しには SFTP を使い、FTP は閉じてください（undo ftp server enable）。",
+    ),
+    (
         re.compile(
             # アラクサラは値を引用符で囲う（`snmp-server community "public" ro`）
             r"^\s*(?:snmp-server community|set snmp community"

@@ -2526,3 +2526,26 @@ def test_login_authentication_quiet_cases(db_session, body):
     """認証ありの口や、口のまとまりの外の none は言わない（見張り）。"""
     titles = [f.title for f in configcheck.check(db_session, _QX_HEAD + body).findings]
     assert _NO_AUTH_TITLE not in titles
+
+
+_FTP_TITLE = "FTP サーバーが開いています"
+
+
+def test_qx_ftp_server_is_found(db_session):
+    """NEC QX の `ftp server enable` は、暗号化しない FTP を開く行として言う。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」4.1.8 ftp server enable（既定は無効）。
+    """
+    found = [
+        f
+        for f in configcheck.check(db_session, _QX_HEAD + "ftp server enable\n#\n").findings
+        if f.title == _FTP_TITLE
+    ]
+    assert found and found[0].level == HIGH
+
+
+@pytest.mark.parametrize("line", ["sftp server enable", "undo ftp server enable"])
+def test_sftp_and_disabled_ftp_are_quiet(db_session, line):
+    """SFTP（6.1.3 sftp server enable）と止めた形は言わない（見張り）。"""
+    titles = [f.title for f in configcheck.check(db_session, _QX_HEAD + line + "\n#\n").findings]
+    assert _FTP_TITLE not in titles
