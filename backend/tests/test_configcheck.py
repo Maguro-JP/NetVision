@@ -2320,3 +2320,64 @@ def test_undo_style_dhcp_snooping_with_trusted_port_is_quiet(db_session, text):
     """信用する口を決めてあれば出さない（新しい分岐の見張り）。"""
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert not any("DHCP の見張り" in t for t in titles)
+
+
+@pytest.mark.parametrize(
+    ("head", "vendor"),
+    [
+        # 出典: H3C「20-ARP attack protection configuration」（arp detection trust: By default, an
+        # interface is untrusted / If no match is found, the device discards the ARP packet）
+        ("H3C Comware Software, Version 7.1.064\nsysname h3c-a1\n#\n", "h3c"),
+        # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.6.1 arp detection enable、
+        # 8.6.3 arp detection trust（既定は非 ARP トラステッドポート）
+        ("# QX-S1108GT-2G\nsysname qx-a1\n#\n", "nec_qx"),
+    ],
+)
+def test_arp_detection_without_trusted_port(db_session, head, vendor):
+    """H3C・NEC QX の ARP の見張りで、信用する口が1つも無ければ指摘する。"""
+    text = head + "dhcp snooping enable\n#\nvlan 10\n arp detection enable\n#\n" + _UNDO_PORT
+    assert configparse.parse(text).vendor.value == vendor
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "ARP の見張りで、信用する口を1つも決めていません"
+    ]
+    assert finding.sources == [defaults.ARP_DETECTION_UNTRUSTED_SOURCES[vendor]]
+
+
+def test_arp_detection_with_trusted_port_is_quiet(db_session):
+    """上位の口を信用していれば出さない（新しい分岐の見張り）。"""
+    text = (
+        "# QX-S1108GT-2G\nsysname qx-a2\n#\nvlan 10\n arp detection enable\n#\n"
+        "interface GigabitEthernet1/0/8\n port link-type trunk\n arp detection trust\n#\n"
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert not any("ARP の見張り" in t for t in titles)
+
+
+def test_huawei_dai_without_binding_basis(db_session):
+    """Huawei の DAI は、DHCP の見張りも静的な対応表も無いと全部の ARP を捨てる。
+
+    出典: Huawei「S300, S500, S2700, S5700, and S6700 V200R024C00 Configuration Guide - Security」
+    の Configuring DAI（If the ARP packet matches no binding entry, the device considers the ARP
+    packet invalid and discards the packet）。
+    """
+    text = _VRP_HEAD + "vlan 10\n arp anti-attack check user-bind enable\n#\n" + _UNDO_PORT
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "ARP の見張りに、判断のもとがありません"
+    ]
+    assert finding.sources == [defaults.HUAWEI_DAI_BINDING_SOURCE]
+
+
+def test_huawei_dai_with_static_binding_is_quiet(db_session):
+    """静的な対応表（user-bind static）があれば、判断のもとはある（新しい分岐の見張り）。"""
+    text = (
+        _VRP_HEAD
+        + "user-bind static ip-address 10.0.0.5 mac-address 0000-1111-2222\n#\n"
+        + "vlan 10\n arp anti-attack check user-bind enable\n#\n"
+        + _UNDO_PORT
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "ARP の見張りに、判断のもとがありません" not in titles

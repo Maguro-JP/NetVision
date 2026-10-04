@@ -180,6 +180,18 @@ DHCP_SNOOPING_UNTRUSTED_SOURCES: dict[str, str] = {
     "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 7.1.7 dhcp snooping trust:"
     " DHCP snooping を有効にしたのち、すべてのポートが非トラステッドポート",
 }
+#: H3C・NEC QX の ARP の見張り（arp detection）で、口は既定で信用しない
+ARP_DETECTION_UNTRUSTED_SOURCES: dict[str, str] = {
+    "h3c": "H3C「20-ARP attack protection configuration」: arp detection trust の既定は untrusted。"
+    "照合できない ARP は捨てる（If no match is found, the device discards the ARP packet）",
+    "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 8.6.3 arp detection trust:"
+    " インタフェースは非 ARP トラステッドポート",
+}
+#: Huawei の DAI は、DHCP の見張りか静的な対応表と照らし合わせる
+HUAWEI_DAI_BINDING_SOURCE = (
+    "Huawei S300, S500, S2700, S5700, and S6700 V200R024C00 Configuration Guide - Security"
+    "「Configuring DAI」: 対応表に無い ARP は捨てる。DHCP snooping か静的な対応表が要る"
+)
 #: Huawei は全体で有効にしたうえで、VLAN か口でも有効にするまで働かない
 HUAWEI_DHCP_SNOOPING_VLAN_SOURCE = (
     "Huawei S5700 and S6700 V200R025C00 Command Reference の dhcp snooping enable:"

@@ -1163,3 +1163,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（信用する口があるときに出ないことは新しい分岐の見張り）。
 - 残り: ARP 検査（Huawei の arp anti-attack check user-bind、H3C の arp detection）と port-security の undo 系の書き方は、
   まだ見ていない。
+
+## Huawei・H3C・NEC QX の ARP の見張りで通信が落ちる形を、指摘していなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ARP の見張りの点検は IOS の `ip arp inspection` だけを見ていた。
+  H3C・NEC QX の `arp detection enable` で信用する口が無い設定、Huawei の `arp anti-attack check user-bind enable` で
+  判断のもと（DHCP の見張り・静的な対応表）が無い設定は、黙って通っていた。
+- 確かめた資料: H3C「20-ARP attack protection configuration」（照合できない ARP は捨てる。口の既定は untrusted）、
+  NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.6.1・8.6.3、Huawei「S300, S500, S2700, S5700, and S6700
+  V200R024C00 Configuration Guide - Security」Configuring DAI（対応表に無い ARP は捨てる）。
+- 直したこと: `backend/app/services/configcheck.py` に `_undo_arp_inspection` を足した。出典は `defaults.py`。
+  試験は `test_configcheck.py` の末尾（信用する口・静的な対応表があるときに出ないことは新しい分岐の見張り）。
+- 見なかったこと: H3C・NEC QX の「判断のもとが無い」形。H3C の資料は版によって「規則が無ければ全部通す」
+  （IPS 向けの版）と「どれも無ければ通らない」（2025 年の版）で書き方が違うため、決めつけない。
