@@ -2411,3 +2411,33 @@ def test_huawei_port_security_default_action_is_quiet(db_session):
     )
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert not any("ポートセキュリティ" in t for t in titles)
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "snmp-agent community read simple public",
+        "snmp-agent community write simple private",
+        "snmp-agent community simple public user-role network-operator",
+    ],
+)
+def test_h3c_snmp_default_community_with_simple_keyword(db_session, line):
+    """H3C は名前の前に simple を書ける。既定の合言葉はその形でも見つける。
+
+    出典: H3C「02-SNMP commands」の snmp-agent community（VACM mode: { read | write }
+    [ simple | cipher ] community-name、RBAC mode: [ simple | cipher ] community-name
+    user-role role-name）。
+    """
+    text = "H3C Comware Software, Version 7.1.064\nsysname h3c-s1\n#\n" + line + "\n#\n"
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "SNMP の合言葉が既定のままです" in titles
+
+
+def test_h3c_snmp_cipher_community_is_not_read_as_default(db_session):
+    """cipher の後ろは暗号化した名前。既定の合言葉とは言わない（見張り）。"""
+    text = (
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-s2\n#\n"
+        "snmp-agent community read cipher $c$3$abcdefpublic\n#\n"
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "SNMP の合言葉が既定のままです" not in titles
