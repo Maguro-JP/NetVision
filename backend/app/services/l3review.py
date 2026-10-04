@@ -701,6 +701,7 @@ def _no_taking_back(parsed: ParsedConfig) -> list[Finding]:
                     f"{entry.interface}: 優先度 {entry.priority}",
                     f"standby {entry.group} preempt の行なし",
                 ],
+                sources=[defaults.HSRP_PREEMPT_SOURCE],
             )
         )
     return out
@@ -743,6 +744,8 @@ def _all_passive(head: str, label: str) -> Finding:
         "そのプロトコルで覚える経路も1本もありません。"
         "隣を作る口に no passive-interface を入れてください。",
         evidence=[head, "passive-interface default はあるが no passive-interface が無い"],
+        # 資料で確かめたのは OSPF の振る舞い（passive の口では hello を出さない）
+        sources=[defaults.OSPF_PASSIVE_SOURCE] if label == "OSPF" else [],
     )
 
 
