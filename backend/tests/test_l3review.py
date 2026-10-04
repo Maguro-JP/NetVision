@@ -1004,3 +1004,31 @@ def test_equal_weights_inside_a_routing_instance_are_caught(db_session):
     assert any("12.12.1.0/24 への経路が同じ重みで複数" in t for t in titles), titles
     # 全体の 0.0.0.0/0 とインスタンスの 0.0.0.0/0 は別の表。混ぜて「同じ宛先」と言わない
     assert not any("0.0.0.0/0 への経路が同じ重みで複数" in t for t in titles), titles
+
+
+# 既定の振る舞いに拠る指摘にも、拠った資料の名前を添える（docs/knowledge/finding-sources.md）
+
+
+def test_the_no_preempt_finding_names_its_source(db_session):
+    device = _device(db_session, "dist-sw-p1")
+    _snapshot(db_session, device, REDUNDANT.replace("dist-sw-01", "dist-sw-p1"), "p1" * 32)
+    finding = next(
+        f for f in l3review.review(db_session, device).findings if "戻りません" in f.title
+    )
+    assert finding.sources == [defaults.HSRP_PREEMPT_SOURCE]
+
+
+def test_the_all_passive_ospf_finding_names_its_source(db_session):
+    device = _device(db_session, "rt-p2")
+    _snapshot(
+        db_session,
+        device,
+        "hostname rt-p2\n!\ninterface Vlan10\n ip address 10.32.0.1 255.255.255.0\n!\n"
+        "router ospf 1\n router-id 10.32.0.1\n network 10.32.0.0 0.0.255.255 area 0\n"
+        " passive-interface default\n",
+        "p2" * 32,
+    )
+    finding = next(
+        f for f in l3review.review(db_session, device).findings if "全部 passive" in f.title
+    )
+    assert finding.sources == [defaults.OSPF_PASSIVE_SOURCE]

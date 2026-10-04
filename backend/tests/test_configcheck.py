@@ -1999,3 +1999,17 @@ def test_a_port_total_of_two_with_per_vlan_lines_is_enough(db_session):
     )
     titles = _titles(configcheck.check(db_session, text))
     assert not [t for t in titles if "覚えられる数が足りません" in t]
+
+
+def test_snooping_without_a_vlan_names_its_source(db_session):
+    text = "hostname sw-sv1\nip dhcp snooping\n"
+    assert _sources_of(db_session, text, "どの VLAN にも掛けていません") == [
+        defaults.DHCP_SNOOPING_VLAN_SOURCE
+    ]
+
+
+def test_arp_inspection_without_a_basis_names_its_source(db_session):
+    text = "hostname sw-ai9\nip arp inspection vlan 10\n"
+    assert _sources_of(db_session, text, "判断のもとがありません") == [
+        defaults.ARP_INSPECTION_BINDING_SOURCE
+    ]

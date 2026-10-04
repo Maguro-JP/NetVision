@@ -1015,6 +1015,7 @@ def _dhcp_snooping(text: str) -> list[Finding]:
                 why="全体で有効にしても、帯（VLAN）を指定するまで働きません。"
                 "入れたつもりで、偽の DHCP サーバーを止められない状態です。",
                 evidence=["ip dhcp snooping はあるが ip dhcp snooping vlan が無い"],
+                sources=[defaults.DHCP_SNOOPING_VLAN_SOURCE],
             )
         )
         return out
@@ -1305,6 +1306,7 @@ def _arp_inspection(text: str) -> list[Finding]:
                     "ip arp inspection vlan はあるが ip dhcp snooping vlan / "
                     "ip arp inspection filter が無い"
                 ],
+                sources=[defaults.ARP_INSPECTION_BINDING_SOURCE],
             )
         )
     return out

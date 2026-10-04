@@ -142,6 +142,23 @@ DTP_DYNAMIC_AUTO_SOURCE = (
     "Cisco IOS XE 17 Interface Characteristics Configuration Guide の"
     " Default Ethernet interface configuration: L2 の口の既定は dynamic auto（DTP を使う）"
 )
+#: 機種の既定の振る舞いに拠る指摘の資料。値ではなく「書かなければこう動く」を確かめたもの
+HSRP_PREEMPT_SOURCE = (
+    "Cisco IOS First Hop Redundancy Protocols Command Reference の standby preempt、"
+    "Nexus 9000 NX-OS Unicast Routing Configuration Guide「Configuring HSRP」: preempt の既定は無効"
+)
+DHCP_SNOOPING_VLAN_SOURCE = (
+    "Cisco Catalyst 3560 Software Configuration Guide 15.0(2)SE"
+    "「Configuring DHCP Features and IP Source Guard」: VLAN に掛けるまで DHCP の見張りは働かない"
+)
+ARP_INSPECTION_BINDING_SOURCE = (
+    "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9300）"
+    "「Configuring Dynamic ARP Inspection」: 判断は DHCP の見張りの対応表か ARP ACL に拠る"
+)
+OSPF_PASSIVE_SOURCE = (
+    "Cisco IP Routing Configuration Guide（IOS XE）「Default Passive Interfaces」:"
+    " passive の口では OSPF の hello を出さず、隣ができない"
+)
 #: eBGP は既定で直結の相手としか張らない。policyreview.py の update-source の指摘が頼る
 EBGP_CONNECTED_CHECK_SOURCE = (
     "Cisco IOS IP Routing: BGP Command Reference の neighbor disable-connected-check:"

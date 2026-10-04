@@ -1050,3 +1050,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   routing-instances を持つ）、「Routing, Interfaces, and NAT for User Logical Systems」の設定例。
 - 見たこと: いまの読み手は `set logical-systems …` の行を読まない（経路も口も）。経路だけを読むと、口の帯を知らない
   「次の相手へ行けません」が誤った指摘を出すので、口と一緒に別の機器として読むまで手を付けない。判断は decisions.md。
+
+## 既定の振る舞いに拠る4つの指摘に、資料の名前が出ていなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 値ではなく「書かなければこう動く」に拠る指摘
+  （HSRP は既定で役を取り返さない、DHCP の見張りは VLAN に掛けるまで働かない、ARP の見張りの判断のもと、OSPF の
+  passive の口は hello を出さない）は、出典がコードのコメントにしか無く、画面にも API にも出ていなかった。
+- 直したこと: コメントにあった出典（Cisco の FHRP Command Reference・Nexus の HSRP 既定値表、Catalyst 3560 の DHCP Features、
+  Catalyst 9300 の Dynamic ARP Inspection、IOS XE の Default Passive Interfaces）を defaults.py に置き、指摘に付けた。
+  passive は資料で確かめた OSPF のときだけ付ける。試験は `backend/tests/test_l3review.py`・`test_configcheck.py` の末尾。
