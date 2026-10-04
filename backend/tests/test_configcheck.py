@@ -1894,7 +1894,7 @@ def test_a_missing_stp_mode_on_nxos_names_the_nexus_default(db_session):
 
 def test_an_unverified_vendor_gets_no_stp_mode_source():
     """確かめていない機種には、他社の資料を出さない。"""
-    assert defaults.stp_mode_source("huawei") is None
+    assert defaults.stp_mode_source("aruba_os") is None
     assert defaults.stp_mode_source(None) is None
 
 
@@ -2091,3 +2091,60 @@ def test_a_missing_stp_mode_names_the_vendor_default(db_session, text, vendor, w
     [source] = _sources_of(db_session, text, "STP のモードを決めていません")
     assert source == defaults.stp_mode_source(vendor)
     assert word in source
+
+
+_STP_WORD_PORT = (
+    "interface GigabitEthernet1/0/1\n port link-type access\n stp edged-port enable\n#\n"
+)
+
+
+@pytest.mark.parametrize(
+    ("head", "vendor", "word"),
+    [
+        (
+            # 出典: Huawei「S9300 and S9300E V200R008 Configuration Guide - Ethernet Switching」の
+            # Configuring Basic MSTP Functions（By default, the working mode is MSTP.）
+            "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\nsysname hw-s1\n#\n",
+            "huawei",
+            "MSTP",
+        ),
+        (
+            # 出典: H3C「07-Spanning tree configuration」Setting the spanning tree mode
+            # （The default setting is the MSTP mode.）
+            "H3C Comware Software, Version 7.1.064\nsysname h3c-s1\n#\n",
+            "h3c",
+            "MSTP",
+        ),
+        (
+            # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.31 stp mode
+            # （デフォルト mstp）
+            "# QX-S1108GT-2G\nsysname qx-s1\n#\n",
+            "nec_qx",
+            "mstp",
+        ),
+    ],
+)
+def test_a_missing_stp_mode_on_undo_style_vendors(db_session, head, vendor, word):
+    """`stp …` で書く機種でも、モードを決めていなければ同じ指摘を出す。
+
+    これまでは `spanning-tree` の行だけを見ていたため、この3機種では黙って通っていた。
+    """
+    text = head + _STP_WORD_PORT
+    assert configparse.parse(text).vendor.value == vendor
+    [source] = _sources_of(db_session, text, "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source(vendor)
+    assert word in source
+
+
+@pytest.mark.parametrize(
+    "extra", ["stp mode rstp\n#\n", "stp global disable\n#\n", "stp disable\n#\n"]
+)
+def test_undo_style_stp_mode_or_global_off_gets_no_mode_finding(db_session, extra):
+    """モードを書いた機器と、装置全体で STP を止めた機器には出さない（新しい分岐の見張り）。"""
+    text = (
+        "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\nsysname hw-s2\n#\n"
+        + extra
+        + _STP_WORD_PORT
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "STP のモードを決めていません" not in titles

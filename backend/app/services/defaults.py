@@ -214,6 +214,11 @@ _STP_MODE_SOURCES: dict[str, str] = {
     " By default, Rapid-PVST is enabled",
     "cisco_sb": "Cisco Business Switches 350 Series CLI Guide「Spanning Tree Commands」の"
     " spanning-tree mode: The default is RSTP",
+    "huawei": "Huawei S9300 and S9300E V200R008 Configuration Guide - Ethernet Switching"
+    "「Configuring Basic MSTP Functions」: By default, the working mode is MSTP",
+    "h3c": "H3C「07-Spanning tree configuration」Setting the spanning tree mode:"
+    " The default setting is the MSTP mode",
+    "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 8.1.31 stp mode: デフォルト mstp",
 }
 
 

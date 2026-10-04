@@ -1109,3 +1109,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`vlan <vlan id>`・`null 0`）で確かめ、前の項の「未確認」を外した。
 - 直したこと: `backend/app/services/defaults.py` の `_STP_MODE_SOURCES` に3機種を足した。試験は `test_configcheck.py` の末尾。
 - 残り: AOS-S（aruba_os）の STP の既定は資料に当たっていない。Huawei・H3C は `stp mode` で書くため、この指摘の対象外。
+
+## Huawei・H3C・NEC QX で STP のモードを決めていなくても、指摘が出ていなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「STP のモードを決めていません」は
+  `spanning-tree` で始まる行だけを見ていた。`stp …` で書く3機種では、STP を使っていても黙って通っていた。
+- 確かめた資料（3機種とも既定は MSTP）: Huawei「S9300 and S9300E V200R008 Configuration Guide - Ethernet Switching」
+  Configuring Basic MSTP Functions、H3C「07-Spanning tree configuration」Setting the spanning tree mode、
+  NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.31 stp mode。
+- 直したこと: `backend/app/services/configcheck.py` の `_stp` で、3機種は `stp` / `stp mode` の行を見る。
+  行頭の `stp disable`・`stp global disable`（装置全体で止めている）では出さない。出典は `defaults.py` に足した。
+  試験は `test_configcheck.py` の末尾（モードを書いた機器・止めた機器に出ないことは新しい分岐の見張り）。
+- 残り: AOS-S（aruba_os）は、HPE の Advanced Traffic Management Guide 16.10/16.11 で MSTP の説明は読めたが、
+  「既定のモード」を言い切る文に当たっていないので未確認のまま。

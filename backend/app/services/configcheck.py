@@ -773,6 +773,14 @@ def _junos_plain_password(text: str) -> list[Finding]:
 #: 「FastIron 08.0.60 Layer 2 Switching Configuration Guide」の「Enabling or disabling the
 #: Spanning Tree Protocol (STP)」）
 _NO_STP_MODE_COMMAND = frozenset({Vendor.FASTIRON})
+#: STP を `stp …` の行で書く機種。モードは `stp mode { mstp | rstp | stp | pvst }`
+#: （出典: Huawei「S9300 and S9300E V200R008 Configuration Guide - Ethernet Switching」の
+#: Configuring Basic MSTP Functions、H3C「07-Spanning tree configuration」の
+#: Setting the spanning tree mode、
+#: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.31 stp mode）
+_STP_WORD_VENDORS = frozenset({Vendor.HUAWEI, Vendor.H3C, Vendor.NEC_QX})
+#: 装置全体で STP を止めている行（行頭から。口の中の `stp disable` はその口だけ）
+_STP_GLOBAL_OFF = re.compile(r"^stp\s+(?:global\s+)?disable\s*$", re.IGNORECASE)
 
 
 def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
@@ -905,10 +913,16 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
         )
 
     lines = [line.strip() for line in text.splitlines()]
+    # `stp mode` で書く機種（undo 系）と、`spanning-tree mode` で書く機種とで、見る語を替える
+    word = "stp" if vendor in _STP_WORD_VENDORS else "spanning-tree"
+    stp_off = vendor in _STP_WORD_VENDORS and any(
+        _STP_GLOBAL_OFF.match(raw) for raw in text.splitlines()
+    )
     if (
         vendor not in _NO_STP_MODE_COMMAND
-        and any(line.lower().startswith("spanning-tree ") for line in lines)
-        and not any(line.lower().startswith("spanning-tree mode ") for line in lines)
+        and not stp_off
+        and any(line.lower().startswith(f"{word} ") for line in lines)
+        and not any(line.lower().startswith(f"{word} mode ") for line in lines)
     ):
         out.append(
             Finding(
@@ -917,7 +931,7 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
                 why="既定のまま動きます。相手の機器が別のモードだと、"
                 "収束の速さも VLAN ごとの木の作られ方も揃いません。"
                 "現場で1つに決めて、そろえてください。",
-                evidence=["spanning-tree mode の行なし"],
+                evidence=[f"{word} mode の行なし"],
                 # 既定のモードは機種と版で違いうる。資料で確かめた機種だけ出典を付ける
                 sources=[source]
                 if (source := defaults.stp_mode_source(vendor.value if vendor else None))
