@@ -1894,7 +1894,7 @@ def test_a_missing_stp_mode_on_nxos_names_the_nexus_default(db_session):
 
 def test_an_unverified_vendor_gets_no_stp_mode_source():
     """確かめていない機種には、他社の資料を出さない。"""
-    assert defaults.stp_mode_source("aruba_cx") is None
+    assert defaults.stp_mode_source("huawei") is None
     assert defaults.stp_mode_source(None) is None
 
 
@@ -2038,3 +2038,18 @@ def test_junos_without_logical_systems_gets_no_such_note(db_session):
     )
     result = configcheck.check(db_session, text)
     assert not any("論理システム" in note for note in result.notes)
+
+
+def test_a_missing_stp_mode_on_aos_cx_names_the_mstp_default(db_session):
+    """出典: AOS-CX 10.12 Layer-2 Bridging Guide（8400 Switch Series）の spanning-tree mode
+    （「The no form of this command sets the spanning tree mode to the default mstp.」）。
+    """
+    text = (
+        "!Version ArubaOS-CX GL.10.12.1000\nhostname cx-a1\nspanning-tree\n"
+        "interface 1/1/1\n    no shutdown\n    vlan access 10\n"
+        "    spanning-tree port-type admin-edge\n"
+    )
+    assert configparse.parse(text).vendor is configparse.Vendor.ARUBA_CX
+    [source] = _sources_of(db_session, text, "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source("aruba_cx")
+    assert "mstp" in source
