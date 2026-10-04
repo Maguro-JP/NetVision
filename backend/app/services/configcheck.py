@@ -96,7 +96,11 @@ _HYGIENE = (
         re.compile(
             # アラクサラは値を引用符で囲う（`snmp-server community "public" ro`）
             r"^\s*(?:snmp-server community|set snmp community"
-            r"|snmp-agent community\s+(?:read|write))\s+\"?(public|private)\b",
+            # H3C は名前の前に simple / cipher を書ける。RBAC の形は read / write を書かない
+            # （出典: H3C「02-SNMP commands」の snmp-agent community: { read | write }
+            # [ simple | cipher ] community-name、RBAC mode: [ simple | cipher ] community-name
+            # user-role role-name）。cipher の後ろは暗号化した名前なので見ない
+            r"|snmp-agent community(?:\s+(?:read|write))?(?:\s+simple)?)\s+\"?(public|private)\b",
             re.IGNORECASE,
         ),
         HIGH,

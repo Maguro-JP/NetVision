@@ -1187,3 +1187,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（既定のまま＝restrict のときに出ないことは新しい分岐の見張り）。
 - 見なかったこと: Huawei の電話用の口（voice-vlan）で覚える数が足りない形。電話の MAC を port-security の数に入れるかを
   資料で確かめていない。H3C・NEC QX の port-security（port-mode で動きが決まる）は資料に当たっていない。
+
+## H3C の SNMP の既定の合言葉を、simple を書いた形で見落としていた（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「SNMP の合言葉が既定のままです」は
+  `snmp-agent community read public` の形だけを見ていた。H3C の `snmp-agent community read simple public`
+  （名前の前に simple）と、RBAC の形 `snmp-agent community simple public user-role …` は通っていた。
+- 確かめた資料: H3C「02-SNMP commands」の snmp-agent community（VACM: `{ read | write } [ simple | cipher ] community-name`、
+  RBAC: `[ simple | cipher ] community-name user-role role-name`。simple で入れても保存は暗号化）。
+  保存済みの設定には simple の形は残らないが、下書き（作る設定）には出る。
+- 直したこと: `backend/app/services/configcheck.py` の該当の正規表現。cipher の後ろ（暗号化した名前）は見ない。
+  試験は `test_configcheck.py` の末尾（cipher の形で出ないことは見張り）。
+- 見なかったこと: H3C・NEC QX・Huawei の利用者のパスワードの保存形式。H3C Comware 7 は simple で入れても hash して保存する
+  （「Fundamentals Command Reference」set authentication password）ので、保存済みの設定に平文は残らない。
+  Huawei の local-user の書き方（simple の有無）は資料に当たっていない。
