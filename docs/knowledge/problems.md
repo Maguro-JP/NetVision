@@ -1224,3 +1224,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（https で出ないことは見張り）。
 - 見なかったこと: Huawei で行が無いのに既定で開いている形。既定は版で違うので、行が無い機器を「開いている」とも
   「閉じている」とも言わない。H3C の ip http enable の既定は資料に当たっていない（行があれば同じ正規表現に当たる）。
+
+## NEC QX の入る口で認証をなくす `authentication-mode none` を、指摘していなかった（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `line vty 0 63` の下に `authentication-mode none` があっても、
+  何も言っていなかった。その口からは合言葉なしで入れる。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.1 authentication-mode
+  （`authentication-mode { none | password | scheme }`、User line view、既定は VTY が password・AUX line が none）。
+- 直したこと: `backend/app/services/configcheck.py` の `_login_without_authentication`。`line …` / `user-interface …` の
+  まとまりの中の none だけを言う（Huawei の `aaa` の下の authentication-scheme にも同じ字面の行があるため）。
+  試験は `test_configcheck.py` の末尾（password・scheme・aaa の下の none で出ないことは見張り）。
+- 見なかったこと: 書いていない AUX（既定で none）。Huawei の user-interface の none は資料で確かめていない（行があれば同じく言う）。

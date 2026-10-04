@@ -2496,3 +2496,33 @@ def test_undo_style_https_server_is_quiet(db_session, head, line):
     """https は暗号化されるので言わない（見張り）。"""
     titles = [f.title for f in configcheck.check(db_session, head + line + "\n#\n").findings]
     assert "管理用の web が開いています" not in titles
+
+
+_NO_AUTH_TITLE = "機器に入る口で、認証を求めていません"
+
+
+def test_qx_line_without_authentication_is_found(db_session):
+    """`line vty` の下の `authentication-mode none` は、合言葉なしで入れる口として言う。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.1 authentication-mode
+    （none: 認証を無効にします。User line view）。
+    """
+    text = _QX_HEAD + "line vty 0 63\n authentication-mode none\n#\n"
+    found = [f for f in configcheck.check(db_session, text).findings if f.title == _NO_AUTH_TITLE]
+    assert found and found[0].level == HIGH
+    assert found[0].evidence == ["line vty 0 63: authentication-mode none"]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "line vty 0 63\n authentication-mode password\n#\n",
+        "line vty 0 63\n authentication-mode scheme\n#\n",
+        # AAA の認証方式の none は口の設定ではない（Huawei の aaa の下の書き方）
+        "aaa\n authentication-scheme abc\n  authentication-mode none\n#\n",
+    ],
+)
+def test_login_authentication_quiet_cases(db_session, body):
+    """認証ありの口や、口のまとまりの外の none は言わない（見張り）。"""
+    titles = [f.title for f in configcheck.check(db_session, _QX_HEAD + body).findings]
+    assert _NO_AUTH_TITLE not in titles
