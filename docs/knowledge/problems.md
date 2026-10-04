@@ -1082,3 +1082,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/defaults.py` に QX の既定 60 と、QX・IX・AOS-CX の出典を足した。
   試験は `backend/tests/test_l3review.py`・`test_configcheck.py` の末尾。
 - 残り: NEC IX2000/IX3000 の資料は開いていない（IX-R/IX-V の資料で 1）。
+
+## AlaxalA の静的経路で、weight の値をディスタンスと、poll などの語を口の名前と読んでいた（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）:
+  - AlaxalA の経路行は IOS の読み手にそのまま渡していた。そのため `weight 100` の 100 をディスタンスと読み、
+    `poll`・`noresolve` を口の名前と読み、`vlan 10` の 10 をディスタンスと読んでいた。
+  - ディスタンスの既定を Cisco の 1 として見ていた（AlaxalA は 2）。2 を書いた経路と書いていない経路が並ぶと
+    「重みが違う」と取り違え、「同じ重みで複数あります」を落としていた。
+- 確かめた資料: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+  （書式と、<distance> の初期値 2）。「コンフィグレーションガイド Vol.3」Ver.12.2 の表24-3（スタティック経路 2）と
+  「9.1.2 経路選択基準」（weight は同じディスタンスの組の中で選ぶ順。マルチパスの最大（既定 6）までは両方使う）。
+- 直したこと: `backend/app/services/configparse/alaxala.py` で、経路行の後ろの語を IOS の読み手に渡す前に整える。
+  `backend/app/services/defaults.py` に既定 2 と出典を足した。試験は `test_l3review.py`・`test_configparse_alaxala.py` の末尾。
+- 残り: 経路の行での口の書き方（`vlan 10`）は、コマンドレファレンスの「パラメータに指定できる値」を開いておらず未確認。
+  NEC IX2000/IX3000 の資料そのものも開いていない（IX-R/IX-V の資料の ip route の項に、差分の記載は無い）。

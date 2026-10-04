@@ -7,6 +7,8 @@
 
 from __future__ import annotations
 
+import pytest
+
 from app.services import configparse
 from app.services.configparse.base import Vendor
 
@@ -206,3 +208,28 @@ def test_the_detailed_lldp_display_gives_the_neighbours_names():
     # 自分の名前（System Name: LLDP1）と、隣の居ない口は相手にしない
     assert not any(n.remote_hostname == "LLDP1" for n in parsed.neighbors)
     assert not any(n.local_interface == "GigabitEthernet1/2" for n in parsed.neighbors)
+
+
+@pytest.mark.parametrize(
+    ("rest", "interface", "distance"),
+    [
+        ("10.0.0.1 poll", None, None),
+        ("10.0.0.1 noresolve", None, None),
+        ("10.0.0.1 vlan 10", "Vlan10", None),
+        ("10.0.0.1 vlan 10 5 tag 3 noresolve", "Vlan10", 5),
+        ("10.0.0.1 vrf 20 3", None, 3),
+    ],
+)
+def test_ax_static_route_words_are_not_ports_or_distances(rest, interface, distance):
+    """経路の後ろの語を、口の名前やディスタンスと取り違えない。
+
+    出典: アラクサラ「AX3660S コンフィグレーションコマンドレファレンス Vol.2」Ver.12.2 の ip route
+    （`[<distance>] [weight <weight>] [tag <tag>] [{noinstall | reject}] [poll] [noresolve]`、
+    ネクストホップの VRF は `{vrf <nexthop vrf id> | global}`）。
+    """
+    parsed = configparse.parse(
+        f'hostname "ax01"\n! AX3660S\nip route 10.9.0.0 255.255.0.0 {rest}\n'
+    )
+    assert parsed.vendor is configparse.Vendor.ALAXALA
+    [route] = parsed.routes
+    assert (route.next_hop, route.interface, route.distance) == ("10.0.0.1", interface, distance)
