@@ -662,6 +662,18 @@ _EDGE_PORT = re.compile(
 #: become edge ports、「S220, S310, S530, and S620 V600R025C00 Configuration Guide - Ethernet
 #: Switching」Configuring Edge Ports and BPDU Filtering Ports）
 _VRP_EDGED_DEFAULT = re.compile(r"^stp\s+edged-port\s+default\s*$", re.IGNORECASE | re.MULTILINE)
+#: VRP で全部の口を BPDU フィルタにする行（行頭から）。`stp bpdu-filter disable` と書いた口は外れる
+#: （出典: Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter default と
+#: stp bpdu-filter: If a port has been configured as a non-BPDU filter port using the
+#: stp bpdu-filter disable command, it remains a non-BPDU filter port, even if the
+#: stp bpdu-filter default command is run）
+_VRP_FILTER_DEFAULT = re.compile(r"^stp\s+bpdu-filter\s+default\s*$", re.IGNORECASE | re.MULTILINE)
+#: 口で BPDU 保護を外す行。全体の `stp bpdu-protection` より口の指定が勝つ
+#: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.35 stp port bpdu-protection
+#: （インタフェースの BPDU ガード機能の状態はグローバルでの BPDU ガード機能と同一。
+#: disable で無効）、
+#: H3C「07-Spanning tree commands」の stp port bpdu-protection）
+_PORT_BPDU_GUARD_OFF = re.compile(r"^stp\s+port\s+bpdu-protection\s+disable\b", re.IGNORECASE)
 #: 口ごとの BPDU フィルタ。IOS 系は `spanning-tree bpdufilter enable`、
 #: VRP は `stp bpdu-filter enable`
 #: （出典: Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter:
@@ -838,8 +850,11 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
                 and not any(re.match(r"^stp edged-port disable\b", line, re.I) for line in body)
             )
         )
-        and not guarded_here
-        and not any(_BPDU_GUARD.search(line) for line in body)
+        and (
+            # 口で BPDU 保護を外していれば、全体で入れていても守られていない
+            any(_PORT_BPDU_GUARD_OFF.match(line) for line in body)
+            or (not guarded_here and not any(_BPDU_GUARD.search(line) for line in body))
+        )
     ]
     if fast_without_guard:
         out.append(
@@ -885,11 +900,21 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
     # 「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
     # interface is the same as disabling spanning tree on it and can result in
     # spanning-tree loops。Nexus 9000 の同節も同じ注意を書いている）
+    # VRP の `stp bpdu-filter default` は、`stp bpdu-filter disable` と書いた口以外を
+    # BPDU フィルタにする
+    vrp_filter_default = vendor is Vendor.HUAWEI and _VRP_FILTER_DEFAULT.search(text) is not None
     filtered: list[tuple[str, bool, str]] = []
     for name, body in ports:
         written = next(
             (line.strip() for line in body if _PORT_BPDU_FILTER.match(line.strip())), None
         )
+        if (
+            written is None
+            and vrp_filter_default
+            and any(re.match(r"^port link-type\b", line, re.I) for line in body)
+            and not any(re.match(r"^stp bpdu-filter disable\b", line, re.I) for line in body)
+        ):
+            written = "stp bpdu-filter default（全体）"
         if written is None:
             continue
         uplink = any(

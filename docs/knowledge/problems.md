@@ -1137,3 +1137,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   対象は `port link-type` のある口で `stp edged-port disable` を書いていない口。全体の `stp bpdu-protection` があれば出さない。
   BPDU フィルタは `port link-type trunk` の口を trunk として HIGH にする。試験は `test_configcheck.py` の末尾。
 - 残り: 全体の `stp bpdu-filter default` は見ていない。H3C・NEC QX の同等の書き方は資料に当たっていない。
+
+## 口で外した BPDU 保護と、Huawei の全体の BPDU フィルタを読んでいなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）:
+  - NEC QX・H3C で、全体の `stp bpdu-protection` があると、口で `stp port bpdu-protection disable` にした
+    端末口まで守られていることにしていた（`bpdu-protection` の語だけを見ていたため、disable も「守り」と読んでいた）。
+  - Huawei の全体の `stp bpdu-filter default`（`stp bpdu-filter disable` の口以外が BPDU フィルタ）を読んでいなかった。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.17 stp bpdu-protection・8.1.22 stp edged-port・
+  8.1.35 stp port bpdu-protection（口の状態は既定で全体と同じ。disable で無効）、H3C「07-Spanning tree commands」の
+  stp port bpdu-protection、Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter。
+  NEC QX のこの資料には BPDU フィルタのコマンドは無い。
+- 直したこと: `backend/app/services/configcheck.py` の `_stp`。試験は `test_configcheck.py` の末尾。
