@@ -2053,3 +2053,41 @@ def test_a_missing_stp_mode_on_aos_cx_names_the_mstp_default(db_session):
     [source] = _sources_of(db_session, text, "STP のモードを決めていません")
     assert source == defaults.stp_mode_source("aruba_cx")
     assert "mstp" in source
+
+
+@pytest.mark.parametrize(
+    ("text", "vendor", "word"),
+    [
+        (
+            # 出典: アラクサラ「AX3660S コンフィグレーションガイド Vol.1」Ver.12.1
+            # 27.2.2 動作モードの設定
+            # （動作モードを設定しない場合，pvst モードで動作します）
+            'hostname "ax-s1"\n! AX3660S\ninterface gigabitethernet 1/0/1\n'
+            " switchport mode access\n spanning-tree portfast\n",
+            "alaxala",
+            "pvst",
+        ),
+        (
+            # 出典: Dell SmartFabric OS10 User Guide Release 10.6.0「Enable Rapid-PVST」
+            # （By default, Rapid-PVST is enabled and creates an instance during VLAN creation.）
+            "hostname os10-a1\ninterface ethernet 1/1/1\n switchport access vlan 10\n"
+            " spanning-tree port type edge\n",
+            "dell_os10",
+            "Rapid-PVST",
+        ),
+        (
+            # 出典: Cisco Business Switches 350 Series CLI Guide「Spanning Tree Commands」の
+            # spanning-tree mode（Default Configuration: The default is RSTP.）
+            "config-file-header\nsb-a1\nv3.0.0.69 / RCBS3.0.0.69\n"
+            "interface gi1/0/1\n spanning-tree portfast\n",
+            "cisco_sb",
+            "RSTP",
+        ),
+    ],
+)
+def test_a_missing_stp_mode_names_the_vendor_default(db_session, text, vendor, word):
+    """STP のモードを決めていないとき、その機種の資料で確かめた既定を出す。"""
+    assert configparse.parse(text).vendor.value == vendor
+    [source] = _sources_of(db_session, text, "STP のモードを決めていません")
+    assert source == defaults.stp_mode_source(vendor)
+    assert word in source
