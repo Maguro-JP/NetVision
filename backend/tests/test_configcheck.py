@@ -2205,3 +2205,47 @@ def test_vrp_port_bpdu_filter_is_found(db_session):
     ]
     assert finding.level == "high"
     assert finding.evidence == ["GigabitEthernet0/0/3: stp bpdu-filter enable（trunk の口）"]
+
+
+def test_port_bpdu_protection_disable_overrides_global_guard(db_session):
+    """全体で BPDU 保護を入れていても、口で `stp port bpdu-protection disable` にした端末口は
+    守られない。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」8.1.35 stp port bpdu-protection
+    （インタフェースの BPDU ガード機能の状態はグローバルでの BPDU ガード機能と同一。
+    disable: BPDU ガード機能を無効にします）。
+    H3C「07-Spanning tree commands」にも同じコマンドがある。
+    """
+    text = (
+        "# QX-S1108GT-2G\nsysname qx-g1\n#\nstp mode rstp\nstp bpdu-protection\n#\n"
+        "interface GigabitEthernet1/0/1\n port link-type access\n stp edged-port\n#\n"
+        "interface GigabitEthernet1/0/2\n port link-type access\n stp edged-port\n"
+        " stp port bpdu-protection disable\n#\n"
+    )
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "端末用の口に、BPDU guard が入っていません"
+    ]
+    assert finding.evidence == ["GigabitEthernet1/0/2: 端末用の口の指定のみ"]
+
+
+def test_vrp_bpdu_filter_default_is_found(db_session):
+    """VRP の全体の `stp bpdu-filter default` は、`stp bpdu-filter disable` の口以外を
+    BPDU フィルタにする。
+
+    出典: Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter
+    （If a port has been configured as a non-BPDU filter port using the stp bpdu-filter
+    disable command, it remains a non-BPDU filter port, even if the stp bpdu-filter default
+    command is run）。
+    """
+    text = (
+        _VRP_HEAD
+        + "stp mode rstp\nstp bpdu-filter default\n#\n"
+        + "interface GigabitEthernet0/0/1\n port link-type access\n#\n"
+        + "interface GigabitEthernet0/0/2\n port link-type trunk\n stp bpdu-filter disable\n#\n"
+    )
+    [finding] = [
+        f for f in configcheck.check(db_session, text).findings if "BPDU フィルタ" in f.title
+    ]
+    assert finding.evidence == ["GigabitEthernet0/0/1: stp bpdu-filter default（全体）"]
