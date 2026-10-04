@@ -171,6 +171,21 @@ DHCP_SNOOPING_VLAN_SOURCE = (
     "Cisco Catalyst 3560 Software Configuration Guide 15.0(2)SE"
     "「Configuring DHCP Features and IP Source Guard」: VLAN に掛けるまで DHCP の見張りは働かない"
 )
+#: `dhcp snooping enable` で書く機種の、信用する口の既定（有効にすると全部の口が信用しない口）
+DHCP_SNOOPING_UNTRUSTED_SOURCES: dict[str, str] = {
+    "huawei": "Huawei S5700 and S6700 V200R025C00 Command Reference の dhcp snooping trusted:"
+    " By default, all interfaces are untrusted interfaces",
+    "h3c": "H3C「DHCP snooping configuration」: By default, all ports are untrusted ports"
+    " after DHCP snooping is enabled",
+    "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 7.1.7 dhcp snooping trust:"
+    " DHCP snooping を有効にしたのち、すべてのポートが非トラステッドポート",
+}
+#: Huawei は全体で有効にしたうえで、VLAN か口でも有効にするまで働かない
+HUAWEI_DHCP_SNOOPING_VLAN_SOURCE = (
+    "Huawei S5700 and S6700 V200R025C00 Command Reference の dhcp snooping enable:"
+    " You must enable DHCP snooping in the system view before enabling DHCP snooping on an"
+    " interface, in a BD, or in a VLAN"
+)
 ARP_INSPECTION_BINDING_SOURCE = (
     "Cisco Security Configuration Guide, IOS XE 17.17.x（Catalyst 9300）"
     "「Configuring Dynamic ARP Inspection」: 判断は DHCP の見張りの対応表か ARP ACL に拠る"

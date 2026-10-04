@@ -2249,3 +2249,74 @@ def test_vrp_bpdu_filter_default_is_found(db_session):
         f for f in configcheck.check(db_session, text).findings if "BPDU フィルタ" in f.title
     ]
     assert finding.evidence == ["GigabitEthernet0/0/1: stp bpdu-filter default（全体）"]
+
+
+_UNDO_PORT = "interface GigabitEthernet1/0/1\n port link-type access\n#\n"
+
+
+@pytest.mark.parametrize(
+    ("head", "vendor", "word"),
+    [
+        (
+            # 出典: Huawei「S5700 and S6700 V200R025C00 Command Reference」の dhcp snooping
+            # trusted（By default, all interfaces are untrusted interfaces）
+            _VRP_HEAD + "dhcp enable\ndhcp snooping enable\n#\nvlan 10\n dhcp snooping enable\n#\n",
+            "huawei",
+            "dhcp snooping trusted",
+        ),
+        (
+            # 出典: H3C「DHCP snooping configuration」（If you enable DHCP snooping globally, DHCP
+            # snooping is enabled on all interfaces / all ports are untrusted ports after DHCP
+            # snooping is enabled）
+            "H3C Comware Software, Version 7.1.064\nsysname h3c-d1\n#\ndhcp snooping enable\n#\n",
+            "h3c",
+            "dhcp snooping trust",
+        ),
+        (
+            # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」7.1.2 dhcp snooping enable
+            # （トラステッドポートを設定する前は、DHCP サーバからのすべての応答を廃棄）
+            "# QX-S1108GT-2G\nsysname qx-d1\n#\ndhcp snooping enable\n#\n",
+            "nec_qx",
+            "dhcp snooping trust",
+        ),
+    ],
+)
+def test_undo_style_dhcp_snooping_without_trusted_port(db_session, head, vendor, word):
+    """`dhcp snooping enable` で書く機種でも、信用する口が無ければ指摘する。"""
+    text = head + _UNDO_PORT
+    assert configparse.parse(text).vendor.value == vendor
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "DHCP の見張りで、信用する口を1つも決めていません"
+    ]
+    assert finding.evidence == [f"dhcp snooping enable はあるが {word} が無い"]
+    assert finding.sources == [defaults.DHCP_SNOOPING_UNTRUSTED_SOURCES[vendor]]
+
+
+def test_huawei_dhcp_snooping_global_only_is_not_on_any_vlan(db_session):
+    """Huawei は全体の `dhcp snooping enable` だけでは働かない。VLAN か口でも有効にする。
+
+    出典: Huawei「S5700 and S6700 V200R025C00 Command Reference」の dhcp snooping enable
+    （You must enable DHCP snooping in the system view before enabling DHCP snooping on an
+    interface, in a BD, or in a VLAN）。
+    """
+    text = _VRP_HEAD + "dhcp enable\ndhcp snooping enable\n#\n" + _UNDO_PORT
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "DHCP の見張りを、どの VLAN にも掛けていません" in titles
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        _VRP_HEAD
+        + "dhcp snooping enable\ndhcp snooping enable vlan 10\n#\n"
+        + "interface GigabitEthernet0/0/24\n port link-type trunk\n dhcp snooping trusted\n#\n",
+        "# QX-S1108GT-2G\nsysname qx-d2\n#\ndhcp snooping enable\n#\n"
+        "interface GigabitEthernet1/0/8\n port link-type trunk\n dhcp snooping trust\n#\n",
+    ],
+)
+def test_undo_style_dhcp_snooping_with_trusted_port_is_quiet(db_session, text):
+    """信用する口を決めてあれば出さない（新しい分岐の見張り）。"""
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert not any("DHCP の見張り" in t for t in titles)

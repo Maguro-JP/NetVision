@@ -248,6 +248,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_hsrp_version(text))
     found.extend(_etherchannel(text))
     found.extend(_dhcp_snooping(text))
+    found.extend(_undo_dhcp_snooping(text, parsed.vendor))
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
@@ -1116,6 +1117,67 @@ def _dhcp_snooping(text: str) -> list[Finding]:
 
     out.extend(_dhcp_snooping_option82(lines))
     return out
+
+
+#: `dhcp snooping enable` で書く機種（undo 系）
+_UNDO_DHCP_SNOOPING_VENDORS = frozenset({Vendor.HUAWEI, Vendor.H3C, Vendor.NEC_QX})
+#: 全体で有効にする行（行頭から。VLAN を伴う形は Huawei の「VLAN に掛ける」書き方）
+_UNDO_DHCP_SNOOPING_GLOBAL = re.compile(
+    r"^dhcp\s+snooping\s+enable(?:\s+(?:ipv4|ipv6))?\s*$", re.IGNORECASE | re.MULTILINE
+)
+#: Huawei で VLAN・口に掛ける行（VLAN・口の中の `dhcp snooping enable`、全体の `… enable vlan N`）
+_HUAWEI_DHCP_SNOOPING_SCOPED = re.compile(
+    r"^(?:\s+dhcp\s+snooping\s+enable\s*$|dhcp\s+snooping\s+enable\s+vlan\b)",
+    re.IGNORECASE | re.MULTILINE,
+)
+#: 信用する口。Huawei は `trusted`、H3C・NEC QX は `trust`。VLAN の中で口を名指す形もある
+_UNDO_DHCP_SNOOPING_TRUST = re.compile(r"^\s*dhcp\s+snooping\s+trust(?:ed)?\b", re.I | re.M)
+
+
+def _undo_dhcp_snooping(text: str, vendor: Vendor | None) -> list[Finding]:
+    """`dhcp snooping enable` で書く機種の、DHCP の見張りの決め忘れ。
+
+    出典:
+    - Huawei「S5700 and S6700 V200R025C00 Command Reference」の dhcp snooping enable（You must
+      enable DHCP snooping in the system view before enabling DHCP snooping on an interface,
+      in a BD, or in a VLAN）と dhcp snooping trusted（By default, all interfaces are untrusted
+      interfaces）
+    - H3C「DHCP snooping configuration」（If you enable DHCP snooping globally, DHCP snooping is
+      enabled on all interfaces / By default, all ports are untrusted ports after DHCP snooping
+      is enabled）
+    - NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」7.1.2 dhcp snooping enable（トラステッド
+      ポートを設定する前は、装置は DHCP サーバから送信されたすべての応答を廃棄します）、
+      7.1.7 dhcp snooping trust
+    """
+    if vendor not in _UNDO_DHCP_SNOOPING_VENDORS or not _UNDO_DHCP_SNOOPING_GLOBAL.search(text):
+        return []
+    if vendor is Vendor.HUAWEI and not _HUAWEI_DHCP_SNOOPING_SCOPED.search(text):
+        return [
+            Finding(
+                level=MEDIUM,
+                title="DHCP の見張りを、どの VLAN にも掛けていません",
+                why="全体で有効にしても、VLAN か口でも有効にするまで働きません。"
+                "入れたつもりで、偽の DHCP サーバーを止められない状態です。",
+                evidence=[
+                    "dhcp snooping enable（全体）はあるが、VLAN・口の dhcp snooping enable が無い"
+                ],
+                sources=[defaults.HUAWEI_DHCP_SNOOPING_VLAN_SOURCE],
+            )
+        ]
+    if _UNDO_DHCP_SNOOPING_TRUST.search(text):
+        return []
+    word = "dhcp snooping trusted" if vendor is Vendor.HUAWEI else "dhcp snooping trust"
+    return [
+        Finding(
+            level=HIGH,
+            title="DHCP の見張りで、信用する口を1つも決めていません",
+            why="口は既定で「信用しない」です。本物の DHCP サーバーへ向かう口"
+            "（上位へのトランクを含む）を信用する設定にしないと、"
+            "配られるはずのアドレスまで落ちて、端末がアドレスを取れません。",
+            evidence=[f"dhcp snooping enable はあるが {word} が無い"],
+            sources=[defaults.DHCP_SNOOPING_UNTRUSTED_SOURCES[vendor.value]],
+        )
+    ]
 
 
 def _dhcp_snooping_option82(lines: list[str]) -> list[Finding]:
