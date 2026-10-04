@@ -2148,3 +2148,60 @@ def test_undo_style_stp_mode_or_global_off_gets_no_mode_finding(db_session, extr
     )
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert "STP のモードを決めていません" not in titles
+
+
+_VRP_HEAD = "VRP (R) software, Version 8.180 (CE6850 V200R005C10SPC800)\nsysname hw-e1\n#\n"
+
+
+def test_vrp_edged_port_default_without_bpdu_protection_is_found(db_session):
+    """`stp edged-port default` は全部の口を端末口にする。BPDU protection が無ければ指摘する。
+
+    出典: Huawei「Fat AP and Cloud AP V200R019C00 Command Reference」の stp edged-port default
+    （After the stp edged-port default command is run on a device, all ports of the device will be
+    become edge ports）。`stp edged-port disable` と書いた口は外れる（「S220, S310, S530, and S620
+    V600R025C00 Configuration Guide - Ethernet Switching」Configuring Edge Ports and BPDU Filtering
+    Ports）。
+    """
+    text = (
+        _VRP_HEAD
+        + "stp mode rstp\nstp edged-port default\n#\n"
+        + "interface GigabitEthernet0/0/1\n port link-type access\n#\n"
+        + "interface GigabitEthernet0/0/2\n port link-type trunk\n stp edged-port disable\n#\n"
+    )
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "端末用の口に、BPDU guard が入っていません"
+    ]
+    assert finding.evidence == ["GigabitEthernet0/0/1: 端末用の口の指定のみ"]
+
+
+def test_vrp_edged_port_default_with_global_bpdu_protection_is_quiet(db_session):
+    """全体の `stp bpdu-protection` で守られていれば出さない（新しい分岐の見張り）。"""
+    text = (
+        _VRP_HEAD
+        + "stp mode rstp\nstp edged-port default\nstp bpdu-protection\n#\n"
+        + "interface GigabitEthernet0/0/1\n port link-type access\n#\n"
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert "端末用の口に、BPDU guard が入っていません" not in titles
+
+
+def test_vrp_port_bpdu_filter_is_found(db_session):
+    """VRP の口ごとの `stp bpdu-filter enable` も、その口の STP を止めるのと同じ。
+
+    出典: Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter
+    （If the stp bpdu-filter enable command is run on a port, the port does not process or send
+    BPDUs. The port cannot negotiate the STP status with the directly connected port on the peer
+    device.）
+    """
+    text = (
+        _VRP_HEAD
+        + "stp mode rstp\n#\n"
+        + "interface GigabitEthernet0/0/3\n port link-type trunk\n stp bpdu-filter enable\n#\n"
+    )
+    [finding] = [
+        f for f in configcheck.check(db_session, text).findings if "BPDU フィルタ" in f.title
+    ]
+    assert finding.level == "high"
+    assert finding.evidence == ["GigabitEthernet0/0/3: stp bpdu-filter enable（trunk の口）"]

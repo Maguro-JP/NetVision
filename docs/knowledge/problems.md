@@ -1122,3 +1122,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（モードを書いた機器・止めた機器に出ないことは新しい分岐の見張り）。
 - 残り: AOS-S（aruba_os）は、HPE の Advanced Traffic Management Guide 16.10/16.11 で MSTP の説明は読めたが、
   「既定のモード」を言い切る文に当たっていないので未確認のまま。
+
+## Huawei の全体の端末口指定と、口ごとの BPDU フィルタを読んでいなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）:
+  - `stp edged-port default`（全部の口を端末口にする）を読んでおらず、BPDU protection が無くても
+    「端末用の口に、BPDU guard が入っていません」が出ていなかった。
+  - 口ごとの `stp bpdu-filter enable`（その口の STP を止めるのと同じ）は IOS の書き方しか見ておらず、黙って通っていた。
+- 確かめた資料: Huawei「Fat AP and Cloud AP V200R019C00 Command Reference」stp edged-port default、
+  「S220, S310, S530, and S620 V600R025C00 Configuration Guide - Ethernet Switching」Configuring Edge Ports and
+  BPDU Filtering Ports（口の `stp edged-port disable` で外れる）、「NetEngine AR6700V-L V600R024C00 Command Reference」
+  stp bpdu-filter（the port does not process or send BPDUs）。
+- 直したこと: `backend/app/services/configcheck.py` の `_stp`。全体の端末口指定は Huawei だけ（資料が Huawei のもの）、
+  対象は `port link-type` のある口で `stp edged-port disable` を書いていない口。全体の `stp bpdu-protection` があれば出さない。
+  BPDU フィルタは `port link-type trunk` の口を trunk として HIGH にする。試験は `test_configcheck.py` の末尾。
+- 残り: 全体の `stp bpdu-filter default` は見ていない。H3C・NEC QX の同等の書き方は資料に当たっていない。
