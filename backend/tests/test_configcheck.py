@@ -2381,3 +2381,33 @@ def test_huawei_dai_with_static_binding_is_quiet(db_session):
     )
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert "ARP の見張りに、判断のもとがありません" not in titles
+
+
+def test_huawei_port_security_protect_action_protect_is_silent(db_session):
+    """Huawei の `port-security protect-action protect` は、超えた分を記録なしで捨てる。
+
+    出典: Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の
+    port-security protect-action（The default action is restrict. / protect: Discards packets with
+    new source MAC addresses / restrict: … and sends a trap message）。
+    """
+    text = (
+        _VRP_HEAD
+        + "interface GigabitEthernet0/0/5\n port link-type access\n port-security enable\n"
+        + " port-security protect-action protect\n#\n"
+    )
+    [finding] = [
+        f
+        for f in configcheck.check(db_session, text).findings
+        if f.title == "ポートセキュリティが、黙って落とす設定になっています"
+    ]
+    assert finding.evidence == ["GigabitEthernet0/0/5: port-security protect-action protect"]
+
+
+def test_huawei_port_security_default_action_is_quiet(db_session):
+    """protect-action を書かなければ既定の restrict（記録が残る）。指摘しない（見張り）。"""
+    text = (
+        _VRP_HEAD
+        + "interface GigabitEthernet0/0/5\n port link-type access\n port-security enable\n#\n"
+    )
+    titles = [f.title for f in configcheck.check(db_session, text).findings]
+    assert not any("ポートセキュリティ" in t for t in titles)

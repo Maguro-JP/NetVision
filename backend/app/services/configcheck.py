@@ -1844,8 +1844,26 @@ def _port_admission(text: str) -> list[Finding]:
             )
         )
 
+    # Huawei は `port-security protect-action protect` が同じ「黙って捨てる」。既定は restrict
+    # （出典: Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の
+    # port-security protect-action: The default action is restrict. / protect: Discards packets
+    # with new source MAC addresses / restrict: … and sends a trap message）
     protect_only = [
-        name for name, body in ports if any("violation protect" in line.lower() for line in body)
+        (name, written)
+        for name, body in ports
+        if (
+            written := next(
+                (
+                    line.strip()
+                    for line in body
+                    if "violation protect" in line.lower()
+                    or re.match(
+                        r"^port-security\s+protect-action\s+protect\s*$", line.strip(), re.I
+                    )
+                ),
+                None,
+            )
+        )
     ]
     if protect_only:
         out.append(
@@ -1855,7 +1873,7 @@ def _port_admission(text: str) -> list[Finding]:
                 why="protect は、超えた分を捨てるだけで記録も残りません。"
                 "つながらないという申告だけが来て、機器側には何の跡もありません。"
                 "restrict なら記録が残ります。",
-                evidence=[f"{name}: violation protect" for name in protect_only[:5]],
+                evidence=[f"{name}: {written}" for name, written in protect_only[:5]],
             )
         )
     return out
