@@ -656,6 +656,19 @@ _EDGE_PORT = re.compile(
     r"|spanning-tree\s+port-type\s+admin-edge\s*$)",  # Aruba CX
     re.IGNORECASE,
 )
+#: VRP で全部の口を端末口にする行（行頭から）。`stp edged-port disable` と書いた口は外れる
+#: （出典: Huawei「Fat AP and Cloud AP V200R019C00 Command Reference」の stp edged-port default:
+#: After the stp edged-port default command is run on a device, all ports of the device will be
+#: become edge ports、「S220, S310, S530, and S620 V600R025C00 Configuration Guide - Ethernet
+#: Switching」Configuring Edge Ports and BPDU Filtering Ports）
+_VRP_EDGED_DEFAULT = re.compile(r"^stp\s+edged-port\s+default\s*$", re.IGNORECASE | re.MULTILINE)
+#: 口ごとの BPDU フィルタ。IOS 系は `spanning-tree bpdufilter enable`、
+#: VRP は `stp bpdu-filter enable`
+#: （出典: Huawei「NetEngine AR6700V-L V600R024C00 Command Reference」の stp bpdu-filter:
+#: If the stp bpdu-filter enable command is run on a port, the port does not process or send BPDUs）
+_PORT_BPDU_FILTER = re.compile(
+    r"^(?:spanning-tree\s+bpdufilter|stp\s+bpdu-filter)\s+enable\b", re.IGNORECASE
+)
 #: 全体でトランク以外の口を端末口にする書き方
 _PORTFAST_DEFAULT = re.compile(
     r"^spanning-tree\s+portfast(?:\s+edge)?\s+default\s*$", re.IGNORECASE | re.MULTILINE
@@ -807,6 +820,8 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
     # configuration command to globally enable the PortFast feature on all
     # nontrunking ports）
     fast_by_default = _PORTFAST_DEFAULT.search(text) is not None
+    # VRP の `stp edged-port default` は、`stp edged-port disable` と書いた口以外を端末口にする
+    vrp_edged_default = vendor is Vendor.HUAWEI and _VRP_EDGED_DEFAULT.search(text) is not None
     fast_without_guard = [
         name
         for name, body in ports
@@ -816,6 +831,11 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
                 fast_by_default
                 and any(re.match(r"^switchport mode access\b", line, re.I) for line in body)
                 and not any(re.match(r"^no spanning-tree portfast\b", line, re.I) for line in body)
+            )
+            or (
+                vrp_edged_default
+                and any(re.match(r"^port link-type\b", line, re.I) for line in body)
+                and not any(re.match(r"^stp edged-port disable\b", line, re.I) for line in body)
             )
         )
         and not guarded_here
@@ -865,26 +885,29 @@ def _stp(text: str, vendor: Vendor | None = None) -> list[Finding]:
     # 「Bridge Protocol Data Unit Filtering」: Enabling BPDU filtering on an
     # interface is the same as disabling spanning tree on it and can result in
     # spanning-tree loops。Nexus 9000 の同節も同じ注意を書いている）
-    filtered: list[tuple[str, bool]] = []
+    filtered: list[tuple[str, bool, str]] = []
     for name, body in ports:
-        if not any(
-            re.match(r"^spanning-tree\s+bpdufilter\s+enable\b", line.strip(), re.IGNORECASE)
-            for line in body
-        ):
+        written = next(
+            (line.strip() for line in body if _PORT_BPDU_FILTER.match(line.strip())), None
+        )
+        if written is None:
             continue
-        uplink = any(line.lower().strip().startswith("switchport mode trunk") for line in body)
-        filtered.append((name, uplink))
+        uplink = any(
+            line.lower().strip().startswith(("switchport mode trunk", "port link-type trunk"))
+            for line in body
+        )
+        filtered.append((name, uplink, written))
     if filtered:
         out.append(
             Finding(
-                level=HIGH if any(uplink for _, uplink in filtered) else MEDIUM,
+                level=HIGH if any(uplink for _, uplink, _ in filtered) else MEDIUM,
                 title="BPDU フィルタを口ごとに入れています（その口の STP が止まります）",
                 why="この口は BPDU を送りも受けもしません。相手が機器だと、輪ができても"
                 "誰も気づかないまま通し続けます。端末だけをつなぐ口でなければ外して、"
                 "BPDU guard（挿されたら落とす）に替えてください。",
                 evidence=[
-                    f"{name}: spanning-tree bpdufilter enable" + ("（trunk の口）" if up else "")
-                    for name, up in filtered[:5]
+                    f"{name}: {written}" + ("（trunk の口）" if up else "")
+                    for name, up, written in filtered[:5]
                 ],
             )
         )
