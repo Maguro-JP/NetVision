@@ -161,6 +161,12 @@ _HYGIENE = (
 )
 
 
+#: Junos の論理システム。set 形式と囲みの形のどちらでも、行頭から始まる
+#: （出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の
+#: set logical-systems … の設定例）
+_JUNOS_LOGICAL_SYSTEM = re.compile(r"^(?:set\s+)?logical-systems\s+\S+", re.MULTILINE)
+
+
 def check(db: Session, text: str, *, filename: str = "config.txt") -> CheckResult:
     """その場で見る。台帳には何も書かない。"""
     parsed = configparse.parse(text)
@@ -194,6 +200,14 @@ def check(db: Session, text: str, *, filename: str = "config.txt") -> CheckResul
         result.notes.append(
             "メーカーを判別できませんでした。読めた範囲だけで見ています。"
             "show version の出力も一緒に渡すと、もう少し読めます。"
+        )
+
+    if parsed.vendor is Vendor.JUNIPER and _JUNOS_LOGICAL_SYSTEM.search(text):
+        # 論理システムは自分の口と経路表を持つ別の機器として動く。読まずに黙っていると、
+        # その中の口・経路・誤りが「無い」ことになる（docs/knowledge/decisions.md）
+        result.notes.append(
+            "論理システム（logical-systems）の中の設定は読んでいません。"
+            "論理システムごとの口・経路と、その中の誤りはこの結果に入っていません。"
         )
 
     # 流儀との違いを先に出す。同じことを2度言わないよう、こちらで出した分は

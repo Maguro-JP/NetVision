@@ -1059,3 +1059,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: コメントにあった出典（Cisco の FHRP Command Reference・Nexus の HSRP 既定値表、Catalyst 3560 の DHCP Features、
   Catalyst 9300 の Dynamic ARP Inspection、IOS XE の Default Passive Interfaces）を defaults.py に置き、指摘に付けた。
   passive は資料で確かめた OSPF のときだけ付ける。試験は `backend/tests/test_l3review.py`・`test_configcheck.py` の末尾。
+
+## Junos の論理システムの中を読んでいないことが、結果に出ていなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `set logical-systems …` の行は読み手が読まないのに、
+  設定の点検の結果には何も出ず、論理システムの中の口・経路・誤りが「無い」ように見えていた。
+- 直したこと: 論理システムの行があれば notes に「論理システムの中は読んでいない」と出す。囲みの形も同じ。
+  試験は `backend/tests/test_configcheck.py` の末尾（論理システムが無いときに出ないことは、新しい分岐の見張り）。
+- 残り: 論理システムを別の機器として読むこと（設計は decisions.md）。
