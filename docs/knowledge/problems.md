@@ -1176,3 +1176,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（信用する口・静的な対応表があるときに出ないことは新しい分岐の見張り）。
 - 見なかったこと: H3C・NEC QX の「判断のもとが無い」形。H3C の資料は版によって「規則が無ければ全部通す」
   （IPS 向けの版）と「どれも無ければ通らない」（2025 年の版）で書き方が違うため、決めつけない。
+
+## Huawei の port-security で「黙って捨てる」指定を、指摘していなかった（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「ポートセキュリティが、黙って落とす設定になっています」は
+  IOS の `violation protect` だけを見ていた。Huawei の `port-security protect-action protect`（超えた分を記録なしで捨てる）は通っていた。
+- 確かめた資料: Huawei「S1720, S2700, S5700, and S6720 V200R011C10 Command Reference」の port-security protect-action
+  （既定は restrict。protect は捨てるだけ、restrict は捨てて trap を出す）と port-security max-mac-num（既定 1）。
+- 直したこと: `backend/app/services/configcheck.py` の該当の指摘で、Huawei の書き方も見る。証跡は書いてある行そのものにした。
+  試験は `test_configcheck.py` の末尾（既定のまま＝restrict のときに出ないことは新しい分岐の見張り）。
+- 見なかったこと: Huawei の電話用の口（voice-vlan）で覚える数が足りない形。電話の MAC を port-security の数に入れるかを
+  資料で確かめていない。H3C・NEC QX の port-security（port-mode で動きが決まる）は資料に当たっていない。
