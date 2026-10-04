@@ -54,7 +54,14 @@ STATIC_ROUTE_DISTANCE = 1
 #:   読み手（configparse/routing.py の _junos_static）が経路ごとの距離として入れる
 #: Arista は Cisco と同じ 1（EOS User Manual「IPv4」の ip route: By default, the administrative
 #: distance assigned to static routes is 1）なので、上の表には置かず出典だけを持つ。
-#: 未確認: NEC QX（H3C の OEM だが資料に届かない）。
+#: - NEC QX: 「QX-S1100G シリーズ コマンドマニュアル 1.9版」セクション4 2.1.2 ip route-static
+#:   （「preference preference: … デフォルトは 60 です。」）、
+#:   2.1.3 ip route-static default-preference（デフォルト 60）
+#: NEC IX は Cisco と同じ 1 なので、上の表には置かず出典だけを持つ。出典は NEC
+#: 「IX-R/IX-V コマンドリファレンス 1.3」IPv4 編のスタティックルート追加
+#: （DISTANCE のデフォルト値: 1）、
+#: 「IX-R/IX-V 機能説明書」2.15 ルーティングの設定の既定のディスタンス表（Static: 1）。
+#: 未確認: IX2000/IX3000 の資料。
 #: `ip route-static default-preference` で既定を変えた機器は、書き換えた後に足した経路にだけ効くため
 #: preference を書いていない経路の距離が決まらない。l3review はその経路を含む組を判定しない
 STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
@@ -62,6 +69,7 @@ STATIC_ROUTE_DISTANCE_BY_VENDOR: dict[str, int] = {
     "h3c": 60,
     "fortinet": 10,
     "juniper": 5,
+    "nec_qx": 60,
 }
 
 
@@ -84,6 +92,10 @@ _STATIC_DISTANCE_SOURCES: dict[str, str] = {
     "h3c": "H3C Comware 7「02-Static routing commands」の ip route-static: preference の既定 60",
     "fortinet": "FortiOS CLI Reference「config router static」: distance の既定 10",
     "juniper": "Juniper「Configure Static Routes」: 静的経路の preference は 5",
+    "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 の ip route-static:"
+    " preference の既定 60",
+    "nec_ix": "NEC IX-R/IX-V コマンドリファレンス 1.3 の ip route（スタティックルート追加）:"
+    " distance の既定 1",
 }
 
 
@@ -185,6 +197,8 @@ _STP_MODE_SOURCES: dict[str, str] = {
     "arista": "Arista EOS User Manual「Spanning Tree Protocol」: MSTP is the default STP version",
     "allied": "Allied Telesis STP Feature Overview and Configuration Guide C613-22026-00 REV A:"
     " By default, the device operates in RSTP mode",
+    "aruba_cx": "AOS-CX 10.12 Layer-2 Bridging Guide（8400）の spanning-tree mode:"
+    " no 形で既定の mstp に戻る",
 }
 
 

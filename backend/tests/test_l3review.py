@@ -847,7 +847,7 @@ def test_the_same_written_priority_needs_no_source(db_session):
 
 def test_an_unverified_vendor_default_says_it_is_unverified():
     """資料に届いていない機種は、確かめたふりをせず「未確認」と出す。"""
-    assert defaults.static_distance_source("nec_qx").startswith("未確認")
+    assert defaults.static_distance_source("allied").startswith("未確認")
     assert not defaults.static_distance_source("cisco_ios").startswith("未確認")
 
 
@@ -1032,3 +1032,47 @@ def test_the_all_passive_ospf_finding_names_its_source(db_session):
         f for f in l3review.review(db_session, device).findings if "全部 passive" in f.title
     )
     assert finding.sources == [defaults.OSPF_PASSIVE_SOURCE]
+
+
+def test_nec_qx_static_preference_60_is_the_default(db_session):
+    """NEC QX の静的経路の preference は、書かなければ 60。明示の 60 と同じ重み。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」セクション4 2.1.2 ip route-static
+    （「preference preference: スタティックルートの優先順位を指定します。設定範囲は 1～255 です。
+    デフォルトは 60 です。」）。Cisco の 1 として見ると、60 を書いた経路と書いていない経路を
+    重みが違う（待機の形）と取り違えて、指摘を落とす。
+    """
+    from app.services import configparse
+
+    config = (
+        "# QX-S1108GT-2G\nsysname qx-a1\n#\n"
+        "ip route-static 0.0.0.0 0 10.0.0.1 preference 60\n"
+        "ip route-static 0.0.0.0 0 10.0.1.1\n#\nreturn\n"
+    )
+    assert configparse.parse(config).vendor is configparse.Vendor.NEC_QX
+    device = _device(db_session, "qx-a1")
+    _snapshot(db_session, device, config, "a7" * 32)
+    [finding] = [
+        f for f in l3review.review(db_session, device).findings if "同じ重みで複数" in f.title
+    ]
+    assert finding.sources == [defaults.static_distance_source("nec_qx")]
+    assert "60" in finding.sources[0]
+
+
+def test_nec_ix_static_distance_names_the_ix_reference(db_session):
+    """NEC IX の静的経路の距離の既定は 1。Cisco と同じ値だが、資料は IX のものを出す。
+
+    出典: NEC「IX-R/IX-V コマンドリファレンス 1.3」IPv4 編のスタティックルート追加
+    （DISTANCE．．．経路優先度 範囲：0〜255 デフォルト値：1）。
+    """
+    from app.services import configparse
+
+    config = "device-name ix-a1\nip route default 10.0.0.1\nip route default 10.0.1.1\n"
+    assert configparse.parse(config).vendor is configparse.Vendor.NEC_IX
+    device = _device(db_session, "ix-a1")
+    _snapshot(db_session, device, config, "a8" * 32)
+    [finding] = [
+        f for f in l3review.review(db_session, device).findings if "同じ重みで複数" in f.title
+    ]
+    assert finding.sources == [defaults.static_distance_source("nec_ix")]
+    assert "未確認" not in finding.sources[0]

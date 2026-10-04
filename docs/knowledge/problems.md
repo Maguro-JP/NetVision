@@ -1067,3 +1067,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 論理システムの行があれば notes に「論理システムの中は読んでいない」と出す。囲みの形も同じ。
   試験は `backend/tests/test_configcheck.py` の末尾（論理システムが無いときに出ないことは、新しい分岐の見張り）。
 - 残り: 論理システムを別の機器として読むこと（設計は decisions.md）。
+
+## NEC QX の静的経路の距離を Cisco の 1 として見ていた（2026-10-04 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: NEC QX は preference を書かない静的経路が 60 なのに、
+  既定を Cisco の 1 として見ていた。`preference 60` を書いた経路と書いていない経路が並ぶと「重みが違う（待機の形）」と
+  取り違え、「同じ重みで複数あります」を落としていた。NEC IX（既定 1）と Aruba CX の STP（既定 MSTP）は値は合っていたが、
+  指摘に「未確認」や出典なしが出ていた。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」セクション4 2.1.2 ip route-static（デフォルトは 60）・
+  2.1.3 ip route-static default-preference（デフォルト 60）。NEC「IX-R/IX-V コマンドリファレンス 1.3」IPv4 編の
+  スタティックルート追加（DISTANCE のデフォルト値 1）。「AOS-CX 10.12 Layer-2 Bridging Guide」（8400）の
+  spanning-tree mode（The no form … sets the spanning tree mode to the default mstp）。
+  QX の PDF は support.nec.co.jp から curl で取り、pypdf で読んだ。AOS-CX は Exa で HTML 版の原文を読んだ（PDF は 403）。
+- 直したこと: `backend/app/services/defaults.py` に QX の既定 60 と、QX・IX・AOS-CX の出典を足した。
+  試験は `backend/tests/test_l3review.py`・`test_configcheck.py` の末尾。
+- 残り: NEC IX2000/IX3000 の資料は開いていない（IX-R/IX-V の資料で 1）。
