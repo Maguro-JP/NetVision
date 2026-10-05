@@ -262,11 +262,27 @@ _FORTIGATE_FIXES: dict[str, str] = {
     "踏み台にされたときに、いちばん気づきにくい入口です。",
 }
 
+#: ヤマハの Config に出す直し方（出典: ヤマハ「RTX コマンドリファレンス」4 章
+#: 「TELNET サーバー機能の ON/OFF の設定」 telnetd service on|off、初期値は on）
+_YAMAHA_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "telnetd service off で止め、リモートで入るなら SSH を使ってください。",
+}
+
+#: アライドテレシスの Config に出す直し方（出典: Allied Telesis「AlliedWare Plus Best Practice
+#: Guide」の Telnet の節 `no service telnet`、「Getting Started with AlliedWare Plus」の既定値の表）
+_ALLIED_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "no service telnet で止め、SSH（service ssh）を使ってください。",
+}
+
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
 _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.NEC_QX: _QX_FIXES,
     Vendor.JUNIPER: _JUNOS_FIXES,
     Vendor.FORTINET: _FORTIGATE_FIXES,
+    Vendor.YAMAHA: _YAMAHA_FIXES,
+    Vendor.ALLIED: _ALLIED_FIXES,
 }
 
 

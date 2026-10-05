@@ -2671,3 +2671,23 @@ def test_fortigate_findings_show_the_fortigate_way_to_fix(db_session, access, ti
     finding = next(f for f in configcheck.check(db_session, text).findings if f.title == title)
     assert fix in finding.why
     assert "transport input" not in finding.why and "no ip http server" not in finding.why
+
+
+@pytest.mark.parametrize(
+    ("text", "fix"),
+    [
+        # 出典: ヤマハ「RTX コマンドリファレンス」4 章「TELNET サーバー機能の ON/OFF の設定」
+        ("# RTX830 Rev.15.02.28\ntelnetd service on\n", "telnetd service off"),
+        # 出典: Allied Telesis「AlliedWare Plus Best Practice Guide」の Telnet の節
+        (
+            "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\nhostname sw\nservice telnet\n",
+            "no service telnet",
+        ),
+    ],
+)
+def test_yamaha_and_allied_telnet_show_their_way_to_fix(db_session, text, fix):
+    """ヤマハ・アライドの telnet の指摘には、その機器で打てる直し方を出す。"""
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert fix in finding.why
+    assert "transport input" not in finding.why
