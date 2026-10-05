@@ -2691,3 +2691,16 @@ def test_yamaha_and_allied_telnet_show_their_way_to_fix(db_session, text, fix):
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert fix in finding.why
     assert "transport input" not in finding.why
+
+
+def test_h3c_telnet_shows_the_h3c_way_to_fix(db_session):
+    """H3C の telnet の指摘には、Comware で打てる直し方を出す。
+
+    出典: H3C「Fundamentals Command Reference」03-Login management commands の
+    telnet server enable（undo で止める）と protocol inbound { all | ssh | telnet }。
+    """
+    text = "H3C Comware Software, Version 7.1.064\nsysname h3c-t1\n#\ntelnet server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "undo telnet server enable" in finding.why
+    assert "transport input" not in finding.why

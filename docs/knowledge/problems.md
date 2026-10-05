@@ -1309,3 +1309,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_YAMAHA_FIXES`・`_ALLIED_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
   試験は `test_configcheck.py` の `test_yamaha_and_allied_telnet_show_their_way_to_fix`。
 - 見なかったこと: ヤマハの SSH を有効にする行の書き方（資料に当たっていないので、直し方の文には書いていない）。
+
+## H3C の telnet の指摘に、Cisco の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: H3C の `telnet server enable` に「transport input ssh」を案内していた。
+- 確かめた資料: H3C「Fundamentals Command Reference」03-Login management commands の telnet server enable（undo で止める、既定は無効）と
+  protocol inbound { all | ssh | telnet }。QX と同じ書き方なので、QX の文をそのまま使う。
+- 直したこと: `backend/app/services/configcheck.py` に `_H3C_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
+  試験は `test_configcheck.py` の `test_h3c_telnet_shows_the_h3c_way_to_fix`。
+- 見なかったこと: H3C の http・SNMP・SSH1・パスワードの直し方（この資料には無いので、資料に当たってから足す）。Huawei はまだ。

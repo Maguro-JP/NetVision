@@ -212,7 +212,7 @@ _HYGIENE = (
 #: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable、
 #: 2.1.29 protocol inbound、2.1.18 ip http enable、4.1.14 snmp-agent community、
 #: 6.1.8 ssh server compatible-ssh1x enable、7 章 1.2.8 password）。
-#: Huawei・H3C も似た書き方だが、その資料では確かめていないので差し替えない（未確認）
+#: Huawei も似た書き方だが、その資料では確かめていないので差し替えない（未確認）
 _QX_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
     "ssh だけに絞ってください（undo telnet server enable、line vty の下で protocol inbound ssh）。",
@@ -276,6 +276,14 @@ _ALLIED_FIXES: dict[str, str] = {
     "no service telnet で止め、SSH（service ssh）を使ってください。",
 }
 
+#: H3C の Config に出す直し方。telnet は QX と同じ書き方（出典: H3C「Fundamentals Command
+#: Reference」03-Login management commands の telnet server enable（既定は無効）と
+#: protocol inbound）。
+#: ほかの題は H3C の資料で確かめていないので差し替えない（未確認）
+_H3C_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": _QX_FIXES["telnet で入れる状態です"],
+}
+
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
 _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.NEC_QX: _QX_FIXES,
@@ -283,6 +291,7 @@ _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.FORTINET: _FORTIGATE_FIXES,
     Vendor.YAMAHA: _YAMAHA_FIXES,
     Vendor.ALLIED: _ALLIED_FIXES,
+    Vendor.H3C: _H3C_FIXES,
 }
 
 
