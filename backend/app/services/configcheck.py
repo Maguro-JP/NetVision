@@ -248,10 +248,25 @@ _JUNOS_FIXES: dict[str, str] = {
     "監視で要るのは読むほうだけなので、authorization read-only で足ります。",
 }
 
+#: FortiGate の Config に出す直し方。口ごとの allowaccess から、その項目だけを外す
+#: （出典: Fortinet Community「Technical Tip: Useful multi-option values CLI commands for existing
+#: lists」の unselect、「Technical Tip: How to meet the requirements for FSBP SH01.1 and SH01.2」の
+#: `unselect allowaccess http telnet`）
+_FORTIGATE_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "その口の設定（config system interface → edit 口の名前）で unselect allowaccess telnet とし、"
+    "ssh だけにしてください。",
+    "管理用の web が開いています": "暗号化されない口が開いたままです。"
+    "その口の設定（config system interface → edit 口の名前）で"
+    " unselect allowaccess http としてください（web で管理するなら https だけを残す）。"
+    "踏み台にされたときに、いちばん気づきにくい入口です。",
+}
+
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
 _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.NEC_QX: _QX_FIXES,
     Vendor.JUNIPER: _JUNOS_FIXES,
+    Vendor.FORTINET: _FORTIGATE_FIXES,
 }
 
 
