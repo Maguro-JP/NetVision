@@ -232,6 +232,28 @@ _QX_FIXES: dict[str, str] = {
     "password hash で書いてください。",
 }
 
+#: Junos の Config に出す直し方。行の規則が見ているのは set 形式なので、消す形も delete で書く
+#: （出典: Juniper「Day One: Juniper Ambassadors' Cookbook for Enterprise」の初期設定の例
+#: `delete system services telnet` / `delete system services web-management`、
+#: Juniper「Junos OS CLI Reference」の community (SNMP) と authorization (SNMP)）
+_JUNOS_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "ssh だけに絞ってください（delete system services telnet）。",
+    "管理用の web が開いています": "暗号化されない口が開いたままです。"
+    "使っていないなら閉じてください（delete system services web-management http。"
+    "web で管理するなら set system services web-management https に替える）。"
+    "踏み台にされたときに、いちばん気づきにくい入口です。",
+    "SNMP から設定を書き換えられます": "read-write は読むだけでなく書き込みも許す指定です。"
+    "合言葉を知られた時点で、設定を変えられます。"
+    "監視で要るのは読むほうだけなので、authorization read-only で足ります。",
+}
+
+#: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
+_FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
+    Vendor.NEC_QX: _QX_FIXES,
+    Vendor.JUNIPER: _JUNOS_FIXES,
+}
+
 
 #: Junos の論理システム。set 形式と囲みの形のどちらでも、行頭から始まる
 #: （出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の
@@ -341,8 +363,7 @@ def _hygiene(parsed: ParsedConfig, text: str) -> list[Finding]:
     for pattern, level, title, why in _HYGIENE:
         hits = [line for line in lines if pattern.match(line)]
         if hits:
-            if parsed.vendor == Vendor.NEC_QX:
-                why = _QX_FIXES.get(title, why)
+            why = _FIXES_BY_VENDOR.get(parsed.vendor, {}).get(title, why)
             out.append(Finding(level=level, title=title, why=why, evidence=hits[:3]))
 
     described = [i for i in parsed.interfaces if i.description]
