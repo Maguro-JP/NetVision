@@ -2717,6 +2717,12 @@ def test_h3c_telnet_shows_the_h3c_way_to_fix(db_session):
             "SNMP から設定を書き換えられます",
             "snmp-agent community read",
         ),
+        # 出典: H3C「SSH commands」の ssh server compatible-ssh1x enable
+        (
+            "ssh server compatible-ssh1x enable",
+            "SSH が古い方式のままです",
+            "undo ssh server compatible-ssh1x",
+        ),
     ],
 )
 def test_h3c_http_and_snmp_show_the_h3c_way_to_fix(db_session, line, title, fix):
@@ -2726,3 +2732,4 @@ def test_h3c_http_and_snmp_show_the_h3c_way_to_fix(db_session, line, title, fix)
     finding = next(f for f in findings if f.title == title)
     assert fix in finding.why
     assert "no ip http server" not in finding.why and "RO で足ります" not in finding.why
+    assert "version 2 にしてください" not in finding.why

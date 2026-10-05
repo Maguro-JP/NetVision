@@ -1328,3 +1328,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に2件を足した（QX と同じ書き方なので QX の文を使う）。
   試験は `test_configcheck.py` の `test_h3c_http_and_snmp_show_the_h3c_way_to_fix`。
 - 見なかったこと: H3C の SSH1 とパスワードの直し方（資料に当たっていない）。RBAC の形の community（user-role で権限を決める）。
+
+## H3C の SSH1 互換の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: H3C の `ssh server compatible-ssh1x enable` に「version 2 にしてください」を案内していた。
+- 確かめた資料: H3C「SSH commands」の ssh server compatible-ssh1x enable（`undo ssh server compatible-ssh1x [ enable ]` で既定に戻す、
+  既定は SSH1 のクライアントを受け入れない）。
+- 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に足した（QX と同じ書き方なので QX の文を使う）。
+  試験は `test_configcheck.py` の `test_h3c_http_and_snmp_show_the_h3c_way_to_fix`。
+- 見なかったこと: H3C のパスワードの直し方（資料に当たっていない）。
