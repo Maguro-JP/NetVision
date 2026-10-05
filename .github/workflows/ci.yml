@@ -8,18 +8,13 @@ name: CI
 #   ・触っていないところは動かさない（backend だけの変更で npm を入れない）
 #   ・止まったまま回り続けないよう、頭打ちの時間を置く
 on:
-  # 作業ブランチは PR 側で見るので、push で走らせるのは本線だけにする
-  push:
-    branches:
-      - main
-    paths-ignore:
-      - "**/*.md"
-      - "docs/**"
+  # 本線への push では回さない。マージの前に、手元か PR で確かめ済みのものしか入らない
+  workflow_dispatch:
   # 下書きのあいだは走らせない。書いている途中は手元で確かめていて、
   # ここで見てほしいのは「人に見せる形になった」ときだから。
   # ready_for_review を足しているのは、既定の種類に入っていないため
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths-ignore:
       - "**/*.md"
       - "docs/**"
@@ -32,8 +27,13 @@ concurrency:
 
 jobs:
   check:
-    # 下書きは、まだ人に見せる形になっていない
-    if: github.event_name != 'pull_request' || github.event.pull_request.draft == false
+    # 下書きは、まだ人に見せる形になっていない。
+    # 自律開発（claude/ の枝）の PR は手元で検証してからマージするので回さない。
+    # 人が見てほしいときは PR に `ci` の札を付ける
+    if: >-
+      github.event_name != 'pull_request'
+      || (github.event.pull_request.draft == false
+          && (!startsWith(github.head_ref, 'claude/') || contains(github.event.pull_request.labels.*.name, 'ci')))
     runs-on: ubuntu-latest
     # 手元では backend 2分・frontend 1分ほど。詰まったまま回り続けたら止める
     timeout-minutes: 20
