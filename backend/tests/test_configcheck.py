@@ -2763,3 +2763,16 @@ def test_huawei_http_shows_the_vrp_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "管理用の web が開いています")
     assert "undo http server enable" in finding.why
     assert "no ip http server" not in finding.why
+
+
+def test_huawei_snmp_write_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の SNMP の書き込みの指摘には、read の community を案内する。
+
+    出典: Huawei「CloudEngine S3700, S5700, and S6700 V600R023C00 Configuration Guide」の
+    Configuring Basic SNMPv1 Functions（snmp-agent community { read | write }）。
+    """
+    text = _VRP_HEAD + "snmp-agent community write cipher %^%#abcdefgh%^%#\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "SNMP から設定を書き換えられます")
+    assert "snmp-agent community read" in finding.why
+    assert "RO で足ります" not in finding.why
