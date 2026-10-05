@@ -1289,3 +1289,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_JUNOS_FIXES` を足し、機種ごとの直し方を `_FIXES_BY_VENDOR` で引く形にした
   （QX の `_QX_FIXES` も同じ表に載せた）。試験は `test_configcheck.py` の `test_junos_findings_show_the_junos_way_to_fix`。
 - 見なかったこと: 囲みの形の Junos の Config（行の規則がもともと set 形式しか見ていない）。FortiGate・ヤマハなどほかの機種の直し方。
+
+## FortiGate の Config に、Cisco の書き方の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `set allowaccess … telnet` に「transport input ssh」、
+  `set allowaccess … http` に「no ip http server」を案内していて、FortiOS ではそのまま打てなかった。
+- 確かめた資料: Fortinet Community「Technical Tip: Useful multi-option values CLI commands for existing lists」（unselect は
+  一覧から項目だけを外す）、「Technical Tip: How to meet the requirements for FSBP SH01.1 and SH01.2」（`unselect allowaccess http telnet`）。
+- 直したこと: `backend/app/services/configcheck.py` に `_FORTIGATE_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
+  試験は `test_configcheck.py` の `test_fortigate_findings_show_the_fortigate_way_to_fix`。
+- 見なかったこと: ヤマハ（telnetd service）・アライド（service telnet）の直し方。資料に当たってから足す。

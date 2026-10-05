@@ -2648,3 +2648,26 @@ def test_junos_findings_show_the_junos_way_to_fix(db_session, line, title, fix):
     assert fix in finding.why
     assert "transport input" not in finding.why and "no ip http server" not in finding.why
     assert "RO で足ります" not in finding.why
+
+
+@pytest.mark.parametrize(
+    ("access", "title", "fix"),
+    [
+        # 出典: Fortinet Community「Technical Tip: How to meet the requirements for FSBP SH01.1 and
+        # SH01.2」（unselect allowaccess http telnet）
+        ("ping https ssh telnet", "telnet で入れる状態です", "unselect allowaccess telnet"),
+        ("ping http https ssh", "管理用の web が開いています", "unselect allowaccess http"),
+    ],
+)
+def test_fortigate_findings_show_the_fortigate_way_to_fix(db_session, access, title, fix):
+    """FortiGate の Config には、Cisco の書き方ではなく FortiOS で打てる直し方を出す。"""
+    text = (
+        'config system global\n    set hostname "fw-fix"\nend\n'
+        "config system interface\n"
+        '    edit "port1"\n'
+        f"        set allowaccess {access}\n"
+        "    next\nend\n"
+    )
+    finding = next(f for f in configcheck.check(db_session, text).findings if f.title == title)
+    assert fix in finding.why
+    assert "transport input" not in finding.why and "no ip http server" not in finding.why
