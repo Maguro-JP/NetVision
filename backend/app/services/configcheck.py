@@ -210,7 +210,8 @@ _HYGIENE = (
 #: NEC QX の Config に出す直し方。行の規則の why は Cisco の書き方で案内しているので、
 #: QX ではそのまま打てない。題で引いて、QX の書き方の文に差し替える
 #: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable、
-#: 2.1.29 protocol inbound、2.1.18 ip http enable、4.1.14 snmp-agent community）。
+#: 2.1.29 protocol inbound、2.1.18 ip http enable、4.1.14 snmp-agent community、
+#: 6.1.8 ssh server compatible-ssh1x enable、7 章 1.2.8 password）。
 #: Huawei・H3C も似た書き方だが、その資料では確かめていないので差し替えない（未確認）
 _QX_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
@@ -222,6 +223,13 @@ _QX_FIXES: dict[str, str] = {
     "SNMP から設定を書き換えられます": "write は読むだけでなく書き込みも許す指定です。"
     "合言葉を知られた時点で、設定を変えられます。"
     "監視で要るのは読むほうだけなので、snmp-agent community read で足ります。",
+    "SSH が古い方式のままです": "SSH1 は解読の方法が知られています。"
+    "SSH1 のクライアントを受け入れないでください（undo ssh server compatible-ssh1x）。",
+    # QX は password simple でも保存するとハッシュにする（1.2.8）。危ないのは、
+    # この Config の文そのものに合言葉が読める形で書いてあること
+    "利用者のパスワードが、元に戻せる形で入っています": "保存すると機器の中では"
+    "ハッシュになりますが、この Config を渡す・保管する場面では合言葉がそのまま読めます。"
+    "password hash で書いてください。",
 }
 
 

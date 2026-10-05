@@ -2592,6 +2592,18 @@ def test_directed_broadcast_with_acl_or_disabled_is_quiet(db_session, line):
             "SNMP から設定を書き換えられます",
             "snmp-agent community read",
         ),
+        # 出典: 同 6.1.8 ssh server compatible-ssh1x enable（undo の形に enable は付かない）
+        (
+            "ssh server compatible-ssh1x enable",
+            "SSH が古い方式のままです",
+            "undo ssh server compatible-ssh1x",
+        ),
+        # 出典: 同 7 章 1.2.8 password（装置管理ユーザは hash か simple）
+        (
+            "local-user admin class manage\n password simple Adm1nPass",
+            "利用者のパスワードが、元に戻せる形で入っています",
+            "password hash",
+        ),
     ],
 )
 def test_qx_findings_show_the_qx_way_to_fix(db_session, line, title, fix):
@@ -2600,6 +2612,7 @@ def test_qx_findings_show_the_qx_way_to_fix(db_session, line, title, fix):
     finding = next(f for f in configcheck.check(db_session, text).findings if f.title == title)
     assert fix in finding.why
     assert "transport input" not in finding.why and "no ip http server" not in finding.why
+    assert "version 2" not in finding.why and "secret" not in finding.why
 
 
 def test_ios_findings_keep_the_ios_way_to_fix(db_session):
