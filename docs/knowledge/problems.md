@@ -1268,3 +1268,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configcheck.py` の末尾（Cisco の Config では今までどおりの文が出ることは見張り）。
 - 見なかったこと: Huawei・H3C は似た書き方だが資料で確かめていないので替えていない（未確認）。
   QX の `password simple` は、マニュアル 1.2.8 では保存するとハッシュ化される。Config の文に平文があることは変わらないので、指摘はそのまま。
+
+## NEC QX の SSH1 互換とパスワードの指摘に、Cisco の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: QX の `ssh server compatible-ssh1x enable` に「version 2 にしてください」、
+  `password simple` に「username ... secret を使うと」を案内していて、QX では打てなかった。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」6.1.8 ssh server compatible-ssh1x enable
+  （無効にする形は `undo ssh server compatible-ssh1x` で、enable は付かない）・7 章 1.2.8 password（装置管理ユーザは hash か simple。
+  simple でも保存するとハッシュになる）。
+- 直したこと: `backend/app/services/configcheck.py` の `_QX_FIXES` に2件を足した。パスワードの文は「機器の中ではハッシュになるが、
+  Config の文では読める」と、QX の振る舞いに合わせて書いた。試験は `test_configcheck.py` の `test_qx_findings_show_the_qx_way_to_fix`。
+- 見なかったこと: Huawei・H3C（資料で確かめていない）。
