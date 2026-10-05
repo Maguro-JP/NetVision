@@ -1299,3 +1299,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_FORTIGATE_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
   試験は `test_configcheck.py` の `test_fortigate_findings_show_the_fortigate_way_to_fix`。
 - 見なかったこと: ヤマハ（telnetd service）・アライド（service telnet）の直し方。資料に当たってから足す。
+
+## ヤマハ・アライドの telnet の指摘に、Cisco の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ヤマハの `telnetd service on`、アライドの `service telnet` に
+  「transport input ssh」を案内していて、どちらの機器でも打てなかった。
+- 確かめた資料: ヤマハ「RTX コマンドリファレンス」4 章「TELNET サーバー機能の ON/OFF の設定」（telnetd service on|off、初期値は on）、
+  Allied Telesis「AlliedWare Plus Best Practice Guide」の Telnet の節（`no service telnet`）・「Getting Started with AlliedWare Plus」の既定値の表。
+- 直したこと: `backend/app/services/configcheck.py` に `_YAMAHA_FIXES`・`_ALLIED_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
+  試験は `test_configcheck.py` の `test_yamaha_and_allied_telnet_show_their_way_to_fix`。
+- 見なかったこと: ヤマハの SSH を有効にする行の書き方（資料に当たっていないので、直し方の文には書いていない）。
