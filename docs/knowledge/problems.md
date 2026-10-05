@@ -1318,3 +1318,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_H3C_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
   試験は `test_configcheck.py` の `test_h3c_telnet_shows_the_h3c_way_to_fix`。
 - 見なかったこと: H3C の http・SNMP・SSH1・パスワードの直し方（この資料には無いので、資料に当たってから足す）。Huawei はまだ。
+
+## H3C の http・SNMP の書き込みの指摘に、Cisco の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: H3C の `ip http enable` に「no ip http server」、
+  `snmp-agent community write` に「RO で足ります」を案内していた。
+- 確かめた資料: H3C「Fundamentals Command Reference」03-Login management commands の ip http enable / ip https enable
+  （既定は無効。http を有効にすると https も自動で有効になる）、H3C「02-SNMP commands」の snmp-agent community { read | write }。
+- 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に2件を足した（QX と同じ書き方なので QX の文を使う）。
+  試験は `test_configcheck.py` の `test_h3c_http_and_snmp_show_the_h3c_way_to_fix`。
+- 見なかったこと: H3C の SSH1 とパスワードの直し方（資料に当たっていない）。RBAC の形の community（user-role で権限を決める）。

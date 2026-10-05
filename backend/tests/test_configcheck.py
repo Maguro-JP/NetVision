@@ -2704,3 +2704,25 @@ def test_h3c_telnet_shows_the_h3c_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert "undo telnet server enable" in finding.why
     assert "transport input" not in finding.why
+
+
+@pytest.mark.parametrize(
+    ("line", "title", "fix"),
+    [
+        # 出典: H3C「Fundamentals Command Reference」03-Login management commands の ip http enable
+        ("ip http enable", "管理用の web が開いています", "undo ip http enable"),
+        # 出典: H3C「02-SNMP commands」の snmp-agent community { read | write }
+        (
+            "snmp-agent community write simple n3tw0rk",
+            "SNMP から設定を書き換えられます",
+            "snmp-agent community read",
+        ),
+    ],
+)
+def test_h3c_http_and_snmp_show_the_h3c_way_to_fix(db_session, line, title, fix):
+    """H3C の http・SNMP の書き込みの指摘にも、Comware で打てる直し方を出す。"""
+    text = "H3C Comware Software, Version 7.1.064\nsysname h3c-t2\n#\n" + line + "\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == title)
+    assert fix in finding.why
+    assert "no ip http server" not in finding.why and "RO で足ります" not in finding.why
