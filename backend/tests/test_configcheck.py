@@ -2733,3 +2733,21 @@ def test_h3c_http_and_snmp_show_the_h3c_way_to_fix(db_session, line, title, fix)
     assert fix in finding.why
     assert "no ip http server" not in finding.why and "RO で足ります" not in finding.why
     assert "version 2 にしてください" not in finding.why
+
+
+@pytest.mark.parametrize(
+    "body",
+    ["telnet server enable\n#\n", "user-interface vty 0 4\n protocol inbound telnet\n#\n"],
+)
+def test_huawei_telnet_shows_the_vrp_way_to_fix(db_session, body):
+    """Huawei の telnet の指摘には、VRP で打てる直し方を出す。
+
+    出典: Huawei「S Series Campus Switches Troubleshooting Guide (V100 and V200)」の
+    SSH/Telnet Attack（undo telnet server enable）と FAQs About Basic Configuration
+    （user-interface vty の protocol inbound）。
+    """
+    findings = configcheck.check(db_session, _VRP_HEAD + body).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "undo telnet server enable" in finding.why
+    assert "user-interface vty" in finding.why
+    assert "transport input" not in finding.why

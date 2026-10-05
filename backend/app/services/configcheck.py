@@ -212,7 +212,7 @@ _HYGIENE = (
 #: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable、
 #: 2.1.29 protocol inbound、2.1.18 ip http enable、4.1.14 snmp-agent community、
 #: 6.1.8 ssh server compatible-ssh1x enable、7 章 1.2.8 password）。
-#: Huawei も似た書き方だが、その資料では確かめていないので差し替えない（未確認）
+#: Huawei は vty の書き方が違う（user-interface）ので、別の表に持つ
 _QX_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
     "ssh だけに絞ってください（undo telnet server enable、line vty の下で protocol inbound ssh）。",
@@ -292,6 +292,17 @@ _H3C_FIXES: dict[str, str] = {
     )
 }
 
+#: Huawei の Config に出す直し方（出典: Huawei「S Series Campus Switches Troubleshooting Guide
+#: (V100 and V200)」の FAQs About Basic Configuration と SSH/Telnet Attack（undo telnet server
+#: enable）、「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
+#: Device（protocol inbound ssh は authentication-mode aaa が要る））。
+#: ほかの題は確かめていない（未確認）
+_HUAWEI_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "ssh だけに絞ってください（undo telnet server enable、user-interface vty の下で"
+    " authentication-mode aaa と protocol inbound ssh）。",
+}
+
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
 _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.NEC_QX: _QX_FIXES,
@@ -300,6 +311,7 @@ _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.YAMAHA: _YAMAHA_FIXES,
     Vendor.ALLIED: _ALLIED_FIXES,
     Vendor.H3C: _H3C_FIXES,
+    Vendor.HUAWEI: _HUAWEI_FIXES,
 }
 
 
