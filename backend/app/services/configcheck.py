@@ -279,14 +279,16 @@ _ALLIED_FIXES: dict[str, str] = {
 #: H3C の Config に出す直し方。QX と同じ書き方なので文もそのまま使う（出典: H3C「Fundamentals
 #: Command Reference」03-Login management commands の telnet server enable（既定は無効）・
 #: protocol inbound・ip http enable / ip https enable、H3C「02-SNMP commands」の
-#: snmp-agent community { read | write }）。
-#: SSH1 とパスワードは H3C の資料で確かめていないので差し替えない（未確認）
+#: snmp-agent community { read | write }、H3C「SSH commands」の ssh server compatible-ssh1x enable
+#: （undo は enable を付けても付けなくてもよい））。
+#: パスワードは H3C の資料で確かめていないので差し替えない（未確認）
 _H3C_FIXES: dict[str, str] = {
     title: _QX_FIXES[title]
     for title in (
         "telnet で入れる状態です",
         "管理用の web が開いています",
         "SNMP から設定を書き換えられます",
+        "SSH が古い方式のままです",
     )
 }
 
