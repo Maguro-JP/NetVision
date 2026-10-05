@@ -1337,3 +1337,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に足した（QX と同じ書き方なので QX の文を使う）。
   試験は `test_configcheck.py` の `test_h3c_http_and_snmp_show_the_h3c_way_to_fix`。
 - 見なかったこと: H3C のパスワードの直し方（資料に当たっていない）。
+
+## Huawei の telnet の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Huawei の `telnet server enable`・`protocol inbound telnet` に
+  「transport input ssh」を案内していた。
+- 確かめた資料: Huawei「S Series Campus Switches Troubleshooting Guide (V100 and V200)」の SSH/Telnet Attack（undo telnet server enable）と
+  FAQs About Basic Configuration（既定は V200R005 以降で無効、V200R003 以前で有効）、「Fat AP and Cloud AP V200R010C00 CLI-based
+  Configuration Guide」の Logging In to the Device（protocol inbound ssh は authentication-mode aaa が要る）。
+- 直したこと: `backend/app/services/configcheck.py` に `_HUAWEI_FIXES` を足した。vty は user-interface で書くので QX の文は使わない。
+  試験は `test_configcheck.py` の `test_huawei_telnet_shows_the_vrp_way_to_fix`。
+- 見なかったこと: Huawei の http・SNMP・パスワードの直し方（資料に当たってから足す）。
