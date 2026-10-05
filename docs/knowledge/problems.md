@@ -1256,3 +1256,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の行の規則に MEDIUM で足した。ACL を付けた形と no の形は言わない。
   試験は `test_configcheck.py` の末尾（ACL 付き・no の形は見張り）。
 - 見なかったこと: ほかのメーカーの同じ働きの書き方（Huawei・H3C・NEC QX などは資料に当たっていない）。
+
+## NEC QX の Config に、Cisco の書き方の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 行の規則の why は Cisco の書き方で直し方を書いている。
+  QX の `telnet server enable` に「transport input ssh」、`ip http enable` に「no ip http server」を案内していて、
+  QX ではそのまま打てなかった。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable・2.1.29 protocol inbound・
+  2.1.18 ip http enable・4.1.14 snmp-agent community。
+- 直したこと: `backend/app/services/configcheck.py` の `_QX_FIXES`。機種が NEC QX のときだけ、題で引いて why を QX の書き方の文に替える。
+  試験は `test_configcheck.py` の末尾（Cisco の Config では今までどおりの文が出ることは見張り）。
+- 見なかったこと: Huawei・H3C は似た書き方だが資料で確かめていないので替えていない（未確認）。
+  QX の `password simple` は、マニュアル 1.2.8 では保存するとハッシュ化される。Config の文に平文があることは変わらないので、指摘はそのまま。

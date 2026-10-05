@@ -207,6 +207,24 @@ _HYGIENE = (
 )
 
 
+#: NEC QX の Config に出す直し方。行の規則の why は Cisco の書き方で案内しているので、
+#: QX ではそのまま打てない。題で引いて、QX の書き方の文に差し替える
+#: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable、
+#: 2.1.29 protocol inbound、2.1.18 ip http enable、4.1.14 snmp-agent community）。
+#: Huawei・H3C も似た書き方だが、その資料では確かめていないので差し替えない（未確認）
+_QX_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "ssh だけに絞ってください（undo telnet server enable、line vty の下で protocol inbound ssh）。",
+    "管理用の web が開いています": "暗号化されない口が開いたままです。"
+    "使っていないなら閉じてください"
+    "（undo ip http enable。web で管理するなら ip https enable に替える）。"
+    "踏み台にされたときに、いちばん気づきにくい入口です。",
+    "SNMP から設定を書き換えられます": "write は読むだけでなく書き込みも許す指定です。"
+    "合言葉を知られた時点で、設定を変えられます。"
+    "監視で要るのは読むほうだけなので、snmp-agent community read で足ります。",
+}
+
+
 #: Junos の論理システム。set 形式と囲みの形のどちらでも、行頭から始まる
 #: （出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の
 #: set logical-systems … の設定例）
@@ -315,6 +333,8 @@ def _hygiene(parsed: ParsedConfig, text: str) -> list[Finding]:
     for pattern, level, title, why in _HYGIENE:
         hits = [line for line in lines if pattern.match(line)]
         if hits:
+            if parsed.vendor == Vendor.NEC_QX:
+                why = _QX_FIXES.get(title, why)
             out.append(Finding(level=level, title=title, why=why, evidence=hits[:3]))
 
     described = [i for i in parsed.interfaces if i.description]

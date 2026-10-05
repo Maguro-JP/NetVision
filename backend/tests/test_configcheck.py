@@ -2576,3 +2576,35 @@ def test_directed_broadcast_with_acl_or_disabled_is_quiet(db_session, line):
     text = _IOS_SVI + f" {line}\n!\n"
     titles = [f.title for f in configcheck.check(db_session, text).findings]
     assert _DIRECTED_BROADCAST_TITLE not in titles
+
+
+@pytest.mark.parametrize(
+    ("line", "title", "fix"),
+    [
+        # 出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable・
+        # 2.1.29 protocol inbound
+        ("telnet server enable", "telnet で入れる状態です", "undo telnet server enable"),
+        # 出典: 同 2.1.18 ip http enable
+        ("ip http enable", "管理用の web が開いています", "undo ip http enable"),
+        # 出典: 同 4.1.14 snmp-agent community { read | write }
+        (
+            "snmp-agent community write simple n3tw0rk",
+            "SNMP から設定を書き換えられます",
+            "snmp-agent community read",
+        ),
+    ],
+)
+def test_qx_findings_show_the_qx_way_to_fix(db_session, line, title, fix):
+    """NEC QX の Config には、Cisco の書き方ではなく QX で打てる直し方を出す。"""
+    text = _QX_HEAD + line + "\n#\n"
+    finding = next(f for f in configcheck.check(db_session, text).findings if f.title == title)
+    assert fix in finding.why
+    assert "transport input" not in finding.why and "no ip http server" not in finding.why
+
+
+def test_ios_findings_keep_the_ios_way_to_fix(db_session):
+    """Cisco の Config では今までどおり Cisco の書き方を出す（見張り）。"""
+    text = "hostname r-fix1\nline vty 0 4\n transport input telnet\n!\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "transport input ssh" in finding.why
