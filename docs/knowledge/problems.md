@@ -1348,3 +1348,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_HUAWEI_FIXES` を足した。vty は user-interface で書くので QX の文は使わない。
   試験は `test_configcheck.py` の `test_huawei_telnet_shows_the_vrp_way_to_fix`。
 - 見なかったこと: Huawei の http・SNMP・パスワードの直し方（資料に当たってから足す）。
+
+## Huawei の管理用 web の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Huawei の `http server enable` に「no ip http server」を案内していた。
+- 確かめた資料: Huawei「S Series Campus Switches Troubleshooting Guide (V100 and V200)」の TCP/UDP Attack
+  （undo http server enable / undo http secure-server enable）と FAQs About Basic Configuration（http server enable は既定で有効）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_http_shows_the_vrp_way_to_fix`。
+- 見なかったこと: `http ipv6 server enable` を止める形（undo の形を資料で確かめていないので、直し方の文には書いていない）。Huawei の SNMP・パスワード。
+
+## Huawei の SNMP の書き込みの指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Huawei の `snmp-agent community write` に「RO で足ります」を案内していた。
+- 確かめた資料: Huawei「CloudEngine S3700, S5700, and S6700 V600R023C00 Configuration Guide」の Configuring Basic SNMPv1 Functions
+  （snmp-agent community { read | write }）。書き方は QX・H3C と同じなので、QX の文を使う。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_snmp_write_shows_the_vrp_way_to_fix`。
+- 見なかったこと: Huawei のパスワード・SSH の直し方。

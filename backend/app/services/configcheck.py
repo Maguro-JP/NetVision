@@ -296,11 +296,19 @@ _H3C_FIXES: dict[str, str] = {
 #: (V100 and V200)」の FAQs About Basic Configuration と SSH/Telnet Attack（undo telnet server
 #: enable）、「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
 #: Device（protocol inbound ssh は authentication-mode aaa が要る））。
-#: ほかの題は確かめていない（未確認）
+#: http は同じ Troubleshooting Guide の TCP/UDP Attack（undo http server enable）と FAQs About
+#: Basic Configuration（http server enable は既定で有効）。SNMP は「CloudEngine S3700, S5700, and
+#: S6700 V600R023C00 Configuration Guide」の Configuring Basic SNMPv1 Functions
+#: （snmp-agent community { read | write }）。ほかの題は確かめていない（未確認）
 _HUAWEI_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
     "ssh だけに絞ってください（undo telnet server enable、user-interface vty の下で"
     " authentication-mode aaa と protocol inbound ssh）。",
+    "管理用の web が開いています": "暗号化されない口が開いたままです。"
+    "使っていないなら閉じてください（undo http server enable。"
+    "web で管理するなら http secure-server enable の https だけを残す）。"
+    "踏み台にされたときに、いちばん気づきにくい入口です。",
+    "SNMP から設定を書き換えられます": _QX_FIXES["SNMP から設定を書き換えられます"],
 }
 
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま

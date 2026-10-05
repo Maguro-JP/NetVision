@@ -2751,3 +2751,28 @@ def test_huawei_telnet_shows_the_vrp_way_to_fix(db_session, body):
     assert "undo telnet server enable" in finding.why
     assert "user-interface vty" in finding.why
     assert "transport input" not in finding.why
+
+
+def test_huawei_http_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の管理用 web の指摘には、VRP で打てる直し方を出す。
+
+    出典: Huawei「S Series Campus Switches Troubleshooting Guide (V100 and V200)」の
+    TCP/UDP Attack（undo http server enable / undo http secure-server enable）。
+    """
+    findings = configcheck.check(db_session, _VRP_HEAD + "http server enable\n#\n").findings
+    finding = next(f for f in findings if f.title == "管理用の web が開いています")
+    assert "undo http server enable" in finding.why
+    assert "no ip http server" not in finding.why
+
+
+def test_huawei_snmp_write_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の SNMP の書き込みの指摘には、read の community を案内する。
+
+    出典: Huawei「CloudEngine S3700, S5700, and S6700 V600R023C00 Configuration Guide」の
+    Configuring Basic SNMPv1 Functions（snmp-agent community { read | write }）。
+    """
+    text = _VRP_HEAD + "snmp-agent community write cipher %^%#abcdefgh%^%#\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "SNMP から設定を書き換えられます")
+    assert "snmp-agent community read" in finding.why
+    assert "RO で足ります" not in finding.why
