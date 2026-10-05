@@ -1279,3 +1279,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の `_QX_FIXES` に2件を足した。パスワードの文は「機器の中ではハッシュになるが、
   Config の文では読める」と、QX の振る舞いに合わせて書いた。試験は `test_configcheck.py` の `test_qx_findings_show_the_qx_way_to_fix`。
 - 見なかったこと: Huawei・H3C（資料で確かめていない）。
+
+## Junos の Config に、Cisco の書き方の直し方を案内していた（2026-10-05 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `set system services telnet` に「transport input ssh」、
+  `web-management http` に「no ip http server」、`authorization read-write` に「RO で足ります」を案内していた。
+- 確かめた資料: Juniper「Day One: Juniper Ambassadors' Cookbook for Enterprise」の初期設定の例（`delete system services telnet`・
+  `delete system services web-management`）、Juniper「Junos OS CLI Reference」の community (SNMP)・authorization (SNMP)。
+- 直したこと: `backend/app/services/configcheck.py` に `_JUNOS_FIXES` を足し、機種ごとの直し方を `_FIXES_BY_VENDOR` で引く形にした
+  （QX の `_QX_FIXES` も同じ表に載せた）。試験は `test_configcheck.py` の `test_junos_findings_show_the_junos_way_to_fix`。
+- 見なかったこと: 囲みの形の Junos の Config（行の規則がもともと set 形式しか見ていない）。FortiGate・ヤマハなどほかの機種の直し方。

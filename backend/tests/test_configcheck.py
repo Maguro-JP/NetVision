@@ -2621,3 +2621,30 @@ def test_ios_findings_keep_the_ios_way_to_fix(db_session):
     findings = configcheck.check(db_session, text).findings
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert "transport input ssh" in finding.why
+
+
+@pytest.mark.parametrize(
+    ("line", "title", "fix"),
+    [
+        # 出典: Juniper「Day One: Juniper Ambassadors' Cookbook for Enterprise」の初期設定の例
+        ("set system services telnet", "telnet で入れる状態です", "delete system services telnet"),
+        (
+            "set system services web-management http",
+            "管理用の web が開いています",
+            "delete system services web-management http",
+        ),
+        # 出典: Juniper「Junos OS CLI Reference」の community (SNMP)
+        (
+            "set snmp community n3tw0rk authorization read-write",
+            "SNMP から設定を書き換えられます",
+            "authorization read-only",
+        ),
+    ],
+)
+def test_junos_findings_show_the_junos_way_to_fix(db_session, line, title, fix):
+    """Junos の Config には、Cisco の書き方ではなく Junos で打てる直し方を出す。"""
+    text = "set system host-name rt-fix\n" + line + "\n"
+    finding = next(f for f in configcheck.check(db_session, text).findings if f.title == title)
+    assert fix in finding.why
+    assert "transport input" not in finding.why and "no ip http server" not in finding.why
+    assert "RO で足ります" not in finding.why
