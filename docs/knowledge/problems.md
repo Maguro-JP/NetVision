@@ -1424,3 +1424,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （Administrative: api, ftp, http, ssh, telnet, x25-pad, and terminal / Common: 8021x, bind, ppp and web）。
 - 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_LOGIN_SERVICES` を公式の管理の種類7つにした。
   試験は `test_huawei_reversible_password_for_web_or_ftp_admin_is_found`。
+
+## Huawei の `http ipv6 server enable` に、IPv4 の口しか閉じない直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `http ipv6 server enable` の行も指摘していたが、
+  案内は `undo http server enable` だけだった。これでは IPv6 の口が開いたまま残る。
+- 確かめた資料: Huawei「智简园区网络解决方案 V100R020C10」の LAN网络站点配置（`http ipv6 server enable` /
+  `undo http ipv6 server enable`、`http [ ipv6 ] secure-server enable`）、「S1720, S2700, S5700, and S6720 V200R011C10
+  Command Reference」の display http server（IPv4 と IPv6 の口は別々に開け閉めする）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` の文に IPv6 の閉じ方と https の形を足した。
+  試験は `test_huawei_http_ipv6_shows_the_ipv6_way_to_close`。

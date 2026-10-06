@@ -301,7 +301,9 @@ _H3C_FIXES: dict[str, str] = {
 #: enable）、「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
 #: Device（protocol inbound ssh は authentication-mode aaa が要る））。
 #: http は同じ Troubleshooting Guide の TCP/UDP Attack（undo http server enable）と FAQs About
-#: Basic Configuration（http server enable は既定で有効）。SNMP は「CloudEngine S3700, S5700, and
+#: Basic Configuration（http server enable は既定で有効）。IPv6 の口は「智简园区网络解决方案
+#: V100R020C10」の LAN网络站点配置（undo http ipv6 server enable、http [ ipv6 ] secure-server
+#: enable）。SNMP は「CloudEngine S3700, S5700, and
 #: S6700 V600R023C00 Configuration Guide」の Configuring Basic SNMPv1 Functions
 #: （snmp-agent community { read | write }）。SSH1 互換は「S5700 and S6700 V200R025C00 Command
 #: Reference」の ssh server compatible-ssh1x enable（QX と違い、undo の形にも enable が付く）。
@@ -312,7 +314,9 @@ _HUAWEI_FIXES: dict[str, str] = {
     " authentication-mode aaa と protocol inbound ssh）。",
     "管理用の web が開いています": "暗号化されない口が開いたままです。"
     "使っていないなら閉じてください（undo http server enable。"
-    "web で管理するなら http secure-server enable の https だけを残す）。"
+    "IPv6 の口は別で、undo http ipv6 server enable で閉じる。"
+    "web で管理するなら http secure-server enable（IPv6 は http ipv6 secure-server enable）の"
+    "https だけを残す）。"
     "踏み台にされたときに、いちばん気づきにくい入口です。",
     "SNMP から設定を書き換えられます": _QX_FIXES["SNMP から設定を書き換えられます"],
     "SSH が古い方式のままです": "SSH1 は解読の方法が知られています。"

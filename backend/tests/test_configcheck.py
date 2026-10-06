@@ -2867,3 +2867,17 @@ def test_huawei_reversible_password_for_web_or_ftp_admin_is_found(db_session):
     findings = configcheck.check(db_session, text).findings
     hits = [f for f in findings if f.title == "利用者のパスワードが、元に戻せる形で入っています"]
     assert [h.evidence for h in hits] == [["local-user webadm password cipher"]]
+
+
+def test_huawei_http_ipv6_shows_the_ipv6_way_to_close(db_session):
+    """Huawei の http ipv6 server enable には、IPv6 の口を閉じる undo の形も案内する。
+
+    undo http server enable は IPv4 の口しか閉じない。
+    出典: Huawei「智简园区网络解决方案 V100R020C10」の LAN网络站点配置
+    （http ipv6 server enable / undo http ipv6 server enable、http [ ipv6 ] secure-server enable）。
+    """
+    text = _VRP_HEAD + "http ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "管理用の web が開いています")
+    assert "undo http ipv6 server enable" in finding.why
+    assert "http ipv6 secure-server enable" in finding.why
