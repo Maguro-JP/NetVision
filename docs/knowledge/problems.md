@@ -1444,3 +1444,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の telnet の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` の文に
   `undo telnet ipv6 server enable` を足した。試験は `test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close`。
 - 見なかったこと: QX・H3C に IPv6 の telnet を開く別の書き方があるか。
+
+## Huawei の `ftp ipv6 server enable` を、FTP の入口として見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: FTP の行の規則が `ftp server enable` しか見ておらず、
+  IPv6 で FTP を開く `ftp ipv6 server enable` を素通りしていた。
+- 確かめた資料: Huawei「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の ftp server enable
+  （`undo ftp server [ enable ]`）と ftp ipv6 server enable（`undo ftp ipv6 server [ enable ]`）、
+  「V600R024C10 Configuration Guide - Basic Configuration」の display ftp server（IPv4 と IPv6 の状態が別に出る）。
+- 直したこと: `backend/app/services/configcheck.py` の FTP の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` に
+  IPv6 の閉じ方を含む直し方を足した。試験は `test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close`。
+- 見なかったこと: H3C の FTP の書き方（コメントに未確認と残した）。

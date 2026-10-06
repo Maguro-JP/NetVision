@@ -2893,3 +2893,16 @@ def test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
     findings = configcheck.check(db_session, text).findings
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert "undo telnet ipv6 server enable" in finding.why
+
+
+def test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
+    """Huawei の ftp ipv6 server enable も FTP の入口として指摘し、IPv6 の閉じ方を出す。
+
+    出典: Huawei「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の
+    ftp server enable（undo ftp server [ enable ]）と ftp ipv6 server enable
+    （undo ftp ipv6 server [ enable ]）。
+    """
+    text = _VRP_HEAD + "ftp ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "FTP サーバーが開いています")
+    assert "undo ftp ipv6 server" in finding.why

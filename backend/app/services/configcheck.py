@@ -105,8 +105,10 @@ _HYGIENE = (
     (
         # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」4.1.8
         # ftp server enable、既定は無効）。暗号化する sftp server enable（6.1.3）は別の行なので
-        # 行頭から見る。Huawei・H3C も同じ字面だが、その資料には当たっていない（未確認）
-        re.compile(r"^\s*ftp server enable\s*$", re.IGNORECASE),
+        # 行頭から見る。Huawei は IPv6 の口が別の行（出典: Huawei「CloudEngine S3700, S5700 and
+        # S6700 V600R024C10 Command Reference」の ftp server enable / ftp ipv6 server enable）。
+        # H3C も同じ字面だが、その資料には当たっていない（未確認）
+        re.compile(r"^\s*ftp (?:ipv6 )?server enable\s*$", re.IGNORECASE),
         HIGH,
         "FTP サーバーが開いています",
         "FTP は telnet と同じく中身が丸見えで、入るときのパスワードもそのまま流れます。"
@@ -310,6 +312,8 @@ _H3C_FIXES: dict[str, str] = {
 #: S6700 V600R023C00 Configuration Guide」の Configuring Basic SNMPv1 Functions
 #: （snmp-agent community { read | write }）。SSH1 互換は「S5700 and S6700 V200R025C00 Command
 #: Reference」の ssh server compatible-ssh1x enable（QX と違い、undo の形にも enable が付く）。
+#: FTP は「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の ftp server enable
+#: （undo ftp server [ enable ]、undo ftp ipv6 server [ enable ]）。
 #: ほかの題は確かめていない（未確認）
 _HUAWEI_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
@@ -325,6 +329,9 @@ _HUAWEI_FIXES: dict[str, str] = {
     "SNMP から設定を書き換えられます": _QX_FIXES["SNMP から設定を書き換えられます"],
     "SSH が古い方式のままです": "SSH1 は解読の方法が知られています。"
     "SSH1 のクライアントを受け入れないでください（undo ssh server compatible-ssh1x enable）。",
+    "FTP サーバーが開いています": "FTP は telnet と同じく中身が丸見えで、"
+    "入るときのパスワードもそのまま流れます。ファイルの受け渡しには SFTP を使い、"
+    "FTP は閉じてください（undo ftp server、IPv6 の口は undo ftp ipv6 server）。",
 }
 
 #: Cisco ASA の Config に出す直し方。telnet は口ごとに許す相手を書く形で、IOS の line vty は無い
