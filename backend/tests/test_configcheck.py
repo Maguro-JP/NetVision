@@ -2806,3 +2806,16 @@ def test_huawei_ssh1_shows_the_vrp_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "SSH が古い方式のままです")
     assert "undo ssh server compatible-ssh1x enable" in finding.why
     assert "version 2 にしてください" not in finding.why
+
+
+def test_asa_telnet_shows_the_asa_way_to_fix(db_session):
+    """ASA の telnet の指摘には、IOS の line vty ではなく ASA の書き方を案内する。
+
+    出典: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+    （no telnet / clear configure telnet）。
+    """
+    text = "ASA Version 9.16(4)\nhostname fw\ntelnet 10.0.0.0 255.255.255.0 inside\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "no telnet" in finding.why and "ssh " in finding.why
+    assert "transport input" not in finding.why

@@ -316,6 +316,16 @@ _HUAWEI_FIXES: dict[str, str] = {
     "SSH1 のクライアントを受け入れないでください（undo ssh server compatible-ssh1x enable）。",
 }
 
+#: Cisco ASA の Config に出す直し方。telnet は口ごとに許す相手を書く形で、IOS の line vty は無い
+#: （出典: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+#: （no telnet で消す、clear configure telnet で全部消す）、Cisco の技術文書 118075（ASA の SSH と
+#: Telnet の設定例）の ssh ip_address mask interface_name）
+_ASA_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "telnet の行を no telnet で消し（全部なら clear configure telnet）、"
+    "同じ相手を ssh 相手のアドレス マスク 口の名前 で許してください。",
+}
+
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
 _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.NEC_QX: _QX_FIXES,
@@ -325,6 +335,7 @@ _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.ALLIED: _ALLIED_FIXES,
     Vendor.H3C: _H3C_FIXES,
     Vendor.HUAWEI: _HUAWEI_FIXES,
+    Vendor.CISCO_ASA: _ASA_FIXES,
 }
 
 

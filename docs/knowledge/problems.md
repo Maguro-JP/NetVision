@@ -1381,3 +1381,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   「S Series Campus Switches Troubleshooting Guide」の FAQs（V200R006 以前は既定で有効、V200R007 以降は無効）。
 - 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_ssh1_shows_the_vrp_way_to_fix`。
 - 見なかったこと: Huawei のパスワードの書き方（`password simple` の規則に当たる書き方を VRP で確かめていない）。
+
+## Cisco ASA の telnet の指摘に、IOS の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ASA の `telnet 10.0.0.0 255.255.255.0 inside` に
+  「transport input ssh」を案内していた。ASA には IOS の line vty が無く、そのまま打てない。
+- 確かめた資料: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+  （`no telnet` で1行ずつ消す、`clear configure telnet` で全部消す）、Cisco の技術文書 118075（`ssh ip_address mask interface_name`）。
+- 直したこと: `backend/app/services/configcheck.py` に `_ASA_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
+  試験は `test_asa_telnet_shows_the_asa_way_to_fix`。
+- 見なかったこと: ASA の http server（ASDM）の書き方。行の規則が ASA の `http` の行を見ていないので、別の件として扱う。
