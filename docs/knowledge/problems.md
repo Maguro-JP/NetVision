@@ -1372,3 +1372,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   QX と同じ書き方・振る舞いなので、QX の文を使う。
 - 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に足した。試験は `test_h3c_plain_password_shows_the_h3c_way_to_fix`。
 - 見なかったこと: ネットワークアクセスユーザ（class network）の password（cipher | simple）。
+
+## Huawei の SSH1 互換の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Huawei の `ssh server compatible-ssh1x enable` に「version 2 にしてください」を案内していた。
+- 確かめた資料: Huawei「S5700 and S6700 V200R025C00 Command Reference」の ssh server compatible-ssh1x enable
+  （止める形は `undo ssh server compatible-ssh1x enable`。QX・H3C と違って enable が付く）、
+  「S Series Campus Switches Troubleshooting Guide」の FAQs（V200R006 以前は既定で有効、V200R007 以降は無効）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_ssh1_shows_the_vrp_way_to_fix`。
+- 見なかったこと: Huawei のパスワードの書き方（`password simple` の規則に当たる書き方を VRP で確かめていない）。

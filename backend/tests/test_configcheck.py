@@ -2793,3 +2793,16 @@ def test_h3c_plain_password_shows_the_h3c_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == title)
     assert "password hash" in finding.why
     assert "secret" not in finding.why
+
+
+def test_huawei_ssh1_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の SSH1 互換の指摘には、VRP の undo の形（enable 付き）を案内する。
+
+    出典: Huawei「S5700 and S6700 V200R025C00 Command Reference」の
+    ssh server compatible-ssh1x enable（undo ssh server compatible-ssh1x enable）。
+    """
+    text = _VRP_HEAD + "ssh server compatible-ssh1x enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "SSH が古い方式のままです")
+    assert "undo ssh server compatible-ssh1x enable" in finding.why
+    assert "version 2 にしてください" not in finding.why
