@@ -280,8 +280,8 @@ _ALLIED_FIXES: dict[str, str] = {
 #: Command Reference」03-Login management commands の telnet server enable（既定は無効）・
 #: protocol inbound・ip http enable / ip https enable、H3C「02-SNMP commands」の
 #: snmp-agent community { read | write }、H3C「SSH commands」の ssh server compatible-ssh1x enable
-#: （undo は enable を付けても付けなくてもよい））。
-#: パスワードは H3C の資料で確かめていないので差し替えない（未確認）
+#: （undo は enable を付けても付けなくてもよい）、H3C「AAA commands」の password
+#: （装置管理ユーザは hash か simple。simple でも保存するとハッシュになる））
 _H3C_FIXES: dict[str, str] = {
     title: _QX_FIXES[title]
     for title in (
@@ -289,6 +289,7 @@ _H3C_FIXES: dict[str, str] = {
         "管理用の web が開いています",
         "SNMP から設定を書き換えられます",
         "SSH が古い方式のままです",
+        "利用者のパスワードが、元に戻せる形で入っています",
     )
 }
 

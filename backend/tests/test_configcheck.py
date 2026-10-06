@@ -2776,3 +2776,20 @@ def test_huawei_snmp_write_shows_the_vrp_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "SNMP から設定を書き換えられます")
     assert "snmp-agent community read" in finding.why
     assert "RO で足ります" not in finding.why
+
+
+def test_h3c_plain_password_shows_the_h3c_way_to_fix(db_session):
+    """H3C の `password simple` の指摘には、password hash を案内する。
+
+    出典: H3C「AAA commands」の password（[ { hash | simple } string ]。
+    simple でも保存するとハッシュになる）。
+    """
+    text = (
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-p1\n#\n"
+        "local-user admin class manage\n password simple Adm1nPass\n#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    title = "利用者のパスワードが、元に戻せる形で入っています"
+    finding = next(f for f in findings if f.title == title)
+    assert "password hash" in finding.why
+    assert "secret" not in finding.why
