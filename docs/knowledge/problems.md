@@ -1455,3 +1455,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の FTP の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` に
   IPv6 の閉じ方を含む直し方を足した。試験は `test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close`。
 - 見なかったこと: H3C の FTP の書き方（コメントに未確認と残した）。
+
+## TFTP サーバーを開いた行を、何も言わずに通していた（2026-10-07 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: FTP は指摘していたが、合言葉の無い TFTP の
+  `tftp server enable` は規則が無く素通りしていた。届く人なら誰でも機器のファイルを読み書きできる。
+- 確かめた資料: H3C「06-FTP and TFTP commands」の tftp server enable（`undo tftp server enable`、既定は無効）、
+  Huawei「NetEngine AR1000V V300R024 CLI-based Configuration Guide - Basic Configuration」の
+  Managing Files When the Device Functions as a TFTP Server（使い終わったら `undo tftp server enable` で止める）。
+- 直したこと: `backend/app/services/configcheck.py` の行の規則に「TFTP サーバーが開いています」を足した。
+  試験は `test_tftp_server_enable_is_found`（H3C と Huawei の2件）。
+- ついでに確かめたこと: H3C の FTP は `undo ftp server enable` で止める（同じ資料）。今の案内のままで合っていたので、
+  FTP の規則のコメントの「未確認」を外しただけで、動きは変えていない。
+- 見なかったこと: Cisco IOS の `tftp-server`。書き方が違い、資料に当たっていない。

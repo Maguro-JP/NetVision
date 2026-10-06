@@ -107,12 +107,23 @@ _HYGIENE = (
         # ftp server enable、既定は無効）。暗号化する sftp server enable（6.1.3）は別の行なので
         # 行頭から見る。Huawei は IPv6 の口が別の行（出典: Huawei「CloudEngine S3700, S5700 and
         # S6700 V600R024C10 Command Reference」の ftp server enable / ftp ipv6 server enable）。
-        # H3C も同じ字面だが、その資料には当たっていない（未確認）
+        # H3C も同じ字面で、undo ftp server enable で止める（出典: H3C「06-FTP and TFTP commands」）
         re.compile(r"^\s*ftp (?:ipv6 )?server enable\s*$", re.IGNORECASE),
         HIGH,
         "FTP サーバーが開いています",
         "FTP は telnet と同じく中身が丸見えで、入るときのパスワードもそのまま流れます。"
         "ファイルの受け渡しには SFTP を使い、FTP は閉じてください（undo ftp server enable）。",
+    ),
+    (
+        # H3C・Huawei（出典: H3C「06-FTP and TFTP commands」の tftp server enable、既定は無効。
+        # Huawei「NetEngine AR1000V V300R024 CLI-based Configuration Guide - Basic Configuration」の
+        # Managing Files When the Device Functions as a TFTP Server）。Cisco の tftp-server は
+        # 別の書き方で、資料に当たっていないので見ない（未確認）
+        re.compile(r"^\s*tftp server enable\s*$", re.IGNORECASE),
+        HIGH,
+        "TFTP サーバーが開いています",
+        "TFTP には合言葉が無く、届く人は誰でも機器のファイルを読み書きできます。"
+        "受け渡しが終わったら undo tftp server enable で止め、普段は SFTP を使ってください。",
     ),
     (
         re.compile(

@@ -2906,3 +2906,23 @@ def test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
     findings = configcheck.check(db_session, text).findings
     finding = next(f for f in findings if f.title == "FTP サーバーが開いています")
     assert "undo ftp ipv6 server" in finding.why
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-t1\n#\n",
+        _VRP_HEAD,
+    ],
+)
+def test_tftp_server_enable_is_found(db_session, head):
+    """H3C・Huawei の tftp server enable は、合言葉なしでファイルを読み書きできる口なので指摘する。
+
+    出典: H3C「06-FTP and TFTP commands」の tftp server enable
+    （undo tftp server enable、既定は無効）、Huawei「NetEngine AR1000V V300R024 CLI-based
+    Configuration Guide - Basic Configuration」の Managing Files When the Device Functions as
+    a TFTP Server（使い終わったら undo tftp server enable で止める）。
+    """
+    findings = configcheck.check(db_session, head + "tftp server enable\n#\n").findings
+    finding = next(f for f in findings if f.title == "TFTP サーバーが開いています")
+    assert "undo tftp server enable" in finding.why
