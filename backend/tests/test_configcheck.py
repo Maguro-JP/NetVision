@@ -2821,3 +2821,29 @@ def test_asa_telnet_shows_the_asa_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert "no telnet" in finding.why and "ssh " in finding.why
     assert "transport input" not in finding.why
+
+
+def test_huawei_reversible_admin_password_is_found(db_session):
+    """Huawei で、管理に入る利用者の合言葉が password cipher（元に戻せる形）なら指摘する。
+
+    出典: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and
+    Authentication」の Configuring a Local User（`local-user user-name password
+    { cipher | irreversible-cipher } password`。管理者の利用者は元に戻せない形にする）、
+    「S300, S500, S2700, S5700, and S6700 V200R024C00 Command Reference」の Password setting
+    （3DES・AES は元に戻せる。管理者の合言葉には元に戻せない方式を使う）。
+    """
+    text = (
+        _VRP_HEAD + "aaa\n"
+        " local-user admin password cipher %^%#abc%^%#\n"
+        " local-user admin service-type ssh terminal\n"
+        " local-user dot1x password cipher %^%#def%^%#\n"
+        " local-user dot1x service-type 8021x\n"
+        " local-user ops password irreversible-cipher $1a$xyz$\n"
+        " local-user ops service-type ssh\n"
+        "#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "利用者のパスワードが、元に戻せる形で入っています"]
+    assert len(hits) == 1
+    assert "irreversible-cipher" in hits[0].why
+    assert hits[0].evidence == ["local-user admin password cipher"]

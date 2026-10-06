@@ -440,6 +440,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
+    found.extend(_huawei_reversible_admin_password(text, parsed.vendor))
     return _sorted(found)
 
 
@@ -973,6 +974,50 @@ def _junos_plain_password(text: str) -> list[Finding]:
             why="Junos は入れた時点で暗号化するので、この形が残っているのは"
             "投入前の設定文です。その文を渡すと合言葉もそのまま渡ります。"
             "渡す前に消すか、暗号化した形（encrypted-password）に替えてください。",
+            evidence=heads[:3],
+        )
+    ]
+
+
+#: Huawei の local-user の合言葉。cipher は元に戻せる暗号（3DES・AES）、irreversible-cipher は
+#: 元に戻せない（出典: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and
+#: Authentication」の Configuring a Local User、「S300, S500, S2700, S5700, and S6700 V200R024C00
+#: Command Reference」の Password setting（管理者の合言葉には元に戻せない方式を使う））
+_HUAWEI_LOCAL_USER_CIPHER = re.compile(r"^local-user\s+(\S+)\s+password\s+cipher\s", re.IGNORECASE)
+_HUAWEI_LOCAL_USER_SERVICE = re.compile(
+    r"^local-user\s+(\S+)\s+service-type\s+(.+)$", re.IGNORECASE
+)
+#: 機器そのものに入る口。8021x・ppp・web などの利用者は、認証の方式によって元に戻せる形が要る
+_HUAWEI_LOGIN_SERVICES = frozenset({"telnet", "ssh", "terminal"})
+
+
+def _huawei_reversible_admin_password(text: str, vendor: Vendor) -> list[Finding]:
+    """Huawei で、機器に入る利用者の合言葉が元に戻せる形（password cipher）なのを言う。
+
+    新しい版は管理の口を許すと元に戻せない形へ自動で替えるので、この形が残るのは古い版の設定。
+    802.1x などだけの利用者は、元に戻せる形が要る場合があるので言わない。
+    """
+    if vendor != Vendor.HUAWEI:
+        return []
+    ciphered: dict[str, str] = {}
+    login_users: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if m := _HUAWEI_LOCAL_USER_CIPHER.match(line):
+            ciphered.setdefault(m.group(1), f"local-user {m.group(1)} password cipher")
+        elif m := _HUAWEI_LOCAL_USER_SERVICE.match(line):
+            if _HUAWEI_LOGIN_SERVICES & set(m.group(2).lower().split()):
+                login_users.add(m.group(1))
+    heads = [head for user, head in ciphered.items() if user in login_users]
+    if not heads:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="利用者のパスワードが、元に戻せる形で入っています",
+            why="password cipher は元に戻せる暗号で、設定を手に入れた人が合言葉を取り出せます。"
+            "機器に入る利用者は、local-user 名前 password irreversible-cipher で"
+            "入れ直してください。",
             evidence=heads[:3],
         )
     ]

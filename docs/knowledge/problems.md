@@ -1402,3 +1402,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_yamaha_and_allied_telnet_show_their_way_to_fix` に1件足した。
 - 足さなかったこと: ASA の `http server enable` は ASDM 用で、通信は HTTPS になる。暗号化しない Web として
   指摘すると誤検知になるので、規則には入れていない。
+
+## Huawei の、機器に入る利用者の合言葉が元に戻せる形でも言っていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: パスワードの規則は Cisco の `username ... password` と
+  QX の `password simple` しか見ておらず、Huawei の `local-user 名前 password cipher` を素通りしていた。
+- 確かめた資料: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and Authentication」の
+  Configuring a Local User（`local-user user-name password { cipher | irreversible-cipher } password`。
+  管理の口を許すと元に戻せない形へ自動で替わる）、「S300, S500, S2700, S5700, and S6700 V200R024C00 Command Reference」の
+  Password setting（3DES・AES は元に戻せる。管理者の合言葉には元に戻せない方式を使う）。
+- 直したこと: `backend/app/services/configcheck.py` に `_huawei_reversible_admin_password` を足した。
+  service-type に telnet・ssh・terminal がある利用者だけを見る。試験は `test_huawei_reversible_admin_password_is_found`。
+- 言わないこと: 8021x・ppp・web だけの利用者。認証の方式によっては元に戻せる形が要る。
+- 見なかったこと: どの service-type を管理の種類とするかの一覧（ftp・http・api）。公式の一覧を確かめていないので入れていない。
