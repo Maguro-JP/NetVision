@@ -987,15 +987,17 @@ _HUAWEI_LOCAL_USER_CIPHER = re.compile(r"^local-user\s+(\S+)\s+password\s+cipher
 _HUAWEI_LOCAL_USER_SERVICE = re.compile(
     r"^local-user\s+(\S+)\s+service-type\s+(.+)$", re.IGNORECASE
 )
-#: 機器そのものに入る口。8021x・ppp・web などの利用者は、認証の方式によって元に戻せる形が要る
-_HUAWEI_LOGIN_SERVICES = frozenset({"telnet", "ssh", "terminal"})
+#: 管理の種類（出典: Huawei「S7700 V200R023C10 Configuration Guide - User Access and
+#: Authentication」の Configuring a Local User。Administrative: api, ftp, http, ssh, telnet,
+#: x25-pad, terminal）。普通の種類（8021x・bind・ppp・web）は、認証の方式によって元に戻せる形が要る
+_HUAWEI_LOGIN_SERVICES = frozenset({"api", "ftp", "http", "ssh", "telnet", "x25-pad", "terminal"})
 
 
 def _huawei_reversible_admin_password(text: str, vendor: Vendor) -> list[Finding]:
-    """Huawei で、機器に入る利用者の合言葉が元に戻せる形（password cipher）なのを言う。
+    """Huawei で、管理の種類の利用者の合言葉が元に戻せる形（password cipher）なのを言う。
 
     新しい版は管理の口を許すと元に戻せない形へ自動で替えるので、この形が残るのは古い版の設定。
-    802.1x などだけの利用者は、元に戻せる形が要る場合があるので言わない。
+    802.1x・ppp・web などだけの利用者は、元に戻せる形が要る場合があるので言わない。
     """
     if vendor != Vendor.HUAWEI:
         return []

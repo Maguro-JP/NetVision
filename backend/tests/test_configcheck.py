@@ -2847,3 +2847,23 @@ def test_huawei_reversible_admin_password_is_found(db_session):
     assert len(hits) == 1
     assert "irreversible-cipher" in hits[0].why
     assert hits[0].evidence == ["local-user admin password cipher"]
+
+
+def test_huawei_reversible_password_for_web_or_ftp_admin_is_found(db_session):
+    """http・ftp・api だけの利用者も管理の種類なので、password cipher なら指摘する。
+
+    出典: Huawei「S7700 V200R023C10 Configuration Guide - User Access and Authentication」の
+    Configuring a Local User（Administrative: api, ftp, http, ssh, telnet, x25-pad, and terminal /
+    Common: 8021x, bind, ppp and web）。
+    """
+    text = (
+        _VRP_HEAD + "aaa\n"
+        " local-user webadm password cipher %^%#abc%^%#\n"
+        " local-user webadm service-type http\n"
+        " local-user portal password cipher %^%#def%^%#\n"
+        " local-user portal service-type web\n"
+        "#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "利用者のパスワードが、元に戻せる形で入っています"]
+    assert [h.evidence for h in hits] == [["local-user webadm password cipher"]]

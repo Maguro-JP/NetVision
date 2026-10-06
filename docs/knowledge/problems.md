@@ -1415,3 +1415,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   service-type に telnet・ssh・terminal がある利用者だけを見る。試験は `test_huawei_reversible_admin_password_is_found`。
 - 言わないこと: 8021x・ppp・web だけの利用者。認証の方式によっては元に戻せる形が要る。
 - 見なかったこと: どの service-type を管理の種類とするかの一覧（ftp・http・api）。公式の一覧を確かめていないので入れていない。
+
+## Huawei の合言葉の指摘が、http・ftp・api だけの管理者を見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 前の件で見る種類を telnet・ssh・terminal に絞っていたので、
+  web から管理する利用者（service-type http）の `password cipher` を素通りしていた。
+- 確かめた資料: Huawei「S7700 V200R023C10 Configuration Guide - User Access and Authentication」の Configuring a Local User
+  （Administrative: api, ftp, http, ssh, telnet, x25-pad, and terminal / Common: 8021x, bind, ppp and web）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_LOGIN_SERVICES` を公式の管理の種類7つにした。
+  試験は `test_huawei_reversible_password_for_web_or_ftp_admin_is_found`。
