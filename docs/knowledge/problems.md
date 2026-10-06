@@ -1434,3 +1434,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   Command Reference」の display http server（IPv4 と IPv6 の口は別々に開け閉めする）。
 - 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` の文に IPv6 の閉じ方と https の形を足した。
   試験は `test_huawei_http_ipv6_shows_the_ipv6_way_to_close`。
+
+## Huawei の `telnet ipv6 server enable` を、telnet の入口として見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 行の規則が `telnet server enable` しか見ておらず、
+  IPv6 で telnet を開く `telnet ipv6 server enable` を素通りしていた。直し方も IPv4 の閉じ方だけだった。
+- 確かめた資料: Huawei「WLAN AC V200R019C00 Command Reference」の telnet server enable
+  （`telnet [ ipv6 ] server enable` / `undo telnet [ ipv6 ] server enable`、既定は止まっている）。
+- 直したこと: `backend/app/services/configcheck.py` の telnet の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` の文に
+  `undo telnet ipv6 server enable` を足した。試験は `test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close`。
+- 見なかったこと: QX・H3C に IPv6 の telnet を開く別の書き方があるか。

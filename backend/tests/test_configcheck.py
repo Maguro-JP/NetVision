@@ -2881,3 +2881,15 @@ def test_huawei_http_ipv6_shows_the_ipv6_way_to_close(db_session):
     finding = next(f for f in findings if f.title == "管理用の web が開いています")
     assert "undo http ipv6 server enable" in finding.why
     assert "http ipv6 secure-server enable" in finding.why
+
+
+def test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
+    """Huawei の telnet ipv6 server enable も telnet の入口として指摘し、IPv6 の閉じ方を出す。
+
+    出典: Huawei「WLAN AC V200R019C00 Command Reference」の telnet server enable
+    （telnet [ ipv6 ] server enable / undo telnet [ ipv6 ] server enable）。
+    """
+    text = _VRP_HEAD + "telnet ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "undo telnet ipv6 server enable" in finding.why

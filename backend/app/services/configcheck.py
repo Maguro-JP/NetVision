@@ -89,7 +89,9 @@ _HYGIENE = (
             r"|set allowaccess\b.*\btelnet\b"  # FortiGate
             r"|telnetd service on\b"  # ヤマハ
             r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
-            r"|telnet server enable\b"  # NEC QX
+            # NEC QX と Huawei。Huawei の IPv6 の口は別の行（出典: Huawei「WLAN AC V200R019C00
+            # Command Reference」の telnet server enable。telnet [ ipv6 ] server enable）
+            r"|telnet (?:ipv6 )?server enable\b"
             r"|protocol inbound (?:all|telnet)\b"  # NEC QX / VRP の vty
             r"|telnet server\s*$"  # FastIron（no telnet server は止めた形）
             r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
@@ -298,7 +300,8 @@ _H3C_FIXES: dict[str, str] = {
 
 #: Huawei の Config に出す直し方（出典: Huawei「S Series Campus Switches Troubleshooting Guide
 #: (V100 and V200)」の FAQs About Basic Configuration と SSH/Telnet Attack（undo telnet server
-#: enable）、「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
+#: enable。IPv6 は「WLAN AC V200R019C00 Command Reference」の undo telnet ipv6 server enable）、
+#: 「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
 #: Device（protocol inbound ssh は authentication-mode aaa が要る））。
 #: http は同じ Troubleshooting Guide の TCP/UDP Attack（undo http server enable）と FAQs About
 #: Basic Configuration（http server enable は既定で有効）。IPv6 の口は「智简园区网络解决方案
@@ -310,7 +313,8 @@ _H3C_FIXES: dict[str, str] = {
 #: ほかの題は確かめていない（未確認）
 _HUAWEI_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
-    "ssh だけに絞ってください（undo telnet server enable、user-interface vty の下で"
+    "ssh だけに絞ってください（undo telnet server enable、IPv6 の口は"
+    "undo telnet ipv6 server enable、user-interface vty の下で"
     " authentication-mode aaa と protocol inbound ssh）。",
     "管理用の web が開いています": "暗号化されない口が開いたままです。"
     "使っていないなら閉じてください（undo http server enable。"
