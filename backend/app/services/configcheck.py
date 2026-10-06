@@ -117,8 +117,8 @@ _HYGIENE = (
     (
         # H3C・Huawei（出典: H3C「06-FTP and TFTP commands」の tftp server enable、既定は無効。
         # Huawei「NetEngine AR1000V V300R024 CLI-based Configuration Guide - Basic Configuration」の
-        # Managing Files When the Device Functions as a TFTP Server）。Cisco の tftp-server は
-        # 別の書き方で、資料に当たっていないので見ない（未確認）
+        # Managing Files When the Device Functions as a TFTP Server）。Cisco IOS の tftp-server は
+        # ファイルごとに書く別の形なので、_ios_open_tftp_server で見る
         re.compile(r"^\s*tftp server enable\s*$", re.IGNORECASE),
         HIGH,
         "TFTP サーバーが開いています",
@@ -467,6 +467,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
     found.extend(_huawei_reversible_admin_password(text, parsed.vendor))
+    found.extend(_ios_open_tftp_server(text))
     return _sorted(found)
 
 
@@ -1047,6 +1048,41 @@ def _huawei_reversible_admin_password(text: str, vendor: Vendor) -> list[Finding
             "機器に入る利用者は、local-user 名前 password irreversible-cipher で"
             "入れ直してください。",
             evidence=heads[:3],
+        )
+    ]
+
+
+#: Cisco IOS の TFTP サーバー。書いたファイルを、合言葉なしで渡す。末尾にアクセスリストの番号
+#: （0〜99）を付けると相手を絞れる（出典: Cisco「Cisco IOS Configuration Fundamentals Command
+#: Reference」の tftp-server: tftp-server flash [partition-number:] filename1 [alias filename2]
+#: [access-list-number]、tftp-server rom alias filename1 [access-list-number]）
+_IOS_TFTP_SERVER = re.compile(r"^tftp-server\s+\S", re.IGNORECASE)
+
+
+def _ios_open_tftp_server(text: str) -> list[Finding]:
+    """Cisco IOS の tftp-server で、アクセスリストの番号が無い行を言う。
+
+    番号が無いと、届く人は誰でもそのファイルを取り出せる。番号のある行は相手を絞っているので言わない。
+    """
+    open_lines: list[str] = []
+    for raw in text.splitlines():
+        line = " ".join(raw.split())
+        if not _IOS_TFTP_SERVER.match(line):
+            continue
+        words = line.split()[1:]
+        has_acl = len(words) >= 2 and words[-1].isdigit() and words[-2].lower() != "alias"
+        if not has_acl:
+            open_lines.append(line)
+    if not open_lines:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="TFTP で誰でもファイルを取り出せます",
+            why="TFTP には合言葉が無く、相手を絞る番号も付いていません。届く人なら誰でも"
+            "このファイルを取り出せます。使い終わったら no tftp-server で消すか、"
+            "行の末尾にアクセスリストの番号を付けて相手を絞ってください。",
+            evidence=open_lines[:3],
         )
     ]
 

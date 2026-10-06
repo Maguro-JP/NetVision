@@ -2926,3 +2926,28 @@ def test_tftp_server_enable_is_found(db_session, head):
     findings = configcheck.check(db_session, head + "tftp server enable\n#\n").findings
     finding = next(f for f in findings if f.title == "TFTP サーバーが開いています")
     assert "undo tftp server enable" in finding.why
+
+
+def test_ios_tftp_server_without_access_list_is_found(db_session):
+    """Cisco IOS の tftp-server で、アクセスリストの番号が無い行だけを指摘する。
+
+    出典: Cisco「Cisco IOS Configuration Fundamentals Command Reference」の tftp-server
+    （tftp-server flash [partition-number:] filename1 [alias filename2] [access-list-number]）、
+    「System Management Configuration Guide, Cisco IOS XE 17.x」の Configuring Basic File
+    Transfer Services（番号を付けると、そのアクセスリストで相手を確かめる）。
+    """
+    text = (
+        "hostname r-tftp\n"
+        "tftp-server flash:c2960-lanbasek9-mz.bin\n"
+        "tftp-server flash version-10.3 22\n"
+        "tftp-server rom alias gs3-k.101 5\n"
+        "tftp-server flash:startup.cfg alias boot.cfg\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "TFTP で誰でもファイルを取り出せます"]
+    assert len(hits) == 1
+    assert hits[0].evidence == [
+        "tftp-server flash:c2960-lanbasek9-mz.bin",
+        "tftp-server flash:startup.cfg alias boot.cfg",
+    ]
+    assert "no tftp-server" in hits[0].why

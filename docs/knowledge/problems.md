@@ -1468,3 +1468,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - ついでに確かめたこと: H3C の FTP は `undo ftp server enable` で止める（同じ資料）。今の案内のままで合っていたので、
   FTP の規則のコメントの「未確認」を外しただけで、動きは変えていない。
 - 見なかったこと: Cisco IOS の `tftp-server`。書き方が違い、資料に当たっていない。
+
+## Cisco IOS の `tftp-server` を、相手を絞らずに書いていても言っていなかった（2026-10-07 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 周10 で H3C・Huawei の TFTP を足したが、
+  Cisco IOS の `tftp-server` は書き方が違うので素通りしていた。アクセスリストの番号が無いと、届く人は誰でもファイルを取り出せる。
+- 確かめた資料: Cisco「Cisco IOS Configuration Fundamentals Command Reference」の tftp-server
+  （`tftp-server flash [partition-number:] filename1 [alias filename2] [access-list-number]`、`no tftp-server` で消す）、
+  「System Management Configuration Guide, Cisco IOS XE 17.x」の Configuring Basic File Transfer Services。
+- 直したこと: `backend/app/services/configcheck.py` に `_ios_open_tftp_server` を足した。末尾が番号の行は言わない。
+  試験は `test_ios_tftp_server_without_access_list_is_found`。
+- 決めたこと: 重さは中にした。IOS の tftp-server は書いたファイルを読ませるだけで、H3C・Huawei のような書き込みは無いため。
