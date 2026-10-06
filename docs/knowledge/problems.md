@@ -1391,3 +1391,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_ASA_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
   試験は `test_asa_telnet_shows_the_asa_way_to_fix`。
 - 見なかったこと: ASA の http server（ASDM）の書き方。行の規則が ASA の `http` の行を見ていないので、別の件として扱う。
+
+## ヤマハの telnet の指摘で、SSH を使えるようにする手順が抜けていた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ヤマハの `telnetd service on` に「SSH を使ってください」とだけ案内していた。
+  ヤマハの sshd は既定で止まっていて、ホスト鍵を作るまでつながらないので、その一言だけでは SSH に切り替えられない。
+- 確かめた資料: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」（`sshd service on`、`sshd host key generate`、
+  `login user` で名前ありの利用者を作る）。
+- 直したこと: `backend/app/services/configcheck.py` の `_YAMAHA_FIXES` の文に、3つの行を足した。
+  試験は `test_yamaha_and_allied_telnet_show_their_way_to_fix` に1件足した。
+- 足さなかったこと: ASA の `http server enable` は ASDM 用で、通信は HTTPS になる。暗号化しない Web として
+  指摘すると誤検知になるので、規則には入れていない。

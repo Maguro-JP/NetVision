@@ -2678,6 +2678,8 @@ def test_fortigate_findings_show_the_fortigate_way_to_fix(db_session, access, ti
     [
         # 出典: ヤマハ「RTX コマンドリファレンス」4 章「TELNET サーバー機能の ON/OFF の設定」
         ("# RTX830 Rev.15.02.28\ntelnetd service on\n", "telnetd service off"),
+        # 出典: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」の SSH サーバー機能の設定
+        ("# RTX830 Rev.15.02.28\ntelnetd service on\n", "sshd host key generate"),
         # 出典: Allied Telesis「AlliedWare Plus Best Practice Guide」の Telnet の節
         (
             "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\nhostname sw\nservice telnet\n",

@@ -263,10 +263,13 @@ _FORTIGATE_FIXES: dict[str, str] = {
 }
 
 #: ヤマハの Config に出す直し方（出典: ヤマハ「RTX コマンドリファレンス」4 章
-#: 「TELNET サーバー機能の ON/OFF の設定」 telnetd service on|off、初期値は on）
+#: 「TELNET サーバー機能の ON/OFF の設定」 telnetd service on|off、初期値は on。SSH はヤマハ
+#: 「TELNET複数セッション機能、SSHサーバー機能」の設定の手順（login user・sshd host key generate・
+#: sshd service on。sshd service の初期値は off、ホスト鍵を作らないと接続できない））
 _YAMAHA_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
-    "telnetd service off で止め、リモートで入るなら SSH を使ってください。",
+    "telnetd service off で止め、リモートで入るなら SSH を使ってください"
+    "（login user で名前ありの利用者を作り、sshd host key generate、sshd service on）。",
 }
 
 #: アライドテレシスの Config に出す直し方（出典: Allied Telesis「AlliedWare Plus Best Practice
