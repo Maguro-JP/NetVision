@@ -1364,3 +1364,118 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （snmp-agent community { read | write }）。書き方は QX・H3C と同じなので、QX の文を使う。
 - 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_snmp_write_shows_the_vrp_way_to_fix`。
 - 見なかったこと: Huawei のパスワード・SSH の直し方。
+
+## H3C の `password simple` の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: H3C の `password simple` に「username ... secret を使うと」を案内していた。
+- 確かめた資料: H3C「AAA commands」の password（`password [ { hash | simple } string ]`。simple でも保存するとハッシュになる）。
+  QX と同じ書き方・振る舞いなので、QX の文を使う。
+- 直したこと: `backend/app/services/configcheck.py` の `_H3C_FIXES` に足した。試験は `test_h3c_plain_password_shows_the_h3c_way_to_fix`。
+- 見なかったこと: ネットワークアクセスユーザ（class network）の password（cipher | simple）。
+
+## Huawei の SSH1 互換の指摘に、Cisco の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Huawei の `ssh server compatible-ssh1x enable` に「version 2 にしてください」を案内していた。
+- 確かめた資料: Huawei「S5700 and S6700 V200R025C00 Command Reference」の ssh server compatible-ssh1x enable
+  （止める形は `undo ssh server compatible-ssh1x enable`。QX・H3C と違って enable が付く）、
+  「S Series Campus Switches Troubleshooting Guide」の FAQs（V200R006 以前は既定で有効、V200R007 以降は無効）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` に足した。試験は `test_huawei_ssh1_shows_the_vrp_way_to_fix`。
+- 見なかったこと: Huawei のパスワードの書き方（`password simple` の規則に当たる書き方を VRP で確かめていない）。
+
+## Cisco ASA の telnet の指摘に、IOS の直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ASA の `telnet 10.0.0.0 255.255.255.0 inside` に
+  「transport input ssh」を案内していた。ASA には IOS の line vty が無く、そのまま打てない。
+- 確かめた資料: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+  （`no telnet` で1行ずつ消す、`clear configure telnet` で全部消す）、Cisco の技術文書 118075（`ssh ip_address mask interface_name`）。
+- 直したこと: `backend/app/services/configcheck.py` に `_ASA_FIXES` を足し、`_FIXES_BY_VENDOR` に載せた。
+  試験は `test_asa_telnet_shows_the_asa_way_to_fix`。
+- 見なかったこと: ASA の http server（ASDM）の書き方。行の規則が ASA の `http` の行を見ていないので、別の件として扱う。
+
+## ヤマハの telnet の指摘で、SSH を使えるようにする手順が抜けていた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: ヤマハの `telnetd service on` に「SSH を使ってください」とだけ案内していた。
+  ヤマハの sshd は既定で止まっていて、ホスト鍵を作るまでつながらないので、その一言だけでは SSH に切り替えられない。
+- 確かめた資料: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」（`sshd service on`、`sshd host key generate`、
+  `login user` で名前ありの利用者を作る）。
+- 直したこと: `backend/app/services/configcheck.py` の `_YAMAHA_FIXES` の文に、3つの行を足した。
+  試験は `test_yamaha_and_allied_telnet_show_their_way_to_fix` に1件足した。
+- 足さなかったこと: ASA の `http server enable` は ASDM 用で、通信は HTTPS になる。暗号化しない Web として
+  指摘すると誤検知になるので、規則には入れていない。
+
+## Huawei の、機器に入る利用者の合言葉が元に戻せる形でも言っていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: パスワードの規則は Cisco の `username ... password` と
+  QX の `password simple` しか見ておらず、Huawei の `local-user 名前 password cipher` を素通りしていた。
+- 確かめた資料: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and Authentication」の
+  Configuring a Local User（`local-user user-name password { cipher | irreversible-cipher } password`。
+  管理の口を許すと元に戻せない形へ自動で替わる）、「S300, S500, S2700, S5700, and S6700 V200R024C00 Command Reference」の
+  Password setting（3DES・AES は元に戻せる。管理者の合言葉には元に戻せない方式を使う）。
+- 直したこと: `backend/app/services/configcheck.py` に `_huawei_reversible_admin_password` を足した。
+  service-type に telnet・ssh・terminal がある利用者だけを見る。試験は `test_huawei_reversible_admin_password_is_found`。
+- 言わないこと: 8021x・ppp・web だけの利用者。認証の方式によっては元に戻せる形が要る。
+- 見なかったこと: どの service-type を管理の種類とするかの一覧（ftp・http・api）。公式の一覧を確かめていないので入れていない。
+
+## Huawei の合言葉の指摘が、http・ftp・api だけの管理者を見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 前の件で見る種類を telnet・ssh・terminal に絞っていたので、
+  web から管理する利用者（service-type http）の `password cipher` を素通りしていた。
+- 確かめた資料: Huawei「S7700 V200R023C10 Configuration Guide - User Access and Authentication」の Configuring a Local User
+  （Administrative: api, ftp, http, ssh, telnet, x25-pad, and terminal / Common: 8021x, bind, ppp and web）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_LOGIN_SERVICES` を公式の管理の種類7つにした。
+  試験は `test_huawei_reversible_password_for_web_or_ftp_admin_is_found`。
+
+## Huawei の `http ipv6 server enable` に、IPv4 の口しか閉じない直し方を案内していた（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `http ipv6 server enable` の行も指摘していたが、
+  案内は `undo http server enable` だけだった。これでは IPv6 の口が開いたまま残る。
+- 確かめた資料: Huawei「智简园区网络解决方案 V100R020C10」の LAN网络站点配置（`http ipv6 server enable` /
+  `undo http ipv6 server enable`、`http [ ipv6 ] secure-server enable`）、「S1720, S2700, S5700, and S6720 V200R011C10
+  Command Reference」の display http server（IPv4 と IPv6 の口は別々に開け閉めする）。
+- 直したこと: `backend/app/services/configcheck.py` の `_HUAWEI_FIXES` の文に IPv6 の閉じ方と https の形を足した。
+  試験は `test_huawei_http_ipv6_shows_the_ipv6_way_to_close`。
+
+## Huawei の `telnet ipv6 server enable` を、telnet の入口として見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 行の規則が `telnet server enable` しか見ておらず、
+  IPv6 で telnet を開く `telnet ipv6 server enable` を素通りしていた。直し方も IPv4 の閉じ方だけだった。
+- 確かめた資料: Huawei「WLAN AC V200R019C00 Command Reference」の telnet server enable
+  （`telnet [ ipv6 ] server enable` / `undo telnet [ ipv6 ] server enable`、既定は止まっている）。
+- 直したこと: `backend/app/services/configcheck.py` の telnet の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` の文に
+  `undo telnet ipv6 server enable` を足した。試験は `test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close`。
+- 見なかったこと: QX・H3C に IPv6 の telnet を開く別の書き方があるか。
+
+## Huawei の `ftp ipv6 server enable` を、FTP の入口として見ていなかった（2026-10-06 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: FTP の行の規則が `ftp server enable` しか見ておらず、
+  IPv6 で FTP を開く `ftp ipv6 server enable` を素通りしていた。
+- 確かめた資料: Huawei「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の ftp server enable
+  （`undo ftp server [ enable ]`）と ftp ipv6 server enable（`undo ftp ipv6 server [ enable ]`）、
+  「V600R024C10 Configuration Guide - Basic Configuration」の display ftp server（IPv4 と IPv6 の状態が別に出る）。
+- 直したこと: `backend/app/services/configcheck.py` の FTP の行の規則に IPv6 の形を足し、`_HUAWEI_FIXES` に
+  IPv6 の閉じ方を含む直し方を足した。試験は `test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close`。
+- 見なかったこと: H3C の FTP の書き方（コメントに未確認と残した）。
+
+## TFTP サーバーを開いた行を、何も言わずに通していた（2026-10-07 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: FTP は指摘していたが、合言葉の無い TFTP の
+  `tftp server enable` は規則が無く素通りしていた。届く人なら誰でも機器のファイルを読み書きできる。
+- 確かめた資料: H3C「06-FTP and TFTP commands」の tftp server enable（`undo tftp server enable`、既定は無効）、
+  Huawei「NetEngine AR1000V V300R024 CLI-based Configuration Guide - Basic Configuration」の
+  Managing Files When the Device Functions as a TFTP Server（使い終わったら `undo tftp server enable` で止める）。
+- 直したこと: `backend/app/services/configcheck.py` の行の規則に「TFTP サーバーが開いています」を足した。
+  試験は `test_tftp_server_enable_is_found`（H3C と Huawei の2件）。
+- ついでに確かめたこと: H3C の FTP は `undo ftp server enable` で止める（同じ資料）。今の案内のままで合っていたので、
+  FTP の規則のコメントの「未確認」を外しただけで、動きは変えていない。
+- 見なかったこと: Cisco IOS の `tftp-server`。書き方が違い、資料に当たっていない。
+
+## Cisco IOS の `tftp-server` を、相手を絞らずに書いていても言っていなかった（2026-10-07 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 周10 で H3C・Huawei の TFTP を足したが、
+  Cisco IOS の `tftp-server` は書き方が違うので素通りしていた。アクセスリストの番号が無いと、届く人は誰でもファイルを取り出せる。
+- 確かめた資料: Cisco「Cisco IOS Configuration Fundamentals Command Reference」の tftp-server
+  （`tftp-server flash [partition-number:] filename1 [alias filename2] [access-list-number]`、`no tftp-server` で消す）、
+  「System Management Configuration Guide, Cisco IOS XE 17.x」の Configuring Basic File Transfer Services。
+- 直したこと: `backend/app/services/configcheck.py` に `_ios_open_tftp_server` を足した。末尾が番号の行は言わない。
+  試験は `test_ios_tftp_server_without_access_list_is_found`。
+- 決めたこと: 重さは中にした。IOS の tftp-server は書いたファイルを読ませるだけで、H3C・Huawei のような書き込みは無いため。

@@ -89,7 +89,9 @@ _HYGIENE = (
             r"|set allowaccess\b.*\btelnet\b"  # FortiGate
             r"|telnetd service on\b"  # ヤマハ
             r"|service telnet\s*$"  # アライドテレシス（no service telnet は止めた形）
-            r"|telnet server enable\b"  # NEC QX
+            # NEC QX と Huawei。Huawei の IPv6 の口は別の行（出典: Huawei「WLAN AC V200R019C00
+            # Command Reference」の telnet server enable。telnet [ ipv6 ] server enable）
+            r"|telnet (?:ipv6 )?server enable\b"
             r"|protocol inbound (?:all|telnet)\b"  # NEC QX / VRP の vty
             r"|telnet server\s*$"  # FastIron（no telnet server は止めた形）
             r"|telnet\s+\d+\.\d+\.\d+\.\d+\s+\d+\.\d+\.\d+\.\d+\s+\S+)",  # ASA
@@ -103,12 +105,25 @@ _HYGIENE = (
     (
         # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」4.1.8
         # ftp server enable、既定は無効）。暗号化する sftp server enable（6.1.3）は別の行なので
-        # 行頭から見る。Huawei・H3C も同じ字面だが、その資料には当たっていない（未確認）
-        re.compile(r"^\s*ftp server enable\s*$", re.IGNORECASE),
+        # 行頭から見る。Huawei は IPv6 の口が別の行（出典: Huawei「CloudEngine S3700, S5700 and
+        # S6700 V600R024C10 Command Reference」の ftp server enable / ftp ipv6 server enable）。
+        # H3C も同じ字面で、undo ftp server enable で止める（出典: H3C「06-FTP and TFTP commands」）
+        re.compile(r"^\s*ftp (?:ipv6 )?server enable\s*$", re.IGNORECASE),
         HIGH,
         "FTP サーバーが開いています",
         "FTP は telnet と同じく中身が丸見えで、入るときのパスワードもそのまま流れます。"
         "ファイルの受け渡しには SFTP を使い、FTP は閉じてください（undo ftp server enable）。",
+    ),
+    (
+        # H3C・Huawei（出典: H3C「06-FTP and TFTP commands」の tftp server enable、既定は無効。
+        # Huawei「NetEngine AR1000V V300R024 CLI-based Configuration Guide - Basic Configuration」の
+        # Managing Files When the Device Functions as a TFTP Server）。Cisco IOS の tftp-server は
+        # ファイルごとに書く別の形なので、_ios_open_tftp_server で見る
+        re.compile(r"^\s*tftp server enable\s*$", re.IGNORECASE),
+        HIGH,
+        "TFTP サーバーが開いています",
+        "TFTP には合言葉が無く、届く人は誰でも機器のファイルを読み書きできます。"
+        "受け渡しが終わったら undo tftp server enable で止め、普段は SFTP を使ってください。",
     ),
     (
         re.compile(
@@ -263,10 +278,13 @@ _FORTIGATE_FIXES: dict[str, str] = {
 }
 
 #: ヤマハの Config に出す直し方（出典: ヤマハ「RTX コマンドリファレンス」4 章
-#: 「TELNET サーバー機能の ON/OFF の設定」 telnetd service on|off、初期値は on）
+#: 「TELNET サーバー機能の ON/OFF の設定」 telnetd service on|off、初期値は on。SSH はヤマハ
+#: 「TELNET複数セッション機能、SSHサーバー機能」の設定の手順（login user・sshd host key generate・
+#: sshd service on。sshd service の初期値は off、ホスト鍵を作らないと接続できない））
 _YAMAHA_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
-    "telnetd service off で止め、リモートで入るなら SSH を使ってください。",
+    "telnetd service off で止め、リモートで入るなら SSH を使ってください"
+    "（login user で名前ありの利用者を作り、sshd host key generate、sshd service on）。",
 }
 
 #: アライドテレシスの Config に出す直し方（出典: Allied Telesis「AlliedWare Plus Best Practice
@@ -280,8 +298,8 @@ _ALLIED_FIXES: dict[str, str] = {
 #: Command Reference」03-Login management commands の telnet server enable（既定は無効）・
 #: protocol inbound・ip http enable / ip https enable、H3C「02-SNMP commands」の
 #: snmp-agent community { read | write }、H3C「SSH commands」の ssh server compatible-ssh1x enable
-#: （undo は enable を付けても付けなくてもよい））。
-#: パスワードは H3C の資料で確かめていないので差し替えない（未確認）
+#: （undo は enable を付けても付けなくてもよい）、H3C「AAA commands」の password
+#: （装置管理ユーザは hash か simple。simple でも保存するとハッシュになる））
 _H3C_FIXES: dict[str, str] = {
     title: _QX_FIXES[title]
     for title in (
@@ -289,26 +307,52 @@ _H3C_FIXES: dict[str, str] = {
         "管理用の web が開いています",
         "SNMP から設定を書き換えられます",
         "SSH が古い方式のままです",
+        "利用者のパスワードが、元に戻せる形で入っています",
     )
 }
 
 #: Huawei の Config に出す直し方（出典: Huawei「S Series Campus Switches Troubleshooting Guide
 #: (V100 and V200)」の FAQs About Basic Configuration と SSH/Telnet Attack（undo telnet server
-#: enable）、「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
+#: enable。IPv6 は「WLAN AC V200R019C00 Command Reference」の undo telnet ipv6 server enable）、
+#: 「Fat AP and Cloud AP V200R010C00 CLI-based Configuration Guide」の Logging In to the
 #: Device（protocol inbound ssh は authentication-mode aaa が要る））。
 #: http は同じ Troubleshooting Guide の TCP/UDP Attack（undo http server enable）と FAQs About
-#: Basic Configuration（http server enable は既定で有効）。SNMP は「CloudEngine S3700, S5700, and
+#: Basic Configuration（http server enable は既定で有効）。IPv6 の口は「智简园区网络解决方案
+#: V100R020C10」の LAN网络站点配置（undo http ipv6 server enable、http [ ipv6 ] secure-server
+#: enable）。SNMP は「CloudEngine S3700, S5700, and
 #: S6700 V600R023C00 Configuration Guide」の Configuring Basic SNMPv1 Functions
-#: （snmp-agent community { read | write }）。ほかの題は確かめていない（未確認）
+#: （snmp-agent community { read | write }）。SSH1 互換は「S5700 and S6700 V200R025C00 Command
+#: Reference」の ssh server compatible-ssh1x enable（QX と違い、undo の形にも enable が付く）。
+#: FTP は「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の ftp server enable
+#: （undo ftp server [ enable ]、undo ftp ipv6 server [ enable ]）。
+#: ほかの題は確かめていない（未確認）
 _HUAWEI_FIXES: dict[str, str] = {
     "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
-    "ssh だけに絞ってください（undo telnet server enable、user-interface vty の下で"
+    "ssh だけに絞ってください（undo telnet server enable、IPv6 の口は"
+    "undo telnet ipv6 server enable、user-interface vty の下で"
     " authentication-mode aaa と protocol inbound ssh）。",
     "管理用の web が開いています": "暗号化されない口が開いたままです。"
     "使っていないなら閉じてください（undo http server enable。"
-    "web で管理するなら http secure-server enable の https だけを残す）。"
+    "IPv6 の口は別で、undo http ipv6 server enable で閉じる。"
+    "web で管理するなら http secure-server enable（IPv6 は http ipv6 secure-server enable）の"
+    "https だけを残す）。"
     "踏み台にされたときに、いちばん気づきにくい入口です。",
     "SNMP から設定を書き換えられます": _QX_FIXES["SNMP から設定を書き換えられます"],
+    "SSH が古い方式のままです": "SSH1 は解読の方法が知られています。"
+    "SSH1 のクライアントを受け入れないでください（undo ssh server compatible-ssh1x enable）。",
+    "FTP サーバーが開いています": "FTP は telnet と同じく中身が丸見えで、"
+    "入るときのパスワードもそのまま流れます。ファイルの受け渡しには SFTP を使い、"
+    "FTP は閉じてください（undo ftp server、IPv6 の口は undo ftp ipv6 server）。",
+}
+
+#: Cisco ASA の Config に出す直し方。telnet は口ごとに許す相手を書く形で、IOS の line vty は無い
+#: （出典: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+#: （no telnet で消す、clear configure telnet で全部消す）、Cisco の技術文書 118075（ASA の SSH と
+#: Telnet の設定例）の ssh ip_address mask interface_name）
+_ASA_FIXES: dict[str, str] = {
+    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+    "telnet の行を no telnet で消し（全部なら clear configure telnet）、"
+    "同じ相手を ssh 相手のアドレス マスク 口の名前 で許してください。",
 }
 
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
@@ -320,6 +364,7 @@ _FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
     Vendor.ALLIED: _ALLIED_FIXES,
     Vendor.H3C: _H3C_FIXES,
     Vendor.HUAWEI: _HUAWEI_FIXES,
+    Vendor.CISCO_ASA: _ASA_FIXES,
 }
 
 
@@ -421,6 +466,8 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_nxos_features(parsed, text))
     found.extend(_password_types(parsed, text))
     found.extend(_junos_plain_password(text))
+    found.extend(_huawei_reversible_admin_password(text, parsed.vendor))
+    found.extend(_ios_open_tftp_server(text))
     return _sorted(found)
 
 
@@ -955,6 +1002,87 @@ def _junos_plain_password(text: str) -> list[Finding]:
             "投入前の設定文です。その文を渡すと合言葉もそのまま渡ります。"
             "渡す前に消すか、暗号化した形（encrypted-password）に替えてください。",
             evidence=heads[:3],
+        )
+    ]
+
+
+#: Huawei の local-user の合言葉。cipher は元に戻せる暗号（3DES・AES）、irreversible-cipher は
+#: 元に戻せない（出典: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and
+#: Authentication」の Configuring a Local User、「S300, S500, S2700, S5700, and S6700 V200R024C00
+#: Command Reference」の Password setting（管理者の合言葉には元に戻せない方式を使う））
+_HUAWEI_LOCAL_USER_CIPHER = re.compile(r"^local-user\s+(\S+)\s+password\s+cipher\s", re.IGNORECASE)
+_HUAWEI_LOCAL_USER_SERVICE = re.compile(
+    r"^local-user\s+(\S+)\s+service-type\s+(.+)$", re.IGNORECASE
+)
+#: 管理の種類（出典: Huawei「S7700 V200R023C10 Configuration Guide - User Access and
+#: Authentication」の Configuring a Local User。Administrative: api, ftp, http, ssh, telnet,
+#: x25-pad, terminal）。普通の種類（8021x・bind・ppp・web）は、認証の方式によって元に戻せる形が要る
+_HUAWEI_LOGIN_SERVICES = frozenset({"api", "ftp", "http", "ssh", "telnet", "x25-pad", "terminal"})
+
+
+def _huawei_reversible_admin_password(text: str, vendor: Vendor) -> list[Finding]:
+    """Huawei で、管理の種類の利用者の合言葉が元に戻せる形（password cipher）なのを言う。
+
+    新しい版は管理の口を許すと元に戻せない形へ自動で替えるので、この形が残るのは古い版の設定。
+    802.1x・ppp・web などだけの利用者は、元に戻せる形が要る場合があるので言わない。
+    """
+    if vendor != Vendor.HUAWEI:
+        return []
+    ciphered: dict[str, str] = {}
+    login_users: set[str] = set()
+    for raw in text.splitlines():
+        line = raw.strip()
+        if m := _HUAWEI_LOCAL_USER_CIPHER.match(line):
+            ciphered.setdefault(m.group(1), f"local-user {m.group(1)} password cipher")
+        elif m := _HUAWEI_LOCAL_USER_SERVICE.match(line):
+            if _HUAWEI_LOGIN_SERVICES & set(m.group(2).lower().split()):
+                login_users.add(m.group(1))
+    heads = [head for user, head in ciphered.items() if user in login_users]
+    if not heads:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="利用者のパスワードが、元に戻せる形で入っています",
+            why="password cipher は元に戻せる暗号で、設定を手に入れた人が合言葉を取り出せます。"
+            "機器に入る利用者は、local-user 名前 password irreversible-cipher で"
+            "入れ直してください。",
+            evidence=heads[:3],
+        )
+    ]
+
+
+#: Cisco IOS の TFTP サーバー。書いたファイルを、合言葉なしで渡す。末尾にアクセスリストの番号
+#: （0〜99）を付けると相手を絞れる（出典: Cisco「Cisco IOS Configuration Fundamentals Command
+#: Reference」の tftp-server: tftp-server flash [partition-number:] filename1 [alias filename2]
+#: [access-list-number]、tftp-server rom alias filename1 [access-list-number]）
+_IOS_TFTP_SERVER = re.compile(r"^tftp-server\s+\S", re.IGNORECASE)
+
+
+def _ios_open_tftp_server(text: str) -> list[Finding]:
+    """Cisco IOS の tftp-server で、アクセスリストの番号が無い行を言う。
+
+    番号が無いと、届く人は誰でもそのファイルを取り出せる。番号のある行は相手を絞っているので言わない。
+    """
+    open_lines: list[str] = []
+    for raw in text.splitlines():
+        line = " ".join(raw.split())
+        if not _IOS_TFTP_SERVER.match(line):
+            continue
+        words = line.split()[1:]
+        has_acl = len(words) >= 2 and words[-1].isdigit() and words[-2].lower() != "alias"
+        if not has_acl:
+            open_lines.append(line)
+    if not open_lines:
+        return []
+    return [
+        Finding(
+            level=MEDIUM,
+            title="TFTP で誰でもファイルを取り出せます",
+            why="TFTP には合言葉が無く、相手を絞る番号も付いていません。届く人なら誰でも"
+            "このファイルを取り出せます。使い終わったら no tftp-server で消すか、"
+            "行の末尾にアクセスリストの番号を付けて相手を絞ってください。",
+            evidence=open_lines[:3],
         )
     ]
 

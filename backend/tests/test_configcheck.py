@@ -2678,6 +2678,8 @@ def test_fortigate_findings_show_the_fortigate_way_to_fix(db_session, access, ti
     [
         # 出典: ヤマハ「RTX コマンドリファレンス」4 章「TELNET サーバー機能の ON/OFF の設定」
         ("# RTX830 Rev.15.02.28\ntelnetd service on\n", "telnetd service off"),
+        # 出典: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」の SSH サーバー機能の設定
+        ("# RTX830 Rev.15.02.28\ntelnetd service on\n", "sshd host key generate"),
         # 出典: Allied Telesis「AlliedWare Plus Best Practice Guide」の Telnet の節
         (
             "! Allied Telesis AlliedWare Plus (tm) version 5.5.2\nhostname sw\nservice telnet\n",
@@ -2776,3 +2778,176 @@ def test_huawei_snmp_write_shows_the_vrp_way_to_fix(db_session):
     finding = next(f for f in findings if f.title == "SNMP から設定を書き換えられます")
     assert "snmp-agent community read" in finding.why
     assert "RO で足ります" not in finding.why
+
+
+def test_h3c_plain_password_shows_the_h3c_way_to_fix(db_session):
+    """H3C の `password simple` の指摘には、password hash を案内する。
+
+    出典: H3C「AAA commands」の password（[ { hash | simple } string ]。
+    simple でも保存するとハッシュになる）。
+    """
+    text = (
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-p1\n#\n"
+        "local-user admin class manage\n password simple Adm1nPass\n#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    title = "利用者のパスワードが、元に戻せる形で入っています"
+    finding = next(f for f in findings if f.title == title)
+    assert "password hash" in finding.why
+    assert "secret" not in finding.why
+
+
+def test_huawei_ssh1_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の SSH1 互換の指摘には、VRP の undo の形（enable 付き）を案内する。
+
+    出典: Huawei「S5700 and S6700 V200R025C00 Command Reference」の
+    ssh server compatible-ssh1x enable（undo ssh server compatible-ssh1x enable）。
+    """
+    text = _VRP_HEAD + "ssh server compatible-ssh1x enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "SSH が古い方式のままです")
+    assert "undo ssh server compatible-ssh1x enable" in finding.why
+    assert "version 2 にしてください" not in finding.why
+
+
+def test_asa_telnet_shows_the_asa_way_to_fix(db_session):
+    """ASA の telnet の指摘には、IOS の line vty ではなく ASA の書き方を案内する。
+
+    出典: Cisco「Cisco Secure Firewall ASA Series Command Reference, T - Z Commands」の telnet
+    （no telnet / clear configure telnet）。
+    """
+    text = "ASA Version 9.16(4)\nhostname fw\ntelnet 10.0.0.0 255.255.255.0 inside\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "no telnet" in finding.why and "ssh " in finding.why
+    assert "transport input" not in finding.why
+
+
+def test_huawei_reversible_admin_password_is_found(db_session):
+    """Huawei で、管理に入る利用者の合言葉が password cipher（元に戻せる形）なら指摘する。
+
+    出典: Huawei「S5700 and S6700 V200R024C10 Configuration Guide - User Access and
+    Authentication」の Configuring a Local User（`local-user user-name password
+    { cipher | irreversible-cipher } password`。管理者の利用者は元に戻せない形にする）、
+    「S300, S500, S2700, S5700, and S6700 V200R024C00 Command Reference」の Password setting
+    （3DES・AES は元に戻せる。管理者の合言葉には元に戻せない方式を使う）。
+    """
+    text = (
+        _VRP_HEAD + "aaa\n"
+        " local-user admin password cipher %^%#abc%^%#\n"
+        " local-user admin service-type ssh terminal\n"
+        " local-user dot1x password cipher %^%#def%^%#\n"
+        " local-user dot1x service-type 8021x\n"
+        " local-user ops password irreversible-cipher $1a$xyz$\n"
+        " local-user ops service-type ssh\n"
+        "#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "利用者のパスワードが、元に戻せる形で入っています"]
+    assert len(hits) == 1
+    assert "irreversible-cipher" in hits[0].why
+    assert hits[0].evidence == ["local-user admin password cipher"]
+
+
+def test_huawei_reversible_password_for_web_or_ftp_admin_is_found(db_session):
+    """http・ftp・api だけの利用者も管理の種類なので、password cipher なら指摘する。
+
+    出典: Huawei「S7700 V200R023C10 Configuration Guide - User Access and Authentication」の
+    Configuring a Local User（Administrative: api, ftp, http, ssh, telnet, x25-pad, and terminal /
+    Common: 8021x, bind, ppp and web）。
+    """
+    text = (
+        _VRP_HEAD + "aaa\n"
+        " local-user webadm password cipher %^%#abc%^%#\n"
+        " local-user webadm service-type http\n"
+        " local-user portal password cipher %^%#def%^%#\n"
+        " local-user portal service-type web\n"
+        "#\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "利用者のパスワードが、元に戻せる形で入っています"]
+    assert [h.evidence for h in hits] == [["local-user webadm password cipher"]]
+
+
+def test_huawei_http_ipv6_shows_the_ipv6_way_to_close(db_session):
+    """Huawei の http ipv6 server enable には、IPv6 の口を閉じる undo の形も案内する。
+
+    undo http server enable は IPv4 の口しか閉じない。
+    出典: Huawei「智简园区网络解决方案 V100R020C10」の LAN网络站点配置
+    （http ipv6 server enable / undo http ipv6 server enable、http [ ipv6 ] secure-server enable）。
+    """
+    text = _VRP_HEAD + "http ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "管理用の web が開いています")
+    assert "undo http ipv6 server enable" in finding.why
+    assert "http ipv6 secure-server enable" in finding.why
+
+
+def test_huawei_telnet_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
+    """Huawei の telnet ipv6 server enable も telnet の入口として指摘し、IPv6 の閉じ方を出す。
+
+    出典: Huawei「WLAN AC V200R019C00 Command Reference」の telnet server enable
+    （telnet [ ipv6 ] server enable / undo telnet [ ipv6 ] server enable）。
+    """
+    text = _VRP_HEAD + "telnet ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "undo telnet ipv6 server enable" in finding.why
+
+
+def test_huawei_ftp_ipv6_is_found_with_the_ipv6_way_to_close(db_session):
+    """Huawei の ftp ipv6 server enable も FTP の入口として指摘し、IPv6 の閉じ方を出す。
+
+    出典: Huawei「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の
+    ftp server enable（undo ftp server [ enable ]）と ftp ipv6 server enable
+    （undo ftp ipv6 server [ enable ]）。
+    """
+    text = _VRP_HEAD + "ftp ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "FTP サーバーが開いています")
+    assert "undo ftp ipv6 server" in finding.why
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-t1\n#\n",
+        _VRP_HEAD,
+    ],
+)
+def test_tftp_server_enable_is_found(db_session, head):
+    """H3C・Huawei の tftp server enable は、合言葉なしでファイルを読み書きできる口なので指摘する。
+
+    出典: H3C「06-FTP and TFTP commands」の tftp server enable
+    （undo tftp server enable、既定は無効）、Huawei「NetEngine AR1000V V300R024 CLI-based
+    Configuration Guide - Basic Configuration」の Managing Files When the Device Functions as
+    a TFTP Server（使い終わったら undo tftp server enable で止める）。
+    """
+    findings = configcheck.check(db_session, head + "tftp server enable\n#\n").findings
+    finding = next(f for f in findings if f.title == "TFTP サーバーが開いています")
+    assert "undo tftp server enable" in finding.why
+
+
+def test_ios_tftp_server_without_access_list_is_found(db_session):
+    """Cisco IOS の tftp-server で、アクセスリストの番号が無い行だけを指摘する。
+
+    出典: Cisco「Cisco IOS Configuration Fundamentals Command Reference」の tftp-server
+    （tftp-server flash [partition-number:] filename1 [alias filename2] [access-list-number]）、
+    「System Management Configuration Guide, Cisco IOS XE 17.x」の Configuring Basic File
+    Transfer Services（番号を付けると、そのアクセスリストで相手を確かめる）。
+    """
+    text = (
+        "hostname r-tftp\n"
+        "tftp-server flash:c2960-lanbasek9-mz.bin\n"
+        "tftp-server flash version-10.3 22\n"
+        "tftp-server rom alias gs3-k.101 5\n"
+        "tftp-server flash:startup.cfg alias boot.cfg\n"
+    )
+    findings = configcheck.check(db_session, text).findings
+    hits = [f for f in findings if f.title == "TFTP で誰でもファイルを取り出せます"]
+    assert len(hits) == 1
+    assert hits[0].evidence == [
+        "tftp-server flash:c2960-lanbasek9-mz.bin",
+        "tftp-server flash:startup.cfg alias boot.cfg",
+    ]
+    assert "no tftp-server" in hits[0].why
