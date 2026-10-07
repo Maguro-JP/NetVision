@@ -1479,3 +1479,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` に `_ios_open_tftp_server` を足した。末尾が番号の行は言わない。
   試験は `test_ios_tftp_server_without_access_list_is_found`。
 - 決めたこと: 重さは中にした。IOS の tftp-server は書いたファイルを読ませるだけで、H3C・Huawei のような書き込みは無いため。
+
+## Huawei の閉じ方で、開いていない側（IPv4 / IPv6）の行まで案内していた（2026-10-07 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 直し方の文を題ごとに1つしか持てなかったので、
+  `telnet server enable` だけの Config にも `undo telnet ipv6 server enable` を並べていた（http・ftp も同じ）。
+  読み手は「IPv6 も開いているのか」と迷う。
+- 確かめた資料: 周7〜周9 と同じ（IPv4 と IPv6 の口は別々の行で開け閉めする）。
+- 直したこと: `backend/app/services/configcheck.py` の直し方の表で、文の代わりに「当たった行から文を作る関数」も
+  持てるようにした（`Fix`、`_by_family`）。Huawei の telnet・http・ftp は、当たった行に応じて開いている側の閉じ方だけを出す。
+  vty の行だけで当たったときは、今までどおり IPv4 の閉じ方を出す。
+  試験は `test_huawei_fix_names_only_the_address_family_that_is_open`（6件）と
+  `test_huawei_fix_names_both_families_when_both_are_open`。
