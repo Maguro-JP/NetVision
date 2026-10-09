@@ -67,7 +67,7 @@ Config 点検の資料はどれも Cisco のもの。点検が Cisco 型の書�
 ## 次に広げる順
 
 1. VLAN・STP・冗長・ログの点検（`topology.py` の各 `FindingRead`）。いまはどの指摘も既定値に拠った資料を持たないので、欄だけ通しても何も出ない。既定値に拠る指摘を見つけたときに、欄と一緒に足す。
-   STP のモードの既定を、残りの機種（AOS-S など。Aruba CX・AlaxalA・Dell OS10・Cisco Business・Huawei・H3C・NEC QX は確かめた）でも資料で確かめる。
+   STP のモードの既定を、残りの機種でも資料で確かめる（Aruba CX・AOS-S・AlaxalA・Dell OS10・Cisco Business・Huawei・H3C・NEC QX は確かめた。AOS-S は 2026-10-10 JST）。
    VLAN・STP・冗長・無線の点検（vlanreview・stpreview・hareview・wirelessreview）を洗った範囲では、既定に拠る指摘は見つからなかった（2026-10-03 JST）。
 2. 既定値ではなく「機種の振る舞い」に拠る指摘（HSRP は既定で取り返さない、など）。出典はいまコメントにだけある。
 3. 画面以外に指摘を出す場所ができたら（報告書の書き出しなど）、そこにも同じ行を出す。

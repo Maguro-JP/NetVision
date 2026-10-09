@@ -246,6 +246,9 @@ _STP_MODE_SOURCES: dict[str, str] = {
     "h3c": "H3C「07-Spanning tree configuration」Setting the spanning tree mode:"
     " The default setting is the MSTP mode",
     "nec_qx": "NEC QX-S1100G シリーズ コマンドマニュアル 1.9版 8.1.31 stp mode: デフォルト mstp",
+    "aruba_os": "HPE Aruba 2930F / 2930M Advanced Traffic Management Guide for AOS-S 16.11"
+    "「Setting spanning tree to operate in 802.1D legacy mode」: Default: MSTP-operation"
+    "（no 形で既定の 802.1s native mode に戻る）",
 }
 
 
