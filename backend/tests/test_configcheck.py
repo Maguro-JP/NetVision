@@ -2951,3 +2951,57 @@ def test_ios_tftp_server_without_access_list_is_found(db_session):
         "tftp-server flash:startup.cfg alias boot.cfg",
     ]
     assert "no tftp-server" in hits[0].why
+
+
+@pytest.mark.parametrize(
+    ("line", "title", "shown", "hidden"),
+    [
+        # IPv4 の行だけなら、IPv6 の閉じ方は出さない
+        ("telnet server enable", "telnet で入れる状態です", "undo telnet server enable", "ipv6"),
+        ("http server enable", "管理用の web が開いています", "undo http server enable", "ipv6"),
+        ("ftp server enable", "FTP サーバーが開いています", "undo ftp server", "ipv6"),
+        # IPv6 の行だけなら、IPv4 の閉じ方は出さない
+        (
+            "telnet ipv6 server enable",
+            "telnet で入れる状態です",
+            "undo telnet ipv6 server enable",
+            "undo telnet server enable",
+        ),
+        (
+            "http ipv6 server enable",
+            "管理用の web が開いています",
+            "undo http ipv6 server enable",
+            "undo http server enable",
+        ),
+        (
+            "ftp ipv6 server enable",
+            "FTP サーバーが開いています",
+            "undo ftp ipv6 server",
+            "undo ftp server、",
+        ),
+    ],
+)
+def test_huawei_fix_names_only_the_address_family_that_is_open(
+    db_session, line, title, shown, hidden
+):
+    """Huawei の telnet・http・ftp は、開いている側（IPv4 / IPv6）の閉じ方だけを出す。
+
+    出典: Huawei「WLAN AC V200R019C00 Command Reference」の telnet server enable、
+    「智简园区网络解决方案 V100R020C10」の LAN网络站点配置（http [ ipv6 ] server enable）、
+    「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の
+    ftp [ ipv6 ] server enable。
+    IPv4 と IPv6 の口は別々に開け閉めする。
+    """
+    findings = configcheck.check(db_session, _VRP_HEAD + line + "\n#\n").findings
+    finding = next(f for f in findings if f.title == title)
+    assert shown in finding.why
+    assert hidden not in finding.why
+
+
+def test_huawei_fix_names_both_families_when_both_are_open(db_session):
+    """IPv4 と IPv6 の両方が開いていれば、両方の閉じ方を出す。"""
+    text = _VRP_HEAD + "telnet server enable\ntelnet ipv6 server enable\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "telnet で入れる状態です")
+    assert "undo telnet server enable" in finding.why
+    assert "undo telnet ipv6 server enable" in finding.why

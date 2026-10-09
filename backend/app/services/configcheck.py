@@ -15,6 +15,7 @@
 from __future__ import annotations
 
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 
 from sqlalchemy import select
@@ -222,6 +223,10 @@ _HYGIENE = (
 )
 
 
+#: 直し方。文そのものか、当たった行から文を作る関数（IPv4 と IPv6 の口が別の行の機種で使う）
+Fix = str | Callable[[list[str]], str]
+
+
 #: NEC QX の Config に出す直し方。行の規則の why は Cisco の書き方で案内しているので、
 #: QX ではそのまま打てない。題で引いて、QX の書き方の文に差し替える
 #: （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.41 telnet server enable、
@@ -311,6 +316,7 @@ _H3C_FIXES: dict[str, str] = {
     )
 }
 
+
 #: Huawei の Config に出す直し方（出典: Huawei「S Series Campus Switches Troubleshooting Guide
 #: (V100 and V200)」の FAQs About Basic Configuration と SSH/Telnet Attack（undo telnet server
 #: enable。IPv6 は「WLAN AC V200R019C00 Command Reference」の undo telnet ipv6 server enable）、
@@ -326,23 +332,53 @@ _H3C_FIXES: dict[str, str] = {
 #: FTP は「CloudEngine S3700, S5700 and S6700 V600R024C10 Command Reference」の ftp server enable
 #: （undo ftp server [ enable ]、undo ftp ipv6 server [ enable ]）。
 #: ほかの題は確かめていない（未確認）
-_HUAWEI_FIXES: dict[str, str] = {
-    "telnet で入れる状態です": "telnet は中身が丸見えで、パスワードもそのまま流れます。"
-    "ssh だけに絞ってください（undo telnet server enable、IPv6 の口は"
-    "undo telnet ipv6 server enable、user-interface vty の下で"
-    " authentication-mode aaa と protocol inbound ssh）。",
-    "管理用の web が開いています": "暗号化されない口が開いたままです。"
-    "使っていないなら閉じてください（undo http server enable。"
-    "IPv6 の口は別で、undo http ipv6 server enable で閉じる。"
-    "web で管理するなら http secure-server enable（IPv6 は http ipv6 secure-server enable）の"
-    "https だけを残す）。"
-    "踏み台にされたときに、いちばん気づきにくい入口です。",
+def _by_family(v4: str, v6: str, v6_line: str) -> Callable[[list[str]], str]:
+    """開いている側（IPv4 / IPv6）の閉じ方だけを、「、」でつないで返す関数を作る。
+
+    IPv6 の行が無ければ IPv4 の閉じ方だけ。vty の行だけで当たったときも、
+    今までどおり IPv4 を出す。
+    """
+    pattern = re.compile(rf"^\s*{v6_line}\s*$", re.IGNORECASE)
+
+    def pick(hits: list[str]) -> str:
+        has_v6 = any(pattern.match(h) for h in hits)
+        has_v4 = any(not pattern.match(h) for h in hits)
+        return "、".join(([v4] if has_v4 or not has_v6 else []) + ([v6] if has_v6 else []))
+
+    return pick
+
+
+_HUAWEI_TELNET_CLOSE = _by_family(
+    "undo telnet server enable", "undo telnet ipv6 server enable", r"telnet ipv6 server enable"
+)
+_HUAWEI_HTTP_CLOSE = _by_family(
+    "undo http server enable", "undo http ipv6 server enable", r"http ipv6 server enable"
+)
+_HUAWEI_HTTPS_KEEP = _by_family(
+    "http secure-server enable", "http ipv6 secure-server enable", r"http ipv6 server enable"
+)
+_HUAWEI_FTP_CLOSE = _by_family("undo ftp server", "undo ftp ipv6 server", r"ftp ipv6 server enable")
+
+_HUAWEI_FIXES: dict[str, Fix] = {
+    "telnet で入れる状態です": lambda hits: (
+        "telnet は中身が丸見えで、パスワードもそのまま流れます。"
+        f"ssh だけに絞ってください（{_HUAWEI_TELNET_CLOSE(hits)}、user-interface vty の下で"
+        " authentication-mode aaa と protocol inbound ssh）。"
+    ),
+    "管理用の web が開いています": lambda hits: (
+        "暗号化されない口が開いたままです。"
+        f"使っていないなら閉じてください（{_HUAWEI_HTTP_CLOSE(hits)}。"
+        f"web で管理するなら {_HUAWEI_HTTPS_KEEP(hits)} の https だけを残す）。"
+        "踏み台にされたときに、いちばん気づきにくい入口です。"
+    ),
     "SNMP から設定を書き換えられます": _QX_FIXES["SNMP から設定を書き換えられます"],
     "SSH が古い方式のままです": "SSH1 は解読の方法が知られています。"
     "SSH1 のクライアントを受け入れないでください（undo ssh server compatible-ssh1x enable）。",
-    "FTP サーバーが開いています": "FTP は telnet と同じく中身が丸見えで、"
-    "入るときのパスワードもそのまま流れます。ファイルの受け渡しには SFTP を使い、"
-    "FTP は閉じてください（undo ftp server、IPv6 の口は undo ftp ipv6 server）。",
+    "FTP サーバーが開いています": lambda hits: (
+        "FTP は telnet と同じく中身が丸見えで、"
+        "入るときのパスワードもそのまま流れます。ファイルの受け渡しには SFTP を使い、"
+        f"FTP は閉じてください（{_HUAWEI_FTP_CLOSE(hits)}）。"
+    ),
 }
 
 #: Cisco ASA の Config に出す直し方。telnet は口ごとに許す相手を書く形で、IOS の line vty は無い
@@ -356,7 +392,7 @@ _ASA_FIXES: dict[str, str] = {
 }
 
 #: 機種ごとの直し方。載っていない機種と題は、行の規則の why（Cisco の書き方）のまま
-_FIXES_BY_VENDOR: dict[Vendor, dict[str, str]] = {
+_FIXES_BY_VENDOR: dict[Vendor, Mapping[str, Fix]] = {
     Vendor.NEC_QX: _QX_FIXES,
     Vendor.JUNIPER: _JUNOS_FIXES,
     Vendor.FORTINET: _FORTIGATE_FIXES,
@@ -478,7 +514,8 @@ def _hygiene(parsed: ParsedConfig, text: str) -> list[Finding]:
     for pattern, level, title, why in _HYGIENE:
         hits = [line for line in lines if pattern.match(line)]
         if hits:
-            why = _FIXES_BY_VENDOR.get(parsed.vendor, {}).get(title, why)
+            fix = _FIXES_BY_VENDOR.get(parsed.vendor, {}).get(title, why)
+            why = fix(hits) if callable(fix) else fix
             out.append(Finding(level=level, title=title, why=why, evidence=hits[:3]))
 
     described = [i for i in parsed.interfaces if i.description]
