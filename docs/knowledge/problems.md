@@ -1503,3 +1503,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/defaults.py` の `_STP_MODE_SOURCES` に aruba_os を足した。
   試験は `test_a_missing_stp_mode_names_the_vendor_default` に AOS-S の1件。確かめていない機種の見張りは fortinet に替えた。
 - 見なかったこと: 2930F/M 以外の AOS-S 機種（3810・5400R など）の版ごとの違い。同じ Guide の別冊に当たっていない。
+
+## Huawei の user-interface の `authentication-mode none` に、QX の直し方（scheme）を案内していた（2026-10-10 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「機器に入る口で、認証を求めていません」の直し方が
+  機種を問わず「password か scheme」で、VRP には scheme が無い。Huawei の none そのものも資料で確かめていなかった。
+- 確かめた資料: Huawei「S300, S500, S2700, S5700, and S6700 V200R023C00 Command Reference」の UI Configuration Commands
+  「authentication-mode (user interface view)」（`authentication-mode { aaa | password }`。none は空パスワードの追加機能を
+  入れたときに書け、危ないので aaa か password を勧める。password を入れると「安全でない、aaa を強く勧める」と出る。
+  コンソールの既定は V200R009 以前が認証なし、V200R010〜R019 が aaa、V200R020 以降が password）。
+- 直したこと: `backend/app/services/configcheck.py` の `_login_without_authentication` に機種を渡し、Huawei には
+  `authentication-mode aaa` と local-user を案内する。試験は `test_huawei_login_without_authentication_shows_the_vrp_way_to_fix`。
+- 見なかったこと: 書いていないコンソール（V200R009 以前は既定で認証なし）。版が Config から読めないことが多いので言わない。
