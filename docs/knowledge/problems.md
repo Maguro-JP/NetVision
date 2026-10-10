@@ -1515,3 +1515,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configcheck.py` の `_login_without_authentication` に機種を渡し、Huawei には
   `authentication-mode aaa` と local-user を案内する。試験は `test_huawei_login_without_authentication_shows_the_vrp_way_to_fix`。
 - 見なかったこと: 書いていないコンソール（V200R009 以前は既定で認証なし）。版が Config から読めないことが多いので言わない。
+
+## Junos の論理システムを読む部品（分けるだけ。取り込みにはつないでいない）（2026-10-10 JST）
+
+- 経緯: 10/4 に「論理システムは口と一緒に別の機器として読む」と決め（decisions.md）、設計だけ書いて未着手だった。
+- 確かめた資料: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の set の設定例
+  （`set logical-systems LS interfaces …`・`set logical-systems LS routing-options static …`）、
+  「Understanding Logical Systems for Routers and Switches」（論理システムは自分の口・経路表・ポリシーを持つ）。
+- 作ったもの: `backend/app/services/configparse/juniper.py` の `split_logical_systems`。平らにした set 行を、全体と
+  論理システムごとに分け、`logical-systems NAME` を外して `parse` にそのまま渡せる形にする。囲みの形も扱う。
+  試験は `test_configparse_juniper.py` の末尾3件（直す前は関数が無く落ちる）。
+- まだやっていないこと: 1ファイルから複数の機器を返す入口（`parse_all`）と、取り込み（pipeline・configcheck）への接続。
+  取り込みと台帳の作りに関わるので、別の周で設計を確かめてから進める。notes の「論理システムの中は読んでいない」はそのまま。
