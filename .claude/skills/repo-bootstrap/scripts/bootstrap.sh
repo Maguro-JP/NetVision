@@ -125,7 +125,13 @@ else
 fi
 
 # --- CI -------------------------------------------------------------
-if [ ${#tests[@]} -gt 0 ] && [ ! -f "$dest/.github/workflows/test.yml" ]; then
+# 手元でできる検証（lint・テスト）はフックが受け持つ。private では Actions の枠を使うので
+# 同じものを CI に置かない。public は無料なので、他の人の PR のために置く。
+slug=$(git -C "$dest" remote get-url origin 2>/dev/null | sed -E 's#.*github\.com[:/]##; s#\.git$##')
+private=$(gh api "repos/$slug" --jq .private 2>/dev/null || echo unknown)
+if [ "$private" != "false" ]; then
+  notes+=("CI は置いていない（private か公開範囲が分からない）。検証はフックが手元で行う")
+elif [ ${#tests[@]} -gt 0 ] && [ ! -f "$dest/.github/workflows/test.yml" ]; then
   case "$lang" in
     node|python)
       mkdir -p "$dest/.github/workflows"
