@@ -1545,3 +1545,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configparse/features.py` の SSH の規則に `ssh server enable` を足し、冒頭の「未確認」から外した。
   行頭から見るので `undo ssh server enable` は拾わない。試験は `test_features.py` の `test_h3c_ssh_server_enable_is_found_as_ssh`。
 - 見なかったこと: 同じ字面を使う他の機種（NEC QX など）。規則は機種を問わず当たるが、そちらの資料はこの周では当たっていない。
+
+## H3C の `dhcp select server` が、機能の一覧に DHCP サーバーとして出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: DHCP サーバーの規則は Huawei の `dhcp select global|interface` しか
+  見ておらず、H3C の口の下の `dhcp select server` を「未確認」として拾っていなかった。
+- 確かめた資料: H3C「03-DHCP configuration」Enabling the DHCP server on an interface（Comware 7 の `dhcp select server`）、
+  「03-DHCP Commands」の `dhcp select server global-pool [ subaddress ]`（Comware 5 の形）。
+- 直したこと: `backend/app/services/configparse/features.py` の DHCP サーバーの規則に2つの形を足し、冒頭の「未確認」から外した。
+  試験は `test_features.py` の `test_h3c_dhcp_select_server_is_found_as_dhcp_server`。
+- 見なかったこと: Comware 7 は口の DHCP サーバーが既定で有効なので、行が無くても配っている場合がある（全体の `dhcp enable` と
+  アドレスの塊で決まる）。行がある場合だけ拾う今の形では、その機器を取りこぼす。

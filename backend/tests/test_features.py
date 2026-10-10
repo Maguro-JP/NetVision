@@ -433,3 +433,15 @@ def test_h3c_ssh_server_enable_is_found_as_ssh():
     head = "H3C Comware Software, Version 7.1.064\nsysname h3c-s1\n#\n"
     assert f"{features.MANAGEMENT}:SSH" in _found(head + "ssh server enable\n#\n")
     assert f"{features.MANAGEMENT}:SSH" not in _found(head + "undo ssh server enable\n#\n")
+
+
+def test_h3c_dhcp_select_server_is_found_as_dhcp_server():
+    """H3C の口の下の `dhcp select server`（Comware 7）と `... global-pool`（Comware 5）を拾う。
+
+    出典: H3C「03-DHCP configuration」Enabling the DHCP server on an interface
+    （dhcp select server）、「03-DHCP Commands」の dhcp select server global-pool [ subaddress ]。
+    """
+    head = "H3C Comware Software, Version 7.1.064\nsysname h3c-s1\n#\n"
+    for line in ("dhcp select server", "dhcp select server global-pool"):
+        text = head + "interface Vlan-interface10\n " + line + "\n#\n"
+        assert f"{features.DHCP}:DHCP サーバー" in _found(text), line
