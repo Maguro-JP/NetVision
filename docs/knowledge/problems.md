@@ -1491,3 +1491,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   vty の行だけで当たったときは、今までどおり IPv4 の閉じ方を出す。
   試験は `test_huawei_fix_names_only_the_address_family_that_is_open`（6件）と
   `test_huawei_fix_names_both_families_when_both_are_open`。
+
+## AOS-S で STP のモードを決めていないとき、既定のモードの出典が出ていなかった（2026-10-10 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 「STP のモードを決めていません」の指摘に、
+  AOS-S（aruba_os）だけ既定のモードの資料が付いていなかった。10/4 の時点では「既定のモード」を言い切る文に当たれず、未確認にしていた。
+- 確かめた資料: HPE「Aruba 2930F / 2930M Advanced Traffic Management Guide for AOS-S 16.11」の
+  Setting spanning tree to operate in 802.1D legacy mode（`spanning-tree legacy-mode` の Default: MSTP-operation。
+  no の形で既定の 802.1s native mode（MSTP）に戻る）。モードを選ぶ節（Selecting MSTP as the spanning tree mode）には
+  既定の書き込みが無く、こちらの節に書いてあった。
+- 直したこと: `backend/app/services/defaults.py` の `_STP_MODE_SOURCES` に aruba_os を足した。
+  試験は `test_a_missing_stp_mode_names_the_vendor_default` に AOS-S の1件。確かめていない機種の見張りは fortinet に替えた。
+- 見なかったこと: 2930F/M 以外の AOS-S 機種（3810・5400R など）の版ごとの違い。同じ Guide の別冊に当たっていない。

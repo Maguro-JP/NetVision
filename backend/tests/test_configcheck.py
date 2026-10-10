@@ -1894,7 +1894,7 @@ def test_a_missing_stp_mode_on_nxos_names_the_nexus_default(db_session):
 
 def test_an_unverified_vendor_gets_no_stp_mode_source():
     """確かめていない機種には、他社の資料を出さない。"""
-    assert defaults.stp_mode_source("aruba_os") is None
+    assert defaults.stp_mode_source("fortinet") is None
     assert defaults.stp_mode_source(None) is None
 
 
@@ -2082,6 +2082,18 @@ def test_a_missing_stp_mode_on_aos_cx_names_the_mstp_default(db_session):
             "interface gi1/0/1\n spanning-tree portfast\n",
             "cisco_sb",
             "RSTP",
+        ),
+        (
+            # 出典: HPE「Aruba 2930F / 2930M Advanced Traffic Management Guide for AOS-S 16.11」の
+            # Setting spanning tree to operate in 802.1D legacy mode（Default: MSTP-operation.
+            # The no form of this command returns the switch to the default 802.1s native mode）
+            "; JL253A Configuration Editor; Created on release #WC.16.11.0001\n"
+            'hostname "sw-aoss-01"\n'
+            "vlan 1\n   untagged 1-24\n   exit\n"
+            "spanning-tree\n"
+            "spanning-tree 1-20 admin-edge-port\n",
+            "aruba_os",
+            "MSTP",
         ),
     ],
 )
