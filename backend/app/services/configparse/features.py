@@ -30,7 +30,7 @@
   どれも2台分以上あるときだけ載せる
 
 未確認のまま残している行: Junos の mstp・vstp と DHCP リレー、
-PAN-OS の DHCP、H3C の ssh server・dhcp select server。Huawei S シリーズ（V200）の
+PAN-OS の DHCP、H3C の dhcp select server。Huawei S シリーズ（V200）の
 スタックは設定が Config に出ないので、ここでは読めない。
 ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
 loadbalance.py など）で確かめた書き方と同じ形を拾うもの、または既存の試験の形のまま。
@@ -257,6 +257,8 @@ _RULES: tuple[_Rule, ...] = (
     # Huawei（S5700 V200R023C10 Configuration Guide の STelnet の例の Configuration File）
     _rule(MANAGEMENT, "SSH", r"^\s*set\s+system\s+services\s+ssh\b"),
     _rule(MANAGEMENT, "SSH", r"^\s*stelnet\s+server\s+enable\s*$"),
+    # H3C（「13-SSH commands」の ssh server enable。既定は無効）
+    _rule(MANAGEMENT, "SSH", r"^\s*ssh\s+server\s+enable\s*$"),
     # ヤマハ（「TELNET複数セッション機能、SSHサーバー機能」の sshd service on。既定は off）
     _rule(MANAGEMENT, "SSH", r"^\s*sshd\s+service\s+on\s*$"),
     # 拠点間の暗号化

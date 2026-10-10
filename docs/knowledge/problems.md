@@ -1536,3 +1536,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   10/6 の周4 で、telnet の直し方を書くときに同じ資料で確かめていた。
 - 直したこと: `backend/app/services/configparse/features.py` の SSH の規則に `sshd service on` を足し、冒頭の「未確認」から外した。
   `sshd service off` は拾わない。試験は `test_features.py` の `test_yamaha_sshd_is_found_as_ssh`。
+
+## H3C の `ssh server enable` が、機能の一覧に SSH として出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は、H3C の ssh server を
+  「未確認」として拾っていなかった。SSH で管理している H3C の機器でも、一覧に SSH が出なかった。
+- 確かめた資料: H3C「13-SSH commands」の ssh server enable（Stelnet サーバーを動かす。既定は無効。`undo ssh server enable` で止める）。
+- 直したこと: `backend/app/services/configparse/features.py` の SSH の規則に `ssh server enable` を足し、冒頭の「未確認」から外した。
+  行頭から見るので `undo ssh server enable` は拾わない。試験は `test_features.py` の `test_h3c_ssh_server_enable_is_found_as_ssh`。
+- 見なかったこと: 同じ字面を使う他の機種（NEC QX など）。規則は機種を問わず当たるが、そちらの資料はこの周では当たっていない。

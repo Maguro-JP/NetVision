@@ -422,3 +422,14 @@ def test_yamaha_sshd_is_found_as_ssh():
     head = "# RTX830 Rev.15.02.28 (Fri Jan 26 09:52:25 2024)\nip lan1 address 192.168.100.1/24\n"
     assert f"{features.MANAGEMENT}:SSH" in _found(head + "sshd service on\n")
     assert f"{features.MANAGEMENT}:SSH" not in _found(head + "sshd service off\n")
+
+
+def test_h3c_ssh_server_enable_is_found_as_ssh():
+    """H3C の `ssh server enable` を SSH として拾う。`undo` の形は拾わない。
+
+    出典: H3C「13-SSH commands」の ssh server enable（Stelnet サーバーを動かす。
+    既定は無効。undo ssh server enable で止める）。
+    """
+    head = "H3C Comware Software, Version 7.1.064\nsysname h3c-s1\n#\n"
+    assert f"{features.MANAGEMENT}:SSH" in _found(head + "ssh server enable\n#\n")
+    assert f"{features.MANAGEMENT}:SSH" not in _found(head + "undo ssh server enable\n#\n")
