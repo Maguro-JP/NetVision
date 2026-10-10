@@ -138,6 +138,15 @@ scripts/inspect.py --json     # 機械が読む形
 | `loop_interval` | `auto-dev` のループ間隔。`null` は自動 |
 | `push_policy` | `batch` / `never` / `each`。既定は `batch` |
 | `policy_checks` | 規約を検査する CI の名前。落ちてもコードを直さない |
+| `kind` | `personal`（個人）か `work`（仕事）。無ければ個人。CI と PR の出し方が変わる |
+| `pr_window` | PR を出してよい時間。例 `"Mon-Fri 10:00-18:00 JST"`。`null` はいつでも |
+| `pr_per_day` | 1日に出してよい PR の数。`null` は区分の既定 |
+| `ci_on_claude_prs` | `claude/` の枝の PR で CI を回すか。`null` は区分の既定 |
+
+`kind`・`pr_window`・`pr_per_day` は、利用者が「このリポジトリは仕事」「平日 10〜18 時だけ PR」
+と言ったときに、その場でこの記録に書く。尋ねて決めるものではない。言われなければ書かない。
+公開か非公開かは書かない。変わり得るので、使う側が毎回 GitHub から読む。
+区分ごとの動きは `auto-dev/references/verification.md`。
 
 ## 原則
 

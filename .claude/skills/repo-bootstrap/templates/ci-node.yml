@@ -1,14 +1,21 @@
-# repo-bootstrap が置いた最小の CI。PR と既定ブランチへの push で走る。
+# repo-bootstrap が置いた最小の CI。人の PR と、ci の札を付けた PR で走る。
 name: test
 on:
+  # 本線への push では回さない。入るのは確かめ済みのものだけ。
+  # 自律開発（claude/ の枝）の PR も回さない。手元で検証してからマージするので、
+  # 同じものを Actions で回すと枠だけが減る。人が見てほしいときは `ci` の札を付ける
   pull_request:
-  push:
-    branches: [main, master]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
+  workflow_dispatch:
 concurrency:
   group: test-${{ github.ref }}
   cancel-in-progress: true
 jobs:
   test:
+    if: >-
+      github.event_name != 'pull_request'
+      || !startsWith(github.head_ref, 'claude/')
+      || contains(github.event.pull_request.labels.*.name, 'ci')
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
