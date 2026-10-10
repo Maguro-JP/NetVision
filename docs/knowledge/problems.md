@@ -1527,3 +1527,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_configparse_juniper.py` の末尾3件（直す前は関数が無く落ちる）。
 - まだやっていないこと: 1ファイルから複数の機器を返す入口（`parse_all`）と、取り込み（pipeline・configcheck）への接続。
   取り込みと台帳の作りに関わるので、別の周で設計を確かめてから進める。notes の「論理システムの中は読んでいない」はそのまま。
+
+## ヤマハの `sshd service on` が、機能の一覧に SSH として出ていなかった（2026-10-10 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は、ヤマハの sshd を
+  「未確認」として拾っていなかった。SSH で管理しているヤマハの機器でも、一覧に SSH が出なかった。
+- 確かめた資料: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」（`sshd service on` で SSH サーバーを動かす。既定は off）。
+  10/6 の周4 で、telnet の直し方を書くときに同じ資料で確かめていた。
+- 直したこと: `backend/app/services/configparse/features.py` の SSH の規則に `sshd service on` を足し、冒頭の「未確認」から外した。
+  `sshd service off` は拾わない。試験は `test_features.py` の `test_yamaha_sshd_is_found_as_ssh`。

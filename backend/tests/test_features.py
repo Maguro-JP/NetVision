@@ -410,3 +410,15 @@ def test_stp_ssh_and_ipsec_written_other_vendors_ways_are_found() -> None:
         assert f"{features.MANAGEMENT}:SSH" in _found(text), text
     panos = "set network tunnel ipsec NY auto-key ike-gateway NY\n"
     assert f"{features.VPN}:IPsec" in _found(panos)
+
+
+def test_yamaha_sshd_is_found_as_ssh():
+    """ヤマハの `sshd service on` を SSH として拾う。`off` は拾わない。
+
+    出典: ヤマハ「TELNET複数セッション機能、SSHサーバー機能」（sshd service on で
+    SSH サーバーを動かす。既定は off で、ホスト鍵を sshd host key generate で
+    作るまでつながらない）。
+    """
+    head = "# RTX830 Rev.15.02.28 (Fri Jan 26 09:52:25 2024)\nip lan1 address 192.168.100.1/24\n"
+    assert f"{features.MANAGEMENT}:SSH" in _found(head + "sshd service on\n")
+    assert f"{features.MANAGEMENT}:SSH" not in _found(head + "sshd service off\n")
