@@ -1566,3 +1566,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 分かったこと: 今の読み手（`nec.py`）は、範囲・行の足し合わせ・undo のどれもマニュアルどおりに読んでいた。コードは直していない。
 - したこと: マニュアルの作例と、行を分けて足す・undo で外す形を試験で押さえた（`test_configparse_nec.py` の
   `test_qx_trunk_permit_vlan_reads_the_manual_example_and_adds_up_lines`。今の読み方を守る見張り）。「未確認」を外した。
+
+## Junos の MSTP・VSTP が、機能の一覧に STP として出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は Junos の `set protocols rstp` だけを
+  STP として拾い、`mstp`・`vstp` は「未確認」として拾っていなかった。MSTP・VSTP で組んだ Junos の機器では、一覧に STP が出なかった。
+- 確かめた資料: Juniper「Example: Configuring Network Regions for VLANs with MSTP on EX-series Switches」
+  （`set protocols mstp configuration-name region1`・`set protocols mstp msti 1 vlan [10 20]` など）、
+  「Configuring VSTP」（`set protocols vstp vlan vlan-id`。VSTP と RSTP は同時に設定できる）。
+- 直したこと: `backend/app/services/configparse/features.py` の Junos の STP の規則を rstp・mstp・vstp にし、モードとして出す。
+  冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode`。

@@ -23,14 +23,14 @@
   PAN-OS（rulebase security / nat）、H3C（acl ipv6 advanced）
 - DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、H3C（サーバー）、Junos（サーバー）、
   AOS-CX
-- STP・SSH・IPsec: Junos（rstp / system services ssh）、Huawei（stelnet）、ヤマハ（sshd）、
-  PAN-OS（ipsec）
+- STP・SSH・IPsec: Junos（rstp・mstp・vstp / system services ssh）、Huawei（stelnet）、
+  ヤマハ（sshd）、PAN-OS（ipsec）
 - マルチキャスト: Arista・AOS-CX・Junos の PIM、Junos の IGMP スヌーピング
 - 負荷分散: FortiGate（server-load-balance）
 - スタック: Catalyst（provision）、H3C（irf-port）、Huawei CE（stack-port）。
   どれも2台分以上あるときだけ載せる
 
-未確認のまま残している行: Junos の mstp・vstp と DHCP リレー、
+未確認のまま残している行: Junos の DHCP リレー、
 PAN-OS の DHCP。Huawei S シリーズ（V200）の
 スタックは設定が Config に出ないので、ここでは読めない。
 ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
@@ -177,8 +177,10 @@ _RULES: tuple[_Rule, ...] = (
     _rule(SPANNING_TREE, "STP", r"^\s*spanning-tree\s+mode\s+(\S+)", "モード"),
     _rule(SPANNING_TREE, "STP", r"^\s*stp\s+(?:mode|global)\s+(\S+)", "モード"),
     # Junos（「Example: Faster Convergence and Improved Network Stability with RSTP on EX
-    # Series Switches」の `set protocols rstp bridge-priority 16k`）。mstp・vstp は未確認
-    _rule(SPANNING_TREE, "STP", r"^\s*set\s+protocols\s+(rstp)\b", "モード"),
+    # Series Switches」の `set protocols rstp bridge-priority 16k`、「Example: Configuring
+    # Network Regions for VLANs with MSTP on EX-series Switches」の `set protocols mstp
+    # configuration-name region1`、「Configuring VSTP」の `set protocols vstp vlan vlan-id`）
+    _rule(SPANNING_TREE, "STP", r"^\s*set\s+protocols\s+(rstp|mstp|vstp)\b", "モード"),
     _rule(
         SPANNING_TREE,
         "STP の優先度",

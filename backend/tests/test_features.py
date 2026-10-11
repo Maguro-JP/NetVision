@@ -445,3 +445,21 @@ def test_h3c_dhcp_select_server_is_found_as_dhcp_server():
     for line in ("dhcp select server", "dhcp select server global-pool"):
         text = head + "interface Vlan-interface10\n " + line + "\n#\n"
         assert f"{features.DHCP}:DHCP サーバー" in _found(text), line
+
+
+def test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode():
+    """Junos の `set protocols mstp` と `set protocols vstp` を、STP のモードとして拾う。
+
+    出典: Juniper「Example: Configuring Network Regions for VLANs with MSTP on EX-series
+    Switches」の set protocols mstp configuration-name region1 など、
+    「Configuring VSTP」の set protocols vstp vlan vlan-id。
+    """
+    head = "set system host-name ex-a1\n"
+    for line, mode in (
+        ("set protocols mstp configuration-name region1", "mstp"),
+        ("set protocols vstp vlan 10", "vstp"),
+    ):
+        found = _found(head + line + "\n")
+        feature = found.get(f"{features.SPANNING_TREE}:STP")
+        assert feature is not None, line
+        assert mode in str(feature.detail), (line, feature.detail)
