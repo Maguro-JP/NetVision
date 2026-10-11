@@ -1599,3 +1599,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configparse/ifname.py` の略記の表に `fi`・`hu` を足した。試験は `test_ifname.py` の
   `test_five_and_hundred_gig_short_names_are_expanded`。
 - 見なかったこと: 表のほかの略記（xge・mgmt など）。冒頭の「ほかの略記は未確認」はそのまま残した。
+
+## Junos の `vlan members` に範囲（10-20）で書いた VLAN を、黙って捨てていた（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Junos の読み手（`configparse/juniper.py`）は `vlan members` の値を
+  番号・VLAN 名・all の3つだけ読み、`10-12` のような範囲を捨てていた。`members [ 10-12 23 27-28 ]` のトランクが VLAN 23 だけを
+  通すことになり、許可 VLAN の食い違いや「VLAN が届いていない」の判断を誤らせていた。
+- 確かめた資料: Juniper「members」（`[edit interfaces interface-name unit logical-unit-number family ethernet-switching vlan]`、
+  `members [ (all | names | vlan-ids) ]`。vlan-ids は「10–20 or 10–20 23 27–30」のように範囲で書ける）。
+- 直したこと: `backend/app/services/configparse/juniper.py` で範囲の語を `vlanlist.parse_ranges` で開くようにした。
+  `vlanlist.py` の「Junos の vlan members は未確認」を外した。試験は `test_configparse_juniper.py` の
+  `test_vlan_members_reads_ranges_of_vlan_ids`。
