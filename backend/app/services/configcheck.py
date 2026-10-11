@@ -493,7 +493,7 @@ def _findings(parsed: ParsedConfig, text: str, *, covered: set[str] | None = Non
     found.extend(_dhcp_snooping(text))
     found.extend(_undo_dhcp_snooping(text, parsed.vendor))
     found.extend(_undo_arp_inspection(text, parsed.vendor))
-    found.extend(_login_without_authentication(text))
+    found.extend(_login_without_authentication(text, parsed.vendor))
     found.extend(_arp_inspection(text))
     found.extend(_vtp_overwrite(text))
     found.extend(_access_on_vlan1(text))
@@ -1785,7 +1785,7 @@ def _arp_inspection(text: str) -> list[Finding]:
 _LOGIN_LINE_BLOCK = re.compile(r"^(?:line|user-interface)\s+\S+", re.IGNORECASE)
 
 
-def _login_without_authentication(text: str) -> list[Finding]:
+def _login_without_authentication(text: str, vendor: Vendor | None = None) -> list[Finding]:
     """口のまとまりの中の `authentication-mode none`。その口からは認証なしで入れる。
 
     同じ字面の行は AAA の認証方式（Huawei の `aaa` の下の authentication-scheme）にもあるので、
@@ -1794,8 +1794,10 @@ def _login_without_authentication(text: str) -> list[Finding]:
     出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.1 authentication-mode
     （`authentication-mode { none | password | scheme }`、none: 認証を無効にします。User line view。
     既定は VTY が password、AUX line が none）。既定のままの AUX は書いていないので言わない。
-    未確認: Huawei の user-interface の none
-    （公式資料で確かめたのは aaa と password の書き方まで）。
+    Huawei の user-interface は `authentication-mode { aaa | password }` で、none は空パスワードの
+    追加機能を入れたときだけ書ける。password は安全でないと資料が言うので aaa を案内する
+    （出典: Huawei「S300, S500, S2700, S5700, and S6700 V200R023C00 Command Reference」の
+    UI Configuration Commands「authentication-mode (user interface view)」）。
     """
     names: list[str] = []
     current: str | None = None
@@ -1814,7 +1816,12 @@ def _login_without_authentication(text: str) -> list[Finding]:
             title="機器に入る口で、認証を求めていません",
             why="その口からは合言葉なしで入れます。"
             "書き換えの途中で残ったものが、そのまま運用に入ることがあります。"
-            "authentication-mode password か scheme にしてください。",
+            + (
+                "authentication-mode aaa にして、aaa の下の local-user で入る人を決めてください"
+                "（password は合言葉1つを皆で使う形で、資料も aaa を勧めています）。"
+                if vendor is Vendor.HUAWEI
+                else "authentication-mode password か scheme にしてください。"
+            ),
             evidence=[f"{name}: authentication-mode none" for name in names[:5]],
         )
     ]

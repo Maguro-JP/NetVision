@@ -1,7 +1,7 @@
 """Juniper Junos の読み取り。"""
 
 from app.services import configparse
-from app.services.configparse import Vendor
+from app.services.configparse import Vendor, juniper
 
 
 def test_a_subinterface_keeps_its_tag_and_its_address_together():
@@ -290,3 +290,56 @@ def test_ports_written_as_an_interface_range_are_opened_one_by_one():
     # 範囲の名前そのものは、口として作らない
     assert "office" not in ports
     assert "interface-range" not in ports
+
+
+_WITH_LOGICAL_SYSTEM = """set system host-name mx-a1
+set interfaces ge-0/0/0 unit 0 family inet address 192.0.2.1/24
+set logical-systems LS1 interfaces ge-0/0/1 unit 10 family inet address 198.51.100.1/24
+set logical-systems LS1 routing-options static route 0.0.0.0/0 next-hop 198.51.100.254
+"""
+
+
+def test_logical_systems_are_cut_out_of_the_set_lines():
+    """論理システムの行を、全体の行と論理システムごとの行に分ける。
+
+    論理システムは自分の口と経路表を持つ別の機器として動く。分けた行は
+    `logical-systems NAME` を外し、全体と同じ読み手で読める形にする。
+    出典: Juniper「Routing, Interfaces, and NAT for User Logical Systems」の
+    set logical-systems … の設定例、「Understanding Logical Systems for Routers and Switches」。
+    """
+    main, systems = juniper.split_logical_systems(_WITH_LOGICAL_SYSTEM)
+    assert "logical-systems" not in main
+    assert "set interfaces ge-0/0/0 unit 0 family inet address 192.0.2.1/24" in main
+    assert list(systems) == ["LS1"]
+    ls1 = juniper.parse(systems["LS1"])
+    assert [i.name for i in ls1.interfaces] == ["ge-0/0/1.10"]
+    assert [r.destination for r in ls1.routes] == ["0.0.0.0/0"]
+
+
+def test_logical_systems_in_the_brace_form_are_cut_out_too():
+    """囲みの形でも、平らにしてから同じように分ける。"""
+    text = (
+        "system { host-name mx-a1; }\n"
+        "logical-systems {\n"
+        "    LS2 {\n"
+        "        interfaces {\n"
+        "            ge-0/0/2 {\n"
+        "                unit 20 {\n"
+        "                    family inet {\n"
+        "                        address 203.0.113.1/24;\n"
+        "                    }\n"
+        "                }\n"
+        "            }\n"
+        "        }\n"
+        "    }\n"
+        "}\n"
+    )
+    _, systems = juniper.split_logical_systems(text)
+    assert list(systems) == ["LS2"]
+    assert [i.name for i in juniper.parse(systems["LS2"]).interfaces] == ["ge-0/0/2.20"]
+
+
+def test_a_config_without_logical_systems_has_none_to_cut_out():
+    main, systems = juniper.split_logical_systems("set system host-name mx-a1\n")
+    assert systems == {}
+    assert "host-name mx-a1" in main

@@ -103,7 +103,7 @@
 - 決めたこと: 論理システムの行（`set logical-systems …` か囲みの形の `logical-systems {`）がある Junos の設定は、
   設定の点検の結果の notes に「論理システムの中は読んでいない」と出す。黙って抜けると、その中の口・経路・誤りが
   「無い」ことになるため。
-- 読むときの設計（下調べ。未着手）: `configparse/juniper.py` で平らにした set 行を、`logical-systems NAME` で始まる行と
+- 読むときの設計（分ける部品だけ作った。2026-10-10 JST、`juniper.split_logical_systems`。取り込みにはまだつないでいない）: `configparse/juniper.py` で平らにした set 行を、`logical-systems NAME` で始まる行と
   それ以外に分け、`logical-systems NAME ` を外した行を同じ読み手に通して、論理システムごとに別の ParsedConfig を作る。
   ホスト名は「全体のホスト名/NAME」とする。いまの取り込みは1ファイル→1台なので、parse が複数の ParsedConfig を
   返せる入口（例: `parse_all`）を足し、取り込み（pipeline・configcheck）は1台目を従来どおり扱い、残りを別の機器として

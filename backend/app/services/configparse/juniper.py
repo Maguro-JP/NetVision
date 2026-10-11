@@ -126,6 +126,31 @@ def _flatten(text: str) -> str:
     return "\n".join(out) if out else text
 
 
+#: 論理システムの中の行。`set logical-systems NAME ` を外すと、全体と同じ書き方になる
+_LOGICAL_SYSTEM_LINE = re.compile(r"^set\s+logical-systems\s+(\S+)\s+(.+)$", re.IGNORECASE)
+
+
+def split_logical_systems(text: str) -> tuple[str, dict[str, str]]:
+    """全体の `set` 行と、論理システムごとの `set` 行に分ける。
+
+    論理システムは自分の口・経路表・ポリシーを持つ別の機器として動く（出典: Juniper
+    「Understanding Logical Systems for Routers and Switches」）。全体に混ぜて読むと、
+    口の帯を知らないまま経路を判断して誤った指摘になる（docs/knowledge/decisions.md）。
+    分けた行は `logical-systems NAME` を外してあり、`parse` にそのまま渡せる
+    （書き方は「Routing, Interfaces, and NAT for User Logical Systems」の set の設定例）。
+    囲みの形は先に平らにする。まだ取り込みにはつないでいない（読む入口は別に足す）。
+    """
+    main: list[str] = []
+    systems: dict[str, list[str]] = {}
+    for line in _flatten(text).splitlines():
+        match = _LOGICAL_SYSTEM_LINE.match(line.strip())
+        if match:
+            systems.setdefault(match.group(1), []).append(f"set {match.group(2)}")
+        else:
+            main.append(line)
+    return "\n".join(main), {name: "\n".join(lines) for name, lines in systems.items()}
+
+
 def parse(text: str) -> ParsedConfig:
     parsed = ParsedConfig(vendor=Vendor.JUNIPER, os_name="Junos")
     # 囲みの形で貼られたときは、先に `set` の形へそろえる。名乗り（show version）は

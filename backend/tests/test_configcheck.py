@@ -3017,3 +3017,18 @@ def test_huawei_fix_names_both_families_when_both_are_open(db_session):
     finding = next(f for f in findings if f.title == "telnet で入れる状態です")
     assert "undo telnet server enable" in finding.why
     assert "undo telnet ipv6 server enable" in finding.why
+
+
+def test_huawei_login_without_authentication_shows_the_vrp_way_to_fix(db_session):
+    """Huawei の user-interface の authentication-mode none には、VRP の aaa を案内する。
+
+    VRP の user-interface の書き方は { aaa | password }（none は空パスワードの追加機能を
+    入れたとき）で、QX の scheme は無い。password は安全でないと資料自身が言うので、aaa を勧める。
+    出典: Huawei「S300, S500, S2700, S5700, and S6700 V200R023C00 Command Reference」の
+    UI Configuration Commands「authentication-mode (user interface view)」。
+    """
+    text = _VRP_HEAD + "user-interface vty 0 4\n authentication-mode none\n#\n"
+    findings = configcheck.check(db_session, text).findings
+    finding = next(f for f in findings if f.title == "機器に入る口で、認証を求めていません")
+    assert "authentication-mode aaa" in finding.why
+    assert "scheme" not in finding.why

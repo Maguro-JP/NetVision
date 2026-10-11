@@ -21,15 +21,17 @@
 
 - ACL・NAT・SNMP: ヤマハ（ip filter / secure filter / nat descriptor / snmp host）、
   PAN-OS（rulebase security / nat）、H3C（acl ipv6 advanced）
-- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、Junos（サーバー）、AOS-CX
-- STP・SSH・IPsec: Junos（rstp / system services ssh）、Huawei（stelnet）、PAN-OS（ipsec）
+- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、H3C（サーバー）、Junos（サーバー）、
+  AOS-CX
+- STP・SSH・IPsec: Junos（rstp / system services ssh）、Huawei（stelnet）、ヤマハ（sshd）、
+  PAN-OS（ipsec）
 - マルチキャスト: Arista・AOS-CX・Junos の PIM、Junos の IGMP スヌーピング
 - 負荷分散: FortiGate（server-load-balance）
 - スタック: Catalyst（provision）、H3C（irf-port）、Huawei CE（stack-port）。
   どれも2台分以上あるときだけ載せる
 
-未確認のまま残している行: ヤマハの sshd、Junos の mstp・vstp と DHCP リレー、
-PAN-OS の DHCP、H3C の ssh server・dhcp select server。Huawei S シリーズ（V200）の
+未確認のまま残している行: Junos の mstp・vstp と DHCP リレー、
+PAN-OS の DHCP。Huawei S シリーズ（V200）の
 スタックは設定が Config に出ないので、ここでは読めない。
 ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
 loadbalance.py など）で確かめた書き方と同じ形を拾うもの、または既存の試験の形のまま。
@@ -155,6 +157,13 @@ _RULES: tuple[_Rule, ...] = (
     _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+service\s+server\s*$"),
     _rule(DHCP, "DHCP サーバー", r"^\s*config\s+system\s+dhcp\s+server\s*$"),
     _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+select\s+(?:global|interface)\s*$"),
+    # H3C の口の下（「03-DHCP configuration」の dhcp select server、Comware 5 は
+    # 「03-DHCP Commands」の dhcp select server global-pool [ subaddress ]）
+    _rule(
+        DHCP,
+        "DHCP サーバー",
+        r"^\s*dhcp\s+select\s+server(?:\s+global-pool(?:\s+subaddress)?)?\s*$",
+    ),
     _rule(
         DHCP,
         "DHCP サーバー",
@@ -256,6 +265,10 @@ _RULES: tuple[_Rule, ...] = (
     # Huawei（S5700 V200R023C10 Configuration Guide の STelnet の例の Configuration File）
     _rule(MANAGEMENT, "SSH", r"^\s*set\s+system\s+services\s+ssh\b"),
     _rule(MANAGEMENT, "SSH", r"^\s*stelnet\s+server\s+enable\s*$"),
+    # H3C（「13-SSH commands」の ssh server enable。既定は無効）
+    _rule(MANAGEMENT, "SSH", r"^\s*ssh\s+server\s+enable\s*$"),
+    # ヤマハ（「TELNET複数セッション機能、SSHサーバー機能」の sshd service on。既定は off）
+    _rule(MANAGEMENT, "SSH", r"^\s*sshd\s+service\s+on\s*$"),
     # 拠点間の暗号化
     _rule(VPN, "IPsec", r"^\s*crypto\s+(?:isakmp|ikev2|map|ipsec)\b"),
     _rule(VPN, "IPsec", r"^\s*ipsec\s+(?:policy|profile|transform-set)\b"),
