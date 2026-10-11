@@ -1587,3 +1587,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configparse/features.py` の DHCP リレーの規則に、server-group のアドレスの行を足した（転送先として出す）。
   冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_dhcp_relay_server_group_is_found_with_its_server`。
 - 見なかったこと: ELS 以前の EX の書き方（`set forwarding-options helpers bootp server …`）。資料に当たっていないので拾っていない。
+
+## Catalyst の 5G 口 `Fi` と 100G 口 `Hu` の略記を、正式名に寄せていなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 口の名前の正規化（`configparse/ifname.py`）は `Hun` だけを
+  HundredGigE に寄せ、`Hu1/1/1`・`Fi1/0/1` はそのまま残していた。`show interfaces status` や CDP の略記で書かれた口が、
+  Config の正式名（HundredGigE1/1/1・FiveGigabitEthernet1/0/1）と突き合わなかった。
+- 確かめた資料: Cisco「Interface and Hardware Components Configuration Guide, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+  Configuring Interface Characteristics（5-Gigabit Ethernet (FiveGigabitEthernet or fi)、100-Gigabit Ethernet (HundredGigE or hu)）、
+  「Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.10.x (Catalyst 9400 Switches)」の表示例（Hu3/0/5）。
+- 直したこと: `backend/app/services/configparse/ifname.py` の略記の表に `fi`・`hu` を足した。試験は `test_ifname.py` の
+  `test_five_and_hundred_gig_short_names_are_expanded`。
+- 見なかったこと: 表のほかの略記（xge・mgmt など）。冒頭の「ほかの略記は未確認」はそのまま残した。
