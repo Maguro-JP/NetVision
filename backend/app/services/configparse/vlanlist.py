@@ -15,7 +15,10 @@
 - Huawei: S7700 V200R024C00 Configuration Guide「Assigning VLANs」と CX320 Command Reference の
   `port trunk allow-pass vlan { { vlan-id1 [ to vlan-id2 ] } &<1-10> | all }`（vlan-id は 1〜4094、
   vlan-id2 は vlan-id1 以上）
-- NEC QX の `port trunk permit vlan` と Junos の `vlan members` は未確認
+- NEC QX: 「QX-S1100G シリーズ コマンドマニュアル 1.9版」10.2.7 の
+  `port trunk permit vlan { vlan-id-list | all }`（範囲は vlan-id1 to vlan-id2、1〜4094。
+  繰り返し書いた行は足し合わせ、undo で外す。足し引きは nec.py）
+- Junos の `vlan members` は未確認
 
 上位では「番号の集合」として扱いたいので、ここで一度ならして扱う。
 DB には `10,20,30-40` の形で1カラムに入れる。数が多い現場では

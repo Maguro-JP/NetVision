@@ -468,3 +468,25 @@ def test_taking_everything_off_the_trunk_leaves_nothing() -> None:
     port = configparse.parse(text).interfaces[0]
     assert port.trunk_vlans == []
     assert port.trunk_all is False
+
+
+def test_qx_trunk_permit_vlan_reads_the_manual_example_and_adds_up_lines():
+    """QX の `port trunk permit vlan` は、`to` の範囲と、何行かに分けた書き方を足し合わせて読む。
+
+    出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」10.2.7 port trunk permit vlan
+    （`port trunk permit vlan { vlan-id-list | all }`。範囲は vlan-id1 to vlan-id2、1〜4094。
+    繰り返し実行すると、各 vlan-id-list で指定した VLAN が通る。undo で外す。
+    例: `port trunk permit vlan 2 4 50 to 100`）。
+    """
+    base = load("qx-sw-01").split("interface ")[0]
+    text = (
+        base + "interface GigabitEthernet1/0/1\n"
+        " port link-type trunk\n"
+        " port trunk permit vlan 2 4 50 to 100\n"
+        " port trunk permit vlan 200\n"
+        " undo port trunk permit vlan 4\n"
+        "#\n"
+    )
+    parsed = configparse.parse(text)
+    port = next(i for i in parsed.interfaces if i.name.endswith("1/0/1"))
+    assert port.trunk_vlans == [2, *range(50, 101), 200]

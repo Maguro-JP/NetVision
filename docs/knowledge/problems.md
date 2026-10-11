@@ -1556,3 +1556,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_features.py` の `test_h3c_dhcp_select_server_is_found_as_dhcp_server`。
 - 見なかったこと: Comware 7 は口の DHCP サーバーが既定で有効なので、行が無くても配っている場合がある（全体の `dhcp enable` と
   アドレスの塊で決まる）。行がある場合だけ拾う今の形では、その機器を取りこぼす。
+
+## NEC QX の `port trunk permit vlan` の読み方を、マニュアルで確かめた（直していない）（2026-10-11 JST）
+
+- 経緯: `configparse/vlanlist.py` に「NEC QX の `port trunk permit vlan` は未確認」と残っていた。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」10.2.7 port trunk permit vlan
+  （`port trunk permit vlan { vlan-id-list | all }`。範囲は vlan-id1 to vlan-id2、1〜4094。繰り返し実行すると各行の VLAN が通る。
+  undo で外す。既定は VLAN 1 だけ。例 `port trunk permit vlan 2 4 50 to 100`）。
+- 分かったこと: 今の読み手（`nec.py`）は、範囲・行の足し合わせ・undo のどれもマニュアルどおりに読んでいた。コードは直していない。
+- したこと: マニュアルの作例と、行を分けて足す・undo で外す形を試験で押さえた（`test_configparse_nec.py` の
+  `test_qx_trunk_permit_vlan_reads_the_manual_example_and_adds_up_lines`。今の読み方を守る見張り）。「未確認」を外した。
