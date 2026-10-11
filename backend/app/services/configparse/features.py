@@ -21,8 +21,8 @@
 
 - ACL・NAT・SNMP: ヤマハ（ip filter / secure filter / nat descriptor / snmp host）、
   PAN-OS（rulebase security / nat）、H3C（acl ipv6 advanced）
-- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、H3C（サーバー）、Junos（サーバー）、
-  AOS-CX
+- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、H3C（サーバー）、
+  Junos（サーバーとリレー）、AOS-CX
 - STP・SSH・IPsec: Junos（rstp・mstp・vstp / system services ssh）、Huawei（stelnet）、
   ヤマハ（sshd）、PAN-OS（ipsec）
 - マルチキャスト: Arista・AOS-CX・Junos の PIM、Junos の IGMP スヌーピング
@@ -30,8 +30,7 @@
 - スタック: Catalyst（provision）、H3C（irf-port）、Huawei CE（stack-port）。
   どれも2台分以上あるときだけ載せる
 
-未確認のまま残している行: Junos の DHCP リレー、
-PAN-OS の DHCP。Huawei S シリーズ（V200）の
+未確認のまま残している行: PAN-OS の DHCP。Huawei S シリーズ（V200）の
 スタックは設定が Config に出ないので、ここでは読めない。
 ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
 loadbalance.py など）で確かめた書き方と同じ形を拾うもの、または既存の試験の形のまま。
@@ -173,6 +172,15 @@ _RULES: tuple[_Rule, ...] = (
     _rule(DHCP, "DHCP リレー", r"^\s*dhcp\s+relay\s+server-address\s+(\S+)", "転送先"),
     # Huawei VRP は口の下に `dhcp select relay` と `dhcp relay server-ip 10.10.20.2`（同じ設定例）
     _rule(DHCP, "DHCP リレー", r"^\s*dhcp\s+relay\s+server-ip\s+(\S+)", "転送先"),
+    # Junos（Juniper Support Portal「The Dhcp client is assigned an incorrect address by an
+    # illegal dhcp server of the same vlan」の `set forwarding-options dhcp-relay server-group
+    # dhcp-server 10.0.0.2`）
+    _rule(
+        DHCP,
+        "DHCP リレー",
+        r"^\s*set\s+forwarding-options\s+dhcp-relay\s+server-group\s+\S+\s+(\d+\.\d+\.\d+\.\d+)\s*$",
+        "転送先",
+    ),
     # ループ防止
     _rule(SPANNING_TREE, "STP", r"^\s*spanning-tree\s+mode\s+(\S+)", "モード"),
     _rule(SPANNING_TREE, "STP", r"^\s*stp\s+(?:mode|global)\s+(\S+)", "モード"),

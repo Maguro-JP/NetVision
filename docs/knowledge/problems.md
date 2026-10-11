@@ -1576,3 +1576,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   「Configuring VSTP」（`set protocols vstp vlan vlan-id`。VSTP と RSTP は同時に設定できる）。
 - 直したこと: `backend/app/services/configparse/features.py` の Junos の STP の規則を rstp・mstp・vstp にし、モードとして出す。
   冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode`。
+
+## Junos の DHCP リレーが、機能の一覧に出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は Junos の DHCP リレーを
+  「未確認」として拾っておらず、`forwarding-options dhcp-relay` で中継している Junos の機器でも、一覧に DHCP リレーが出なかった。
+- 確かめた資料: Juniper Support Portal「The Dhcp client is assigned an incorrect address by an illegal dhcp server of the same vlan」
+  （`set forwarding-options dhcp-relay server-group dhcp-server 10.0.0.2`・`group … active-server-group`・`group … interface irb.100`）、
+  Junos OS「DHCP Active Server Groups」（server-group にサーバーのアドレスを足し、active-server-group で使う）。
+- 直したこと: `backend/app/services/configparse/features.py` の DHCP リレーの規則に、server-group のアドレスの行を足した（転送先として出す）。
+  冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_dhcp_relay_server_group_is_found_with_its_server`。
+- 見なかったこと: ELS 以前の EX の書き方（`set forwarding-options helpers bootp server …`）。資料に当たっていないので拾っていない。

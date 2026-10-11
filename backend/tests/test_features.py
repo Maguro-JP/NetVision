@@ -463,3 +463,23 @@ def test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode():
         feature = found.get(f"{features.SPANNING_TREE}:STP")
         assert feature is not None, line
         assert mode in str(feature.detail), (line, feature.detail)
+
+
+def test_junos_dhcp_relay_server_group_is_found_with_its_server():
+    """Junos の `set forwarding-options dhcp-relay server-group 名前 アドレス` を
+    DHCP リレーとして拾う。
+
+    出典: Juniper Support Portal「The Dhcp client is assigned an incorrect address by an
+    illegal dhcp server of the same vlan」の set forwarding-options dhcp-relay server-group
+    dhcp-server 10.0.0.2、Junos OS「DHCP Active Server Groups」（server-group にサーバーの
+    アドレスを足し、active-server-group で使う）。
+    """
+    text = (
+        "set system host-name ex-a1\n"
+        "set forwarding-options dhcp-relay server-group dhcp-server 10.0.0.2\n"
+        "set forwarding-options dhcp-relay group dhcpv4-relay active-server-group dhcp-server\n"
+        "set forwarding-options dhcp-relay group dhcpv4-relay interface irb.100\n"
+    )
+    feature = _found(text).get(f"{features.DHCP}:DHCP リレー")
+    assert feature is not None
+    assert "10.0.0.2" in feature.detail
