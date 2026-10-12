@@ -23,9 +23,9 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 
 公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
 status、Cisco show ip interface brief、Arista show ip interface brief、Junos terse、
-NX-OS brief、PAN-OS、FastIron。
-未確認の表: Aruba CX、FortiGate、NEC QX、NEC IX、
-アラクサラ、`show interfaces` の段落。Aruba CX と FortiGate は公式の出力例に当たれず、
+NX-OS brief、PAN-OS、FastIron、Cisco の `show interfaces` の段落（_PARAGRAPH の上）。
+未確認の表: Aruba CX、FortiGate、NEC QX、NEC IX（`show interfaces` の段落を含む）、
+アラクサラ。Aruba CX と FortiGate は公式の出力例に当たれず、
 HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC とアラクサラは
 マニュアル置き場にこの環境から届かなかった。
 
@@ -58,9 +58,12 @@ _PANOS_STATE = re.compile(r"/(up|down)(?:\(+[\w-]*\)+)?$", re.IGNORECASE)
 #: FortiGate `get system interface physical`。`==[port1]` の見出しの下に `status: up`
 _FORTI_PHYSICAL = re.compile(r"^\s*==\s*\[\s*(\S+?)\s*\]", re.IGNORECASE)
 _FORTI_STATUS = re.compile(r"^\s*status:\s*(up|down)\b", re.IGNORECASE)
-#: `show interfaces` の段落の1行目。`X is up, line protocol is up (connected)`
+#: `show interfaces` の段落の1行目。`X is up, line protocol is up (connected)`。
+#: 名前と番号の間が空いた `Ethernet 0 is up, ...` もある（出典: Cisco IOS Interface and
+#: Hardware Component Command Reference の show interfaces の出力例）
 _PARAGRAPH = re.compile(
-    r"^(\S+) is (up|down|administratively down),\s*line protocol is (up|down)\b", re.IGNORECASE
+    r"^(\S+(?: \d\S*)?) is (up|down|administratively down),\s*line protocol is (up|down)\b",
+    re.IGNORECASE,
 )
 #: NEC QX / VRP の `display interface`。`GigabitEthernet1/0/1 current state: UP`
 _STATE_PARAGRAPH = re.compile(

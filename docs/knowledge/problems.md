@@ -1639,3 +1639,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   新しい EOS で列が増えた形（Owner など）にも当たれていない。
 - ついでに分かったこと: PAN-OS の DHCP の行は、公式の資料（Configure an Interface as a DHCP Server / DHCP Relay）が
   画面の操作の説明だけで、CLI の行の形に当たれなかった。features.py の「未確認」はそのまま。
+
+## Cisco の `show interfaces` で、名前と番号の間が空いた段落（`Ethernet 0 is up`）を読めていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の段落の1行目の判定が、口の名前を
+  空白の無い1語（`GigabitEthernet1/0/1`）と決めていた。Cisco の公式の出力例は `Ethernet 0 is up, line protocol is up` の形で、
+  これだと線の上下も、続く行の CRC の数も読まれなかった。
+- 確かめた資料: Cisco「Cisco IOS Interface and Hardware Component Command Reference」の show interfaces の出力例
+  （`Ethernet 0 is up, line protocol is up`、`0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort`）と、
+  show interfaces serial の項目の説明（`is {up | down}` / `is administratively down`、`line protocol is {up | down}`）。
+- 直したこと: 名前の後ろに「空白と数字で始まる番号」を1つだけ許すようにした。空白の無い名前は今までどおり読む。
+  冒頭の「未確認の表」から Cisco の段落を外した（NEC IX の段落は未確認のまま）。試験は `test_linkstate.py` の
+  `test_show_interfaces_paragraph_with_a_space_before_the_number_is_read`。
+- 見なかったこと: IOS XE の新しい版の項目の説明の表。公式の PDF（Catalyst 3850）は取りに行くと 504 で読めなかった。

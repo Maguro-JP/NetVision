@@ -627,3 +627,32 @@ def test_arista_ip_interface_brief_with_the_mtu_column_is_read():
     states = _states(configparse.parse(text))
     assert states["Vlan10"] == "up"
     assert states["Vlan20"] == "down"
+
+
+def test_show_interfaces_paragraph_with_a_space_before_the_number_is_read() -> None:
+    """`Ethernet 0 is up, line protocol is up` のように、口の名前と番号の間が空いた段落も読む。
+
+    出典: Cisco「Cisco IOS Interface and Hardware Component Command Reference」の show interfaces の
+    出力例（`Ethernet 0 is up, line protocol is up` と `0 input errors, 0 CRC, 0 frame, ...`）。
+    空白の無い `GigabitEthernet1/0/1 is up, ...` は今までどおり読む（見張り）。
+    """
+    text = "\n".join(
+        [
+            "hostname r1",
+            "!",
+            "interface Ethernet0",
+            " ip address 10.0.0.1 255.255.255.0",
+            "!",
+            "interface Ethernet1",
+            " shutdown",
+            "!",
+            "Ethernet 0 is up, line protocol is up",
+            "  Hardware is Lance, address is 0000.0c00.750c (bia 0000.0c00.750c)",
+            "     3 input errors, 3 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort",
+            "Ethernet 1 is administratively down, line protocol is down",
+        ]
+    )
+    ports = {i.name: i for i in configparse.parse(text).interfaces}
+    assert ports["Ethernet0"].link_state == "up"
+    assert ports["Ethernet0"].input_crc_errors == 3
+    assert ports["Ethernet1"].link_state == "disabled"
