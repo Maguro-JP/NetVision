@@ -100,6 +100,7 @@ _QX_ACCESS_VLAN = re.compile(r"^\s*port\s+access\s+vlan\s+(\d+)", re.IGNORECASE)
 _QX_LINK_TYPE = re.compile(r"^\s*port\s+link-type\s+(\S+)", re.IGNORECASE)
 # `port trunk permit vlan 10 20 30 to 40` / `port trunk permit vlan all`。
 # 「足す」書き方（同じ口に何行も並ぶ）。外すときは頭に undo を付ける
+# （出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」10.2.7 port trunk permit vlan）
 _QX_TRUNK_PERMIT = re.compile(
     r"^\s*(undo\s+)?port\s+trunk\s+permit\s+vlan\s*(.*?)\s*$",
     re.IGNORECASE,

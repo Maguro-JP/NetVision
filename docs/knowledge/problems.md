@@ -1556,3 +1556,57 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   試験は `test_features.py` の `test_h3c_dhcp_select_server_is_found_as_dhcp_server`。
 - 見なかったこと: Comware 7 は口の DHCP サーバーが既定で有効なので、行が無くても配っている場合がある（全体の `dhcp enable` と
   アドレスの塊で決まる）。行がある場合だけ拾う今の形では、その機器を取りこぼす。
+
+## NEC QX の `port trunk permit vlan` の読み方を、マニュアルで確かめた（直していない）（2026-10-11 JST）
+
+- 経緯: `configparse/vlanlist.py` に「NEC QX の `port trunk permit vlan` は未確認」と残っていた。
+- 確かめた資料: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」10.2.7 port trunk permit vlan
+  （`port trunk permit vlan { vlan-id-list | all }`。範囲は vlan-id1 to vlan-id2、1〜4094。繰り返し実行すると各行の VLAN が通る。
+  undo で外す。既定は VLAN 1 だけ。例 `port trunk permit vlan 2 4 50 to 100`）。
+- 分かったこと: 今の読み手（`nec.py`）は、範囲・行の足し合わせ・undo のどれもマニュアルどおりに読んでいた。コードは直していない。
+- したこと: マニュアルの作例と、行を分けて足す・undo で外す形を試験で押さえた（`test_configparse_nec.py` の
+  `test_qx_trunk_permit_vlan_reads_the_manual_example_and_adds_up_lines`。今の読み方を守る見張り）。「未確認」を外した。
+
+## Junos の MSTP・VSTP が、機能の一覧に STP として出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は Junos の `set protocols rstp` だけを
+  STP として拾い、`mstp`・`vstp` は「未確認」として拾っていなかった。MSTP・VSTP で組んだ Junos の機器では、一覧に STP が出なかった。
+- 確かめた資料: Juniper「Example: Configuring Network Regions for VLANs with MSTP on EX-series Switches」
+  （`set protocols mstp configuration-name region1`・`set protocols mstp msti 1 vlan [10 20]` など）、
+  「Configuring VSTP」（`set protocols vstp vlan vlan-id`。VSTP と RSTP は同時に設定できる）。
+- 直したこと: `backend/app/services/configparse/features.py` の Junos の STP の規則を rstp・mstp・vstp にし、モードとして出す。
+  冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode`。
+
+## Junos の DHCP リレーが、機能の一覧に出ていなかった（2026-10-11 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 機能の一覧（`configparse/features.py`）は Junos の DHCP リレーを
+  「未確認」として拾っておらず、`forwarding-options dhcp-relay` で中継している Junos の機器でも、一覧に DHCP リレーが出なかった。
+- 確かめた資料: Juniper Support Portal「The Dhcp client is assigned an incorrect address by an illegal dhcp server of the same vlan」
+  （`set forwarding-options dhcp-relay server-group dhcp-server 10.0.0.2`・`group … active-server-group`・`group … interface irb.100`）、
+  Junos OS「DHCP Active Server Groups」（server-group にサーバーのアドレスを足し、active-server-group で使う）。
+- 直したこと: `backend/app/services/configparse/features.py` の DHCP リレーの規則に、server-group のアドレスの行を足した（転送先として出す）。
+  冒頭の「未確認」から外した。試験は `test_features.py` の `test_junos_dhcp_relay_server_group_is_found_with_its_server`。
+- 見なかったこと: ELS 以前の EX の書き方（`set forwarding-options helpers bootp server …`）。資料に当たっていないので拾っていない。
+
+## Catalyst の 5G 口 `Fi` と 100G 口 `Hu` の略記を、正式名に寄せていなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 口の名前の正規化（`configparse/ifname.py`）は `Hun` だけを
+  HundredGigE に寄せ、`Hu1/1/1`・`Fi1/0/1` はそのまま残していた。`show interfaces status` や CDP の略記で書かれた口が、
+  Config の正式名（HundredGigE1/1/1・FiveGigabitEthernet1/0/1）と突き合わなかった。
+- 確かめた資料: Cisco「Interface and Hardware Components Configuration Guide, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+  Configuring Interface Characteristics（5-Gigabit Ethernet (FiveGigabitEthernet or fi)、100-Gigabit Ethernet (HundredGigE or hu)）、
+  「Interface and Hardware Components Configuration Guide, Cisco IOS XE Dublin 17.10.x (Catalyst 9400 Switches)」の表示例（Hu3/0/5）。
+- 直したこと: `backend/app/services/configparse/ifname.py` の略記の表に `fi`・`hu` を足した。試験は `test_ifname.py` の
+  `test_five_and_hundred_gig_short_names_are_expanded`。
+- 見なかったこと: 表のほかの略記（xge・mgmt など）。冒頭の「ほかの略記は未確認」はそのまま残した。
+
+## Junos の `vlan members` に範囲（10-20）で書いた VLAN を、黙って捨てていた（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: Junos の読み手（`configparse/juniper.py`）は `vlan members` の値を
+  番号・VLAN 名・all の3つだけ読み、`10-12` のような範囲を捨てていた。`members [ 10-12 23 27-28 ]` のトランクが VLAN 23 だけを
+  通すことになり、許可 VLAN の食い違いや「VLAN が届いていない」の判断を誤らせていた。
+- 確かめた資料: Juniper「members」（`[edit interfaces interface-name unit logical-unit-number family ethernet-switching vlan]`、
+  `members [ (all | names | vlan-ids) ]`。vlan-ids は「10–20 or 10–20 23 27–30」のように範囲で書ける）。
+- 直したこと: `backend/app/services/configparse/juniper.py` で範囲の語を `vlanlist.parse_ranges` で開くようにした。
+  `vlanlist.py` の「Junos の vlan members は未確認」を外した。試験は `test_configparse_juniper.py` の
+  `test_vlan_members_reads_ranges_of_vlan_ids`。

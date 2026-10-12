@@ -343,3 +343,19 @@ def test_a_config_without_logical_systems_has_none_to_cut_out():
     main, systems = juniper.split_logical_systems("set system host-name mx-a1\n")
     assert systems == {}
     assert "host-name mx-a1" in main
+
+
+def test_vlan_members_reads_ranges_of_vlan_ids():
+    """`vlan members` の番号は範囲（10-20）でも書ける。範囲を捨てずに開いて読む。
+
+    出典: Juniper「members」（[edit interfaces interface-name unit logical-unit-number family
+    ethernet-switching vlan]、members [ (all | names | vlan-ids) ]。vlan-ids は
+    「10–20 or 10–20 23 27–30」のように範囲で書ける）。
+    """
+    text = (
+        "set system host-name ex-a1\n"
+        "set interfaces ge-0/0/1 unit 0 family ethernet-switching interface-mode trunk\n"
+        "set interfaces ge-0/0/1 unit 0 family ethernet-switching vlan members [ 10-12 23 27-28 ]\n"
+    )
+    port = next(i for i in configparse.parse(text).interfaces if i.name.startswith("ge-0/0/1"))
+    assert port.trunk_vlans == [10, 11, 12, 23, 27, 28]

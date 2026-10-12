@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 
-from app.services.configparse import policy, routing, tunnels
+from app.services.configparse import policy, routing, tunnels, vlanlist
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedConfig,
@@ -650,6 +650,9 @@ def _parse_set_interfaces(text: str, parsed: ParsedConfig) -> None:
         for token in members.replace("[", " ").replace("]", " ").split():
             if token.isdigit():
                 values.append(int(token))
+            elif re.fullmatch(r"\d+-\d+", token):
+                # 番号は範囲でも書ける（Juniper「members」: 10-20 23 27-30）
+                values.extend(vlanlist.parse_ranges(token))
             elif token in vlan_ids:
                 values.append(vlan_ids[token])
             elif token.lower() == "all":

@@ -445,3 +445,41 @@ def test_h3c_dhcp_select_server_is_found_as_dhcp_server():
     for line in ("dhcp select server", "dhcp select server global-pool"):
         text = head + "interface Vlan-interface10\n " + line + "\n#\n"
         assert f"{features.DHCP}:DHCP サーバー" in _found(text), line
+
+
+def test_junos_mstp_and_vstp_are_found_as_stp_with_their_mode():
+    """Junos の `set protocols mstp` と `set protocols vstp` を、STP のモードとして拾う。
+
+    出典: Juniper「Example: Configuring Network Regions for VLANs with MSTP on EX-series
+    Switches」の set protocols mstp configuration-name region1 など、
+    「Configuring VSTP」の set protocols vstp vlan vlan-id。
+    """
+    head = "set system host-name ex-a1\n"
+    for line, mode in (
+        ("set protocols mstp configuration-name region1", "mstp"),
+        ("set protocols vstp vlan 10", "vstp"),
+    ):
+        found = _found(head + line + "\n")
+        feature = found.get(f"{features.SPANNING_TREE}:STP")
+        assert feature is not None, line
+        assert mode in str(feature.detail), (line, feature.detail)
+
+
+def test_junos_dhcp_relay_server_group_is_found_with_its_server():
+    """Junos の `set forwarding-options dhcp-relay server-group 名前 アドレス` を
+    DHCP リレーとして拾う。
+
+    出典: Juniper Support Portal「The Dhcp client is assigned an incorrect address by an
+    illegal dhcp server of the same vlan」の set forwarding-options dhcp-relay server-group
+    dhcp-server 10.0.0.2、Junos OS「DHCP Active Server Groups」（server-group にサーバーの
+    アドレスを足し、active-server-group で使う）。
+    """
+    text = (
+        "set system host-name ex-a1\n"
+        "set forwarding-options dhcp-relay server-group dhcp-server 10.0.0.2\n"
+        "set forwarding-options dhcp-relay group dhcpv4-relay active-server-group dhcp-server\n"
+        "set forwarding-options dhcp-relay group dhcpv4-relay interface irb.100\n"
+    )
+    feature = _found(text).get(f"{features.DHCP}:DHCP リレー")
+    assert feature is not None
+    assert "10.0.0.2" in feature.detail

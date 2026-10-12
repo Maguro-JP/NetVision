@@ -4,7 +4,8 @@
 突き合わせる前に正式名へ寄せる。表示は元の表記を残し、比較にだけ正規化名を使う。
 
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
-Cisco の Command Reference と Migration Guide で確かめた（tests/test_ifname.py）。
+Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
+Components Configuration Guide で確かめた（tests/test_ifname.py）。
 ほかの略記は既存の試験の形のまま（未確認）。
 """
 
@@ -40,9 +41,14 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("tunnel", "Tunnel"),
     ("twe", "TwentyFiveGigE"),
     # 2.5G は `Tw1/0/1`（Cisco「Migration Guide from Cisco Catalyst」Table 5）。
-    # 25G の `Twe` とは別の口。5G の `Fi` と 100G の `Hu` の略記は未確認
+    # 25G の `Twe` とは別の口
     ("tw", "TwoGigabitEthernet"),
     ("hun", "HundredGigE"),
+    # 5G は fi、100G は hu（出典: Cisco「Interface and Hardware Components Configuration
+    # Guide, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Configuring Interface
+    # Characteristics）
+    ("fi", "FiveGigabitEthernet"),
+    ("hu", "HundredGigE"),
     ("tengig", "TenGigabitEthernet"),
     ("fortygig", "FortyGigabitEthernet"),
     ("xge", "TenGigabitEthernet"),

@@ -27,3 +27,15 @@ def test_existing_abbreviations_stay_as_they_were() -> None:
     assert ifname.expand("Te1/1/1") == "TenGigabitEthernet1/1/1"
     assert ifname.expand("ge-0/0/1") == "ge-0/0/1"
     assert ifname.expand("GE1/0/1") == "GigabitEthernet1/0/1"
+
+
+def test_five_and_hundred_gig_short_names_are_expanded():
+    """Catalyst の 5G 口 `Fi` と 100G 口 `Hu` を正式名に寄せる。
+
+    出典: Cisco「Interface and Hardware Components Configuration Guide, Cisco IOS XE Cupertino
+    17.9.x (Catalyst 9300 Switches)」Configuring Interface Characteristics
+    （5-Gigabit Ethernet (FiveGigabitEthernet or fi)、100-Gigabit Ethernet (HundredGigE or hu)）。
+    """
+    assert ifname.expand("Fi1/0/1") == "FiveGigabitEthernet1/0/1"
+    assert ifname.expand("Hu1/1/1") == "HundredGigE1/1/1"
+    assert ifname.normalize("Hu1/1/1") == ifname.normalize("HundredGigE1/1/1")
