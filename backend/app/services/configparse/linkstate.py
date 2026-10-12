@@ -7,8 +7,10 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 読めるのは、次の表。列の並びが決まっているものだけを見る。
 
 - Cisco `show interfaces status`（Port / Name / Status / Vlan / Duplex / Speed / Type）
-- Cisco / Arista / NEC IX `show ip interface brief`
+- Cisco / NEC IX `show ip interface brief`
   （Interface / IP-Address / ... / Status / Protocol。Cisco の出典は _read_brief）
+- Arista `show ip interface brief`（Interface / IP Address / Status / Protocol / MTU。
+  出典は _read_arista_brief）
 - Junos `show interfaces terse`（Interface / Admin / Link / Proto ...。出典は _read_terse）
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address。出典は _PANOS_STATE）
@@ -20,8 +22,9 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Huawei VRP `display interface brief`（Interface / PHY / Protocol ...。出典は _vrp_state）
 
 公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
-status、Cisco show ip interface brief、Junos terse、NX-OS brief、PAN-OS、FastIron。
-未確認の表: Arista の show ip interface brief、Aruba CX、FortiGate、NEC QX、NEC IX、
+status、Cisco show ip interface brief、Arista show ip interface brief、Junos terse、
+NX-OS brief、PAN-OS、FastIron。
+未確認の表: Aruba CX、FortiGate、NEC QX、NEC IX、
 アラクサラ、`show interfaces` の段落。Aruba CX と FortiGate は公式の出力例に当たれず、
 HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC とアラクサラは
 マニュアル置き場にこの環境から届かなかった。
@@ -78,6 +81,11 @@ _ALAXALA_PORT = re.compile(
     r"^\s*Port\s+(?P<name>[\d/]+)\s+Link\s*:\s*(?P<state>\S+)", re.IGNORECASE
 )
 _BRIEF_HEADER = re.compile(r"^\s*Interface\s+IP-Address\s+.*\bStatus\s+Protocol\s*$", re.I)
+#: Arista `show ip interface brief`。見出しは `IP Address`（空白）で、Protocol の後ろに MTU が付く。
+#: 出典は _read_arista_brief
+_ARISTA_BRIEF_HEADER = re.compile(
+    r"^\s*Interface\s+IP\s+Address\s+Status\s+Protocol\s+MTU\s*$", re.I
+)
 _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 
 #: `show interfaces status` の Status 列に出る言葉。
@@ -102,6 +110,8 @@ def parse(text: str, parsed: ParsedConfig) -> None:
             _read_status(lines[index + 1 :], parsed)
         elif _BRIEF_HEADER.match(line):
             _read_brief(lines[index + 1 :], parsed)
+        elif _ARISTA_BRIEF_HEADER.match(line):
+            _read_arista_brief(lines[index + 1 :], parsed)
         elif _TERSE_HEADER.match(line):
             _read_terse(lines[index + 1 :], parsed)
         elif _ARUBA_HEADER.match(line):
@@ -193,6 +203,22 @@ def _read_brief(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "disabled"
         else:
             port.link_state = "up" if status == "up" and protocol == "up" else "down"
+
+
+def _read_arista_brief(rows: list[str], parsed: ParsedConfig) -> None:
+    """Arista `show ip interface brief`。末尾の MTU を外せば Cisco と同じ読み方になる。
+
+    出典: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
+    （Interface / IP Address / Status / Protocol / MTU）。Status の値は出力例に up しか無く、
+    up / down 以外の言葉は未確認（_read_brief と同じく、上下を決めずに飛ばす）。
+    """
+    trimmed = []
+    for row in rows:
+        columns = row.split()
+        if columns and columns[-1].isdigit():
+            columns = columns[:-1]
+        trimmed.append(" ".join(columns))
+    _read_brief(trimmed, parsed)
 
 
 #: terse の続きの行の先頭。アドレス（`10.0.0.16`、`fe80::1/64`）か family の名前

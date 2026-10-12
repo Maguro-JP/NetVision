@@ -1623,3 +1623,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `test_comware_aggregate_short_names_are_expanded`。
 - 見なかったこと: H3C の `FGE`・`HGE`・`WGE`・`MGE`。資料の出力例には `WGE1/0/1` と `Twenty-FiveGigE1/0/1` が並ぶが、
   対応を書いた表に当たれなかったので未確認のまま寄せていない。
+
+## Arista の `show ip interface brief` を、見出しの形が違うために一切読んでいなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の冒頭は「Cisco / Arista / NEC IX の
+  show ip interface brief を読む」と書いていたが、見出しの判定は Cisco の `Interface  IP-Address ... Status  Protocol` で
+  行が終わる形だけだった。Arista の見出しは `IP Address`（空白）で、Protocol の後ろに `MTU` が付くので当たらず、
+  Arista の表は黙って読み飛ばしていた。線の上下（link_state）が空のままになる。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
+  （`Interface  IP Address  Status  Protocol  MTU`、行は `Vlan901  170.33.254.1/30  up  up  9212`）。
+- 直したこと: Arista の見出しを別に判定し、行の末尾の MTU を外してから Cisco と同じ読み方に渡すようにした。
+  冒頭の「確かめた表／未確認の表」も直した。試験は `test_linkstate.py` の
+  `test_arista_ip_interface_brief_with_the_mtu_column_is_read`。
+- 見なかったこと: Status の値。出力例には up しか無いので、up / down 以外の言葉は未確認のまま（Cisco と同じく上下を決めずに飛ばす）。
+  新しい EOS で列が増えた形（Owner など）にも当たれていない。
+- ついでに分かったこと: PAN-OS の DHCP の行は、公式の資料（Configure an Interface as a DHCP Server / DHCP Relay）が
+  画面の操作の説明だけで、CLI の行の形に当たれなかった。features.py の「未確認」はそのまま。

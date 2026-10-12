@@ -605,3 +605,25 @@ def test_fastiron_disable_does_not_stop_the_table() -> None:
     parsed = configparse.parse("\n".join(config + table))
     states = [item.link_state for item in parsed.interfaces]
     assert states == ["down", "disabled", "down", "up"]
+
+
+ARISTA_BRIEF = """
+show ip interface brief
+
+Interface              IP Address         Status     Protocol         MTU
+Vlan10                 10.0.10.1/24       up         up              9212
+Vlan20                 10.0.20.1/24       up         down            1500
+"""
+
+
+def test_arista_ip_interface_brief_with_the_mtu_column_is_read():
+    """Arista の `show ip interface brief` は見出しが `IP Address`（空白）で、末尾に MTU が付く。
+
+    出典: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
+    （Interface / IP Address / Status / Protocol / MTU。行の末尾は 9212 などの MTU）。
+    Status の値は出力例に up しか無いので、up / down 以外の言葉の扱いは未確認。
+    """
+    text = (FIXTURES / "arista-dc-01.txt").read_text() + ARISTA_BRIEF
+    states = _states(configparse.parse(text))
+    assert states["Vlan10"] == "up"
+    assert states["Vlan20"] == "down"
