@@ -483,3 +483,21 @@ def test_junos_dhcp_relay_server_group_is_found_with_its_server():
     feature = _found(text).get(f"{features.DHCP}:DHCP リレー")
     assert feature is not None
     assert "10.0.0.2" in feature.detail
+
+
+def test_h3c_comware7_dhcp_server_without_dhcp_select_is_found():
+    """見張り: Comware 7 は口の既定が DHCP サーバーなので、`dhcp select server` が Config に出ない。
+
+    出典: H3C「SR6600[SR6600-X] Routers Command Reference (V7)-R8149-6W100」06-Layer 3—IP Services
+    Command Reference の 03-DHCP commands（dhcp select の Default「The interface operates in
+    the DHCP server mode」、dhcp enable の Default「DHCP is disabled」）。
+    口に何も書かなくても、`dhcp server ip-pool` の塊で DHCP サーバーとして拾えていることを見張る。
+    """
+    text = (
+        "H3C Comware Software, Version 7.1.064\nsysname h3c-r1\n#\n"
+        " dhcp enable\n#\n"
+        "dhcp server ip-pool pool10\n gateway-list 10.0.10.1\n"
+        " network 10.0.10.0 mask 255.255.255.0\n#\n"
+        "interface Vlan-interface10\n ip address 10.0.10.1 255.255.255.0\n#\n"
+    )
+    assert f"{features.DHCP}:DHCP サーバー" in _found(text)

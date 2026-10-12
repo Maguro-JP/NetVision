@@ -1652,3 +1652,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   冒頭の「未確認の表」から Cisco の段落を外した（NEC IX の段落は未確認のまま）。試験は `test_linkstate.py` の
   `test_show_interfaces_paragraph_with_a_space_before_the_number_is_read`。
 - 見なかったこと: IOS XE の新しい版の項目の説明の表。公式の PDF（Catalyst 3850）は取りに行くと 504 で読めなかった。
+
+## 見張り: H3C Comware 7 の口の DHCP サーバーは既定で動き、`dhcp select server` が Config に出ない（2026-10-13 JST）
+
+- 確かめたこと: Comware 7 は口の既定が DHCP サーバーの動き方なので、Config には `dhcp select server` が出ないことがある。
+  機能の一覧（`configparse/features.py`）は `dhcp server ip-pool` の塊で DHCP サーバーとして拾っており、直す所は無かった。
+  直す前のコードで通る見張りの試験として足した。
+- 確かめた資料: H3C「SR6600[SR6600-X] Routers Command Reference (V7)-R8149-6W100」06-Layer 3—IP Services Command Reference の
+  03-DHCP commands（dhcp select の Default「The interface operates in the DHCP server mode and responds to DHCP requests ...」、
+  dhcp enable の Default「DHCP is disabled」、Usage guidelines「DHCP related configuration takes effect only after you enable DHCP」）。
+- 試験: `test_features.py` の `test_h3c_comware7_dhcp_server_without_dhcp_select_is_found`。
+- 気付いたが手を付けなかったこと: `dhcp enable` が無い Config でも、`dhcp server ip-pool` があれば DHCP サーバーとして載せる。
+  資料どおりなら動いていないので言い過ぎになる。ただ同じ行の判定はほかの機種と共有していて、直すと範囲が広がるので見送った。
+- 同じ周で見送ったもの: FortiGate の `get system interface physical` と Aruba CX の `show interface brief` は、
+  公式の出力例に当たれなかった（第三者の作例とコミュニティの投稿だけ）。linkstate.py の「未確認」はそのまま。
