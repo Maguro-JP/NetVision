@@ -1610,3 +1610,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configparse/juniper.py` で範囲の語を `vlanlist.parse_ranges` で開くようにした。
   `vlanlist.py` の「Junos の vlan members は未確認」を外した。試験は `test_configparse_juniper.py` の
   `test_vlan_members_reads_ranges_of_vlan_ids`。
+
+## H3C Comware の集約口の略記 BAGG・RAGG を、正式名に寄せていなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 口の名前を突き合わせる `configparse/ifname.py` が `BAGG1` を
+  そのまま返し、Config の `Bridge-Aggregation1` と別の口として扱っていた。`RAGG` と正式名の `Route-Aggregation` も表に無かった。
+  H3C の `display interface brief` や `display link-aggregation` は略記で書くので、表示の出力と Config の口が結び付かない。
+- 確かめた資料: H3C「S9820-8M[S6880] Command References, R1116Pxx-6W100」04-Layer 2—LAN Switching Command Reference の
+  display link-aggregation summary（Aggregate Interface Type の凡例「BAGG -- Bridge-Aggregation, ... RAGG -- Route-Aggregation」、
+  出力例 `BAGG20`・`RAGG10`）。MSR（V9）の Command Reference にも同じ凡例がある。
+- 直したこと: 略記の表に `route-aggregation`・`bagg`・`ragg` を足した。試験は `test_ifname.py` の
+  `test_comware_aggregate_short_names_are_expanded`。
+- 見なかったこと: H3C の `FGE`・`HGE`・`WGE`・`MGE`。資料の出力例には `WGE1/0/1` と `Twenty-FiveGigE1/0/1` が並ぶが、
+  対応を書いた表に当たれなかったので未確認のまま寄せていない。

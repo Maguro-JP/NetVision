@@ -5,8 +5,8 @@
 
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
-Components Configuration Guide で確かめた（tests/test_ifname.py）。
-ほかの略記は既存の試験の形のまま（未確認）。
+Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の Command Reference
+で確かめた（tests/test_ifname.py）。ほかの略記は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -31,6 +31,12 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     # 正式名そのものだけをここに置く（略記 ge は Juniper と衝突するので下）
     ("gigaethernet", "GigaEthernet"),
     ("bridge-aggregation", "Bridge-Aggregation"),
+    ("route-aggregation", "Route-Aggregation"),
+    # H3C Comware の集約口の略記。出典: H3C「S9820-8M[S6880] Command References,
+    # R1116Pxx-6W100」display link-aggregation summary の凡例
+    # （BAGG -- Bridge-Aggregation, RAGG -- Route-Aggregation）
+    ("bagg", "Bridge-Aggregation"),
+    ("ragg", "Route-Aggregation"),
     ("fastethernet", "FastEthernet"),
     ("port-channel", "Port-channel"),
     ("portchannel", "Port-channel"),
