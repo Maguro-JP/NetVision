@@ -86,7 +86,13 @@ NODE_W = 210.0
 # 線のラベルを番号だけにしても、機器を見れば何のポートか分かるようにするため
 NODE_H = 78.0
 MARGIN = 48.0
-LEGEND_H = 62.0
+LEGEND_H = 102.0
+#: 簡易図の凡例。名前と線だけの図なので、1行で足りる
+SIMPLE_LEGEND_H = 40.0
+#: 凡例と見出しが収まる最小の幅。機器が1列だけの細い図でも、凡例の右端や
+#: 見出しの日時が切れたり重なったりしないようにする
+LEGEND_MIN_W = 660.0
+SIMPLE_LEGEND_MIN_W = 520.0
 # 1本あたりの折れの上限。同じ段の迂回で2つ使う（品質検査と合わせること）
 MAX_BENDS = 2
 #: 「線に沿わせる」で傾けてよい角度の幅（度）。縦横から離れたら水平に置く
@@ -321,10 +327,11 @@ def render_svg(
         max_y += _GROUP_PAD * deep
 
     # 図の左上を原点側へ寄せ、余白と凡例・見出しの分を確保する
-    legend_h = 0.0 if simple else LEGEND_H
+    legend_h = SIMPLE_LEGEND_H if simple else LEGEND_H
     dx = MARGIN - min_x
     dy = MARGIN + 34.0 - min_y
     width = max_x - min_x + MARGIN * 2
+    width = max(width, SIMPLE_LEGEND_MIN_W if simple else LEGEND_MIN_W)
     height = max_y - min_y + MARGIN * 2 + 34.0 + legend_h
 
     at = {n.device_id: (sized[n.device_id][0] + dx, sized[n.device_id][1] + dy) for n in nodes}
@@ -332,6 +339,9 @@ def render_svg(
     parts: list[str] = []
     # 凡例に出すのは実際に使われている種別だけ。使っていない色を並べても読み手が困る
     used_media: set[Media] = set()
+    #: 凡例に出す機器の種別と、稼働していない機器があるか。使っていないものは並べない
+    used_types: set[str] = set()
+    any_stopped = False
 
     # 機器の箱と簡易ノードを先に「埋まっている場所」として登録しておく。
     # ラベルはこれを避けて置く。少し広げるのは、枠に文字が接すると読みにくいため
@@ -897,6 +907,8 @@ def render_svg(
         color = SEVERITY_COLOR.get(str(node.severity), SEVERITY_COLOR[str(Severity.UNKNOWN)])
         # 背景は稼働状態。止まっているものは灰色寄りにして、稼働中と区別する
         fill = "#f7f9fc" if str(node.status) == "active" else "#eceef1"
+        used_types.add(str(node.device_type))
+        any_stopped = any_stopped or str(node.status) != "active"
         parts.append(
             f'<g><rect x="{x:.0f}" y="{y:.0f}" width="{nw:.0f}" height="{nh:.0f}" '
             f'rx="7" fill="{fill}" stroke="{color}" stroke-width="2"/>'
@@ -968,8 +980,12 @@ def render_svg(
         )
         parts.append("</g>")
 
-    if not simple:
-        parts.append(_legend(MARGIN, height - LEGEND_H + 10, width, used_media))
+    if simple:
+        parts.append(_simple_legend(MARGIN, height - SIMPLE_LEGEND_H + 10, width, bool(peers)))
+    else:
+        parts.append(
+            _legend(MARGIN, height - LEGEND_H + 10, width, used_media, used_types, any_stopped)
+        )
     parts.append("</svg>")
     return "\n".join(parts)
 
@@ -2457,7 +2473,14 @@ def _center_label(
     )
 
 
-def _legend(x: float, y: float, width: float, media: set[Media] | None = None) -> str:
+def _legend(
+    x: float,
+    y: float,
+    width: float,
+    media: set[Media] | None = None,
+    types: set[str] | None = None,
+    stopped: bool = False,
+) -> str:
     parts = [
         f'<line x1="{x:.0f}" y1="{y - 12:.0f}" x2="{width - x:.0f}" y2="{y - 12:.0f}" '
         f'stroke="#dfe3ea" stroke-width="1"/>',
@@ -2483,7 +2506,8 @@ def _legend(x: float, y: float, width: float, media: set[Media] | None = None) -
     # ポート名を色分けしているので、何色が何かを図の中に残す。
     # 凡例の無い色分けは、その図だけ見た人には読めない
     if media:
-        cursor = x + 250
+        # 左の「実線 = … 片側のみ」と重ならない位置から始める
+        cursor = x + 340
         parts.append(
             f'<text x="{cursor:.0f}" y="{y + 24:.0f}" font-size="10" fill="#6b6b6b">'
             "ポート種別</text>"
@@ -2497,7 +2521,53 @@ def _legend(x: float, y: float, width: float, media: set[Media] | None = None) -
             )
             cursor += 18 + len(label) * 8
 
+    # 箱の左上の記号と、灰色の地。どちらも図の中で説明しないと、その図だけ
+    # 渡された人には何を表しているか分からない
+    cursor = x
+    if types:
+        parts.append(
+            f'<text x="{cursor:.0f}" y="{y + 44:.0f}" font-size="10" fill="#6b6b6b">'
+            "機器の種別</text>"
+        )
+        cursor += 60
+        for key in TYPE_GLYPH:
+            if key not in types:
+                continue
+            item = f"{TYPE_GLYPH[key]} {DEVICE_TYPE_NAMES.get(key, key)}"
+            parts.append(
+                f'<text x="{cursor:.0f}" y="{y + 44:.0f}" font-size="10" fill="#4a4a4a">'
+                f"{_esc(item)}</text>"
+            )
+            cursor += 18 + len(item) * 10
+    if stopped:
+        # 種別の並びの後ろに続けると、細い図では右へはみ出して切れる。行を分ける
+        parts.append(
+            f'<rect x="{x:.0f}" y="{y + 55:.0f}" width="14" height="10" rx="2" '
+            f'fill="#eceef1" stroke="#9aa4b2" stroke-width="0.8"/>'
+        )
+        parts.append(
+            f'<text x="{x + 19:.0f}" y="{y + 64:.0f}" font-size="10" fill="#4a4a4a">'
+            "灰色の地 = 稼働していない機器</text>"
+        )
+
     return "\n".join(parts)
+
+
+def _simple_legend(x: float, y: float, width: float, peers: bool) -> str:
+    """簡易図の凡例。名前と線だけの図でも、線と破線の箱が何かは書いておく。
+
+    型番・保守状態・ポート名は載せない図なので、それらの説明は入れない。
+    """
+    text = "四角 = 機器 / 線 = 機器どうしの結線"
+    if peers:
+        text += " / 破線の四角 = この図の外の相手"
+    return "\n".join(
+        [
+            f'<line x1="{x:.0f}" y1="{y - 12:.0f}" x2="{width - x:.0f}" y2="{y - 12:.0f}" '
+            f'stroke="#dfe3ea" stroke-width="1"/>',
+            f'<text x="{x:.0f}" y="{y + 4:.0f}" font-size="10" fill="#6b6b6b">{_esc(text)}</text>',
+        ]
+    )
 
 
 def _empty_svg(title: str, *, layer: str = "physical") -> str:
