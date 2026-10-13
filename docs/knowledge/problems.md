@@ -1666,3 +1666,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   資料どおりなら動いていないので言い過ぎになる。ただ同じ行の判定はほかの機種と共有していて、直すと範囲が広がるので見送った。
 - 同じ周で見送ったもの: FortiGate の `get system interface physical` と Aruba CX の `show interface brief` は、
   公式の出力例に当たれなかった（第三者の作例とコミュニティの投稿だけ）。linkstate.py の「未確認」はそのまま。
+
+## H3C Comware の 25G 口の略記 WGE と、正式名 Twenty-FiveGigE を同じ口に寄せていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/ifname.py` の略記の表に、H3C の正式名
+  `Twenty-FiveGigE`（ハイフン入り）も略記の `WGE` も無かった。表示の出力の `WGE1/0/3` と Config の
+  `interface Twenty-FiveGigE1/0/3` が、別の口として扱われていた。
+- 確かめた資料: H3C「S6850 & S9850 Switch Series Command References, Release 655x-6W100」03-Ethernet interface commands
+  （`display interface twenty-fivegige 1/0/3 brief description` の出力が `WGE1/0/3`。display counters などの
+  Interface 列の説明は「Abbreviated interface name」）。
+- 直したこと: 略記の表に `twenty-fivegige` と `wge` を足し、Cisco の `TwentyFiveGigE`・`Twe` と同じ正式名に寄せた。
+  試験は `test_ifname.py` の `test_comware_twenty_five_gig_short_name_is_expanded`。
+- 見なかったこと: H3C の `FGE`・`HGE`・`MGE`。同じ資料の見えた範囲には出力例が無く、未確認のまま。
+- 同じ周で見送ったもの: H3C の `dhcp enable` が無い Config を DHCP サーバーとして載せる件。判定の `dhcp server ip-pool` は
+  NEC QX と共用で、QX の Config 例には `dhcp enable` が無い。QX の資料にこの環境から届かないので、条件を足すと QX を崩しうる。

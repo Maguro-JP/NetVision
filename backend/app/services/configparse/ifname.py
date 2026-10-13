@@ -5,8 +5,9 @@
 
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
-Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の Command Reference
-で確かめた（tests/test_ifname.py）。ほかの略記は既存の試験の形のまま（未確認）。
+Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE` は
+S6850 の Command Reference で確かめた（tests/test_ifname.py）。
+ほかの略記は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -19,6 +20,9 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("ten-gigabitethernet", "TenGigabitEthernet"),
     ("tengigabitethernet", "TenGigabitEthernet"),
     ("twentyfivegige", "TwentyFiveGigE"),
+    # H3C Comware の正式名はハイフン入り。出典: H3C「S6850 & S9850 Switch Series Command
+    # References, Release 655x-6W100」03-Ethernet interface commands
+    ("twenty-fivegige", "TwentyFiveGigE"),
     # Catalyst 9000 の mGig（2.5G・5G）。出典: Command Reference, Cisco IOS XE 17.10.x
     # （Catalyst 9300）の interface コマンド
     ("twogigabitethernet", "TwoGigabitEthernet"),
@@ -36,6 +40,8 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     # R1116Pxx-6W100」display link-aggregation summary の凡例
     # （BAGG -- Bridge-Aggregation, RAGG -- Route-Aggregation）
     ("bagg", "Bridge-Aggregation"),
+    # 25G 口の略記（同じ資料の display interface twenty-fivegige 1/0/3 brief の出力が WGE1/0/3）
+    ("wge", "TwentyFiveGigE"),
     ("ragg", "Route-Aggregation"),
     ("fastethernet", "FastEthernet"),
     ("port-channel", "Port-channel"),

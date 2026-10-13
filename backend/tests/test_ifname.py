@@ -56,3 +56,17 @@ def test_comware_aggregate_short_names_are_expanded():
     assert ifname.expand("RAGG10") == "Route-Aggregation10"
     assert ifname.normalize("RAGG10") == ifname.normalize("Route-Aggregation10")
     assert ifname.expand("route-aggregation10") == "Route-Aggregation10"
+
+
+def test_comware_twenty_five_gig_short_name_is_expanded():
+    """H3C Comware の 25G 口 `WGE1/0/1` を、Config の `Twenty-FiveGigE1/0/1` と同じ口に寄せる。
+
+    出典: H3C「S6850 & S9850 Switch Series Command References, Release 655x-6W100」03-Ethernet
+    interface commands（`display interface twenty-fivegige 1/0/3 brief description` の出力が
+    `WGE1/0/3`、display counters などの Interface 列の説明が「Abbreviated interface name」）。
+    Cisco の `TwentyFiveGigE`・`Twe` と同じ正式名にそろえる。
+    """
+    assert ifname.expand("WGE1/0/3") == "TwentyFiveGigE1/0/3"
+    assert ifname.expand("Twenty-FiveGigE1/0/3") == "TwentyFiveGigE1/0/3"
+    assert ifname.normalize("WGE1/0/3") == ifname.normalize("Twenty-FiveGigE1/0/3")
+    assert ifname.normalize("WGE1/0/3") == ifname.normalize("Twe1/0/3")
