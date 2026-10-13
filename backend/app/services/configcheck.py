@@ -68,7 +68,9 @@ _HYGIENE = (
     ),
     (
         re.compile(
-            r"^\s*(?:ip http server\s*$"  # Cisco IOS
+            # Cisco IOS（出典: Cisco「Cisco IOS HTTP Services Command Reference」の ip http server。
+            # 閉じるのは no ip http server、https は ip http secure-server で別の行）
+            r"^\s*(?:ip http server\s*$"
             r"|set system services web-management http\b"  # Junos（https は別）
             r"|set allowaccess\b.*\bhttp\b(?!s)"  # FortiGate
             # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.18

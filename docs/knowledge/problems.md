@@ -1720,3 +1720,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 同じ周で見送ったもの: Cisco の `transport input ssh telnet` のように telnet を後ろに書いた行を、今の規則
   （`transport input (?:all|telnet)`）は当てない。複数の方式を並べて書けることを公式の資料で確かめられなかった
   （IOS 12.2 Terminal Services Configuration Guide は `transport input { ... | ssh | telnet | ... }` の形だけ）ので、直していない。
+
+## 見張り: Cisco の `ip http server` の規則に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configcheck.py` の「管理用の web が開いています」は、Cisco の行に出典が無かった。公式資料で確かめ、
+  `ip http server` を指摘し、`ip http secure-server`（https）と `no ip http server` を言わない今の形で合っていた。
+  直す所は無く、直す前のコードで通る見張りの試験として足し、規則に出典を書いた。直し方の文（no ip http server）も資料と同じ。
+- 確かめた資料: Cisco「Cisco IOS HTTP Services Command Reference」clear ip http client cookie through show ip http server
+  secure status の ip http server（To disable the HTTP server, use the no form of this command）と ip http secure-server
+  （When enabling an HTTPS server, you should always disable the standard HTTP server ... using the no ip http server command）。
+- 試験: `test_configcheck.py` の `test_ios_http_server_is_called_out_and_the_secure_server_is_not`。

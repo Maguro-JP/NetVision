@@ -3067,3 +3067,20 @@ def test_both_negotiating_modes_are_called_out_and_fixed_modes_are_not(db_sessio
     for mode in ("access", "trunk"):
         titles = _titles(configcheck.check(db_session, head + f" switchport mode {mode}\n"))
         assert not any("相手任せ" in t for t in titles), mode
+
+
+def test_ios_http_server_is_called_out_and_the_secure_server_is_not(db_session):
+    """見張り: Cisco IOS の `ip http server` だけを「管理用の web が開いています」として指摘し、
+    `ip http secure-server`（https）と `no ip http server` は言わない。
+
+    出典: Cisco「Cisco IOS HTTP Services Command Reference」clear ip http client cookie through
+    show ip http server secure status の ip http server（To disable the HTTP server, use the no
+    form）と ip http secure-server（When enabling an HTTPS server, you should always disable
+    the standard HTTP server ... using the no ip http server command）。
+    """
+    head = "hostname r-web\n!\n"
+    titles = _titles(configcheck.check(db_session, head + "ip http server\n"))
+    assert any("管理用の web" in t for t in titles)
+    for line in ("ip http secure-server\n", "no ip http server\nip http secure-server\n"):
+        titles = _titles(configcheck.check(db_session, head + line))
+        assert not any("管理用の web" in t for t in titles), line
