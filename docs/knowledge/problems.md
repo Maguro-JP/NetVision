@@ -1610,3 +1610,59 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `backend/app/services/configparse/juniper.py` で範囲の語を `vlanlist.parse_ranges` で開くようにした。
   `vlanlist.py` の「Junos の vlan members は未確認」を外した。試験は `test_configparse_juniper.py` の
   `test_vlan_members_reads_ranges_of_vlan_ids`。
+
+## H3C Comware の集約口の略記 BAGG・RAGG を、正式名に寄せていなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 口の名前を突き合わせる `configparse/ifname.py` が `BAGG1` を
+  そのまま返し、Config の `Bridge-Aggregation1` と別の口として扱っていた。`RAGG` と正式名の `Route-Aggregation` も表に無かった。
+  H3C の `display interface brief` や `display link-aggregation` は略記で書くので、表示の出力と Config の口が結び付かない。
+- 確かめた資料: H3C「S9820-8M[S6880] Command References, R1116Pxx-6W100」04-Layer 2—LAN Switching Command Reference の
+  display link-aggregation summary（Aggregate Interface Type の凡例「BAGG -- Bridge-Aggregation, ... RAGG -- Route-Aggregation」、
+  出力例 `BAGG20`・`RAGG10`）。MSR（V9）の Command Reference にも同じ凡例がある。
+- 直したこと: 略記の表に `route-aggregation`・`bagg`・`ragg` を足した。試験は `test_ifname.py` の
+  `test_comware_aggregate_short_names_are_expanded`。
+- 見なかったこと: H3C の `FGE`・`HGE`・`WGE`・`MGE`。資料の出力例には `WGE1/0/1` と `Twenty-FiveGigE1/0/1` が並ぶが、
+  対応を書いた表に当たれなかったので未確認のまま寄せていない。
+
+## Arista の `show ip interface brief` を、見出しの形が違うために一切読んでいなかった（2026-10-12 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の冒頭は「Cisco / Arista / NEC IX の
+  show ip interface brief を読む」と書いていたが、見出しの判定は Cisco の `Interface  IP-Address ... Status  Protocol` で
+  行が終わる形だけだった。Arista の見出しは `IP Address`（空白）で、Protocol の後ろに `MTU` が付くので当たらず、
+  Arista の表は黙って読み飛ばしていた。線の上下（link_state）が空のままになる。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
+  （`Interface  IP Address  Status  Protocol  MTU`、行は `Vlan901  170.33.254.1/30  up  up  9212`）。
+- 直したこと: Arista の見出しを別に判定し、行の末尾の MTU を外してから Cisco と同じ読み方に渡すようにした。
+  冒頭の「確かめた表／未確認の表」も直した。試験は `test_linkstate.py` の
+  `test_arista_ip_interface_brief_with_the_mtu_column_is_read`。
+- 見なかったこと: Status の値。出力例には up しか無いので、up / down 以外の言葉は未確認のまま（Cisco と同じく上下を決めずに飛ばす）。
+  新しい EOS で列が増えた形（Owner など）にも当たれていない。
+- ついでに分かったこと: PAN-OS の DHCP の行は、公式の資料（Configure an Interface as a DHCP Server / DHCP Relay）が
+  画面の操作の説明だけで、CLI の行の形に当たれなかった。features.py の「未確認」はそのまま。
+
+## Cisco の `show interfaces` で、名前と番号の間が空いた段落（`Ethernet 0 is up`）を読めていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の段落の1行目の判定が、口の名前を
+  空白の無い1語（`GigabitEthernet1/0/1`）と決めていた。Cisco の公式の出力例は `Ethernet 0 is up, line protocol is up` の形で、
+  これだと線の上下も、続く行の CRC の数も読まれなかった。
+- 確かめた資料: Cisco「Cisco IOS Interface and Hardware Component Command Reference」の show interfaces の出力例
+  （`Ethernet 0 is up, line protocol is up`、`0 input errors, 0 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort`）と、
+  show interfaces serial の項目の説明（`is {up | down}` / `is administratively down`、`line protocol is {up | down}`）。
+- 直したこと: 名前の後ろに「空白と数字で始まる番号」を1つだけ許すようにした。空白の無い名前は今までどおり読む。
+  冒頭の「未確認の表」から Cisco の段落を外した（NEC IX の段落は未確認のまま）。試験は `test_linkstate.py` の
+  `test_show_interfaces_paragraph_with_a_space_before_the_number_is_read`。
+- 見なかったこと: IOS XE の新しい版の項目の説明の表。公式の PDF（Catalyst 3850）は取りに行くと 504 で読めなかった。
+
+## 見張り: H3C Comware 7 の口の DHCP サーバーは既定で動き、`dhcp select server` が Config に出ない（2026-10-13 JST）
+
+- 確かめたこと: Comware 7 は口の既定が DHCP サーバーの動き方なので、Config には `dhcp select server` が出ないことがある。
+  機能の一覧（`configparse/features.py`）は `dhcp server ip-pool` の塊で DHCP サーバーとして拾っており、直す所は無かった。
+  直す前のコードで通る見張りの試験として足した。
+- 確かめた資料: H3C「SR6600[SR6600-X] Routers Command Reference (V7)-R8149-6W100」06-Layer 3—IP Services Command Reference の
+  03-DHCP commands（dhcp select の Default「The interface operates in the DHCP server mode and responds to DHCP requests ...」、
+  dhcp enable の Default「DHCP is disabled」、Usage guidelines「DHCP related configuration takes effect only after you enable DHCP」）。
+- 試験: `test_features.py` の `test_h3c_comware7_dhcp_server_without_dhcp_select_is_found`。
+- 気付いたが手を付けなかったこと: `dhcp enable` が無い Config でも、`dhcp server ip-pool` があれば DHCP サーバーとして載せる。
+  資料どおりなら動いていないので言い過ぎになる。ただ同じ行の判定はほかの機種と共有していて、直すと範囲が広がるので見送った。
+- 同じ周で見送ったもの: FortiGate の `get system interface physical` と Aruba CX の `show interface brief` は、
+  公式の出力例に当たれなかった（第三者の作例とコミュニティの投稿だけ）。linkstate.py の「未確認」はそのまま。

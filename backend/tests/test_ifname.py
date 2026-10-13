@@ -39,3 +39,20 @@ def test_five_and_hundred_gig_short_names_are_expanded():
     assert ifname.expand("Fi1/0/1") == "FiveGigabitEthernet1/0/1"
     assert ifname.expand("Hu1/1/1") == "HundredGigE1/1/1"
     assert ifname.normalize("Hu1/1/1") == ifname.normalize("HundredGigE1/1/1")
+
+
+def test_comware_aggregate_short_names_are_expanded():
+    """H3C Comware の集約口の略記 `BAGG`・`RAGG` を正式名に寄せる。
+
+    `display interface brief` や `display link-aggregation` は BAGG1 と書き、Config は
+    `interface Bridge-Aggregation1` と書くため、寄せないと同じ口が別の口に見える。
+    出典: H3C「S9820-8M[S6880] Command References, R1116Pxx-6W100」04-Layer 2—LAN Switching
+    Command Reference の display link-aggregation summary（Aggregate Interface Type の凡例
+    「BAGG -- Bridge-Aggregation, ... RAGG -- Route-Aggregation」）。
+    FGE・HGE・WGE の略記は公式の対応表に当たれていない（未確認）ので、ここでは寄せない。
+    """
+    assert ifname.expand("BAGG1") == "Bridge-Aggregation1"
+    assert ifname.normalize("BAGG1") == ifname.normalize("Bridge-Aggregation1")
+    assert ifname.expand("RAGG10") == "Route-Aggregation10"
+    assert ifname.normalize("RAGG10") == ifname.normalize("Route-Aggregation10")
+    assert ifname.expand("route-aggregation10") == "Route-Aggregation10"

@@ -605,3 +605,54 @@ def test_fastiron_disable_does_not_stop_the_table() -> None:
     parsed = configparse.parse("\n".join(config + table))
     states = [item.link_state for item in parsed.interfaces]
     assert states == ["down", "disabled", "down", "up"]
+
+
+ARISTA_BRIEF = """
+show ip interface brief
+
+Interface              IP Address         Status     Protocol         MTU
+Vlan10                 10.0.10.1/24       up         up              9212
+Vlan20                 10.0.20.1/24       up         down            1500
+"""
+
+
+def test_arista_ip_interface_brief_with_the_mtu_column_is_read():
+    """Arista の `show ip interface brief` は見出しが `IP Address`（空白）で、末尾に MTU が付く。
+
+    出典: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
+    （Interface / IP Address / Status / Protocol / MTU。行の末尾は 9212 などの MTU）。
+    Status の値は出力例に up しか無いので、up / down 以外の言葉の扱いは未確認。
+    """
+    text = (FIXTURES / "arista-dc-01.txt").read_text() + ARISTA_BRIEF
+    states = _states(configparse.parse(text))
+    assert states["Vlan10"] == "up"
+    assert states["Vlan20"] == "down"
+
+
+def test_show_interfaces_paragraph_with_a_space_before_the_number_is_read() -> None:
+    """`Ethernet 0 is up, line protocol is up` のように、口の名前と番号の間が空いた段落も読む。
+
+    出典: Cisco「Cisco IOS Interface and Hardware Component Command Reference」の show interfaces の
+    出力例（`Ethernet 0 is up, line protocol is up` と `0 input errors, 0 CRC, 0 frame, ...`）。
+    空白の無い `GigabitEthernet1/0/1 is up, ...` は今までどおり読む（見張り）。
+    """
+    text = "\n".join(
+        [
+            "hostname r1",
+            "!",
+            "interface Ethernet0",
+            " ip address 10.0.0.1 255.255.255.0",
+            "!",
+            "interface Ethernet1",
+            " shutdown",
+            "!",
+            "Ethernet 0 is up, line protocol is up",
+            "  Hardware is Lance, address is 0000.0c00.750c (bia 0000.0c00.750c)",
+            "     3 input errors, 3 CRC, 0 frame, 0 overrun, 0 ignored, 0 abort",
+            "Ethernet 1 is administratively down, line protocol is down",
+        ]
+    )
+    ports = {i.name: i for i in configparse.parse(text).interfaces}
+    assert ports["Ethernet0"].link_state == "up"
+    assert ports["Ethernet0"].input_crc_errors == 3
+    assert ports["Ethernet1"].link_state == "disabled"

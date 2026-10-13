@@ -113,3 +113,26 @@
 - 採らなかった案: 何も出さずに読まない（黙って抜ける）。論理システムの行を警告（warning）にする（設定の誤りではない）。
 - 触る場所: `backend/app/services/configcheck.py` の `_JUNOS_LOGICAL_SYSTEM`、読むときは `configparse/juniper.py` と
   `configparse/__init__.py` の `parse`。
+
+## Junos の論理システムを取り込むときの設計（2026-10-12 JST。未実装）
+
+- 決めたこと: 論理システムは「1つのファイルに何台分も入っている」の一種として扱う。
+  `configs.ingest_many` が今 `configsplit.split` で台数ぶんに分けているのと同じ段で、Junos の塊に論理システムがあれば
+  `juniper.split_logical_systems` で論理システムごとの塊を足し、1台ずつ `ingest` に通す。
+  - 全体の塊は、元の字のまま渡す（世代に残す中身を変えない。今の読み手は論理システムの行を読まないので、全体の機器の値は変わらない）
+  - 論理システムの塊は `set system host-name 全体のホスト名/論理システム名` を頭に足した set 行にする。台帳の機器名と、
+    世代（ConfigSnapshot）のホスト名はこの名前になる
+  - 論理システムの世代の中身は、元の字ではなく分けた set 行になる。結線の作り直し（`rebuild_links`）は世代の中身を
+    読み直すので、分けた形で持てば読み直しても同じ結果になる
+- 理由: `ingest_many` は既に「1ファイル→複数の機器」を扱っており、世代・台帳・結線・差分の作りを変えずに済む。
+  AP の自動登録（`_register_aps`）と違い、論理システムは自分の口と経路を持つので、同じ読み手で読める形にして渡すのが素直
+- 変わらないもの: 設定の点検（`configcheck.check`）は1ファイル1機器のまま。notes の「論理システムの中は読んでいない」も残す
+  （点検を論理システムごとに出すのは別の段にする）
+- 決めていないこと（実装の前に確かめる）:
+  - 機器の種別（device_type）と拠点は全体の機器から写すか。AP の登録はコントローラの拠点を写している
+  - `device_id` を指定して取り込んだとき（今は分けない）に、論理システムをどう扱うか。指定と食い違うので、分けない方に倒す案
+  - 名前の区切りに `/` を使ってよいか（台帳・URL・画面で問題が出ないか）
+- 採らなかった案: parse が複数の ParsedConfig を返す入口（`parse_all`）を足す（10/4 の案）。呼び出し元が8か所あり、
+  全部を複数台に対応させる必要がある。`ingest_many` の分ける段に寄せれば、触るのは1か所で済む
+- 触る場所: `backend/app/services/configs.py` の `ingest_many`、`backend/app/services/configparse/juniper.py` の
+  `split_logical_systems`
