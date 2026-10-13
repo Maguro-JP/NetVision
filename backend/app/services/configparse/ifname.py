@@ -5,8 +5,8 @@
 
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
-Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE` は
-S6850 の Command Reference で確かめた（tests/test_ifname.py）。
+Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE`・`FGE`・
+`HGE` は S6850・S7500E-XS・S12500R の Command Reference で確かめた（tests/test_ifname.py）。
 ほかの略記は既存の試験の形のまま（未確認）。
 """
 
@@ -29,6 +29,8 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("fivegigabitethernet", "FiveGigabitEthernet"),
     ("forty-gigabitethernet", "FortyGigabitEthernet"),
     ("fortygigabitethernet", "FortyGigabitEthernet"),
+    # H3C Comware の 40G の正式名（出典は下の fge）
+    ("fortygige", "FortyGigabitEthernet"),
     ("hundredgige", "HundredGigE"),
     ("gigabitethernet", "GigabitEthernet"),
     # NEC IX。GigabitEthernet より先に見ると Cisco 側へ寄ってしまうので、
@@ -42,6 +44,11 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("bagg", "Bridge-Aggregation"),
     # 25G 口の略記（同じ資料の display interface twenty-fivegige 1/0/3 brief の出力が WGE1/0/3）
     ("wge", "TwentyFiveGigE"),
+    # 40G・100G の略記。出典: H3C「S7500E-XS Command References, R2418P05-6W100」（display
+    # interface fortygige 1/1/3 brief の出力が FGE1/1/3）、「S12500R Command References
+    # (R36xx)-6W101」（display interface hundredgige 1/0/3 brief の出力が HGE1/0/3）
+    ("fge", "FortyGigabitEthernet"),
+    ("hge", "HundredGigE"),
     ("ragg", "Route-Aggregation"),
     ("fastethernet", "FastEthernet"),
     ("port-channel", "Port-channel"),

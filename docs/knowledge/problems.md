@@ -1680,3 +1680,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見なかったこと: H3C の `FGE`・`HGE`・`MGE`。同じ資料の見えた範囲には出力例が無く、未確認のまま。
 - 同じ周で見送ったもの: H3C の `dhcp enable` が無い Config を DHCP サーバーとして載せる件。判定の `dhcp server ip-pool` は
   NEC QX と共用で、QX の Config 例には `dhcp enable` が無い。QX の資料にこの環境から届かないので、条件を足すと QX を崩しうる。
+
+## H3C Comware の 40G・100G 口の略記 FGE・HGE を、正式名に寄せていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/ifname.py` の略記の表に `FGE`・`HGE` が無く、
+  H3C の 40G の正式名 `FortyGigE` も無かった（`fortygig` は語がちょうど一致するときしか当たらない）。表示の出力の
+  `FGE1/1/3`・`HGE1/0/3` と、Config の `FortyGigE1/1/3`・`HundredGigE1/0/3` が別の口として扱われていた。
+- 確かめた資料: H3C「S7500E-XS Command References, R2418P05-6W100」01-Ethernet interface commands
+  （`display interface fortygige 1/1/3 brief description` の出力が `FGE1/1/3`、Interface 列の説明は「Abbreviated interface name」）と、
+  H3C「S12500R Switch Router Series Command References (R36xx)-6W101」03-Ethernet interface commands
+  （`display interface hundredgige 1/0/3 brief description` の出力が `HGE1/0/3`）。
+- 直したこと: 略記の表に `fortygige`・`fge`・`hge` を足し、Cisco の `Fo`・`FortyGigabitEthernet` と `Hu`・`HundredGigE` と
+  同じ正式名に寄せた。試験は `test_ifname.py` の `test_comware_forty_and_hundred_gig_short_names_are_expanded`。
+- 見なかったこと: H3C の `MGE`（管理口 M-GigabitEthernet）。対になる出力例に当たれず、未確認のまま。

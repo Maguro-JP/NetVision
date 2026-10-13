@@ -70,3 +70,20 @@ def test_comware_twenty_five_gig_short_name_is_expanded():
     assert ifname.expand("Twenty-FiveGigE1/0/3") == "TwentyFiveGigE1/0/3"
     assert ifname.normalize("WGE1/0/3") == ifname.normalize("Twenty-FiveGigE1/0/3")
     assert ifname.normalize("WGE1/0/3") == ifname.normalize("Twe1/0/3")
+
+
+def test_comware_forty_and_hundred_gig_short_names_are_expanded():
+    """H3C Comware の 40G 口 `FGE` と 100G 口 `HGE` を、Config の正式名と同じ口に寄せる。
+
+    出典: H3C「S7500E-XS Command References, R2418P05-6W100」01-Ethernet interface commands
+    （`display interface fortygige 1/1/3 brief description` の出力が `FGE1/1/3`）と、
+    H3C「S12500R Switch Router Series Command References (R36xx)-6W101」03-Ethernet interface
+    commands（`display interface hundredgige 1/0/3 brief description` の出力が `HGE1/0/3`）。
+    40G は Cisco の `Fo`・`FortyGigabitEthernet` と、100G は `Hu`・`HundredGigE` と
+    同じ正式名にそろえる。
+    """
+    assert ifname.normalize("FGE1/1/3") == ifname.normalize("FortyGigE1/1/3")
+    assert ifname.normalize("FGE1/1/3") == ifname.normalize("Fo1/1/3")
+    assert ifname.expand("FortyGigE1/1/3") == "FortyGigabitEthernet1/1/3"
+    assert ifname.normalize("HGE1/0/3") == ifname.normalize("HundredGigE1/0/3")
+    assert ifname.expand("HGE1/0/3") == "HundredGigE1/0/3"
