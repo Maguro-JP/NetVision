@@ -49,6 +49,9 @@ class CheckResult:
 #: 機器に紐づかなくても言えること。どれも「入っていないと後で困る」もの
 _HYGIENE = (
     (
+        # Cisco（出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300
+        # Switches)」Layer 2/3 Commands の switchport mode。dynamic auto / desirable は DTP で
+        # 相手と話し合ってトランクになる）。書いていない既定の dynamic auto は別の規則で見る
         re.compile(r"^\s*switchport mode dynamic\s+(?:auto|desirable)\s*$", re.IGNORECASE),
         HIGH,
         "相手任せでトランクになる口があります",

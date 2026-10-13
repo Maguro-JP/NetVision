@@ -3049,3 +3049,21 @@ def test_no_exec_timeout_is_called_out_like_zero_zero(db_session):
     # 時間を決めてあれば言わない
     titles = _titles(configcheck.check(db_session, head + " exec-timeout 10 0\n"))
     assert not any("いつまでも閉じません" in t for t in titles)
+
+
+def test_both_negotiating_modes_are_called_out_and_fixed_modes_are_not(db_session):
+    """見張り: `switchport mode dynamic auto` と `dynamic desirable` を相手任せのトランクとして
+    指摘し、`access`・`trunk` は言わない。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+    Layer 2/3 Commands の switchport mode（switchport mode { access | dynamic { auto | desirable }
+    | trunk }。dynamic auto は相手が trunk か desirable ならトランクに、dynamic desirable は相手が
+    trunk・desirable・auto ならトランクになる。既定は dynamic auto）。
+    """
+    head = "hostname sw-dtp2\ninterface GigabitEthernet1/0/1\n"
+    for mode in ("dynamic auto", "dynamic desirable"):
+        titles = _titles(configcheck.check(db_session, head + f" switchport mode {mode}\n"))
+        assert any("相手任せ" in t for t in titles), mode
+    for mode in ("access", "trunk"):
+        titles = _titles(configcheck.check(db_session, head + f" switchport mode {mode}\n"))
+        assert not any("相手任せ" in t for t in titles), mode

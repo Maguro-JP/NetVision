@@ -1707,3 +1707,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見なかったこと: Huawei の `idle-timeout 0 0`（同じ規則に当たる）。公式のページが画面の中で後から読み込む作りで、
   この環境の取得では中身が空だった。検索の抜粋では「0 0 で時間切れなし」とあるが、本文に当たれていないので未確認のまま。
 - 同じ周で見送ったもの: H3C の管理口の略記 `MGE`。対になる出力例に当たれなかった。
+
+## 見張り: Cisco の `switchport mode dynamic auto / desirable` の規則に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configcheck.py` の「相手任せでトランクになる口があります」は、Cisco の行に出典が無かった。公式資料で確かめ、
+  `dynamic auto`・`dynamic desirable` を指摘して `access`・`trunk` を言わない今の形で合っていた。直す所は無く、
+  直す前のコードで通る見張りの試験として足し、規則に出典を書いた。書いていない既定の dynamic auto は、既にある別の規則
+  （「相手次第でトランク」）で見ている。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Layer 2/3 Commands の
+  switchport mode（`switchport mode { access | dynamic { auto | desirable } | trunk }`、Command Default は dynamic auto）。
+- 試験: `test_configcheck.py` の `test_both_negotiating_modes_are_called_out_and_fixed_modes_are_not`。
+- 同じ周で見送ったもの: Cisco の `transport input ssh telnet` のように telnet を後ろに書いた行を、今の規則
+  （`transport input (?:all|telnet)`）は当てない。複数の方式を並べて書けることを公式の資料で確かめられなかった
+  （IOS 12.2 Terminal Services Configuration Guide は `transport input { ... | ssh | telnet | ... }` の形だけ）ので、直していない。
