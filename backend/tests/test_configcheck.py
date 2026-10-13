@@ -3032,3 +3032,20 @@ def test_huawei_login_without_authentication_shows_the_vrp_way_to_fix(db_session
     finding = next(f for f in findings if f.title == "機器に入る口で、認証を求めていません")
     assert "authentication-mode aaa" in finding.why
     assert "scheme" not in finding.why
+
+
+def test_no_exec_timeout_is_called_out_like_zero_zero(db_session):
+    """Cisco IOS の `no exec-timeout` も、時間切れの無い画面として指摘する。
+
+    出典: Cisco「Cisco IOS Configuration Fundamentals Command Reference」D through E の
+    exec-timeout（Usage Guidelines「To specify no timeout, enter the no form of this command.」、
+    Command History 15.0(1)SY2「The no form of the command updated to configure an exec-timeout
+    of 0 0」、Command Default は 10 分）。`exec-timeout 0 0` は今までどおり指摘する（見張り）。
+    """
+    head = "hostname r-exec\n!\nline vty 0 4\n transport input ssh\n"
+    for line in (" no exec-timeout\n", " exec-timeout 0 0\n"):
+        titles = _titles(configcheck.check(db_session, head + line))
+        assert any("いつまでも閉じません" in t for t in titles), line
+    # 時間を決めてあれば言わない
+    titles = _titles(configcheck.check(db_session, head + " exec-timeout 10 0\n"))
+    assert not any("いつまでも閉じません" in t for t in titles)

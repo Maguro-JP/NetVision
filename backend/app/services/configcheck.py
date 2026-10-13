@@ -180,7 +180,11 @@ _HYGIENE = (
     ),
     (
         re.compile(
+            # Cisco IOS。0 0 と no の形はどちらも時間切れにならない（出典: Cisco「Cisco IOS
+            # Configuration Fundamentals Command Reference」D through E の exec-timeout、
+            # 既定は 10 分）
             r"^\s*(?:exec-timeout 0 0\s*$"
+            r"|no exec-timeout\s*$"
             # NEC QX の user line: 0 にすると時間切れにならない（出典: NEC「QX-S1100G シリーズ
             # コマンドマニュアル 1.9版」2.1.16 idle-timeout、既定は 10 分）。
             # `0 30` は 30 秒なので言わない

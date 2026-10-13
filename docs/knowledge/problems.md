@@ -1693,3 +1693,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 略記の表に `fortygige`・`fge`・`hge` を足し、Cisco の `Fo`・`FortyGigabitEthernet` と `Hu`・`HundredGigE` と
   同じ正式名に寄せた。試験は `test_ifname.py` の `test_comware_forty_and_hundred_gig_short_names_are_expanded`。
 - 見なかったこと: H3C の `MGE`（管理口 M-GigabitEthernet）。対になる出力例に当たれず、未確認のまま。
+
+## Cisco IOS の `no exec-timeout`（時間切れの無い画面）を指摘していなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configcheck.py` の「入ったままの画面が、いつまでも閉じません」は
+  `exec-timeout 0 0` だけを見ていた。Cisco は `no exec-timeout` も「時間切れなし」と定めているのに、こちらは黙って通していた。
+  Cisco の書き方の行には出典も付いていなかった。
+- 確かめた資料: Cisco「Cisco IOS Configuration Fundamentals Command Reference」D through E の exec-timeout
+  （Usage Guidelines「To specify no timeout, enter the no form of this command.」、Command History 15.0(1)SY2
+  「The no form of the command updated to configure an exec-timeout of 0 0」、Command Default は 10 分）。
+- 直したこと: 規則の正規表現に `no exec-timeout` を足し、Cisco の行に出典を書いた。`exec-timeout 10 0` のように時間を決めた行は
+  今までどおり言わない。試験は `test_configcheck.py` の `test_no_exec_timeout_is_called_out_like_zero_zero`。
+- 見なかったこと: Huawei の `idle-timeout 0 0`（同じ規則に当たる）。公式のページが画面の中で後から読み込む作りで、
+  この環境の取得では中身が空だった。検索の抜粋では「0 0 で時間切れなし」とあるが、本文に当たれていないので未確認のまま。
+- 同じ周で見送ったもの: H3C の管理口の略記 `MGE`。対になる出力例に当たれなかった。
