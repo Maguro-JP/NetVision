@@ -41,8 +41,11 @@ from app.services.configparse.base import ParsedConfig, ParsedInterface
 from app.services.configparse.ifname import normalize
 
 #: Arista は末尾に Flags が付く。それ以外は同じ並び
+#: `show interfaces status err-disabled` は Vlan 以降の代わりに Reason が付く（出典: Cisco
+#: 「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and
+#: Hardware Commands の show interfaces の出力例 `Port Name Status Reason`）
 _STATUS_HEADER = re.compile(
-    r"^\s*Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type\b", re.IGNORECASE
+    r"^\s*Port\s+Name\s+Status\s+(?:Vlan\s+Duplex\s+Speed\s+Type|Reason\s*$)", re.IGNORECASE
 )
 #: Aruba CX `show interface brief`（Port / Native VLAN / Mode / Type / Enabled / Status / ...）
 #: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）

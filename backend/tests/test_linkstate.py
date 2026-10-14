@@ -656,3 +656,22 @@ def test_show_interfaces_paragraph_with_a_space_before_the_number_is_read() -> N
     assert ports["Ethernet0"].link_state == "up"
     assert ports["Ethernet0"].input_crc_errors == 3
     assert ports["Ethernet1"].link_state == "disabled"
+
+
+def test_show_interfaces_status_err_disabled_with_the_reason_column_is_read():
+    """`show interfaces status err-disabled` は見出しが `Port Name Status Reason` で、
+    Vlan 以降の列が無い。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+    Interface and Hardware Commands の show interfaces（status [ err-disabled | inactive ]、出力例
+    `Port Name Status Reason` / `Gi1/0/2 err-disabled gbic-invalid`）。
+    """
+    text = (FIXTURES / "core-sw-01.txt").read_text() + (
+        "\nshow interfaces status err-disabled\n"
+        "Port      Name               Status       Reason\n"
+        "Gi1/0/2                      err-disabled gbic-invalid\n"
+        "Gi1/0/24  to-printer         err-disabled dtp-flap\n"
+    )
+    states = _states(configparse.parse(text))
+    assert states["GigabitEthernet1/0/2"] == "err-disabled"
+    assert states["GigabitEthernet1/0/24"] == "err-disabled"

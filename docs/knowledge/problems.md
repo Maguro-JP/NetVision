@@ -1730,3 +1730,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   secure status の ip http server（To disable the HTTP server, use the no form of this command）と ip http secure-server
   （When enabling an HTTPS server, you should always disable the standard HTTP server ... using the no ip http server command）。
 - 試験: `test_configcheck.py` の `test_ios_http_server_is_called_out_and_the_secure_server_is_not`。
+
+## Cisco の `show interfaces status err-disabled` の表を、見出しの形が違うために読んでいなかった（2026-10-14 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の `show interfaces status` の見出しの判定は
+  `Port Name Status Vlan Duplex Speed Type` の形だけだった。err-disabled に絞った表は見出しが `Port Name Status Reason` で、
+  当たらずに黙って読み飛ばしていた。止まった口を洗い出すために打つ表なのに、口の状態が空のままになる。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and Hardware Commands の
+  show interfaces（`status [ err-disabled | inactive ]`、出力例 `Port Name Status Reason` / `Gi1/0/2 err-disabled gbic-invalid` /
+  `Gi2/0/3 err-disabled dtp-flap`）。
+- 直したこと: 見出しの判定に `Port Name Status Reason` の形を足した。行の読み方は今までの `_read_status` のまま（行の中から
+  Status の言葉を探す）。試験は `test_linkstate.py` の `test_show_interfaces_status_err_disabled_with_the_reason_column_is_read`。
+- 見なかったこと: `show interfaces status inactive` の出力例。資料には選択肢の説明（Displays interfaces in an inactive state）だけで、
+  出力例が無かった。
+- 同じ周で見送ったもの: Cisco の `no login` の規則の出典。Security Command Reference の login (line) の項に、この環境から当たれなかった
+  （新しい版の章は見つからず、古い版は 404 か 504）。
