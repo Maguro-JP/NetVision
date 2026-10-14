@@ -1769,3 +1769,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見なかったこと: `monitoring`（SPAN の宛先の口）。同じ資料の出力例に出てこず、未確認のまま。
 - 同じ周で見送ったもの: Catalyst 9300 のアプリ用の口 `AppGigabitEthernet` の略記 `Ap`。正式名は Cisco の KB 222780
   （Understand App Hosting on Catalyst 9000 Switches）にあるが、略記の例は公式の資料に無く、コミュニティの投稿だけだった。
+
+## 見張り: Arista の `show interfaces status` の読み方に出典が無かった（2026-10-15 JST）
+
+- 確かめたこと: `configparse/linkstate.py` は「Arista は末尾に Flags が付く」とだけ書き、出典が無かった。EOS の公式マニュアルで
+  見出しの並びと Status の言葉を確かめ、今の読み方で合っていた。直す所は無く、直す前のコードで通る見張りの試験として足し、
+  出典を書いた（末尾は Flags と Encapsulation の2列）。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces ... status の出力例
+  （`Port Name Status Vlan Duplex Speed Type Flags Encapsulation`、行は connected・notconnect・disabled）。
+- 試験: `test_linkstate.py` の `test_arista_status_words_follow_the_eos_manual`。
+- 見なかったこと: Arista の err-disabled の言葉（errdisabled か err-disabled か）。読めた範囲の出力例に無く、未確認のまま。

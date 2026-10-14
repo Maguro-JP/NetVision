@@ -690,3 +690,22 @@ def test_inactive_in_show_interfaces_status_is_kept_as_its_own_state():
         "Gi1/0/2                      inactive     99           auto   auto 10/100/1000BaseTX\n"
     )
     assert _states(configparse.parse(text))["GigabitEthernet1/0/2"] == "inactive"
+
+
+def test_arista_status_words_follow_the_eos_manual():
+    """見張り: Arista の `show interfaces status`（末尾に Flags と Encapsulation の列）の
+    connected・notconnect・disabled を読む。
+
+    出典: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces ... status の出力例
+    （`Port Name Status Vlan Duplex Speed Type Flags Encapsulation`、
+    `Et4/1 connected 1 full 100G ...`・`Et5/1 notconnect ...`・`Et4/1 disabled ...`）。
+    """
+    text = (FIXTURES / "arista-dc-01.txt").read_text() + (
+        "\nshow interfaces status\n"
+        "Port   Name        Status     Vlan  Duplex Speed Type       Flags Encapsulation\n"
+        "Et1        to-core-01    connected    1        full   10G    10GBASE-SR\n"
+        "Et2                      disabled     1        full   10G    10GBASE-SR\n"
+    )
+    states = _states(configparse.parse(text))
+    assert states["Ethernet1"] == "up"
+    assert states["Ethernet2"] == "disabled"

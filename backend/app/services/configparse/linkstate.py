@@ -40,7 +40,9 @@ import re
 from app.services.configparse.base import ParsedConfig, ParsedInterface
 from app.services.configparse.ifname import normalize
 
-#: Arista は末尾に Flags が付く。それ以外は同じ並び
+#: Arista は末尾に Flags と Encapsulation が付く。それ以外は同じ並び（出典: Arista「EOS 4.36.2F
+#: User Manual - Ethernet Ports」の show interfaces status の出力例。言葉は connected・notconnect・
+#: disabled）
 #: `show interfaces status err-disabled` は Vlan 以降の代わりに Reason が付く（出典: Cisco
 #: 「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and
 #: Hardware Commands の show interfaces の出力例 `Port Name Status Reason`）
