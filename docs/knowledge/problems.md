@@ -1745,3 +1745,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   出力例が無かった。
 - 同じ周で見送ったもの: Cisco の `no login` の規則の出典。Security Command Reference の login (line) の項に、この環境から当たれなかった
   （新しい版の章は見つからず、古い版は 404 か 504）。
+
+## 見張り: 機能の一覧の Cisco IOS の `ip dhcp pool` に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configparse/features.py` の「DHCP サーバー」は、Cisco IOS の `ip dhcp pool` の行に出典が無かった。公式資料で
+  ip dhcp pool が Cisco IOS の DHCP サーバーの塊であることを確かめ、今の形で合っていた。直す所は無く、直す前のコードで通る
+  見張りの試験として足し、行と冒頭の「確かめた行」に出典を書いた。DHCP の受け手（`ip address dhcp`）を拾わないことも同じ試験で見ている。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」IP Addressing Services Commands
+  （Related Commands の ip dhcp pool「Configures a DHCP address pool on a Cisco IOS DHCP server」、ip address dhcp の例）。
+- 試験: `test_features.py` の `test_ios_dhcp_pool_is_found_as_dhcp_server`。
+- 見なかったこと: Cisco の `ip helper-address`（DHCP リレー）。同じ版の Command Reference のどの章にも項が無く、未確認のまま。
+- 同じ周で見送ったもの: Cisco の `transport input` の並べ書き。Catalyst 9300 17.9 の System Management Commands にも
+  1つの方式（ssh・all・none）を書いた例しか無かった。
