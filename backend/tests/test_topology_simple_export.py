@@ -102,7 +102,7 @@ def test_simple_export_drops_everything_but_names_and_lines(client):
     assert res.status_code == 200
     assert "core-sw-01" in res.text
     assert "acc-sw-01" in res.text
-    # 型番・保守状態・凡例は載せない
+    # 型番・保守状態とその凡例は載せない
     assert "C9500-40X" not in res.text
     assert "保守・EoL の状態" not in res.text
     assert "期限切れ" not in res.text
@@ -141,3 +141,34 @@ def test_a_line_that_is_down_on_the_device_is_flagged_on_the_edge(client):
     )
     edge = client.get(f"{API}/topology").json()["edges"][0]
     assert edge["link_down"] is True
+
+
+def test_simple_export_explains_its_boxes_and_lines(client):
+    """簡易図にも凡例を置く。名前と線だけの図でも、渡された人には
+    四角と線が何かを図の中で説明しておく。保守状態の説明は載せない。"""
+    setup_pair(client)
+    res = client.get(f"{API}/topology/export.svg", params={"style": "simple"})
+
+    assert "四角 = 機器" in res.text
+    assert "線 = 機器どうしの結線" in res.text
+    assert "保守・EoL の状態" not in res.text
+
+
+def test_detail_legend_names_the_device_glyphs_and_the_stopped_shade(client):
+    """箱の左上の記号と、灰色の地（稼働していない機器）を凡例で説明する。
+    使っている種別だけを並べ、止まっている機器が無ければ灰色の説明は出さない。"""
+    setup_pair(client)
+    res = client.get(f"{API}/topology/export.svg")
+    assert "機器の種別" in res.text
+    # 試験の機器は種別が「その他」なので、その記号だけが並ぶ
+    assert "▪ その他" in res.text
+    assert "◇ ルーター" not in res.text
+    assert "稼働していない機器" not in res.text
+
+    devices = client.get(f"{API}/devices").json()
+    target = next(d for d in devices if d["hostname"] == "acc-sw-01")
+    assert (
+        client.patch(f"{API}/devices/{target['id']}", json={"status": "standby"}).status_code == 200
+    )
+    res = client.get(f"{API}/topology/export.svg")
+    assert "灰色の地 = 稼働していない機器" in res.text
