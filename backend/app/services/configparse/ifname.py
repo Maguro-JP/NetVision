@@ -5,8 +5,9 @@
 
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
-Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の Command Reference
-で確かめた（tests/test_ifname.py）。ほかの略記は既存の試験の形のまま（未確認）。
+Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE`・`FGE`・
+`HGE` は S6850・S7500E-XS・S12500R の Command Reference で確かめた（tests/test_ifname.py）。
+ほかの略記は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -19,12 +20,17 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("ten-gigabitethernet", "TenGigabitEthernet"),
     ("tengigabitethernet", "TenGigabitEthernet"),
     ("twentyfivegige", "TwentyFiveGigE"),
+    # H3C Comware の正式名はハイフン入り。出典: H3C「S6850 & S9850 Switch Series Command
+    # References, Release 655x-6W100」03-Ethernet interface commands
+    ("twenty-fivegige", "TwentyFiveGigE"),
     # Catalyst 9000 の mGig（2.5G・5G）。出典: Command Reference, Cisco IOS XE 17.10.x
     # （Catalyst 9300）の interface コマンド
     ("twogigabitethernet", "TwoGigabitEthernet"),
     ("fivegigabitethernet", "FiveGigabitEthernet"),
     ("forty-gigabitethernet", "FortyGigabitEthernet"),
     ("fortygigabitethernet", "FortyGigabitEthernet"),
+    # H3C Comware の 40G の正式名（出典は下の fge）
+    ("fortygige", "FortyGigabitEthernet"),
     ("hundredgige", "HundredGigE"),
     ("gigabitethernet", "GigabitEthernet"),
     # NEC IX。GigabitEthernet より先に見ると Cisco 側へ寄ってしまうので、
@@ -36,6 +42,13 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     # R1116Pxx-6W100」display link-aggregation summary の凡例
     # （BAGG -- Bridge-Aggregation, RAGG -- Route-Aggregation）
     ("bagg", "Bridge-Aggregation"),
+    # 25G 口の略記（同じ資料の display interface twenty-fivegige 1/0/3 brief の出力が WGE1/0/3）
+    ("wge", "TwentyFiveGigE"),
+    # 40G・100G の略記。出典: H3C「S7500E-XS Command References, R2418P05-6W100」（display
+    # interface fortygige 1/1/3 brief の出力が FGE1/1/3）、「S12500R Command References
+    # (R36xx)-6W101」（display interface hundredgige 1/0/3 brief の出力が HGE1/0/3）
+    ("fge", "FortyGigabitEthernet"),
+    ("hge", "HundredGigE"),
     ("ragg", "Route-Aggregation"),
     ("fastethernet", "FastEthernet"),
     ("port-channel", "Port-channel"),

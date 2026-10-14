@@ -1666,3 +1666,67 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   資料どおりなら動いていないので言い過ぎになる。ただ同じ行の判定はほかの機種と共有していて、直すと範囲が広がるので見送った。
 - 同じ周で見送ったもの: FortiGate の `get system interface physical` と Aruba CX の `show interface brief` は、
   公式の出力例に当たれなかった（第三者の作例とコミュニティの投稿だけ）。linkstate.py の「未確認」はそのまま。
+
+## H3C Comware の 25G 口の略記 WGE と、正式名 Twenty-FiveGigE を同じ口に寄せていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/ifname.py` の略記の表に、H3C の正式名
+  `Twenty-FiveGigE`（ハイフン入り）も略記の `WGE` も無かった。表示の出力の `WGE1/0/3` と Config の
+  `interface Twenty-FiveGigE1/0/3` が、別の口として扱われていた。
+- 確かめた資料: H3C「S6850 & S9850 Switch Series Command References, Release 655x-6W100」03-Ethernet interface commands
+  （`display interface twenty-fivegige 1/0/3 brief description` の出力が `WGE1/0/3`。display counters などの
+  Interface 列の説明は「Abbreviated interface name」）。
+- 直したこと: 略記の表に `twenty-fivegige` と `wge` を足し、Cisco の `TwentyFiveGigE`・`Twe` と同じ正式名に寄せた。
+  試験は `test_ifname.py` の `test_comware_twenty_five_gig_short_name_is_expanded`。
+- 見なかったこと: H3C の `FGE`・`HGE`・`MGE`。同じ資料の見えた範囲には出力例が無く、未確認のまま。
+- 同じ周で見送ったもの: H3C の `dhcp enable` が無い Config を DHCP サーバーとして載せる件。判定の `dhcp server ip-pool` は
+  NEC QX と共用で、QX の Config 例には `dhcp enable` が無い。QX の資料にこの環境から届かないので、条件を足すと QX を崩しうる。
+
+## H3C Comware の 40G・100G 口の略記 FGE・HGE を、正式名に寄せていなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/ifname.py` の略記の表に `FGE`・`HGE` が無く、
+  H3C の 40G の正式名 `FortyGigE` も無かった（`fortygig` は語がちょうど一致するときしか当たらない）。表示の出力の
+  `FGE1/1/3`・`HGE1/0/3` と、Config の `FortyGigE1/1/3`・`HundredGigE1/0/3` が別の口として扱われていた。
+- 確かめた資料: H3C「S7500E-XS Command References, R2418P05-6W100」01-Ethernet interface commands
+  （`display interface fortygige 1/1/3 brief description` の出力が `FGE1/1/3`、Interface 列の説明は「Abbreviated interface name」）と、
+  H3C「S12500R Switch Router Series Command References (R36xx)-6W101」03-Ethernet interface commands
+  （`display interface hundredgige 1/0/3 brief description` の出力が `HGE1/0/3`）。
+- 直したこと: 略記の表に `fortygige`・`fge`・`hge` を足し、Cisco の `Fo`・`FortyGigabitEthernet` と `Hu`・`HundredGigE` と
+  同じ正式名に寄せた。試験は `test_ifname.py` の `test_comware_forty_and_hundred_gig_short_names_are_expanded`。
+- 見なかったこと: H3C の `MGE`（管理口 M-GigabitEthernet）。対になる出力例に当たれず、未確認のまま。
+
+## Cisco IOS の `no exec-timeout`（時間切れの無い画面）を指摘していなかった（2026-10-13 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configcheck.py` の「入ったままの画面が、いつまでも閉じません」は
+  `exec-timeout 0 0` だけを見ていた。Cisco は `no exec-timeout` も「時間切れなし」と定めているのに、こちらは黙って通していた。
+  Cisco の書き方の行には出典も付いていなかった。
+- 確かめた資料: Cisco「Cisco IOS Configuration Fundamentals Command Reference」D through E の exec-timeout
+  （Usage Guidelines「To specify no timeout, enter the no form of this command.」、Command History 15.0(1)SY2
+  「The no form of the command updated to configure an exec-timeout of 0 0」、Command Default は 10 分）。
+- 直したこと: 規則の正規表現に `no exec-timeout` を足し、Cisco の行に出典を書いた。`exec-timeout 10 0` のように時間を決めた行は
+  今までどおり言わない。試験は `test_configcheck.py` の `test_no_exec_timeout_is_called_out_like_zero_zero`。
+- 見なかったこと: Huawei の `idle-timeout 0 0`（同じ規則に当たる）。公式のページが画面の中で後から読み込む作りで、
+  この環境の取得では中身が空だった。検索の抜粋では「0 0 で時間切れなし」とあるが、本文に当たれていないので未確認のまま。
+- 同じ周で見送ったもの: H3C の管理口の略記 `MGE`。対になる出力例に当たれなかった。
+
+## 見張り: Cisco の `switchport mode dynamic auto / desirable` の規則に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configcheck.py` の「相手任せでトランクになる口があります」は、Cisco の行に出典が無かった。公式資料で確かめ、
+  `dynamic auto`・`dynamic desirable` を指摘して `access`・`trunk` を言わない今の形で合っていた。直す所は無く、
+  直す前のコードで通る見張りの試験として足し、規則に出典を書いた。書いていない既定の dynamic auto は、既にある別の規則
+  （「相手次第でトランク」）で見ている。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Layer 2/3 Commands の
+  switchport mode（`switchport mode { access | dynamic { auto | desirable } | trunk }`、Command Default は dynamic auto）。
+- 試験: `test_configcheck.py` の `test_both_negotiating_modes_are_called_out_and_fixed_modes_are_not`。
+- 同じ周で見送ったもの: Cisco の `transport input ssh telnet` のように telnet を後ろに書いた行を、今の規則
+  （`transport input (?:all|telnet)`）は当てない。複数の方式を並べて書けることを公式の資料で確かめられなかった
+  （IOS 12.2 Terminal Services Configuration Guide は `transport input { ... | ssh | telnet | ... }` の形だけ）ので、直していない。
+
+## 見張り: Cisco の `ip http server` の規則に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configcheck.py` の「管理用の web が開いています」は、Cisco の行に出典が無かった。公式資料で確かめ、
+  `ip http server` を指摘し、`ip http secure-server`（https）と `no ip http server` を言わない今の形で合っていた。
+  直す所は無く、直す前のコードで通る見張りの試験として足し、規則に出典を書いた。直し方の文（no ip http server）も資料と同じ。
+- 確かめた資料: Cisco「Cisco IOS HTTP Services Command Reference」clear ip http client cookie through show ip http server
+  secure status の ip http server（To disable the HTTP server, use the no form of this command）と ip http secure-server
+  （When enabling an HTTPS server, you should always disable the standard HTTP server ... using the no ip http server command）。
+- 試験: `test_configcheck.py` の `test_ios_http_server_is_called_out_and_the_secure_server_is_not`。

@@ -3032,3 +3032,55 @@ def test_huawei_login_without_authentication_shows_the_vrp_way_to_fix(db_session
     finding = next(f for f in findings if f.title == "機器に入る口で、認証を求めていません")
     assert "authentication-mode aaa" in finding.why
     assert "scheme" not in finding.why
+
+
+def test_no_exec_timeout_is_called_out_like_zero_zero(db_session):
+    """Cisco IOS の `no exec-timeout` も、時間切れの無い画面として指摘する。
+
+    出典: Cisco「Cisco IOS Configuration Fundamentals Command Reference」D through E の
+    exec-timeout（Usage Guidelines「To specify no timeout, enter the no form of this command.」、
+    Command History 15.0(1)SY2「The no form of the command updated to configure an exec-timeout
+    of 0 0」、Command Default は 10 分）。`exec-timeout 0 0` は今までどおり指摘する（見張り）。
+    """
+    head = "hostname r-exec\n!\nline vty 0 4\n transport input ssh\n"
+    for line in (" no exec-timeout\n", " exec-timeout 0 0\n"):
+        titles = _titles(configcheck.check(db_session, head + line))
+        assert any("いつまでも閉じません" in t for t in titles), line
+    # 時間を決めてあれば言わない
+    titles = _titles(configcheck.check(db_session, head + " exec-timeout 10 0\n"))
+    assert not any("いつまでも閉じません" in t for t in titles)
+
+
+def test_both_negotiating_modes_are_called_out_and_fixed_modes_are_not(db_session):
+    """見張り: `switchport mode dynamic auto` と `dynamic desirable` を相手任せのトランクとして
+    指摘し、`access`・`trunk` は言わない。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+    Layer 2/3 Commands の switchport mode（switchport mode { access | dynamic { auto | desirable }
+    | trunk }。dynamic auto は相手が trunk か desirable ならトランクに、dynamic desirable は相手が
+    trunk・desirable・auto ならトランクになる。既定は dynamic auto）。
+    """
+    head = "hostname sw-dtp2\ninterface GigabitEthernet1/0/1\n"
+    for mode in ("dynamic auto", "dynamic desirable"):
+        titles = _titles(configcheck.check(db_session, head + f" switchport mode {mode}\n"))
+        assert any("相手任せ" in t for t in titles), mode
+    for mode in ("access", "trunk"):
+        titles = _titles(configcheck.check(db_session, head + f" switchport mode {mode}\n"))
+        assert not any("相手任せ" in t for t in titles), mode
+
+
+def test_ios_http_server_is_called_out_and_the_secure_server_is_not(db_session):
+    """見張り: Cisco IOS の `ip http server` だけを「管理用の web が開いています」として指摘し、
+    `ip http secure-server`（https）と `no ip http server` は言わない。
+
+    出典: Cisco「Cisco IOS HTTP Services Command Reference」clear ip http client cookie through
+    show ip http server secure status の ip http server（To disable the HTTP server, use the no
+    form）と ip http secure-server（When enabling an HTTPS server, you should always disable
+    the standard HTTP server ... using the no ip http server command）。
+    """
+    head = "hostname r-web\n!\n"
+    titles = _titles(configcheck.check(db_session, head + "ip http server\n"))
+    assert any("管理用の web" in t for t in titles)
+    for line in ("ip http secure-server\n", "no ip http server\nip http secure-server\n"):
+        titles = _titles(configcheck.check(db_session, head + line))
+        assert not any("管理用の web" in t for t in titles), line

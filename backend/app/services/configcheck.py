@@ -49,6 +49,9 @@ class CheckResult:
 #: 機器に紐づかなくても言えること。どれも「入っていないと後で困る」もの
 _HYGIENE = (
     (
+        # Cisco（出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300
+        # Switches)」Layer 2/3 Commands の switchport mode。dynamic auto / desirable は DTP で
+        # 相手と話し合ってトランクになる）。書いていない既定の dynamic auto は別の規則で見る
         re.compile(r"^\s*switchport mode dynamic\s+(?:auto|desirable)\s*$", re.IGNORECASE),
         HIGH,
         "相手任せでトランクになる口があります",
@@ -65,7 +68,9 @@ _HYGIENE = (
     ),
     (
         re.compile(
-            r"^\s*(?:ip http server\s*$"  # Cisco IOS
+            # Cisco IOS（出典: Cisco「Cisco IOS HTTP Services Command Reference」の ip http server。
+            # 閉じるのは no ip http server、https は ip http secure-server で別の行）
+            r"^\s*(?:ip http server\s*$"
             r"|set system services web-management http\b"  # Junos（https は別）
             r"|set allowaccess\b.*\bhttp\b(?!s)"  # FortiGate
             # NEC QX（出典: NEC「QX-S1100G シリーズ コマンドマニュアル 1.9版」2.1.18
@@ -180,7 +185,11 @@ _HYGIENE = (
     ),
     (
         re.compile(
+            # Cisco IOS。0 0 と no の形はどちらも時間切れにならない（出典: Cisco「Cisco IOS
+            # Configuration Fundamentals Command Reference」D through E の exec-timeout、
+            # 既定は 10 分）
             r"^\s*(?:exec-timeout 0 0\s*$"
+            r"|no exec-timeout\s*$"
             # NEC QX の user line: 0 にすると時間切れにならない（出典: NEC「QX-S1100G シリーズ
             # コマンドマニュアル 1.9版」2.1.16 idle-timeout、既定は 10 分）。
             # `0 30` は 30 秒なので言わない
