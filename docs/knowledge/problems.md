@@ -1757,3 +1757,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見なかったこと: Cisco の `ip helper-address`（DHCP リレー）。同じ版の Command Reference のどの章にも項が無く、未確認のまま。
 - 同じ周で見送ったもの: Cisco の `transport input` の並べ書き。Catalyst 9300 17.9 の System Management Commands にも
   1つの方式（ssh・all・none）を書いた例しか無かった。
+
+## 見張り: Cisco の `show interfaces status` の `inactive` に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の Status 列の言葉のうち `inactive` は「既存の試験の形（未確認）」だった。公式資料で
+  Cisco の口の状態の1つであることを確かめた。読み手は今までも言葉をそのまま持っており、直す所は無かった。直す前のコードで通る
+  見張りの試験として足し、言葉の一覧の出典を書き足した。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and Hardware Commands の
+  show interfaces（`status [ err-disabled | inactive ]`、「inactive (Optional) Displays interfaces in an inactive state.」）。
+- 試験: `test_linkstate.py` の `test_inactive_in_show_interfaces_status_is_kept_as_its_own_state`。
+- 見なかったこと: `monitoring`（SPAN の宛先の口）。同じ資料の出力例に出てこず、未確認のまま。
+- 同じ周で見送ったもの: Catalyst 9300 のアプリ用の口 `AppGigabitEthernet` の略記 `Ap`。正式名は Cisco の KB 222780
+  （Understand App Hosting on Catalyst 9000 Switches）にあるが、略記の例は公式の資料に無く、コミュニティの投稿だけだった。

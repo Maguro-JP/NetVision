@@ -675,3 +675,18 @@ def test_show_interfaces_status_err_disabled_with_the_reason_column_is_read():
     states = _states(configparse.parse(text))
     assert states["GigabitEthernet1/0/2"] == "err-disabled"
     assert states["GigabitEthernet1/0/24"] == "err-disabled"
+
+
+def test_inactive_in_show_interfaces_status_is_kept_as_its_own_state():
+    """見張り: `show interfaces status` の Status 列の `inactive` を、そのままの言葉で持つ。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+    Interface and Hardware Commands の show interfaces（status [ err-disabled | inactive ]、
+    「inactive (Optional) Displays interfaces in an inactive state.」）。
+    """
+    text = (FIXTURES / "core-sw-01.txt").read_text() + (
+        "\nshow interfaces status\n"
+        "Port      Name               Status       Vlan       Duplex  Speed Type\n"
+        "Gi1/0/2                      inactive     99           auto   auto 10/100/1000BaseTX\n"
+    )
+    assert _states(configparse.parse(text))["GigabitEthernet1/0/2"] == "inactive"

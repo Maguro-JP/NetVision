@@ -97,7 +97,9 @@ _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 #: `show interfaces status` の Status 列に出る言葉。
 #: 出典: Interface and Hardware Components Configuration Guide, Cisco IOS XE（Catalyst 9300 /
 #: 9400、16.11.x・17.2.x）「Checking Port Status and Connectivity」の出力例（connected、
-#: notconnect、err-disabled）。ほかの言葉は既存の試験の形（未確認）
+#: notconnect、err-disabled）。inactive は「Command Reference, Cisco IOS XE Cupertino 17.9.x
+#: (Catalyst 9300 Switches)」の show interfaces（status inactive: interfaces in an inactive
+#: state）。ほかの言葉は既存の試験の形（未確認）
 _STATUS_WORDS = (
     "connected",
     "notconnect",
