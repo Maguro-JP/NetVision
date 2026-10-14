@@ -709,3 +709,23 @@ def test_arista_status_words_follow_the_eos_manual():
     states = _states(configparse.parse(text))
     assert states["Ethernet1"] == "up"
     assert states["Ethernet2"] == "disabled"
+
+
+def test_arista_errdisabled_is_read_as_err_disabled():
+    """Arista は止まった口を `errdisabled`（ハイフン無し）と書く。Cisco の `err-disabled` に
+    そろえる。
+
+    Vlan 列に `inactive` が出る行もあるので、それを Status と取り違えないこと。
+    出典: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces status の出力例
+    （`Et5/1/2 errdisabled 1 unconf unconf 40GBASE-SR4`、`Et1/2 errdisabled inactive unconf unconf
+    40GBASE-CR4`。Multi-lane Ports「the other lanes as errdisabled」）。
+    """
+    text = (FIXTURES / "arista-dc-01.txt").read_text() + (
+        "\nshow interfaces status\n"
+        "Port   Name        Status     Vlan  Duplex Speed Type       Flags Encapsulation\n"
+        "Et1                errdisabled  1      unconf unconf 40GBASE-SR4\n"
+        "Et2                errdisabled  inactive unconf unconf 40GBASE-CR4\n"
+    )
+    states = _states(configparse.parse(text))
+    assert states["Ethernet1"] == "err-disabled"
+    assert states["Ethernet2"] == "err-disabled"

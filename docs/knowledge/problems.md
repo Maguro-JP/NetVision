@@ -1779,3 +1779,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`Port Name Status Vlan Duplex Speed Type Flags Encapsulation`、行は connected・notconnect・disabled）。
 - 試験: `test_linkstate.py` の `test_arista_status_words_follow_the_eos_manual`。
 - 見なかったこと: Arista の err-disabled の言葉（errdisabled か err-disabled か）。読めた範囲の出力例に無く、未確認のまま。
+
+## Arista の `errdisabled` を読めず、Vlan 列の `inactive` を状態と取り違えていた（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の Status の言葉の一覧には Cisco の
+  `err-disabled` しか無かった。Arista は止まった口を `errdisabled` と書くので、`Et5/1/2 errdisabled 1 ...` の行は状態が空のまま、
+  `Et1/2 errdisabled inactive ...` の行は Vlan 列の `inactive` を状態と取り違えて「inactive」になっていた。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces status の出力例
+  （`Et5/1/2 errdisabled 1 unconf unconf 40GBASE-SR4`、`Et1/2 errdisabled inactive unconf unconf 40GBASE-CR4`、
+  Multi-lane Ports「show commands display ... the other lanes as errdisabled」）。
+- 直したこと: 言葉の一覧に `errdisabled` を足し、`err-disabled` にそろえて持つようにした。一覧の中で `inactive` より先に
+  当たるので、Vlan 列の取り違えも起きない。試験は `test_linkstate.py` の `test_arista_errdisabled_is_read_as_err_disabled`。
+- 気付いたこと: 前の周（周4）で「Arista の err-disabled の言葉は未確認」と書いたものが、これで確かめられた。

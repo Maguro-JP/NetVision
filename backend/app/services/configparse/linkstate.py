@@ -108,6 +108,9 @@ _STATUS_WORDS = (
     "notconnec",
     "disabled",
     "err-disabled",
+    # Arista はハイフン無し（出典: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の
+    # show interfaces status の出力例 `Et5/1/2 errdisabled 1 ...`）。err-disabled にそろえる
+    "errdisabled",
     "inactive",
     "monitoring",
 )
@@ -179,6 +182,8 @@ def _read_status(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "up"
         elif status.startswith("notconnec"):
             port.link_state = "notconnect"
+        elif status == "errdisabled":
+            port.link_state = "err-disabled"
         else:
             port.link_state = status
 
