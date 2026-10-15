@@ -17,8 +17,8 @@ add dst-address=0.0.0.0/0 gateway=10.0.0.254
 出典: MikroTik RouterOS マニュアル（help.mikrotik.com）の「VLAN」（`/interface vlan` の name・
 vlan-id・interface）、「IP Routing」（`/ip route` の dst-address・gateway・distance、
 `/ip address` の address・interface）。2026-09-28 に確認。
-bridge の vlan-filtering と bridge port の pvid は「Bridging and Switching」の章にあるが、
-該当の表まで読めておらず未確認。
+bridge の vlan-filtering、bridge port の pvid（既定 1、vlan-filtering=yes のときだけ効く）、
+bridge vlan の tagged・vlan-ids は「Bridging and Switching」で確かめた（2026-10-16 に確認）。
 
 行が長いと `\\` で折り返される。折り返しを繋いでから読まないと、
 後ろ半分の値がまるごと落ちる。
@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import re
 
+from app.services.configparse import vlanlist
 from app.services.configparse.base import (
     ParsedConfig,
     ParsedInterface,
@@ -97,8 +98,33 @@ def parse(text: str) -> ParsedConfig:
             _route(parsed, values)
         elif section == "/interface bridge port":
             _bridge_port(parsed, values, filtering)
+        elif section == "/interface bridge vlan":
+            _bridge_vlan(parsed, values, filtering)
 
     return parsed
+
+
+def _bridge_vlan(parsed: ParsedConfig, values: dict[str, str], filtering: set[str]) -> None:
+    """橋の VLAN の表。`tagged` に並んだ口は、`vlan-ids` の VLAN をトランクで通す。
+
+    出典: MikroTik RouterOS マニュアル「Bridging and Switching」の Bridge VLAN Filtering
+    （tagged はカンマ区切りの口、vlan-ids は範囲とカンマ区切り）。pvid と同じく、
+    `vlan-filtering=yes` の橋でしか効かないので、それ以外の橋の行は読まない。
+    橋そのもの（`tagged=bridge1`）は CPU 側の口なので、トランクの口として数えない
+    """
+    bridge = values.get("bridge")
+    if bridge not in filtering:
+        return
+    vlans = vlanlist.parse_ranges(values.get("vlan-ids", ""))
+    if not vlans:
+        return
+    for name in values.get("tagged", "").split(","):
+        name = name.strip()
+        if not name or name == bridge:
+            continue
+        port = _port(parsed, name, {})
+        port.mode = "trunk"
+        port.trunk_vlans = sorted(set(port.trunk_vlans) | set(vlans))
 
 
 def _vlan_port(parsed: ParsedConfig, values: dict[str, str]) -> None:

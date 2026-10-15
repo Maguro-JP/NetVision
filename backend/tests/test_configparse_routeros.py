@@ -72,6 +72,8 @@ def test_a_pvid_on_a_bridge_that_does_not_sort_by_vlan_is_not_taken_as_native() 
     """効いていない値を根拠に、両端の食い違いを言うことになる。
 
     RouterOS の pvid が効くのは、その橋が `vlan-filtering=yes` のときだけ。
+    出典: MikroTik RouterOS マニュアル「Bridging and Switching」の pvid
+    （「This property only has an effect when vlan-filtering is set to yes.」）。
     """
     text = (
         "/interface bridge\nadd name=bridge1\n"
@@ -125,3 +127,36 @@ def test_a_route_without_dst_address_is_the_default_route():
 
     assert ("0.0.0.0/0", "172.16.1.1", None) in routes
     assert ("10.0.0.0/8", "10.1.1.1", 5) in routes
+
+
+def test_tagged_vlans_on_a_bridge_are_read_as_trunk_vlans() -> None:
+    """`/interface bridge vlan` の tagged に並んだ口は、その vlan-ids をトランクで通す。
+
+    出典: MikroTik RouterOS マニュアル（help.mikrotik.com）「Bridging and Switching」の
+    Bridge VLAN Filtering（tagged は「comma-separated values. e.g. tagged=ether1,ether2」、
+    vlan-ids は「the VLAN ID range as well as comma-separated values. e.g. vlan-ids=100-115,120」、
+    pvid は「only has an effect when vlan-filtering is set to yes」）。
+    vlan-filtering の無い橋の行は効かないので読まない。
+    """
+    text = "\n".join(
+        [
+            "/interface bridge",
+            "add name=bridge1 vlan-filtering=yes",
+            "add name=bridge2",
+            "/interface bridge port",
+            "add bridge=bridge1 interface=ether1",
+            "add bridge=bridge1 interface=ether2 pvid=20",
+            "add bridge=bridge2 interface=ether3",
+            "/interface bridge vlan",
+            "add bridge=bridge1 tagged=bridge1,ether1 vlan-ids=10,30-32",
+            "add bridge=bridge1 tagged=ether1 untagged=ether2 vlan-ids=20",
+            "add bridge=bridge2 tagged=ether3 vlan-ids=40",
+            "/system identity",
+            "set name=rt-mt-02",
+        ]
+    )
+    ports = {p.name: p for p in configparse.parse(text).interfaces}
+    assert sorted(ports["ether1"].trunk_vlans) == [10, 20, 30, 31, 32]
+    assert ports["ether2"].trunk_vlans == []
+    assert ports["ether2"].native_vlan == 20
+    assert ports["ether3"].trunk_vlans == []

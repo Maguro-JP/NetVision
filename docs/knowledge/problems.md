@@ -1825,3 +1825,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `test_configparse_vyos.py` の `test_the_old_bond_group_line_with_quotes_is_read`。
 - 気付いたこと: bonding の行しか無い Config は VyOS と見分けられず Junos として読まれる（見分けの手掛かりが
   `set interfaces ethernet eth…` の行のため）。実機の Config には ethernet の行が必ずあるので直していない。
+
+## MikroTik RouterOS の `/interface bridge vlan`（トランクで通す VLAN）を読んでいなかった（2026-10-16 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/routeros.py` は `/interface bridge vlan` の区画を読まず、
+  `tagged=ether1 vlan-ids=10,30-32` と書いても ether1 のトランクの VLAN（trunk_vlans）が空で、mode も trunk にならなかった。
+  linkcheck は mode が trunk の口どうしで許可 VLAN を比べるので、MikroTik の両端の食い違いを一度も言えていなかった。
+- 確かめた資料: MikroTik RouterOS マニュアル（help.mikrotik.com）「Bridging and Switching」（Bridge VLAN Filtering の tagged
+  「comma-separated values. e.g. tagged=ether1,ether2」、vlan-ids「the VLAN ID range as well as comma-separated values」、
+  pvid「Default: 1 ... only has an effect when vlan-filtering is set to yes」、vlan-filtering「Default: no」）。
+- 直したこと: `vlan-filtering=yes` の橋の `/interface bridge vlan` の行で、tagged に並んだ口に mode=trunk と vlan-ids を入れるようにした。
+  橋そのもの（`tagged=bridge1`、CPU 側の口）は数えない。vlan-filtering の無い橋の行は効かないので読まない。冒頭の「未確認」を外し、
+  pvid の既存の試験に出典を書いた。試験は `test_configparse_routeros.py` の `test_tagged_vlans_on_a_bridge_are_read_as_trunk_vlans`。
+- 見なかったこと: vlan-filtering=yes の橋の口で pvid を書いていないとき（既定は 1）。今は native_vlan を空のままにしている。
+  既定の 1 を入れると「タグ無し VLAN が 1 のまま」の点検が新しく当たり始めるので、点検の側と合わせて決める（未着手）。
