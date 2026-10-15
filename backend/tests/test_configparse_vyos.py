@@ -203,3 +203,32 @@ def test_a_vif_without_an_address_is_still_a_vlan() -> None:
     assert _port(parsed, "eth0.30").description == "This is an unused vlan"
     assert _port(parsed, "eth0.40").vlan == 40
     assert _port(parsed, "eth0.40").enabled is False
+
+
+def test_the_old_bond_group_line_with_quotes_is_read() -> None:
+    """見張り: VyOS 1.2 の子の口の側に書く `bond-group 'bond0'`（引用符付き）を読む。
+
+    出典: VyOS 1.2.x (crux) documentation「Bonding」の設定例
+    （`set interfaces ethernet eth0 bond-group 'bond0'`）。1.3 以降の
+    `set interfaces bonding bond0 member interface eth1`（1.3.x「Bond / Link Aggregation」）も
+    同じ番号になる。
+    """
+    old = "\n".join(
+        [
+            "set system host-name vy-old",
+            "set interfaces ethernet eth0 bond-group 'bond1'",
+            "set interfaces ethernet eth1 bond-group 'bond1'",
+        ]
+    )
+    new = "\n".join(
+        [
+            "set system host-name vy-new",
+            "set interfaces ethernet eth0 hw-id '00:53:00:00:00:01'",
+            "set interfaces bonding bond1 member interface eth0",
+            "set interfaces bonding bond1 member interface eth1",
+        ]
+    )
+    for text in (old, new):
+        parsed = configparse.parse(text)
+        assert _port(parsed, "eth0").lag_group == 1, text
+        assert _port(parsed, "eth1").lag_group == 1, text

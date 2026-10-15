@@ -1814,3 +1814,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: address・description・disable のどの行からでも vif の VLAN 番号を入れるようにした。冒頭の未確認から vif を外した
   （残るのは bond-group）。試験は `test_configparse_vyos.py` の `test_a_vif_without_an_address_is_still_a_vlan`。
 - 見なかったこと: QinQ の `vif-s` / `vif-c`。Ethernet の章には無く、別の章（未確認）。今の読み手は読まない。
+
+## 見張り: VyOS の `bond-group` に出典が無かった（2026-10-15 JST）
+
+- 確かめたこと: `configparse/vyos.py` の子の口の側に書く `bond-group` は「既存の試験の形（未確認）」だった。VyOS 1.2 の公式資料で
+  引用符付きの形（`bond-group 'bond0'`）を確かめ、今の読み手で束ねの番号が取れていた。直す所は無く、直す前のコードで通る
+  見張りの試験として足し、冒頭の出典を書いた。1.3 以降の `member interface` の形も同じ番号になることを同じ試験で見ている。
+- 確かめた資料: VyOS 1.2.x (crux) documentation「Bonding」（`set interfaces ethernet eth0 bond-group 'bond0'`）、
+  VyOS 1.3.x (equuleus) documentation「Bond / Link Aggregation」（`set interfaces bonding bond0 member interface eth1`）。
+- 試験: `test_configparse_vyos.py` の `test_the_old_bond_group_line_with_quotes_is_read`。
+- 気付いたこと: bonding の行しか無い Config は VyOS と見分けられず Junos として読まれる（見分けの手掛かりが
+  `set interfaces ethernet eth…` の行のため）。実機の Config には ethernet の行が必ずあるので直していない。

@@ -11,7 +11,8 @@ Junos も `set` で始まるので、そこだけで決めると取り違える�
 出典: LAG の子（`set interfaces bonding bond0 member interface eth0`）は VyOS 1.5.x LTS
 Documentation「Bond / link aggregation」で、口の address（dhcp・dhcpv6 を含む）・description・
 disable と vif の行は「Ethernet」で、経路（next-hop・interface・dhcp-interface）は「Static」で
-確かめた。bond-group は既存の試験の形のまま（未確認）。
+確かめた。子の口の側の bond-group は VyOS 1.2.x (crux) documentation「Bonding」の
+`set interfaces ethernet eth0 bond-group 'bond0'` で確かめた。
 """
 
 from __future__ import annotations
