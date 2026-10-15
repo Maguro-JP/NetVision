@@ -1791,3 +1791,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 言葉の一覧に `errdisabled` を足し、`err-disabled` にそろえて持つようにした。一覧の中で `inactive` より先に
   当たるので、Vlan 列の取り違えも起きない。試験は `test_linkstate.py` の `test_arista_errdisabled_is_read_as_err_disabled`。
 - 気付いたこと: 前の周（周4）で「Arista の err-disabled の言葉は未確認」と書いたものが、これで確かめられた。
+
+## VyOS の、次の宛先を口で書いた経路（`interface eth0`）を取りこぼしていた（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/vyos.py` の経路の読み手は `next-hop アドレス` の形だけを
+  読んでいた。`set protocols static route 198.51.100.0/24 interface eth0` や `dhcp-interface eth1` の経路は台帳に載らず、
+  経路の突き合わせ（戻り経路の片側だけ、など）の材料から抜けていた。
+- 確かめた資料: VyOS Documentation（rolling release）「Static」（`set protocols static route <subnet> next-hop <address>`、
+  `... interface <interface>`、`... dhcp-interface <interface>`、`route6` も同じ形）。あわせて「Ethernet」で
+  `set interfaces ethernet <interface> address <address | dhcp | dhcpv6>`・`description`・`disable` の形を確かめ、今の読み方で合っていた。
+- 直したこと: `interface` と `dhcp-interface` の経路を、ParsedRoute の interface に入れて読むようにした。冒頭の出典と未確認の範囲を直した
+  （残る未確認は vif と bond-group）。試験は `test_configparse_vyos.py` の `test_a_route_out_of_an_interface_is_read`。
+- 見なかったこと: `blackhole`・`reject`（捨てる経路）。今の ParsedRoute に「捨てる」を表す欄が無いので読んでいない。

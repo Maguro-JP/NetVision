@@ -9,8 +9,9 @@ Junos も `set` で始まるので、そこだけで決めると取り違える�
 `eth0` / `switch0` の形であること、`set interfaces ethernet` と書くことで見分ける。
 
 出典: LAG の子（`set interfaces bonding bond0 member interface eth0`）は VyOS 1.5.x LTS
-Documentation「Bond / link aggregation」で確かめた。ほかの行（address・vif・description・
-disable・static route・bond-group）は既存の試験の形のまま（未確認）。
+Documentation「Bond / link aggregation」で、口の address（dhcp・dhcpv6 を含む）・description・
+disable は「Ethernet」で、経路（next-hop・interface・dhcp-interface）は「Static」で確かめた。
+ほかの行（vif・bond-group）は既存の試験の形のまま（未確認）。
 """
 
 from __future__ import annotations
@@ -75,6 +76,13 @@ _DISABLE = re.compile(
 _ROUTE = re.compile(
     r"^\s*set\s+protocols\s+static\s+route6?\s+'?(?P<dest>[\d.:/a-fA-F]+)'?"
     r"\s+next-hop\s+'?(?P<hop>[^'\s]+)'?",
+    re.IGNORECASE,
+)
+#: 次の宛先を口で書く経路。出典: VyOS Documentation「Static」
+#: （set protocols static route <subnet> interface <interface> / dhcp-interface <interface>）
+_ROUTE_INTERFACE = re.compile(
+    r"^\s*set\s+protocols\s+static\s+route6?\s+'?(?P<dest>[\d.:/a-fA-F]+)'?"
+    r"\s+(?:dhcp-)?interface\s+'?(?P<name>[^'\s]+)'?\s*$",
     re.IGNORECASE,
 )
 _BOND = re.compile(
@@ -148,6 +156,12 @@ def parse(text: str) -> ParsedConfig:
         if found:
             parsed.routes.append(
                 ParsedRoute(destination=found.group("dest"), next_hop=found.group("hop"))
+            )
+            continue
+        found = _ROUTE_INTERFACE.match(raw)
+        if found:
+            parsed.routes.append(
+                ParsedRoute(destination=found.group("dest"), interface=found.group("name"))
             )
 
     # VLAN の口（vif）から、その機器が持つ VLAN を起こす。

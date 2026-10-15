@@ -150,3 +150,30 @@ def test_bonding_members_written_the_vyos_1_3_way_are_read():
     parsed = configparse.parse(text)
     lag = {i.name: i.lag_group for i in parsed.interfaces if i.lag_group is not None}
     assert lag == {"eth1": 0, "eth2": 0}
+
+
+def test_a_route_out_of_an_interface_is_read() -> None:
+    """次の宛先を口で書いた経路（`interface eth0`・`dhcp-interface eth0`）も取りこぼさない。
+
+    出典: VyOS Documentation「Static」
+    （`set protocols static route <subnet> interface <interface>`、
+    `set protocols static route <subnet> dhcp-interface <interface>`、
+    `set protocols static route6 <subnet> interface <interface>`）。
+    `next-hop` の形は今までどおり読む（見張り）。blackhole・reject は読まない（未対応）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name vy-rt",
+            "set interfaces ethernet eth0 address 10.0.0.1/24",
+            "set protocols static route 192.0.2.0/24 next-hop 10.0.0.254",
+            "set protocols static route 198.51.100.0/24 interface eth0",
+            "set protocols static route 203.0.113.0/24 dhcp-interface eth1",
+            "set protocols static route6 2001:db8:1::/64 interface eth0",
+        ]
+    )
+    routes = {r.destination: r for r in configparse.parse(text).routes}
+    assert routes["192.0.2.0/24"].next_hop == "10.0.0.254"
+    assert routes["198.51.100.0/24"].interface == "eth0"
+    assert routes["198.51.100.0/24"].next_hop is None
+    assert routes["203.0.113.0/24"].interface == "eth1"
+    assert routes["2001:db8:1::/64"].interface == "eth0"
