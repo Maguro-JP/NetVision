@@ -40,9 +40,14 @@ import re
 from app.services.configparse.base import ParsedConfig, ParsedInterface
 from app.services.configparse.ifname import normalize
 
-#: Arista は末尾に Flags が付く。それ以外は同じ並び
+#: Arista は末尾に Flags と Encapsulation が付く。それ以外は同じ並び（出典: Arista「EOS 4.36.2F
+#: User Manual - Ethernet Ports」の show interfaces status の出力例。言葉は connected・notconnect・
+#: disabled）
+#: `show interfaces status err-disabled` は Vlan 以降の代わりに Reason が付く（出典: Cisco
+#: 「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and
+#: Hardware Commands の show interfaces の出力例 `Port Name Status Reason`）
 _STATUS_HEADER = re.compile(
-    r"^\s*Port\s+Name\s+Status\s+Vlan\s+Duplex\s+Speed\s+Type\b", re.IGNORECASE
+    r"^\s*Port\s+Name\s+Status\s+(?:Vlan\s+Duplex\s+Speed\s+Type|Reason\s*$)", re.IGNORECASE
 )
 #: Aruba CX `show interface brief`（Port / Native VLAN / Mode / Type / Enabled / Status / ...）
 #: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）
@@ -94,13 +99,18 @@ _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 #: `show interfaces status` の Status 列に出る言葉。
 #: 出典: Interface and Hardware Components Configuration Guide, Cisco IOS XE（Catalyst 9300 /
 #: 9400、16.11.x・17.2.x）「Checking Port Status and Connectivity」の出力例（connected、
-#: notconnect、err-disabled）。ほかの言葉は既存の試験の形（未確認）
+#: notconnect、err-disabled）。inactive は「Command Reference, Cisco IOS XE Cupertino 17.9.x
+#: (Catalyst 9300 Switches)」の show interfaces（status inactive: interfaces in an inactive
+#: state）。ほかの言葉は既存の試験の形（未確認）
 _STATUS_WORDS = (
     "connected",
     "notconnect",
     "notconnec",
     "disabled",
     "err-disabled",
+    # Arista はハイフン無し（出典: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の
+    # show interfaces status の出力例 `Et5/1/2 errdisabled 1 ...`）。err-disabled にそろえる
+    "errdisabled",
     "inactive",
     "monitoring",
 )
@@ -172,6 +182,8 @@ def _read_status(rows: list[str], parsed: ParsedConfig) -> None:
             port.link_state = "up"
         elif status.startswith("notconnec"):
             port.link_state = "notconnect"
+        elif status == "errdisabled":
+            port.link_state = "err-disabled"
         else:
             port.link_state = status
 

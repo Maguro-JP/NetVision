@@ -501,3 +501,18 @@ def test_h3c_comware7_dhcp_server_without_dhcp_select_is_found():
         "interface Vlan-interface10\n ip address 10.0.10.1 255.255.255.0\n#\n"
     )
     assert f"{features.DHCP}:DHCP サーバー" in _found(text)
+
+
+def test_ios_dhcp_pool_is_found_as_dhcp_server():
+    """見張り: Cisco IOS の `ip dhcp pool 名前` を DHCP サーバーとして拾い、DHCP の受け手
+    （`ip address dhcp`）は拾わない。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」
+    IP Addressing Services Commands（ip dhcp pool は「Configures a DHCP address pool on a Cisco IOS
+    DHCP server」、ip address dhcp の例 `interface Ethernet 1 / ip address dhcp client-id ...`）。
+    """
+    head = "hostname r-dhcp\n!\n"
+    pool = head + "ip dhcp pool abc\n network 10.1.0.0 /24\n"
+    assert f"{features.DHCP}:DHCP サーバー" in _found(pool)
+    client = head + "interface GigabitEthernet1/0/1\n ip address dhcp\n"
+    assert f"{features.DHCP}:DHCP サーバー" not in _found(client)

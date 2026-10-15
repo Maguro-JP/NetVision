@@ -1730,3 +1730,64 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   secure status の ip http server（To disable the HTTP server, use the no form of this command）と ip http secure-server
   （When enabling an HTTPS server, you should always disable the standard HTTP server ... using the no ip http server command）。
 - 試験: `test_configcheck.py` の `test_ios_http_server_is_called_out_and_the_secure_server_is_not`。
+
+## Cisco の `show interfaces status err-disabled` の表を、見出しの形が違うために読んでいなかった（2026-10-14 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の `show interfaces status` の見出しの判定は
+  `Port Name Status Vlan Duplex Speed Type` の形だけだった。err-disabled に絞った表は見出しが `Port Name Status Reason` で、
+  当たらずに黙って読み飛ばしていた。止まった口を洗い出すために打つ表なのに、口の状態が空のままになる。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and Hardware Commands の
+  show interfaces（`status [ err-disabled | inactive ]`、出力例 `Port Name Status Reason` / `Gi1/0/2 err-disabled gbic-invalid` /
+  `Gi2/0/3 err-disabled dtp-flap`）。
+- 直したこと: 見出しの判定に `Port Name Status Reason` の形を足した。行の読み方は今までの `_read_status` のまま（行の中から
+  Status の言葉を探す）。試験は `test_linkstate.py` の `test_show_interfaces_status_err_disabled_with_the_reason_column_is_read`。
+- 見なかったこと: `show interfaces status inactive` の出力例。資料には選択肢の説明（Displays interfaces in an inactive state）だけで、
+  出力例が無かった。
+- 同じ周で見送ったもの: Cisco の `no login` の規則の出典。Security Command Reference の login (line) の項に、この環境から当たれなかった
+  （新しい版の章は見つからず、古い版は 404 か 504）。
+
+## 見張り: 機能の一覧の Cisco IOS の `ip dhcp pool` に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configparse/features.py` の「DHCP サーバー」は、Cisco IOS の `ip dhcp pool` の行に出典が無かった。公式資料で
+  ip dhcp pool が Cisco IOS の DHCP サーバーの塊であることを確かめ、今の形で合っていた。直す所は無く、直す前のコードで通る
+  見張りの試験として足し、行と冒頭の「確かめた行」に出典を書いた。DHCP の受け手（`ip address dhcp`）を拾わないことも同じ試験で見ている。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」IP Addressing Services Commands
+  （Related Commands の ip dhcp pool「Configures a DHCP address pool on a Cisco IOS DHCP server」、ip address dhcp の例）。
+- 試験: `test_features.py` の `test_ios_dhcp_pool_is_found_as_dhcp_server`。
+- 見なかったこと: Cisco の `ip helper-address`（DHCP リレー）。同じ版の Command Reference のどの章にも項が無く、未確認のまま。
+- 同じ周で見送ったもの: Cisco の `transport input` の並べ書き。Catalyst 9300 17.9 の System Management Commands にも
+  1つの方式（ssh・all・none）を書いた例しか無かった。
+
+## 見張り: Cisco の `show interfaces status` の `inactive` に出典が無かった（2026-10-14 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の Status 列の言葉のうち `inactive` は「既存の試験の形（未確認）」だった。公式資料で
+  Cisco の口の状態の1つであることを確かめた。読み手は今までも言葉をそのまま持っており、直す所は無かった。直す前のコードで通る
+  見張りの試験として足し、言葉の一覧の出典を書き足した。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」Interface and Hardware Commands の
+  show interfaces（`status [ err-disabled | inactive ]`、「inactive (Optional) Displays interfaces in an inactive state.」）。
+- 試験: `test_linkstate.py` の `test_inactive_in_show_interfaces_status_is_kept_as_its_own_state`。
+- 見なかったこと: `monitoring`（SPAN の宛先の口）。同じ資料の出力例に出てこず、未確認のまま。
+- 同じ周で見送ったもの: Catalyst 9300 のアプリ用の口 `AppGigabitEthernet` の略記 `Ap`。正式名は Cisco の KB 222780
+  （Understand App Hosting on Catalyst 9000 Switches）にあるが、略記の例は公式の資料に無く、コミュニティの投稿だけだった。
+
+## 見張り: Arista の `show interfaces status` の読み方に出典が無かった（2026-10-15 JST）
+
+- 確かめたこと: `configparse/linkstate.py` は「Arista は末尾に Flags が付く」とだけ書き、出典が無かった。EOS の公式マニュアルで
+  見出しの並びと Status の言葉を確かめ、今の読み方で合っていた。直す所は無く、直す前のコードで通る見張りの試験として足し、
+  出典を書いた（末尾は Flags と Encapsulation の2列）。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces ... status の出力例
+  （`Port Name Status Vlan Duplex Speed Type Flags Encapsulation`、行は connected・notconnect・disabled）。
+- 試験: `test_linkstate.py` の `test_arista_status_words_follow_the_eos_manual`。
+- 見なかったこと: Arista の err-disabled の言葉（errdisabled か err-disabled か）。読めた範囲の出力例に無く、未確認のまま。
+
+## Arista の `errdisabled` を読めず、Vlan 列の `inactive` を状態と取り違えていた（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/linkstate.py` の Status の言葉の一覧には Cisco の
+  `err-disabled` しか無かった。Arista は止まった口を `errdisabled` と書くので、`Et5/1/2 errdisabled 1 ...` の行は状態が空のまま、
+  `Et1/2 errdisabled inactive ...` の行は Vlan 列の `inactive` を状態と取り違えて「inactive」になっていた。
+- 確かめた資料: Arista「EOS 4.36.2F User Manual - Ethernet Ports」の show interfaces status の出力例
+  （`Et5/1/2 errdisabled 1 unconf unconf 40GBASE-SR4`、`Et1/2 errdisabled inactive unconf unconf 40GBASE-CR4`、
+  Multi-lane Ports「show commands display ... the other lanes as errdisabled」）。
+- 直したこと: 言葉の一覧に `errdisabled` を足し、`err-disabled` にそろえて持つようにした。一覧の中で `inactive` より先に
+  当たるので、Vlan 列の取り違えも起きない。試験は `test_linkstate.py` の `test_arista_errdisabled_is_read_as_err_disabled`。
+- 気付いたこと: 前の周（周4）で「Arista の err-disabled の言葉は未確認」と書いたものが、これで確かめられた。

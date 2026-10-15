@@ -21,8 +21,8 @@
 
 - ACL・NAT・SNMP: ヤマハ（ip filter / secure filter / nat descriptor / snmp host）、
   PAN-OS（rulebase security / nat）、H3C（acl ipv6 advanced）
-- DHCP: ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、H3C（サーバー）、
-  Junos（サーバーとリレー）、AOS-CX
+- DHCP: Cisco IOS（ip dhcp pool）、ヤマハ、FortiGate、Huawei VRP（サーバーとリレー）、
+  H3C（サーバー）、Junos（サーバーとリレー）、AOS-CX
 - STP・SSH・IPsec: Junos（rstp・mstp・vstp / system services ssh）、Huawei（stelnet）、
   ヤマハ（sshd）、PAN-OS（ipsec）
 - マルチキャスト: Arista・AOS-CX・Junos の PIM、Junos の IGMP スヌーピング
@@ -147,6 +147,8 @@ _RULES: tuple[_Rule, ...] = (
     # PAN-OS（Knowledge Base「How to Create and View NAT Policies Using the CLI」）
     _rule(NAT, "NAT", r"^\s*set\s+rulebase\s+nat\s+rules\s"),
     # アドレス配布
+    # Cisco IOS（出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300
+    # Switches)」IP Addressing Services Commands。ip dhcp pool は Cisco IOS DHCP server の塊）
     _rule(DHCP, "DHCP サーバー", r"^\s*ip\s+dhcp\s+pool\s"),
     _rule(DHCP, "DHCP サーバー", r"^\s*dhcp\s+server\s+ip-pool\s"),
     # ヤマハ（rtpro.yamaha.co.jp の設定例の `dhcp service server`）、FortiGate（FortiOS
