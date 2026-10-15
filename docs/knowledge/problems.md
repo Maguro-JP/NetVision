@@ -1839,3 +1839,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   pvid の既存の試験に出典を書いた。試験は `test_configparse_routeros.py` の `test_tagged_vlans_on_a_bridge_are_read_as_trunk_vlans`。
 - 見なかったこと: vlan-filtering=yes の橋の口で pvid を書いていないとき（既定は 1）。今は native_vlan を空のままにしている。
   既定の 1 を入れると「タグ無し VLAN が 1 のまま」の点検が新しく当たり始めるので、点検の側と合わせて決める（未着手）。
+
+## 見張り: EXOS の `enable sharing ... grouping` に出典が無かった（2026-10-16 JST）
+
+- 確かめたこと: `configparse/exos.py` の束ねの行は「既存の試験の形（未確認）」だった。公式の Command Reference で書き方を確かめ、
+  代表の口を束ねの番号に、lacp を動的（active）、health-check と何も付けない形を静的（on）として持つ今の読み方で合っていた。
+  スタックの `1:23-24`・`2:1,2:3` の並びも正しく開けていた。直す所は無く、直す前のコードで通る見張りの試験として足し、出典を書いた。
+- 確かめた資料: ExtremeXOS v33.1.1 Command References の enable sharing grouping
+  （`enable sharing port grouping port_list {algorithm [...]} {resilient-hashing ...} {distribution-mode ...} {lacp | health-check}`、
+  port「the master logical port」、port_list「one or more ports or slots and ports」）。
+- 試験: `test_configparse_exos.py` の `test_sharing_follows_the_command_reference`。
+- 気付いたが手を付けなかったこと: スタックの2台が同じ番号の口を代表にすると（`1:23` と `2:23`）、束ねの番号が同じ 23 になって
+  1つの束ねに見える。束ねの番号を `台:口` で持つかどうかは、台帳の持ち方と合わせて決める（未着手）。
+- 残る未確認: `configure iproute add` と `disable ports` の行。

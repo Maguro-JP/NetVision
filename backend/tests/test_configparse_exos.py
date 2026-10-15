@@ -184,3 +184,29 @@ def test_the_description_string_is_read() -> None:
     ports = {p.name: p for p in configparse.parse(text).interfaces}
     assert ports["Port1"].description == "Uplink to core-sw-01 Te1/1/1"
     assert ports["Port2"].description == "Printer"
+
+
+def test_sharing_follows_the_command_reference() -> None:
+    """見張り: `enable sharing <port> grouping <port_list> ... {lacp | health-check}` を読む。
+
+    出典: ExtremeXOS v33.1.1 Command References の enable sharing grouping
+    （`enable sharing port grouping port_list {algorithm [...]} ... {lacp | health-check}`、
+    port は「the master logical port」、port_list は「one or more ports or slots and ports」）。
+    lacp は動的（active）、health-check と何も付けない形は静的（on）として持つ。
+    """
+    text = "\n".join(
+        [
+            "# ExtremeXOS version 33.1.1",
+            'configure snmp sysName "x-stack"',
+            "enable sharing 1:23 grouping 1:23-24 algorithm address-based L2 lacp",
+            "enable sharing 2:1 grouping 2:1,2:3 algorithm address-based L3_L4 health-check",
+            "enable sharing 9 grouping 9-10",
+        ]
+    )
+    ports = {p.name: p for p in configparse.parse(text).interfaces}
+    assert ports["Port1:23"].lag_group == ports["Port1:24"].lag_group == 23
+    assert ports["Port1:24"].lag_mode == "active"
+    assert ports["Port2:3"].lag_group == 1
+    assert ports["Port2:3"].lag_mode == "on"
+    assert ports["Port10"].lag_group == 9
+    assert ports["Port10"].lag_mode == "on"

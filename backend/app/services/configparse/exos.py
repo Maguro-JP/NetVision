@@ -14,7 +14,8 @@
 タグ付きと一緒に載っているタグ無しは、その口のタグ無し VLAN（native）。
 
 出典: VLAN を番号の並びで書く形と description-string は ExtremeXOS Command Reference Guide
-（22.1 / 30.1 / 31.7）で確かめた。LLDP は `_lldp_detail` の docstring。
+（22.1 / 30.1 / 31.7）で、束ね（enable sharing grouping）は v33.1.1 で確かめた。
+LLDP は `_lldp_detail` の docstring。
 ほかの行は既存の試験の形のまま（未確認）。
 """
 
@@ -70,6 +71,8 @@ _DISPLAY = re.compile(
 #: （`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`、vlan_list は 16.1 から）
 _VLAN_LIST = re.compile(r"[\d,\-]+")
 _DISABLE = re.compile(r"^\s*disable\s+ports?\s+(?P<ports>[\d\-,:]+)", re.IGNORECASE)
+#: 束ね。出典: ExtremeXOS v33.1.1 Command References の enable sharing grouping
+#: （port は代表の口、port_list は束ねる口。末尾の lacp で動的、health-check か無しで静的）
 _SHARING = re.compile(
     r"^\s*enable\s+sharing\s+(?P<master>[\d:]+)\s+grouping\s+(?P<ports>[\d\-,:]+)", re.IGNORECASE
 )
