@@ -3,13 +3,19 @@
 # 作業用の端末に Git も Python も Node.js も入れられないことがある。
 # その場合はここで作った ZIP をブラウザから落として、そのまま持ち込めばよい。
 #
-# 動かし方: GitHub の Actions タブ → この workflow → Run workflow
+# 動かし方: GitHub の Actions タブ → この workflow → Run workflow。
+# 毎月1日にも自動で作る（下の schedule）。
 name: Windows bundle
 
 on:
   workflow_dispatch:
   release:
     types: [published]
+  # 毎月1日 09:17 JST（00:17 UTC）。その月の持ち込み用 ZIP を、手で走らせなくても
+  # 置いておくため。1回およそ1分で、月に1回だけなので無料枠への影響はほぼ無い。
+  # 分を 0 にしないのは、毎時ちょうどは GitHub 側が混んで遅れやすいから
+  schedule:
+    - cron: "17 0 1 * *"
 
 jobs:
   bundle:
@@ -66,9 +72,10 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.find.outputs.zip }}" --clobber
 
-      # 手で走らせたときの受け取り口。ZIP は 1 個で約 19 MB あり、
-      # Actions のストレージ枠（無料は 0.5 GB）を直に削る。落としたら
-      # 用は済むので、置いておくのは 3 日で足りる
+      # 手で走らせたときと、毎月1日の受け取り口。ZIP は 1 個で約 20 MB あり、
+      # Actions のストレージ枠（無料は 0.5 GB）を直に削る。手で走らせたときは
+      # 落としたら用は済むので 3 日。毎月の分は次の月の分ができるまで残したいので
+      # 35 日（重なっても 2 個、約 40 MB）
       #
       # v7 は単一ファイルをそのまま置く形に変わり、成果物の入れ子が
       # 変わる（＝手順書の記述が合わなくなる）。ここで変えたいのは
@@ -79,4 +86,4 @@ jobs:
         with:
           name: NetVision-windows
           path: dist/NetVision-*-windows.zip
-          retention-days: 3
+          retention-days: ${{ github.event_name == 'schedule' && 35 || 3 }}
