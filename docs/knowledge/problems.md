@@ -1803,3 +1803,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `interface` と `dhcp-interface` の経路を、ParsedRoute の interface に入れて読むようにした。冒頭の出典と未確認の範囲を直した
   （残る未確認は vif と bond-group）。試験は `test_configparse_vyos.py` の `test_a_route_out_of_an_interface_is_read`。
 - 見なかったこと: `blackhole`・`reject`（捨てる経路）。今の ParsedRoute に「捨てる」を表す欄が無いので読んでいない。
+
+## VyOS の、アドレスを持たない vif（VLAN の口）を VLAN として数えていなかった（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/vyos.py` は vif の VLAN 番号を address の行からしか
+  入れていなかった。`vif 30 description ...` や `vif 40 disable` だけの VLAN の口は、口としては載るのに VLAN 番号が空で、
+  機器の VLAN の一覧からも抜けていた（VyOS は VLAN を別に定義しないので、vif からしか分からない）。
+- 確かめた資料: VyOS Documentation（rolling release）「Ethernet」の VLAN の項（`set interfaces ethernet <interface> vif <vlan-id>
+  address <address | dhcp | dhcpv6>`・`... vif <vlan-id> description <description>`・`... vif <vlan-id> disable`。どれも単独で書ける）。
+- 直したこと: address・description・disable のどの行からでも vif の VLAN 番号を入れるようにした。冒頭の未確認から vif を外した
+  （残るのは bond-group）。試験は `test_configparse_vyos.py` の `test_a_vif_without_an_address_is_still_a_vlan`。
+- 見なかったこと: QinQ の `vif-s` / `vif-c`。Ethernet の章には無く、別の章（未確認）。今の読み手は読まない。

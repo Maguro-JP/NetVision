@@ -177,3 +177,29 @@ def test_a_route_out_of_an_interface_is_read() -> None:
     assert routes["198.51.100.0/24"].next_hop is None
     assert routes["203.0.113.0/24"].interface == "eth1"
     assert routes["2001:db8:1::/64"].interface == "eth0"
+
+
+def test_a_vif_without_an_address_is_still_a_vlan() -> None:
+    """アドレスを持たない vif（説明や disable だけの VLAN の口）も、VLAN として数える。
+
+    出典: VyOS Documentation「Ethernet」の VLAN の項（`set interfaces ethernet <interface> vif
+    <vlan-id> address <address | dhcp | dhcpv6>`・`... vif <vlan-id> description <description>`・
+    `... vif <vlan-id> disable`）。address・description・disable がそれぞれ単独で書ける。
+    アドレスのある vif と `address dhcp` の vif は今までどおり読む（見張り）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name vy-vif",
+            "set interfaces ethernet eth0 vif 10 address 192.0.2.1/24",
+            "set interfaces ethernet eth0 vif 20 address dhcp",
+            "set interfaces ethernet eth0 vif 30 description 'This is an unused vlan'",
+            "set interfaces ethernet eth0 vif 40 disable",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert {10, 20, 30, 40} <= set(parsed.vlans)
+    assert _port(parsed, "eth0.20").address_source == "dhcp"
+    assert _port(parsed, "eth0.30").vlan == 30
+    assert _port(parsed, "eth0.30").description == "This is an unused vlan"
+    assert _port(parsed, "eth0.40").vlan == 40
+    assert _port(parsed, "eth0.40").enabled is False
