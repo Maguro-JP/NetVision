@@ -101,7 +101,7 @@ create_session(
 
 ```
 <owner>/<repo> の feedback-session <題目>。成果物: <形1行>。判定: <1行>。
-.claude/skills/feedback-session/SKILL.md に従う。枝は claude/FB-<題目>-<YYYYMMDD>。PR の題は「FB <題目>: <1行>」。
+.claude/skills/feedback-session/SKILL.md に従う。枝は claude/FB-<題目>-<YYYYMMDD>（日付は JST。TZ=Asia/Tokyo date +%Y%m%d）。PR の題は「FB <題目>: <1行>」。
 終わったら束ねる側（session_id <束ねる側の id>）に「セッション間の連絡」の形で ★ <題目> PR #N <1行> を送る。
 ```
 
