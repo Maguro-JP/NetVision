@@ -24,7 +24,7 @@ description: 日報・週報・月報を書くとき。「日報」「週報」�
 ## 共通の約束
 
 - 調べるのは git の履歴、`docs/knowledge/`、`docs/reports/` の前回分。コードは必要なところだけ
-- 報告は `docs/reports/` に残す。`daily/YYYY-MM-DD.md` `weekly/YYYY-Www.md` `monthly/YYYY-MM.md`
+- 報告は `docs/reports/` に残す。`daily/YYYY-MM-DD.md` `weekly/YYYY-Www.md` `monthly/YYYY-MM.md`（日付は JST）
 - 報告のためにコードを変えない。変更が無かった日は無かったと書く
 - 会話に出すのは `★ <日報|週報|月報> <日付>: <PR か docs/reports/ の URL>` の1行だけ。報告の中身を会話に貼らない
 - 週報の PR 整理だけは書き込みを伴う。`solo-pr-flow` の判定に従う

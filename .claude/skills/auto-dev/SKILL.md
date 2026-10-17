@@ -198,7 +198,7 @@ git log --oneline -10
 
 ## push と GitHub Actions
 
-作業の枝は `claude/DEV-<YYYYMMDD>`、PR の題は `DEV <日付>: <1行>`（work-style「名前の付け方」）。
+作業の枝は `claude/DEV-<YYYYMMDD>`（日付は JST。`TZ=Asia/Tokyo date +%Y%m%d`）、PR の題は `DEV <日付>: <1行>`（work-style「名前の付け方」）。
 
 `.claude/policy/<利用者名>.json` の `push_policy` に従う。既定は `"batch"`。
 

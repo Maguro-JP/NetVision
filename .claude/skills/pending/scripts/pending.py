@@ -100,7 +100,8 @@ def cmd_answer(repo, which, answer):
         raise SystemExit(f"{repo}: 「答え:」の行が無い項目: {s['title']}")
     lines = text.splitlines()
     m = ANSWER.match(lines[s["ans_i"]])
-    today = datetime.date.today().isoformat()
+    # 日付は利用者の時間（JST）。コンテナの時計は UTC で、0〜9 時に前日の日付になる
+    today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).date().isoformat()
     stamp = f"（{today}、利用者の返答）"
     lines[s["ans_i"]] = f"{m.group('lead')}答え: {answer}{stamp}" if not s["ans"] else f"{lines[s['ans_i']]} / {answer}{stamp}"
     new = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
