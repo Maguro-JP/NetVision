@@ -1880,3 +1880,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   宛先と次の宛先が同じ経路はこちらで読んだ方に置き換える。試験は `test_configparse_allied.py` の
   `test_route_weight_and_description_are_not_taken_as_distance_or_port`。
 - 残る未確認: `access-list hardware` の行。
+
+## Cisco の `interface Tunnel 0`（番号の前に空白）のトンネルを丸ごと読み落としていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/tunnels.py` の区画の見出しは `interface 名前` の
+  1語しか受けず、公式の設定例の `interface Tunnel 0` は見出しとして当たらなかった。そのトンネルは一覧から抜け、論理構成図に線が出なかった。
+- 確かめた資料: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x」の Implementing Tunnels（Example: Configuring a GRE IPv4
+  Tunnel。`tunnel source { ip-address | interface-type interface-number }`、`tunnel destination { hostname | ip-address }`、
+  `tunnel mode gre { ip | multipoint }`）と VRF-Aware Tunnels（`vrf forwarding` が内側、`tunnel vrf` が外側の VRF）。
+- 直したこと: 見出しの名前の後ろに数字で始まる語があれば、つないで `Tunnel0` として持つ。行の読み方（source・destination・mode・vrf）は
+  今のままで資料と合っていた。冒頭の「未確認」を外した。試験は `test_topology_logical.py` の
+  `test_cisco_tunnel_lines_follow_the_ip_routing_guide`。
+- 気付いたが手を付けなかったこと: `tunnel mode` を書かないときの既定は GRE over IPv4 だが、種別は空のまま（書いていない値を埋めない方針）。
+  H3C は `interface Tunnel1 mode gre` と見出しに種別が付く形がありうるが、資料で確かめていない。
