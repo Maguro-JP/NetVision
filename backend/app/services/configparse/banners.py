@@ -34,7 +34,9 @@ import re
 #: 出典: Cisco IOS Command Reference の banner motd（`banner motd d message d`。d は
 #: 区切りに選んだ1文字で、2回目に出たところで文言が終わる）と、Configuration
 #: Fundamentals Configuration Guide 15M&T「Managing Connections, Menus, and System
-#: Banners」。保存した設定で印が `^C` と出る形は、既存の試験の形に合わせた（未確認）。
+#: Banners」。保存した設定で印が `^C` と出る形は、Cisco「Network as Code」の IOS-XE Banner
+#: の Sample Configuration で確かめた（`banner login ^C` … `^C`、
+#: `banner prompt-timeout ^C文言^C`）。
 _OPEN = re.compile(
     r"^\s*banner\s+(?:(?:motd|login|exec|incoming|slip-ppp|prompt-timeout|config-save)\s+)?"
     r"(?P<rest>\S.*?)\s*$",

@@ -96,3 +96,36 @@ def test_a_banner_without_a_delimiter_is_left_alone() -> None:
     """ASA は `banner motd 文言` と印を使わない。1文字目を印にすると設定を捨てる。"""
     text = "hostname fw-01\nbanner motd Authorized use only\ninterface GigabitEthernet0/1\n"
     assert banners.strip(text) == text
+
+
+def test_saved_banners_follow_the_cisco_network_as_code_sample() -> None:
+    """見張り。保存した設定の banner は、区切りが `^C` と出る。4種類とも外れることを見張る。
+
+    出典: Cisco「Network as Code」の IOS-XE Banner（Sample Configuration。`banner login ^C` の
+    次の行から `^C` まで、`banner motd ^C文言` と同じ行に続く形、`banner prompt-timeout ^C文言^C`
+    と1行で閉じる形）。区切りの考え方は System Management Configuration Guide, Cisco IOS XE
+    （Catalyst 9300 17.15）の Configuring a Message-of-the-Day Login Banner。
+    """
+    text = (
+        "hostname rt-01\n"
+        "banner exec ^C\n"
+        "Welcome to Device1\n"
+        "interface GigabitEthernet0/99\n"
+        "^C\n"
+        "banner login ^C\n"
+        "* WARNING: Unauthorized access is *\n"
+        "^C\n"
+        "banner motd ^CSystem maintenance scheduled for Sunday 2AM-4AM\n"
+        "All users will be disconnected during this time\n"
+        "^C\n"
+        "banner prompt-timeout ^CSession will timeout in 5 minutes due to inactivity^C\n"
+        "interface GigabitEthernet0/1\n"
+        " description uplink\n"
+    )
+    stripped = banners.strip(text).splitlines()
+    assert len(stripped) == len(text.splitlines())
+    assert [line for line in stripped if line] == [
+        "hostname rt-01",
+        "interface GigabitEthernet0/1",
+        " description uplink",
+    ]

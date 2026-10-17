@@ -1893,3 +1893,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `test_cisco_tunnel_lines_follow_the_ip_routing_guide`。
 - 気付いたが手を付けなかったこと: `tunnel mode` を書かないときの既定は GRE over IPv4 だが、種別は空のまま（書いていない値を埋めない方針）。
   H3C は `interface Tunnel1 mode gre` と見出しに種別が付く形がありうるが、資料で確かめていない。
+
+## 見張り: Cisco の保存した設定の banner（区切りが `^C`）を外せている（2026-10-17 JST）
+
+- 確かめたこと: `configparse/banners.py` は、保存した設定で区切りが `^C` と出る形を「既存の試験の形」として受けていた（未確認）。
+  直す所は無く、4種類（exec・login・motd・prompt-timeout）とも外れていた。
+- 確かめた資料: Cisco「Network as Code」の IOS-XE Banner の Sample Configuration（`banner login ^C` の次の行から `^C` まで、
+  `banner motd ^C文言` と同じ行に続く形、`banner prompt-timeout ^C文言^C` と1行で閉じる形）。区切りの考え方は
+  System Management Configuration Guide, Cisco IOS XE（Catalyst 9300 17.15）の Configuring a Message-of-the-Day Login Banner。
+- 試験: `test_configparse_banners.py` の `test_saved_banners_follow_the_cisco_network_as_code_sample`。冒頭の「未確認」を外した。
+- 見なかったこと: TFTP で写した設定では、区切りが見えない制御文字（`^C` の2文字ではなく1文字）になるという話がある。
+  公式の資料では確かめていない。今の読み手は記号の1文字も区切りとして受けるので、その形でも外れるはず（試していない）。
