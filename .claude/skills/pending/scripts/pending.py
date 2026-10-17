@@ -4,7 +4,7 @@
   pending.py list <owner/repo>...                答えの無い項目を出す
   pending.py list --count <owner/repo>           答えの無い項目の数だけ出す（patrol が使う）
   pending.py answer <owner/repo> <番号|見出しの一部> <答え>
-                                                答えを書き、枝 claude/answer-<番号> で PR を作ってマージする
+                                                答えを書き、枝 claude/ANSWER-<番号>-<日付> で PR を作ってマージする
 
 自律開発は判断待ちに答えが入るまでその件を脇に置く。答えが pending.md に入れば、次の周が取り込む。
 GitHub の画面でファイルを直してもよい。この道具は、会話から答えるためのもの。
@@ -106,7 +106,7 @@ def cmd_answer(repo, which, answer):
     new = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
 
     default = json.loads(gh(f"repos/{repo}"))["default_branch"]
-    branch = f"claude/answer-{s['num']}-{today.replace('-', '')}"
+    branch = f"claude/ANSWER-{s['num']}-{today.replace('-', '')}"
     with tempfile.TemporaryDirectory() as d:
         subprocess.run(["git", "clone", "-q", "--depth", "1", "-b", default, f"https://github.com/{repo}.git", d], check=True)
         (Path(d) / FILE).write_text(new, encoding="utf-8")

@@ -25,7 +25,7 @@ description: 自律開発が脇に置いた判断待ち（docs/reports/pending.m
 ```
 
 - `docs/reports/pending.md` のその項目の「答え:」に、答えと日付を書く
-- 枝 `claude/answer-<番号>-<日付>` で PR を作り、squash でマージする。文書だけなので CI は走らない（走る設定のリポジトリでは `.claude/` と `docs/` を paths-ignore にしてある）
+- 枝 `claude/ANSWER-<番号>-<日付>` で PR を作り、squash でマージする。文書だけなので CI は走らない（走る設定のリポジトリでは `.claude/` と `docs/` を paths-ignore にしてある）
 - 答えは利用者の言葉のまま書く。選択肢の記号だけなら「A」でよい。言い換えない
 
 マージしたあと、結びつけ先のセッションに知らせる。知らせなくても翌朝の周で取り込まれるが、
