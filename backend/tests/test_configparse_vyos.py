@@ -150,3 +150,85 @@ def test_bonding_members_written_the_vyos_1_3_way_are_read():
     parsed = configparse.parse(text)
     lag = {i.name: i.lag_group for i in parsed.interfaces if i.lag_group is not None}
     assert lag == {"eth1": 0, "eth2": 0}
+
+
+def test_a_route_out_of_an_interface_is_read() -> None:
+    """次の宛先を口で書いた経路（`interface eth0`・`dhcp-interface eth0`）も取りこぼさない。
+
+    出典: VyOS Documentation「Static」
+    （`set protocols static route <subnet> interface <interface>`、
+    `set protocols static route <subnet> dhcp-interface <interface>`、
+    `set protocols static route6 <subnet> interface <interface>`）。
+    `next-hop` の形は今までどおり読む（見張り）。blackhole・reject は読まない（未対応）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name vy-rt",
+            "set interfaces ethernet eth0 address 10.0.0.1/24",
+            "set protocols static route 192.0.2.0/24 next-hop 10.0.0.254",
+            "set protocols static route 198.51.100.0/24 interface eth0",
+            "set protocols static route 203.0.113.0/24 dhcp-interface eth1",
+            "set protocols static route6 2001:db8:1::/64 interface eth0",
+        ]
+    )
+    routes = {r.destination: r for r in configparse.parse(text).routes}
+    assert routes["192.0.2.0/24"].next_hop == "10.0.0.254"
+    assert routes["198.51.100.0/24"].interface == "eth0"
+    assert routes["198.51.100.0/24"].next_hop is None
+    assert routes["203.0.113.0/24"].interface == "eth1"
+    assert routes["2001:db8:1::/64"].interface == "eth0"
+
+
+def test_a_vif_without_an_address_is_still_a_vlan() -> None:
+    """アドレスを持たない vif（説明や disable だけの VLAN の口）も、VLAN として数える。
+
+    出典: VyOS Documentation「Ethernet」の VLAN の項（`set interfaces ethernet <interface> vif
+    <vlan-id> address <address | dhcp | dhcpv6>`・`... vif <vlan-id> description <description>`・
+    `... vif <vlan-id> disable`）。address・description・disable がそれぞれ単独で書ける。
+    アドレスのある vif と `address dhcp` の vif は今までどおり読む（見張り）。
+    """
+    text = "\n".join(
+        [
+            "set system host-name vy-vif",
+            "set interfaces ethernet eth0 vif 10 address 192.0.2.1/24",
+            "set interfaces ethernet eth0 vif 20 address dhcp",
+            "set interfaces ethernet eth0 vif 30 description 'This is an unused vlan'",
+            "set interfaces ethernet eth0 vif 40 disable",
+        ]
+    )
+    parsed = configparse.parse(text)
+    assert {10, 20, 30, 40} <= set(parsed.vlans)
+    assert _port(parsed, "eth0.20").address_source == "dhcp"
+    assert _port(parsed, "eth0.30").vlan == 30
+    assert _port(parsed, "eth0.30").description == "This is an unused vlan"
+    assert _port(parsed, "eth0.40").vlan == 40
+    assert _port(parsed, "eth0.40").enabled is False
+
+
+def test_the_old_bond_group_line_with_quotes_is_read() -> None:
+    """見張り: VyOS 1.2 の子の口の側に書く `bond-group 'bond0'`（引用符付き）を読む。
+
+    出典: VyOS 1.2.x (crux) documentation「Bonding」の設定例
+    （`set interfaces ethernet eth0 bond-group 'bond0'`）。1.3 以降の
+    `set interfaces bonding bond0 member interface eth1`（1.3.x「Bond / Link Aggregation」）も
+    同じ番号になる。
+    """
+    old = "\n".join(
+        [
+            "set system host-name vy-old",
+            "set interfaces ethernet eth0 bond-group 'bond1'",
+            "set interfaces ethernet eth1 bond-group 'bond1'",
+        ]
+    )
+    new = "\n".join(
+        [
+            "set system host-name vy-new",
+            "set interfaces ethernet eth0 hw-id '00:53:00:00:00:01'",
+            "set interfaces bonding bond1 member interface eth0",
+            "set interfaces bonding bond1 member interface eth1",
+        ]
+    )
+    for text in (old, new):
+        parsed = configparse.parse(text)
+        assert _port(parsed, "eth0").lag_group == 1, text
+        assert _port(parsed, "eth1").lag_group == 1, text

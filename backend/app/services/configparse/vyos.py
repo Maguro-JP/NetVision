@@ -9,8 +9,10 @@ Junos も `set` で始まるので、そこだけで決めると取り違える�
 `eth0` / `switch0` の形であること、`set interfaces ethernet` と書くことで見分ける。
 
 出典: LAG の子（`set interfaces bonding bond0 member interface eth0`）は VyOS 1.5.x LTS
-Documentation「Bond / link aggregation」で確かめた。ほかの行（address・vif・description・
-disable・static route・bond-group）は既存の試験の形のまま（未確認）。
+Documentation「Bond / link aggregation」で、口の address（dhcp・dhcpv6 を含む）・description・
+disable と vif の行は「Ethernet」で、経路（next-hop・interface・dhcp-interface）は「Static」で
+確かめた。子の口の側の bond-group は VyOS 1.2.x (crux) documentation「Bonding」の
+`set interfaces ethernet eth0 bond-group 'bond0'` で確かめた。
 """
 
 from __future__ import annotations
@@ -77,6 +79,13 @@ _ROUTE = re.compile(
     r"\s+next-hop\s+'?(?P<hop>[^'\s]+)'?",
     re.IGNORECASE,
 )
+#: 次の宛先を口で書く経路。出典: VyOS Documentation「Static」
+#: （set protocols static route <subnet> interface <interface> / dhcp-interface <interface>）
+_ROUTE_INTERFACE = re.compile(
+    r"^\s*set\s+protocols\s+static\s+route6?\s+'?(?P<dest>[\d.:/a-fA-F]+)'?"
+    r"\s+(?:dhcp-)?interface\s+'?(?P<name>[^'\s]+)'?\s*$",
+    re.IGNORECASE,
+)
 _BOND = re.compile(
     r"^\s*set\s+interfaces\s+ethernet\s+(?P<name>\S+)\s+bond-group\s+'?(?P<group>\S+)'?",
     re.IGNORECASE,
@@ -128,16 +137,19 @@ def parse(text: str) -> ParsedConfig:
                 port.ip_address = value
             else:
                 port.extra_addresses.append(value)
-            if found.group("vif"):
-                port.vlan = int(found.group("vif"))
+            _set_vif(port, found)
             continue
         found = _DESCRIPTION.match(raw)
         if found:
-            _add(parsed, _name(found)).description = found.group("text").strip('"')
+            port = _add(parsed, _name(found))
+            port.description = found.group("text").strip('"')
+            _set_vif(port, found)
             continue
         found = _DISABLE.match(raw)
         if found:
-            _add(parsed, _name(found)).enabled = False
+            port = _add(parsed, _name(found))
+            port.enabled = False
+            _set_vif(port, found)
             continue
         found = _BOND.match(raw) or _BOND_MEMBER.match(raw)
         if found:
@@ -148,6 +160,12 @@ def parse(text: str) -> ParsedConfig:
         if found:
             parsed.routes.append(
                 ParsedRoute(destination=found.group("dest"), next_hop=found.group("hop"))
+            )
+            continue
+        found = _ROUTE_INTERFACE.match(raw)
+        if found:
+            parsed.routes.append(
+                ParsedRoute(destination=found.group("dest"), interface=found.group("name"))
             )
 
     # VLAN の口（vif）から、その機器が持つ VLAN を起こす。
@@ -168,6 +186,16 @@ def _add(parsed: ParsedConfig, name: str) -> ParsedInterface:
     port = parsed.add_interface(ParsedInterface(name=name))
     port.name = name
     return port
+
+
+def _set_vif(port: ParsedInterface, found: re.Match[str]) -> None:
+    """vif の行なら、その口の VLAN 番号を入れる。
+
+    address・description・disable はどれも単独で書ける（出典: VyOS Documentation「Ethernet」の
+    VLAN の項）。アドレスの無い vif も VLAN として数えるため、どの行からでも入れる。
+    """
+    if found.group("vif"):
+        port.vlan = int(found.group("vif"))
 
 
 def _name(found: re.Match[str]) -> str:

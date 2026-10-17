@@ -1791,3 +1791,64 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 言葉の一覧に `errdisabled` を足し、`err-disabled` にそろえて持つようにした。一覧の中で `inactive` より先に
   当たるので、Vlan 列の取り違えも起きない。試験は `test_linkstate.py` の `test_arista_errdisabled_is_read_as_err_disabled`。
 - 気付いたこと: 前の周（周4）で「Arista の err-disabled の言葉は未確認」と書いたものが、これで確かめられた。
+
+## VyOS の、次の宛先を口で書いた経路（`interface eth0`）を取りこぼしていた（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/vyos.py` の経路の読み手は `next-hop アドレス` の形だけを
+  読んでいた。`set protocols static route 198.51.100.0/24 interface eth0` や `dhcp-interface eth1` の経路は台帳に載らず、
+  経路の突き合わせ（戻り経路の片側だけ、など）の材料から抜けていた。
+- 確かめた資料: VyOS Documentation（rolling release）「Static」（`set protocols static route <subnet> next-hop <address>`、
+  `... interface <interface>`、`... dhcp-interface <interface>`、`route6` も同じ形）。あわせて「Ethernet」で
+  `set interfaces ethernet <interface> address <address | dhcp | dhcpv6>`・`description`・`disable` の形を確かめ、今の読み方で合っていた。
+- 直したこと: `interface` と `dhcp-interface` の経路を、ParsedRoute の interface に入れて読むようにした。冒頭の出典と未確認の範囲を直した
+  （残る未確認は vif と bond-group）。試験は `test_configparse_vyos.py` の `test_a_route_out_of_an_interface_is_read`。
+- 見なかったこと: `blackhole`・`reject`（捨てる経路）。今の ParsedRoute に「捨てる」を表す欄が無いので読んでいない。
+
+## VyOS の、アドレスを持たない vif（VLAN の口）を VLAN として数えていなかった（2026-10-15 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/vyos.py` は vif の VLAN 番号を address の行からしか
+  入れていなかった。`vif 30 description ...` や `vif 40 disable` だけの VLAN の口は、口としては載るのに VLAN 番号が空で、
+  機器の VLAN の一覧からも抜けていた（VyOS は VLAN を別に定義しないので、vif からしか分からない）。
+- 確かめた資料: VyOS Documentation（rolling release）「Ethernet」の VLAN の項（`set interfaces ethernet <interface> vif <vlan-id>
+  address <address | dhcp | dhcpv6>`・`... vif <vlan-id> description <description>`・`... vif <vlan-id> disable`。どれも単独で書ける）。
+- 直したこと: address・description・disable のどの行からでも vif の VLAN 番号を入れるようにした。冒頭の未確認から vif を外した
+  （残るのは bond-group）。試験は `test_configparse_vyos.py` の `test_a_vif_without_an_address_is_still_a_vlan`。
+- 見なかったこと: QinQ の `vif-s` / `vif-c`。Ethernet の章には無く、別の章（未確認）。今の読み手は読まない。
+
+## 見張り: VyOS の `bond-group` に出典が無かった（2026-10-15 JST）
+
+- 確かめたこと: `configparse/vyos.py` の子の口の側に書く `bond-group` は「既存の試験の形（未確認）」だった。VyOS 1.2 の公式資料で
+  引用符付きの形（`bond-group 'bond0'`）を確かめ、今の読み手で束ねの番号が取れていた。直す所は無く、直す前のコードで通る
+  見張りの試験として足し、冒頭の出典を書いた。1.3 以降の `member interface` の形も同じ番号になることを同じ試験で見ている。
+- 確かめた資料: VyOS 1.2.x (crux) documentation「Bonding」（`set interfaces ethernet eth0 bond-group 'bond0'`）、
+  VyOS 1.3.x (equuleus) documentation「Bond / Link Aggregation」（`set interfaces bonding bond0 member interface eth1`）。
+- 試験: `test_configparse_vyos.py` の `test_the_old_bond_group_line_with_quotes_is_read`。
+- 気付いたこと: bonding の行しか無い Config は VyOS と見分けられず Junos として読まれる（見分けの手掛かりが
+  `set interfaces ethernet eth…` の行のため）。実機の Config には ethernet の行が必ずあるので直していない。
+
+## MikroTik RouterOS の `/interface bridge vlan`（トランクで通す VLAN）を読んでいなかった（2026-10-16 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/routeros.py` は `/interface bridge vlan` の区画を読まず、
+  `tagged=ether1 vlan-ids=10,30-32` と書いても ether1 のトランクの VLAN（trunk_vlans）が空で、mode も trunk にならなかった。
+  linkcheck は mode が trunk の口どうしで許可 VLAN を比べるので、MikroTik の両端の食い違いを一度も言えていなかった。
+- 確かめた資料: MikroTik RouterOS マニュアル（help.mikrotik.com）「Bridging and Switching」（Bridge VLAN Filtering の tagged
+  「comma-separated values. e.g. tagged=ether1,ether2」、vlan-ids「the VLAN ID range as well as comma-separated values」、
+  pvid「Default: 1 ... only has an effect when vlan-filtering is set to yes」、vlan-filtering「Default: no」）。
+- 直したこと: `vlan-filtering=yes` の橋の `/interface bridge vlan` の行で、tagged に並んだ口に mode=trunk と vlan-ids を入れるようにした。
+  橋そのもの（`tagged=bridge1`、CPU 側の口）は数えない。vlan-filtering の無い橋の行は効かないので読まない。冒頭の「未確認」を外し、
+  pvid の既存の試験に出典を書いた。試験は `test_configparse_routeros.py` の `test_tagged_vlans_on_a_bridge_are_read_as_trunk_vlans`。
+- 見なかったこと: vlan-filtering=yes の橋の口で pvid を書いていないとき（既定は 1）。今は native_vlan を空のままにしている。
+  既定の 1 を入れると「タグ無し VLAN が 1 のまま」の点検が新しく当たり始めるので、点検の側と合わせて決める（未着手）。
+
+## 見張り: EXOS の `enable sharing ... grouping` に出典が無かった（2026-10-16 JST）
+
+- 確かめたこと: `configparse/exos.py` の束ねの行は「既存の試験の形（未確認）」だった。公式の Command Reference で書き方を確かめ、
+  代表の口を束ねの番号に、lacp を動的（active）、health-check と何も付けない形を静的（on）として持つ今の読み方で合っていた。
+  スタックの `1:23-24`・`2:1,2:3` の並びも正しく開けていた。直す所は無く、直す前のコードで通る見張りの試験として足し、出典を書いた。
+- 確かめた資料: ExtremeXOS v33.1.1 Command References の enable sharing grouping
+  （`enable sharing port grouping port_list {algorithm [...]} {resilient-hashing ...} {distribution-mode ...} {lacp | health-check}`、
+  port「the master logical port」、port_list「one or more ports or slots and ports」）。
+- 試験: `test_configparse_exos.py` の `test_sharing_follows_the_command_reference`。
+- 気付いたが手を付けなかったこと: スタックの2台が同じ番号の口を代表にすると（`1:23` と `2:23`）、束ねの番号が同じ 23 になって
+  1つの束ねに見える。束ねの番号を `台:口` で持つかどうかは、台帳の持ち方と合わせて決める（未着手）。
+- 残る未確認: `configure iproute add` と `disable ports` の行。
