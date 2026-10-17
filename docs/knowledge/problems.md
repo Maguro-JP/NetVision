@@ -1852,3 +1852,19 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 気付いたが手を付けなかったこと: スタックの2台が同じ番号の口を代表にすると（`1:23` と `2:23`）、束ねの番号が同じ 23 になって
   1つの束ねに見える。束ねの番号を `台:口` で持つかどうかは、台帳の持ち方と合わせて決める（未着手）。
 - 残る未確認: `configure iproute add` と `disable ports` の行。
+
+## EXOS の IPv6 の経路（既定経路と静的経路）を読んでいなかった（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/exos.py` の経路の読み手は、次の宛先を IPv4 の形でしか
+  拾っていなかった。公式資料の例そのもの（`configure iproute add default 2001:db8::1234:5678`、
+  `configure iproute add 2001:db8:0:1111::/64 fe80::1111%default`）が、経路の一覧から抜けていた。
+- 確かめた資料: ExtremeXOS 22.5 Command Reference の configure iproute add (IPv4)
+  （`configure iproute add [ ipNetmask | ip_addr mask ] gateway {...}`）、configure iproute add default
+  （`[ gateway | ipv6Gateway | ipv6ScopedGateway ]`）、configure iproute add (IPV6)
+  （`configure iproute add ipv6Netmask [ ipv6Gateway | ipv6ScopedGateway ]`）、disable port（`disable port [ port_list | all ]`、
+  例 `disable ports 3,5,12-15`）。
+- 直したこと: IPv6 の経路の行を足し、既定経路は `::/0` で持つようにした。スコープ付きの次の宛先は `%` の前のアドレスだけを持つ。
+  IPv4 の形と `disable ports` の並びは今の読み方で合っていた。冒頭の出典を書き足した。試験は `test_configparse_exos.py` の
+  `test_ipv6_routes_are_read`。
+- 見なかったこと: `disable port all`（全部の口を止める）。読み手は番号の並びしか読まないので、今は止めた口として数えない。
+  Config に書かれる形かどうかも確かめていない。

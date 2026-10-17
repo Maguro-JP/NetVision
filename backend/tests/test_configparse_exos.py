@@ -210,3 +210,29 @@ def test_sharing_follows_the_command_reference() -> None:
     assert ports["Port2:3"].lag_mode == "on"
     assert ports["Port10"].lag_group == 9
     assert ports["Port10"].lag_mode == "on"
+
+
+def test_ipv6_routes_are_read() -> None:
+    """IPv6 の既定経路と静的経路を読む。IPv4 の形は今までどおり（見張り）。
+
+    出典: ExtremeXOS 22.5 Command Reference の configure iproute add default
+    （`[ gateway | ipv6Gateway | ipv6ScopedGateway ]`、
+    例 `configure iproute add default 2001:db8::1234:5678`）、configure iproute add (IPV6)
+    （`configure iproute add ipv6Netmask [ ipv6Gateway | ipv6ScopedGateway ]`、
+    例 `configure iproute add 2001:db8:0:1111::/64 fe80::1111%default`）、
+    configure iproute add (IPv4)（例 `configure iproute add 10.1.1.0/24 123.45.67.1`）。
+    スコープ付きの次の宛先（`%default` は VLAN 名）は、アドレスの部分だけを持つ。
+    """
+    text = "\n".join(
+        [
+            "# ExtremeXOS version 22.5.1",
+            'configure snmp sysName "x-v6"',
+            "configure iproute add 10.1.1.0/24 123.45.67.1",
+            "configure iproute add default 2001:db8::1234:5678",
+            "configure iproute add 2001:db8:0:1111::/64 fe80::1111%default",
+        ]
+    )
+    routes = {r.destination: r.next_hop for r in configparse.parse(text).routes}
+    assert routes["10.1.1.0/24"] == "123.45.67.1"
+    assert routes["::/0"] == "2001:db8::1234:5678"
+    assert routes["2001:db8:0:1111::/64"] == "fe80::1111"
