@@ -136,6 +136,9 @@ git branch --show-current
 git log --oneline -10
 ```
 
+- main を取り込む（`git fetch origin && git merge origin/main`）。feedback-session など別のセッションの発見は main 経由でしか届かない
+- 前の周以降に main に入った `docs/knowledge/` と `docs/reports/pending.md` の差分（`git log -p <前の周のコミット>..origin/main -- docs/knowledge docs/reports/pending.md`）。読んだ上でその周の作業を選ぶ
+- 利用者からの指示が届いていれば、それを最優先にする。判断待ちに回さない（work-style「人が決める」）
 - 直近のコミットで何をしていたか（前の周の続きがあるか）
 - README と、そこに書かれた未着手の項目
 - `TODO` `FIXME` `HACK` のコメント
@@ -194,6 +197,8 @@ git log --oneline -10
 入っているか見る。
 
 ## push と GitHub Actions
+
+作業の枝は `claude/DEV-<YYYYMMDD>`、PR の題は `DEV <日付>: <1行>`（work-style「名前の付け方」）。
 
 `.claude/policy/<利用者名>.json` の `push_policy` に従う。既定は `"batch"`。
 
