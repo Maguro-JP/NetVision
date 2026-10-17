@@ -35,7 +35,8 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
 - Arista: EOS 4.36.2F User Manual「Protocol Independent Multicast」
   （`router pim sparse-mode` の `ipv4` の中の `rp address A [グループ] [override]`、
   `rp candidate vlan 24 ...`、`router pim bsr`、口の `pim ipv4 sparse-mode`）。
-  IGMP スヌーピングの書き方は未確認
+  IGMP スヌーピングは EOS 4.35.1F User Manual「IGMP and IGMP Snooping」の Snooping Querier
+  （`ip igmp snooping vlan 5-8 querier`、帯の設定が全体の `ip igmp snooping querier` より優先）
 - NEC QX の書き方は未確認（既存の試験の形のまま）
 """
 
@@ -148,8 +149,10 @@ _PIM_MODE = re.compile(
 )
 _SNOOP_OFF = re.compile(r"^\s*no\s+ip\s+igmp\s+snooping\s*$", re.IGNORECASE)
 _SNOOP_ON = re.compile(r"^\s*ip\s+igmp\s+snooping(?:\s+enable)?\s*$", re.IGNORECASE)
+#: 帯は範囲でも書ける（Arista `no ip igmp snooping vlan 1-4 querier`。出典: EOS 4.35.1F
+#: User Manual「IGMP and IGMP Snooping」の Snooping Querier）
 _SNOOP_VLAN = re.compile(
-    r"^\s*(?P<no>no\s+)?ip\s+igmp\s+snooping\s+vlan\s+(?P<vlan>\d+)(?:\s+(?P<rest>.+))?$",
+    r"^\s*(?P<no>no\s+)?ip\s+igmp\s+snooping\s+vlan\s+(?P<vlan>\d[\d,\-]*)(?:\s+(?P<rest>.+))?$",
     re.IGNORECASE,
 )
 #: `querier-timeout` などの設定値の行は querier を置く行ではない。`\b` だと `-` の前でも切れる
@@ -208,6 +211,7 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
     vlans: list[int] = []
     pim_block = False
     global_querier = False
+    querier_off: set[int] = set()
     #: IGMP を入れた帯の口の番号。後で、スヌーピングを入れた帯の querier に数える
     igmp_svis: set[int] = set()
     for raw in text.splitlines():
@@ -265,15 +269,17 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
             continue
         snoop_vlan = _SNOOP_VLAN.match(line)
         if snoop_vlan:
-            item = _vlan(found, int(snoop_vlan.group("vlan")))
             rest = (snoop_vlan.group("rest") or "").lower()
-            if snoop_vlan.group("no"):
-                if _QUERIER_WORD.match(rest):
-                    item.querier = False
-                elif not rest:
-                    item.enabled = False
-            elif _QUERIER_WORD.match(rest):
-                item.querier = True
+            for number in _vlan_numbers(snoop_vlan.group("vlan")):
+                item = _vlan(found, number)
+                if snoop_vlan.group("no"):
+                    if _QUERIER_WORD.match(rest):
+                        item.querier = False
+                        querier_off.add(number)
+                    elif not rest:
+                        item.enabled = False
+                elif _QUERIER_WORD.match(rest):
+                    item.querier = True
             continue
         if _SNOOP_OFF.match(line):
             if vlans:
@@ -298,8 +304,10 @@ def parse_cisco(text: str, found: ParsedMulticast) -> None:
         if item.vlan in igmp_svis:
             item.querier = True
     if global_querier:
+        # 帯ごとの設定が全体より優先する。帯で止めた querier は入れ直さない
+        # （出典: Arista EOS 4.35.1F User Manual の Snooping Querier）
         for item in found.vlans:
-            item.querier = True
+            item.querier = item.querier or item.vlan not in querier_off
         found.snooping = True if found.snooping is None else found.snooping
 
 

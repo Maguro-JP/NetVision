@@ -1904,3 +1904,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `test_configparse_banners.py` の `test_saved_banners_follow_the_cisco_network_as_code_sample`。冒頭の「未確認」を外した。
 - 見なかったこと: TFTP で写した設定では、区切りが見えない制御文字（`^C` の2文字ではなく1文字）になるという話がある。
   公式の資料では確かめていない。今の読み手は記号の1文字も区切りとして受けるので、その形でも外れるはず（試していない）。
+
+## Arista の IGMP スヌーピングの querier を、範囲で書いた帯と帯ごとの停止で取り違えていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/multicast.py` の `ip igmp snooping vlan` の行は帯を
+  1つの番号でしか受けず、公式の例の `no ip igmp snooping vlan 1-4 querier` や `ip igmp snooping vlan 5-8 querier` は行ごと
+  読み飛ばしていた（マルチキャストの設定が無い機器に見えていた）。さらに、全体の `ip igmp snooping querier` があると、帯で止めた
+  querier まで入れ直していた。
+- 確かめた資料: Arista EOS 4.35.1F User Manual「IGMP and IGMP Snooping」の Snooping Querier（VLAN querier settings take
+  precedence over the global querier setting。例 `no ip igmp snooping vlan 1-4 querier`、`ip igmp snooping vlan 5-8 querier`）。
+- 直したこと: 帯の番号を範囲と並びで開く（`_vlan_numbers` を使う）。帯で止めた querier は、全体の設定で入れ直さない。冒頭の「Arista の
+  IGMP スヌーピングは未確認」を外した。試験は `test_multicast.py` の
+  `test_arista_snooping_querier_follows_the_vlan_setting_over_the_global_one`。
+- 気付いたが手を付けなかったこと: 同じ読み手を Cisco IOS と NX-OS も使う。帯の設定が全体より優先する考え方は Cisco の資料では
+  確かめていない（範囲で書けるかも未確認）。
