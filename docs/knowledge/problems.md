@@ -1868,3 +1868,15 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `test_ipv6_routes_are_read`。
 - 見なかったこと: `disable port all`（全部の口を止める）。読み手は番号の並びしか読まないので、今は止めた口として数えない。
   Config に書かれる形かどうかも確かめていない。
+
+## アライドテレシスの `ip route` の `weight`・`description` を距離や口と取り違えていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/allied.py` の経路の読み手は、行の後ろの語を順に見て、
+  数字なら距離、`port`・`vlan` などで始まれば口として拾っていた。`ip route 0.0.0.0/0 192.168.1.1 weight 5` は距離 5 に、
+  `description` の後ろの文や `weight` そのものは口（interface='weight'）に化けていた。
+- 確かめた資料: Allied Telesis「Route Selection Feature Overview and Configuration Guide」C613-22029-00 REV G の Static routes
+  （`ip route <subnet&mask> {<gateway-ip>|<interface>} [<distance>]`、ECMP の重みの `weight`、説明の `description`）。
+- 直したこと: `weight` と `description` が来たら、そこから後ろは読まない。IOS の読み手が同じ行を先に読んでいるので、
+  宛先と次の宛先が同じ経路はこちらで読んだ方に置き換える。試験は `test_configparse_allied.py` の
+  `test_route_weight_and_description_are_not_taken_as_distance_or_port`。
+- 残る未確認: `access-list hardware` の行。

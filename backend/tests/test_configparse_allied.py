@@ -130,3 +130,35 @@ def test_the_ports_after_a_range_are_left_as_they_are():
     ports = {i.name: i for i in _official().interfaces}
     assert ports["port1.0.5"].trunk_vlans == [10, 20]
     assert ports["Vlan10"].ip_address == "192.168.10.1/24"
+
+
+def test_route_weight_and_description_are_not_taken_as_distance_or_port():
+    """`weight` と `description` の後ろの語を、距離や出口の口として読まない。
+
+    出典: Allied Telesis「Route Selection Feature Overview and Configuration Guide」
+    （C613-22029-00 REV G）の Static routes（`ip route [vrf <vrf-name>] <subnet&mask>
+    {<gateway-ip>|<interface>} [<distance>] [weight <1-255>] [description <description>]`）と例
+    （`ip route 100.0.0.0/24 192.168.1.100 255`、`ip route 192.168.2.0/24 tunnel1`）。
+    距離と口の指定は今までどおり読む（見張り）。
+    """
+    from app.services import configparse
+
+    text = "\n".join(
+        [
+            "! AlliedWare Plus (TM) 5.5.2",
+            "hostname aw-rt",
+            "!",
+            "ip route 100.0.0.0/24 192.168.1.100 255",
+            "ip route 10.0.0.0/8 192.168.1.1 weight 5",
+            "ip route 10.1.0.0/16 192.168.1.1 20 weight 5 description to branch 2",
+            "ip route 192.168.2.0/24 tunnel1",
+        ]
+    )
+    routes = {r.destination: r for r in configparse.parse(text).routes}
+    assert routes["100.0.0.0/24"].distance == 255
+    assert routes["10.0.0.0/8"].next_hop == "192.168.1.1"
+    assert routes["10.0.0.0/8"].distance is None
+    assert routes["10.0.0.0/8"].interface is None
+    assert routes["10.1.0.0/16"].distance == 20
+    assert routes["10.1.0.0/16"].interface is None
+    assert routes["192.168.2.0/24"].interface is not None
