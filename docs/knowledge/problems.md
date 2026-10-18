@@ -1964,3 +1964,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 3000-3699 の行で動作が Table 2 の語なら、周3 と同じ寄せ方（`_HARDWARE_ACTIONS`）で読んで足す。試験は
   `test_configparse_allied.py` の `test_numbered_hardware_acl_actions_are_read_too`。
 - 見なかったこと: MAC ACL（4000 番台）の同じ動作の語。
+
+## アライドテレシスの番号付き MAC ACL（4000 番台）を IP の ACL として読み、MAC アドレスがプロトコルに化けていた（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `access-list 4000 permit 0030.841A.1234 0000.0000.0000 any` を IOS の読み手が
+  IP の拡張 ACL として読み、プロトコルが `0030.841a.1234`、送信元がマスクの `0000.0000.0000` になっていた。`access-list 4001 deny any any` は
+  宛先が空。`copy-to-mirror` などの行は捨てていた。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining hardware MAC ACLs
+  （4000-4699。送信元 MAC・マスク・宛先 MAC・マスクの順で、any にはマスクを付けない）、Filtering traffic on VLANs の
+  `access-list 4000 deny any any`、Table 2: Hardware ACL parameter actions。
+- 直したこと: 4000-4699 の行を読み直し、種別を `mac`、プロトコルを `mac`、送信元・宛先を `any` か `MAC マスク` で持つ。動作は周3 と同じ寄せ方。
+  読めない形の行は足さない。試験は `test_configparse_allied.py` の `test_numbered_hardware_mac_acls_are_read_as_mac_addresses`。
+- 気付いたが手を付けなかったこと: 資料はハードウェア ACL の末尾を「暗黙の permit」と書く（for AlliedWare Plus hardware ACLs, the ACL ends in an
+  implicit 'permit all else' clause）。ところが点検（`policyreview.py` の落とす行の指摘）は、アライドのハードウェア ACL 3000 にも
+  「末尾には、書かなくても残り全部を落とすが入っています」と出す。言っていることが逆になる。次の周で、機種ごとの末尾の既定として直す。

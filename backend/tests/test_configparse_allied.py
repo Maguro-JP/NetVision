@@ -226,3 +226,41 @@ def test_numbered_hardware_acl_actions_are_read_too():
     ]
     assert [e.action for e in acls["3003"].entries] == ["deny"]
     assert acls["3003"].applied_to == ["interface port1.0.1 入り"]
+
+
+def test_numbered_hardware_mac_acls_are_read_as_mac_addresses():
+    """4000 番台はハードウェア MAC ACL。IP の ACL として読むと、MAC アドレスがプロトコルに化ける。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining hardware MAC ACLs（`access-list 4000 permit 0030.841A.1234 0000.0000.0000 any`。
+    送信元 MAC・マスク・宛先 MAC・マスクの順で、any にはマスクを付けない）と、Filtering traffic on
+    VLANs の `access-list 4000 deny any any`、Table 2: Hardware ACL parameter actions。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list 4000 permit 0030.841A.1234 0000.0000.0000 any\n"
+        "access-list 4001 deny any any\n"
+        "access-list 4002 copy-to-mirror any 0000.5e00.0101 0000.0000.0000\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group 4001\n"
+        "!\n"
+    )
+    acls = {a.name: a for a in configparse.parse(text).acls}
+    assert {name: acls[name].kind for name in ("4000", "4001", "4002")} == {
+        "4000": "mac",
+        "4001": "mac",
+        "4002": "mac",
+    }
+    rows = {
+        name: [(e.action, e.protocol, e.source, e.destination) for e in acls[name].entries]
+        for name in ("4000", "4001", "4002")
+    }
+    assert rows == {
+        "4000": [("permit", "mac", "0030.841a.1234 0000.0000.0000", "any")],
+        "4001": [("deny", "mac", "any", "any")],
+        "4002": [("permit", "mac", "any", "0000.5e00.0101 0000.0000.0000")],
+    }
+    assert acls["4001"].entries[0].is_any_any
+    assert acls["4001"].applied_to == ["interface port1.0.1 入り"]

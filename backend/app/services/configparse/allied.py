@@ -59,6 +59,10 @@ _ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE
 #: 番号付きのハードウェア IP ACL（3000-3699）。出典: C613-22039-00 REV M の
 #: Defining hardware IP ACLs
 _ACL_HARDWARE_NUMBERED = re.compile(r"^access-list\s+(3[0-6]\d\d)\s+(\S.*)$", re.IGNORECASE)
+#: 番号付きのハードウェア MAC ACL（4000-4699）。送信元・宛先は `any` か `MAC マスク`
+#: （出典: C613-22039-00 REV M の Defining hardware MAC ACLs）
+_ACL_MAC_NUMBERED = re.compile(r"^access-list\s+(4[0-6]\d\d)\s+(\S.*)$", re.IGNORECASE)
+_MAC = re.compile(r"^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$", re.IGNORECASE)
 _ACCESS_GROUP = re.compile(r"^access-group\s+(\S+)\s*$", re.IGNORECASE)
 #: `show lldp neighbors` の見出し
 _LLDP_HEADER = re.compile(
@@ -107,6 +111,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_addresses(text, parsed)
     _parse_routes(text, parsed)
     _parse_hardware_acls(text, parsed)
+    _parse_mac_acls(text, parsed)
     _parse_lldp_table(text, parsed)
     return parsed
 
@@ -236,6 +241,62 @@ def _hardware_acl_entry(line: str) -> ParsedAclEntry | None:
     if entry is not None:
         entry.raw = line
     return entry
+
+
+def _mac_side(words: list[str], index: int) -> tuple[str, int] | None:
+    """`any` か `MAC マスク` を1つ読み、次の位置を返す。"""
+    if index >= len(words):
+        return None
+    if words[index].lower() == "any":
+        return "any", index + 1
+    if index + 1 < len(words) and _MAC.match(words[index]) and _MAC.match(words[index + 1]):
+        return f"{words[index].lower()} {words[index + 1].lower()}", index + 2
+    return None
+
+
+def _mac_acl_entry(line: str) -> ParsedAclEntry | None:
+    """MAC ACL の1行（`permit 0030.841A.1234 0000.0000.0000 any`）。読めない形は None。"""
+    words = line.split()
+    if not words:
+        return None
+    action = words[0].lower()
+    action = _HARDWARE_ACTIONS.get(action, action)
+    if action not in ("permit", "deny"):
+        return None
+    source = _mac_side(words, 1)
+    if source is None:
+        return None
+    destination = _mac_side(words, source[1])
+    if destination is None:
+        return None
+    return ParsedAclEntry(
+        action=action, protocol="mac", source=source[0], destination=destination[0], raw=line
+    )
+
+
+def _parse_mac_acls(text: str, parsed: ParsedConfig) -> None:
+    """番号付きの MAC ACL を読み直す。
+
+    IOS の読み手は IP の行として読むので、MAC アドレスがプロトコルに化けている。
+    """
+    by_name = {acl.name: acl for acl in parsed.acls}
+    redone: set[str] = set()
+    for raw in text.splitlines():
+        found = _ACL_MAC_NUMBERED.match(raw.strip()) if not raw.startswith(" ") else None
+        if found is None:
+            continue
+        name = found.group(1)
+        acl = by_name.get(name)
+        if acl is None:
+            acl = by_name[name] = ParsedAcl(name=name, kind="mac")
+            parsed.acls.append(acl)
+        if name not in redone:
+            acl.kind = "mac"
+            acl.entries = []
+            redone.add(name)
+        entry = _mac_acl_entry(found.group(2))
+        if entry is not None:
+            acl.entries.append(entry)
 
 
 def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
