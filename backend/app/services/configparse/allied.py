@@ -18,7 +18,8 @@
 （`interface port1.0.1-1.0.24`）。表番号は無い。`<vid-range>` にカンマ区切りが
 使えるかはコマンドリファレンスで未確認なので、`-` と `,` の両方を読む。
 アドレスの長さ付きの書き方（`ip address 192.168.10.1/24`）は同社サポートポータルの
-作例で確かめた。経路の書き方と `access-list hardware` は未確認。
+作例で、経路の書き方は「Route Selection Feature Overview and Configuration Guide」
+（C613-22029-00 REV G）の Static routes で確かめた。`access-list hardware` は未確認。
 """
 
 from __future__ import annotations
@@ -180,15 +181,25 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
             continue
         route = ParsedRoute(destination=destination, vrf=found.group("vrf"))
         for token in found.group("rest").split():
+            # `weight <1-255>` と `description <文>` は距離でも口でもない。ここから後ろは読まない
+            # （出典: Allied Telesis「Route Selection Feature Overview and Configuration Guide」
+            # C613-22029-00 REV G の Static routes）
+            if token.lower() in ("weight", "description"):
+                break
             if re.match(r"^\d+\.\d+\.\d+\.\d+$", token):
                 route.next_hop = token
             elif token.isdigit():
                 route.distance = int(token)
-            elif re.match(r"^(port|vlan|po|sa)", token, re.IGNORECASE):
+            elif re.match(r"^(port|vlan|po|sa|tunnel)", token, re.IGNORECASE):
                 route.interface = token
-        if (route.destination, route.next_hop) in seen:
-            continue
-        seen.add((route.destination, route.next_hop))
+        key = (route.destination, route.next_hop)
+        if key in seen:
+            # IOS の読み手が先に同じ行を読んでいる。こちらの書式で読んだ方に置き換える
+            # （IOS の読み手は weight を口、その後ろの数を距離と取り違える）
+            parsed.routes = [
+                r for r in parsed.routes if (r.destination, r.next_hop) != key or r.vrf != route.vrf
+            ]
+        seen.add(key)
         parsed.routes.append(route)
 
 

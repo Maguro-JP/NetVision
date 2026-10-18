@@ -1852,3 +1852,69 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 気付いたが手を付けなかったこと: スタックの2台が同じ番号の口を代表にすると（`1:23` と `2:23`）、束ねの番号が同じ 23 になって
   1つの束ねに見える。束ねの番号を `台:口` で持つかどうかは、台帳の持ち方と合わせて決める（未着手）。
 - 残る未確認: `configure iproute add` と `disable ports` の行。
+
+## EXOS の IPv6 の経路（既定経路と静的経路）を読んでいなかった（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/exos.py` の経路の読み手は、次の宛先を IPv4 の形でしか
+  拾っていなかった。公式資料の例そのもの（`configure iproute add default 2001:db8::1234:5678`、
+  `configure iproute add 2001:db8:0:1111::/64 fe80::1111%default`）が、経路の一覧から抜けていた。
+- 確かめた資料: ExtremeXOS 22.5 Command Reference の configure iproute add (IPv4)
+  （`configure iproute add [ ipNetmask | ip_addr mask ] gateway {...}`）、configure iproute add default
+  （`[ gateway | ipv6Gateway | ipv6ScopedGateway ]`）、configure iproute add (IPV6)
+  （`configure iproute add ipv6Netmask [ ipv6Gateway | ipv6ScopedGateway ]`）、disable port（`disable port [ port_list | all ]`、
+  例 `disable ports 3,5,12-15`）。
+- 直したこと: IPv6 の経路の行を足し、既定経路は `::/0` で持つようにした。スコープ付きの次の宛先は `%` の前のアドレスだけを持つ。
+  IPv4 の形と `disable ports` の並びは今の読み方で合っていた。冒頭の出典を書き足した。試験は `test_configparse_exos.py` の
+  `test_ipv6_routes_are_read`。
+- 見なかったこと: `disable port all`（全部の口を止める）。読み手は番号の並びしか読まないので、今は止めた口として数えない。
+  Config に書かれる形かどうかも確かめていない。
+
+## アライドテレシスの `ip route` の `weight`・`description` を距離や口と取り違えていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/allied.py` の経路の読み手は、行の後ろの語を順に見て、
+  数字なら距離、`port`・`vlan` などで始まれば口として拾っていた。`ip route 0.0.0.0/0 192.168.1.1 weight 5` は距離 5 に、
+  `description` の後ろの文や `weight` そのものは口（interface='weight'）に化けていた。
+- 確かめた資料: Allied Telesis「Route Selection Feature Overview and Configuration Guide」C613-22029-00 REV G の Static routes
+  （`ip route <subnet&mask> {<gateway-ip>|<interface>} [<distance>]`、ECMP の重みの `weight`、説明の `description`）。
+- 直したこと: `weight` と `description` が来たら、そこから後ろは読まない。IOS の読み手が同じ行を先に読んでいるので、
+  宛先と次の宛先が同じ経路はこちらで読んだ方に置き換える。試験は `test_configparse_allied.py` の
+  `test_route_weight_and_description_are_not_taken_as_distance_or_port`。
+- 残る未確認: `access-list hardware` の行。
+
+## Cisco の `interface Tunnel 0`（番号の前に空白）のトンネルを丸ごと読み落としていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/tunnels.py` の区画の見出しは `interface 名前` の
+  1語しか受けず、公式の設定例の `interface Tunnel 0` は見出しとして当たらなかった。そのトンネルは一覧から抜け、論理構成図に線が出なかった。
+- 確かめた資料: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x」の Implementing Tunnels（Example: Configuring a GRE IPv4
+  Tunnel。`tunnel source { ip-address | interface-type interface-number }`、`tunnel destination { hostname | ip-address }`、
+  `tunnel mode gre { ip | multipoint }`）と VRF-Aware Tunnels（`vrf forwarding` が内側、`tunnel vrf` が外側の VRF）。
+- 直したこと: 見出しの名前の後ろに数字で始まる語があれば、つないで `Tunnel0` として持つ。行の読み方（source・destination・mode・vrf）は
+  今のままで資料と合っていた。冒頭の「未確認」を外した。試験は `test_topology_logical.py` の
+  `test_cisco_tunnel_lines_follow_the_ip_routing_guide`。
+- 気付いたが手を付けなかったこと: `tunnel mode` を書かないときの既定は GRE over IPv4 だが、種別は空のまま（書いていない値を埋めない方針）。
+  H3C は `interface Tunnel1 mode gre` と見出しに種別が付く形がありうるが、資料で確かめていない。
+
+## 見張り: Cisco の保存した設定の banner（区切りが `^C`）を外せている（2026-10-17 JST）
+
+- 確かめたこと: `configparse/banners.py` は、保存した設定で区切りが `^C` と出る形を「既存の試験の形」として受けていた（未確認）。
+  直す所は無く、4種類（exec・login・motd・prompt-timeout）とも外れていた。
+- 確かめた資料: Cisco「Network as Code」の IOS-XE Banner の Sample Configuration（`banner login ^C` の次の行から `^C` まで、
+  `banner motd ^C文言` と同じ行に続く形、`banner prompt-timeout ^C文言^C` と1行で閉じる形）。区切りの考え方は
+  System Management Configuration Guide, Cisco IOS XE（Catalyst 9300 17.15）の Configuring a Message-of-the-Day Login Banner。
+- 試験: `test_configparse_banners.py` の `test_saved_banners_follow_the_cisco_network_as_code_sample`。冒頭の「未確認」を外した。
+- 見なかったこと: TFTP で写した設定では、区切りが見えない制御文字（`^C` の2文字ではなく1文字）になるという話がある。
+  公式の資料では確かめていない。今の読み手は記号の1文字も区切りとして受けるので、その形でも外れるはず（試していない）。
+
+## Arista の IGMP スヌーピングの querier を、範囲で書いた帯と帯ごとの停止で取り違えていた（2026-10-17 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/multicast.py` の `ip igmp snooping vlan` の行は帯を
+  1つの番号でしか受けず、公式の例の `no ip igmp snooping vlan 1-4 querier` や `ip igmp snooping vlan 5-8 querier` は行ごと
+  読み飛ばしていた（マルチキャストの設定が無い機器に見えていた）。さらに、全体の `ip igmp snooping querier` があると、帯で止めた
+  querier まで入れ直していた。
+- 確かめた資料: Arista EOS 4.35.1F User Manual「IGMP and IGMP Snooping」の Snooping Querier（VLAN querier settings take
+  precedence over the global querier setting。例 `no ip igmp snooping vlan 1-4 querier`、`ip igmp snooping vlan 5-8 querier`）。
+- 直したこと: 帯の番号を範囲と並びで開く（`_vlan_numbers` を使う）。帯で止めた querier は、全体の設定で入れ直さない。冒頭の「Arista の
+  IGMP スヌーピングは未確認」を外した。試験は `test_multicast.py` の
+  `test_arista_snooping_querier_follows_the_vlan_setting_over_the_global_one`。
+- 気付いたが手を付けなかったこと: 同じ読み手を Cisco IOS と NX-OS も使う。帯の設定が全体より優先する考え方は Cisco の資料では
+  確かめていない（範囲で書けるかも未確認）。

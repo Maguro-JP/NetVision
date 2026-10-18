@@ -14,9 +14,10 @@
 タグ付きと一緒に載っているタグ無しは、その口のタグ無し VLAN（native）。
 
 出典: VLAN を番号の並びで書く形と description-string は ExtremeXOS Command Reference Guide
-（22.1 / 30.1 / 31.7）で、束ね（enable sharing grouping）は v33.1.1 で確かめた。
+（22.1 / 30.1 / 31.7）で、束ね（enable sharing grouping）は v33.1.1 で、経路
+（configure iproute add の IPv4・IPv6・default）と disable port は 22.5 で確かめた。
 LLDP は `_lldp_detail` の docstring。
-ほかの行は既存の試験の形のまま（未確認）。
+ほかの行は既存の試験の形のまま（未確認）。`disable port all` は読まない。
 """
 
 from __future__ import annotations
@@ -79,6 +80,15 @@ _SHARING = re.compile(
 _ROUTE = re.compile(
     r"^\s*configure\s+iproute\s+add\s+(?:(?P<default>default)|"
     r"(?P<dest>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>\d+\.\d+\.\d+\.\d+|\d{1,2})(?![\d.]))\s+(?P<hop>\d+\.\d+\.\d+\.\d+)",
+    re.IGNORECASE,
+)
+
+#: IPv6 の経路。既定経路は IPv6 の次の宛先も書ける。スコープ付きの次の宛先
+#: （`fe80::1%vlan名`）はアドレスの部分だけを持つ。出典: ExtremeXOS 22.5 Command Reference の
+#: configure iproute add default と configure iproute add (IPV6)
+_ROUTE6 = re.compile(
+    r"^\s*configure\s+iproute\s+add\s+(?:(?P<default>default)|(?P<dest>[0-9a-f:]+:[0-9a-f:]*/\d{1,3}))"
+    r"\s+(?P<hop>[0-9a-f]*:[0-9a-f:]+)(?:%\S+)?",
     re.IGNORECASE,
 )
 
@@ -195,6 +205,11 @@ def parse(text: str) -> ParsedConfig:
                 destination = "0.0.0.0/0"
             else:
                 destination = f"{route.group('dest')}/{_prefixlen(route.group('mask'))}"
+            parsed.routes.append(ParsedRoute(destination=destination, next_hop=route.group("hop")))
+            continue
+        route = _ROUTE6.match(raw)
+        if route:
+            destination = "::/0" if route.group("default") else route.group("dest").lower()
             parsed.routes.append(ParsedRoute(destination=destination, next_hop=route.group("hop")))
 
     # タグ付きと一緒に載っているタグ無しは、その口のタグ無し VLAN（native）。

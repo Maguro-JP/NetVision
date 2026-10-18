@@ -194,3 +194,37 @@ def test_fortios_ipv6_gateways_are_read():
     assert [(t.name, t.source, t.destination) for t in parsed.tunnels] == [
         ("toHQ6", "2001:db8::1", "2001:db8::2")
     ]
+
+
+def test_cisco_tunnel_lines_follow_the_ip_routing_guide():
+    """Cisco IOS XE の GRE と VRF を意識したトンネルの例を、そのまま読む。
+
+    出典: Cisco「IP Routing Configuration Guide, Cisco IOS XE 17.x」の Implementing Tunnels
+    （Example: Configuring a GRE IPv4 Tunnel、`interface Tunnel 0` と番号の前に空白）と
+    VRF-Aware Tunnels（`vrf forwarding green` が内側、`tunnel vrf red` が外側）。
+    """
+    text = (
+        "hostname rt-01\n"
+        "interface Tunnel 0\n"
+        " ip address 10.1.1.2 255.255.255.0\n"
+        " tunnel source GigabitEthernet 0/0/1\n"
+        " tunnel destination 192.168.3.2\n"
+        " tunnel mode gre ip\n"
+        "!\n"
+        "interface Tunnel1\n"
+        " no ip address\n"
+        " vrf forwarding green\n"
+        " tunnel source 10.22.22.22\n"
+        " tunnel destination 10.44.44.44\n"
+        " tunnel vrf red\n"
+        "!\n"
+    )
+    tunnels = {t.name: t for t in configparse.parse(text).tunnels}
+    assert sorted(tunnels) == ["Tunnel0", "Tunnel1"]
+    gre = tunnels["Tunnel0"]
+    assert (gre.kind, gre.source, gre.destination) == (
+        "gre ip",
+        "GigabitEthernet 0/0/1",
+        "192.168.3.2",
+    )
+    assert (tunnels["Tunnel1"].destination, tunnels["Tunnel1"].vrf) == ("10.44.44.44", "green")

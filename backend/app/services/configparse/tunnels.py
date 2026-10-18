@@ -18,7 +18,9 @@ from app.services.configparse.base import ParsedConfig, ParsedTunnel
 # 種別が名前から分かるもの。書いていなければ空のままにする
 _KIND_FROM_MODE = re.compile(r"^\s*tunnel\s+mode\s+(.+?)\s*$", re.IGNORECASE)
 
-_BLOCK_INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
+# Cisco の設定例は `interface Tunnel 0` と番号の前に空白を置く（出典: IP Routing Configuration
+# Guide, Cisco IOS XE 17.x の Implementing Tunnels）。名前と番号をつないで `Tunnel0` として持つ
+_BLOCK_INTERFACE = re.compile(r"^interface\s+(\S+)(?:\s+(\d\S*))?\s*$", re.IGNORECASE)
 _TUNNEL_NAME = re.compile(r"^(?:tunnel|st0|gr-|ipip|vti)", re.IGNORECASE)
 
 
@@ -29,7 +31,9 @@ def is_tunnel(name: str) -> bool:
 def parse_block_style(text: str, parsed: ParsedConfig) -> None:
     """`interface TunnelN` … の形（Cisco IOS / NEC IX / NEC QX）を読む。
 
-    Cisco の行（tunnel source / destination / mode / vrf）は公式の資料に当たれていない（未確認）。
+    Cisco の行（tunnel source / destination / mode / vrf）は、Cisco「IP Routing Configuration Guide,
+    Cisco IOS XE 17.x」の Implementing Tunnels と VRF-Aware Tunnels で確かめた。
+    `vrf forwarding` が内側、`tunnel vrf` が外側（トンネルの通り道）の VRF。
 
     書式の細かい差（`tunnel source` と `source`）は両方受ける。
     どちらか片方しか見ないと、ベンダーを跨いだ瞬間に黙って空になる。
@@ -38,7 +42,7 @@ def parse_block_style(text: str, parsed: ParsedConfig) -> None:
     for raw in text.splitlines():
         match = _BLOCK_INTERFACE.match(raw.strip())
         if match and not raw[:1].isspace():
-            name = match.group(1)
+            name = match.group(1) + (match.group(2) or "")
             current = parsed.add_tunnel(ParsedTunnel(name=name)) if is_tunnel(name) else None
             continue
         if current is None:

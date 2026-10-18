@@ -517,3 +517,23 @@ interface Vlan24
 """
     found = multicast.parse(text, "arista")
     assert found.dynamic_rp is True
+
+
+def test_arista_snooping_querier_follows_the_vlan_setting_over_the_global_one():
+    """Arista の帯ごとの querier は、範囲で書け、全体の設定より優先する。
+
+    出典: Arista EOS 4.35.1F User Manual「IGMP and IGMP Snooping」の Snooping Querier
+    （VLAN querier settings take precedence over the global querier setting。例
+    `no ip igmp snooping vlan 1-4 querier`、`ip igmp snooping vlan 5-8 querier`）。
+    """
+    text = (
+        "ip igmp snooping\n"
+        "ip igmp snooping querier\n"
+        "ip igmp snooping querier address 10.0.0.1\n"
+        "no ip igmp snooping vlan 1-4 querier\n"
+        "ip igmp snooping vlan 5-8 querier\n"
+    )
+    found = multicast.parse(text, "arista")
+    assert found is not None
+    querier = {item.vlan: item.querier for item in found.vlans}
+    assert querier == {1: False, 2: False, 3: False, 4: False, 5: True, 6: True, 7: True, 8: True}
