@@ -20,7 +20,11 @@ _KIND_FROM_MODE = re.compile(r"^\s*tunnel\s+mode\s+(.+?)\s*$", re.IGNORECASE)
 
 # Cisco の設定例は `interface Tunnel 0` と番号の前に空白を置く（出典: IP Routing Configuration
 # Guide, Cisco IOS XE 17.x の Implementing Tunnels）。名前と番号をつないで `Tunnel0` として持つ
-_BLOCK_INTERFACE = re.compile(r"^interface\s+(\S+)(?:\s+(\d\S*))?\s*$", re.IGNORECASE)
+# H3C Comware 7 は種別を見出しに書く（`interface tunnel 0 mode gre`。出典: H3C「GRE over IPv4
+# Tunnel Configuration Examples」と Tunnel interface commands の interface tunnel）
+_BLOCK_INTERFACE = re.compile(
+    r"^interface\s+(\S+)(?:\s+(\d\S*))?(?:\s+mode\s+(?P<mode>\S.*?))?\s*$", re.IGNORECASE
+)
 _TUNNEL_NAME = re.compile(r"^(?:tunnel|st0|gr-|ipip|vti)", re.IGNORECASE)
 
 
@@ -43,7 +47,12 @@ def parse_block_style(text: str, parsed: ParsedConfig) -> None:
         match = _BLOCK_INTERFACE.match(raw.strip())
         if match and not raw[:1].isspace():
             name = match.group(1) + (match.group(2) or "")
+            if name[:6].lower() == "tunnel":
+                # 入力のままの `interface tunnel 0` も、保存した設定の `Tunnel0` にそろえる
+                name = "Tunnel" + name[6:]
             current = parsed.add_tunnel(ParsedTunnel(name=name)) if is_tunnel(name) else None
+            if current is not None and match.group("mode"):
+                current.kind = current.kind or match.group("mode")
             continue
         if current is None:
             continue

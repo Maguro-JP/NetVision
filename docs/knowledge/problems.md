@@ -1929,3 +1929,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `test_multicast.py` の `test_cisco_snooping_vlan_lines_follow_the_catalyst_command_reference`。
 - 見なかったこと: 資料は `ip igmp snooping vlan N querier` が「その帯のスヌーピングも入れる」と書く。帯のスヌーピングを止めた後に
   querier の行がある形は読み手が止めたまま扱うが、Arista で同じかを確かめていないので変えていない。
+
+## H3C の `interface tunnel 0 mode gre`（見出しに種別）のトンネルを丸ごと読み落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/tunnels.py` の区画の見出しは `interface 名前 [番号]` までしか
+  受けず、H3C Comware 7 の `interface tunnel 0 mode gre` は見出しとして当たらなかった。そのトンネルは一覧から抜け、論理構成図に線が出なかった。
+- 確かめた資料: H3C「GRE over IPv4 Tunnel Configuration Examples」（Comware 7-based routers。`interface tunnel 0 mode gre`、`source 1.1.1.1`、
+  `destination 2.2.2.2`）と、Tunnel interface commands の interface tunnel（`interface tunnel number [ mode { ... | gre [ ipv6 ] | ... } ]`。
+  作るときは mode が要る）。
+- 直したこと: 見出しの末尾の `mode <種別>` を読み、種別として持つ。名前は `Tunnel0` にそろえる。試験は `test_topology_logical.py` の
+  `test_h3c_tunnel_with_the_mode_on_the_interface_line_is_read`。
+- 残る未確認: 保存した設定（display current-configuration）で `interface Tunnel0 mode gre` と出る形は資料で見ていない。両方の形を受ける。

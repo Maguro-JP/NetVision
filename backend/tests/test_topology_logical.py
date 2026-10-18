@@ -228,3 +228,27 @@ def test_cisco_tunnel_lines_follow_the_ip_routing_guide():
         "192.168.3.2",
     )
     assert (tunnels["Tunnel1"].destination, tunnels["Tunnel1"].vrf) == ("10.44.44.44", "green")
+
+
+def test_h3c_tunnel_with_the_mode_on_the_interface_line_is_read():
+    """H3C Comware 7 はトンネルの種別を見出しの行に書く（`interface tunnel 0 mode gre`）。
+
+    出典: H3C「GRE over IPv4 Tunnel Configuration Examples」（Comware 7-based routers。
+    `interface tunnel 0 mode gre`、`source 1.1.1.1`、`destination 2.2.2.2`）と、
+    Tunnel interface commands の interface tunnel
+    （`interface tunnel number [ mode { ... | gre [ ipv6 ] | ... } ]`）。
+    保存した設定で `interface Tunnel0 mode gre` と出る形は資料で見ていない（未確認）。
+    """
+    for header in ("interface tunnel 0 mode gre", "interface Tunnel0 mode gre"):
+        text = (
+            "#\n sysname DeviceA\n#\n"
+            f"{header}\n"
+            " ip address 10.1.2.1 255.255.255.0\n"
+            " source 1.1.1.1\n"
+            " destination 2.2.2.2\n"
+            "#\nreturn\n"
+        )
+        tunnels = configparse.parse(text).tunnels
+        assert [(t.name, t.kind, t.source, t.destination) for t in tunnels] == [
+            ("Tunnel0", "gre", "1.1.1.1", "2.2.2.2")
+        ], header
