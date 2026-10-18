@@ -162,3 +162,40 @@ def test_route_weight_and_description_are_not_taken_as_distance_or_port():
     assert routes["10.1.0.0/16"].distance == 20
     assert routes["10.1.0.0/16"].interface is None
     assert routes["192.168.2.0/24"].interface is not None
+
+
+def test_hardware_acl_actions_follow_the_acl_feature_overview():
+    """ハードウェア ACL の動作は permit / deny だけではない。通すか捨てるかで読む。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining named hardware ACLs（`access-list hardware hw_name` の下に `permit ip 192.168.1.0
+    0.0.0.255 192.168.2.0 0.0.0.255`）、Table 2: Hardware ACL parameter actions（copy-to-cpu・
+    copy-to-mirror は転送もする、send-to-cpu・send-to-mirror・deny-and-not-cpu は転送しない）、
+    Attaching hardware ACLs to interfaces（`interface port1.0.1` の `access-group`）。
+    send-to-vlan-port は別の口へ送り直すので、通す・捨てるのどちらにも決めずに読まない。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list hardware hw_name\n"
+        " permit ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255\n"
+        " copy-to-mirror ip any 236.5.8.213/32\n"
+        " send-to-cpu ip 192.168.9.0/24 any\n"
+        " deny-and-not-cpu tcp 1.1.1.1/32 any eq 10\n"
+        " send-to-vlan-port vlan 10 port1.0.2 ip any any\n"
+        " deny ip 192.168.1.0 0.0.0.255 any\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group hw_name\n"
+        "!\n"
+    )
+    parsed = configparse.parse(text)
+    acl = {a.name: a for a in parsed.acls}["hw_name"]
+    assert [(e.action, e.raw.split()[0]) for e in acl.entries] == [
+        ("permit", "permit"),
+        ("permit", "copy-to-mirror"),
+        ("deny", "send-to-cpu"),
+        ("deny", "deny-and-not-cpu"),
+        ("deny", "deny"),
+    ]
+    assert acl.applied_to == ["interface port1.0.1 入り"]

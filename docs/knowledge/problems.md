@@ -1940,3 +1940,17 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 見出しの末尾の `mode <種別>` を読み、種別として持つ。名前は `Tunnel0` にそろえる。試験は `test_topology_logical.py` の
   `test_h3c_tunnel_with_the_mode_on_the_interface_line_is_read`。
 - 残る未確認: 保存した設定（display current-configuration）で `interface Tunnel0 mode gre` と出る形は資料で見ていない。両方の形を受ける。
+
+## アライドテレシスのハードウェア ACL の copy-to-mirror・send-to-cpu・deny-and-not-cpu を読み落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/allied.py` は名前付きのハードウェア ACL（`access-list hardware 名前`）の
+  行を IOS と同じ形で読んでいたので、動作が permit / deny 以外の行（`copy-to-mirror`、`send-to-cpu`、`deny-and-not-cpu` など）を黙って捨てていた。
+  捨てる側（`deny-and-not-cpu` など）が抜けると、止めている通信を止めていないと読む。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining named hardware ACLs、
+  Table 2: Hardware ACL parameter actions、Attaching hardware ACLs to interfaces（`access-group` で口に当てる）。
+- 直したこと（AI の判断）: 動作を、転送するか（copy-to-cpu・copy-to-mirror → permit）、転送しないか（send-to-cpu・send-to-mirror・
+  deny-and-not-cpu → deny）に寄せて読み、元の行は raw に残す。send-to-vlan-port は別の口へ送り直すので、どちらにも寄せずに読まない。
+  試験は `test_configparse_allied.py` の `test_hardware_acl_actions_follow_the_acl_feature_overview`。冒頭の「未確認」を外した。
+- 変えたい場合に触る場所: `allied.py` の `_HARDWARE_ACTIONS`。
+- 見なかったこと: 番号付き（3000 番台）の行は IOS の読み手が読むので、同じ動作の語はそちらでは寄せていない。保存した設定で行頭に番号
+  （`10 permit ...`）が付くかは資料で見ていない（付いても読む）。

@@ -19,7 +19,8 @@
 使えるかはコマンドリファレンスで未確認なので、`-` と `,` の両方を読む。
 アドレスの長さ付きの書き方（`ip address 192.168.10.1/24`）は同社サポートポータルの
 作例で、経路の書き方は「Route Selection Feature Overview and Configuration Guide」
-（C613-22029-00 REV G）の Static routes で確かめた。`access-list hardware` は未確認。
+（C613-22029-00 REV G）の Static routes で、`access-list hardware` は「ACL Feature Overview and
+Configuration Guide」（C613-22039-00 REV M）で確かめた。
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from app.services.configparse import cisco, policy
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedAcl,
+    ParsedAclEntry,
     ParsedConfig,
     ParsedNeighbor,
     ParsedRoute,
@@ -203,6 +205,36 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
         parsed.routes.append(route)
 
 
+#: ハードウェア ACL の動作を、通す（permit）か捨てる（deny）かに寄せる。出典: Allied Telesis
+#: 「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Table 2: Hardware ACL
+#: parameter actions（copy-to-* は転送もする。send-to-cpu・send-to-mirror・deny-and-not-cpu は
+#: 転送しない）。
+#: send-to-vlan-port は別の口へ送り直すので、どちらにも寄せない（読まない）
+_HARDWARE_ACTIONS = {
+    "copy-to-cpu": "permit",
+    "copy-to-mirror": "permit",
+    "send-to-cpu": "deny",
+    "send-to-mirror": "deny",
+    "deny-and-not-cpu": "deny",
+}
+
+
+def _hardware_acl_entry(line: str) -> ParsedAclEntry | None:
+    """名前付きのハードウェア ACL の1行。動作の語を寄せてから IOS と同じ形で読み、元の行を残す。"""
+    words = line.split(maxsplit=2)
+    index = 1 if words and words[0].isdigit() else 0
+    if len(words) <= index:
+        return None
+    action = _HARDWARE_ACTIONS.get(words[index].lower())
+    if action is None:
+        return policy.acl_entry(line)
+    words[index] = action
+    entry = policy.acl_entry(" ".join(words))
+    if entry is not None:
+        entry.raw = line
+    return entry
+
+
 def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
     """ハードウェア ACL と、ポートへの当て方。
 
@@ -236,7 +268,7 @@ def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
             continue
 
         if current is not None:
-            entry = policy.acl_entry(stripped)
+            entry = _hardware_acl_entry(stripped)
             if entry is not None:
                 current.entries.append(entry)
             continue
