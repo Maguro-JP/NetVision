@@ -150,7 +150,8 @@ _PIM_MODE = re.compile(
 _SNOOP_OFF = re.compile(r"^\s*no\s+ip\s+igmp\s+snooping\s*$", re.IGNORECASE)
 _SNOOP_ON = re.compile(r"^\s*ip\s+igmp\s+snooping(?:\s+enable)?\s*$", re.IGNORECASE)
 #: 帯は範囲でも書ける（Arista `no ip igmp snooping vlan 1-4 querier`。出典: EOS 4.35.1F
-#: User Manual「IGMP and IGMP Snooping」の Snooping Querier）
+#: User Manual「IGMP and IGMP Snooping」の Snooping Querier）。Cisco は1つの番号だけ
+#: （出典: Command Reference, Cisco IOS XE 17.9.x (Catalyst 9300) の ip igmp snooping querier）
 _SNOOP_VLAN = re.compile(
     r"^\s*(?P<no>no\s+)?ip\s+igmp\s+snooping\s+vlan\s+(?P<vlan>\d[\d,\-]*)(?:\s+(?P<rest>.+))?$",
     re.IGNORECASE,
