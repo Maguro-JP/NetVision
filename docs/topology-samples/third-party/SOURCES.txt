@@ -1,11 +1,15 @@
-Wikimedia Commons files in this folder. See each file page for license.
+Wikimedia Commons files in this folder, kept as layout references.
+License and author as shown on each file page (checked 2026-10-18 JST via the Commons API).
+CC BY-SA 4.0: https://creativecommons.org/licenses/by-sa/4.0/
 
-- tree-radial.png — File:Network_Tree_diagram.png
-- network-topologies.svg — File:NetworkTopologies.svg
-- flat-vs-hierarchy.png — File:Flat vs hierarchy topology - en.png
-- sample-network.svg — File:Sample_network.svg
-- fat-tree.svg — File:Fat-tree.svg
-- ospf-cisco-style.svg — File:OSPF with BGP-MPLS VPN backbone (Cisco style).svg
-- hierarchical-tree.jpeg — File:Hierarchiczna.jpeg
-- fast-ethernet-logical.svg — File:Fast ethernet logical topology.svg
-- textbook-topologies.png — File:Network topology.png
+| File here | Commons file page | Author | License |
+|---|---|---|---|
+| tree-radial.png | https://commons.wikimedia.org/wiki/File:Network_Tree_diagram.png | Conspiritech | Public domain |
+| network-topologies.svg | https://commons.wikimedia.org/wiki/File:NetworkTopologies.svg | Maksim (NetworkTopologies.png) / derivative work: Malyszkz | Public domain |
+| flat-vs-hierarchy.png | https://commons.wikimedia.org/wiki/File:Flat_vs_hierarchy_topology_-_en.png | Michel Bakni | CC BY-SA 4.0 |
+| sample-network.svg | https://commons.wikimedia.org/wiki/File:Sample_network.svg | Gargoyle888 | CC BY-SA 4.0 |
+| fat-tree.svg | https://commons.wikimedia.org/wiki/File:Fat-tree.svg | Konstantinos Agiannis | CC BY-SA 4.0 |
+| ospf-cisco-style.svg | https://commons.wikimedia.org/wiki/File:OSPF_with_BGP-MPLS_VPN_backbone_(Cisco_style).svg | Mordomo | CC BY-SA 4.0 |
+| hierarchical-tree.jpeg | https://commons.wikimedia.org/wiki/File:Hierarchiczna.jpeg | wierzbadark | Public domain |
+| fast-ethernet-logical.svg | https://commons.wikimedia.org/wiki/File:Fast_ethernet_logical_topology.svg | Harkonnen2 (original: pl:Wikipedysta:Łukasz Tłomak) | Public domain |
+| textbook-topologies.png | https://commons.wikimedia.org/wiki/File:Network_topology.png | Maksim | CC BY-SA 4.0 |
