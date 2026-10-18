@@ -199,3 +199,30 @@ def test_hardware_acl_actions_follow_the_acl_feature_overview():
         ("deny", "deny"),
     ]
     assert acl.applied_to == ["interface port1.0.1 入り"]
+
+
+def test_numbered_hardware_acl_actions_are_read_too():
+    """番号付き（3000 番台）のハードウェア ACL も、permit / deny 以外の動作の行を落とさない。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining hardware IP ACLs（`access-list 3000 permit ip any 192.168.1.1/32`。3000-3699 が
+    ハードウェア IP ACL）と Table 2: Hardware ACL parameter actions。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list 3000 permit ip 192.168.1.0/24 any\n"
+        "access-list 3002 copy-to-mirror ip any 236.5.8.213/32\n"
+        "access-list 3003 deny-and-not-cpu ip 10.0.0.0/8 any\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group 3003\n"
+        "!\n"
+    )
+    acls = {a.name: a for a in configparse.parse(text).acls}
+    assert [e.action for e in acls["3000"].entries] == ["permit"]
+    assert [(e.action, e.raw) for e in acls["3002"].entries] == [
+        ("permit", "copy-to-mirror ip any 236.5.8.213/32")
+    ]
+    assert [e.action for e in acls["3003"].entries] == ["deny"]
+    assert acls["3003"].applied_to == ["interface port1.0.1 入り"]

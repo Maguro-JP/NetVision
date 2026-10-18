@@ -1954,3 +1954,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 変えたい場合に触る場所: `allied.py` の `_HARDWARE_ACTIONS`。
 - 見なかったこと: 番号付き（3000 番台）の行は IOS の読み手が読むので、同じ動作の語はそちらでは寄せていない。保存した設定で行頭に番号
   （`10 permit ...`）が付くかは資料で見ていない（付いても読む）。
+
+## アライドテレシスの番号付きハードウェア ACL（3000 番台）でも、permit / deny 以外の動作の行を落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `access-list 3003 deny-and-not-cpu ip 10.0.0.0/8 any` のような行は、IOS の
+  読み手が permit / deny しか拾わないので捨てられ、ACL 3003 は中身が空のまま口に当たっていた（何も止めていないように見えた）。周3 の名前付きと同じ穴。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining hardware IP ACLs
+  （3000-3699 がハードウェア IP ACL）と Table 2: Hardware ACL parameter actions。
+- 直したこと: 3000-3699 の行で動作が Table 2 の語なら、周3 と同じ寄せ方（`_HARDWARE_ACTIONS`）で読んで足す。試験は
+  `test_configparse_allied.py` の `test_numbered_hardware_acl_actions_are_read_too`。
+- 見なかったこと: MAC ACL（4000 番台）の同じ動作の語。

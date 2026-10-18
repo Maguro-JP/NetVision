@@ -56,6 +56,9 @@ _PORT_RANGE = re.compile(
 _IP_ADDRESS = re.compile(r"^ip address\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE)
+#: 番号付きのハードウェア IP ACL（3000-3699）。出典: C613-22039-00 REV M の
+#: Defining hardware IP ACLs
+_ACL_HARDWARE_NUMBERED = re.compile(r"^access-list\s+(3[0-6]\d\d)\s+(\S.*)$", re.IGNORECASE)
 _ACCESS_GROUP = re.compile(r"^access-group\s+(\S+)\s*$", re.IGNORECASE)
 #: `show lldp neighbors` の見出し
 _LLDP_HEADER = re.compile(
@@ -253,6 +256,17 @@ def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
         stripped = line.strip()
 
         if not line.startswith(" "):
+            numbered = _ACL_HARDWARE_NUMBERED.match(stripped)
+            if numbered and numbered.group(2).split()[0].lower() in _HARDWARE_ACTIONS:
+                # IOS の読み手は permit / deny の行しか拾わないので、ほかの動作の行をここで足す
+                entry = _hardware_acl_entry(numbered.group(2))
+                if entry is not None:
+                    acl = by_name.setdefault(
+                        numbered.group(1), ParsedAcl(name=numbered.group(1), kind="extended")
+                    )
+                    if acl not in parsed.acls:
+                        parsed.acls.append(acl)
+                    acl.entries.append(entry)
             head = _ACL_HARDWARE.match(stripped)
             if head:
                 current = by_name.setdefault(
