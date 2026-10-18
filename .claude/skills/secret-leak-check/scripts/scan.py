@@ -214,12 +214,13 @@ def main():
         return 0
 
     findings.sort(key=lambda f: (f[0] != "high", f[1]))
+    label_of = {"high": "重大", "medium": "注意"}
     for sev, path, ln, name, hit in findings:
         mark = "!!" if sev == "high" else " ?"
         loc = f"{path}:{ln}" if ln else path
-        print(f"  {mark} [{sev:6}] {name}\n       {loc}\n       {redact(hit)}")
+        print(f"  {mark} [{label_of.get(sev, sev)}] {name}\n       {loc}\n       {redact(hit)}")
     high = sum(1 for f in findings if f[0] == "high")
-    print(f"\n  high {high} / medium {len(findings)-high}")
+    print(f"\n  重大 {high} / 注意 {len(findings)-high}")
     print("  本物なら まず鍵をローテート、次に履歴から除去。順序を逆にしない。")
     return 1
 

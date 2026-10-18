@@ -42,6 +42,11 @@
           },
           {
             "type": "command",
+            "command": ".claude/skills/feedback-session/scripts/gate.sh",
+            "timeout": 15
+          },
+          {
+            "type": "command",
             "command": ".claude/hooks/test.sh",
             "timeout": 600
           }

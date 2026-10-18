@@ -44,6 +44,11 @@
             "type": "command",
             "command": ".claude/hooks/lang-check.sh",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": ".claude/skills/feedback-session/scripts/gate.sh",
+            "timeout": 15
           }
         ]
       }
