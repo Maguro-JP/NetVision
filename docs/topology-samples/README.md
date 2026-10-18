@@ -45,7 +45,7 @@ Cisco のキャンパス図をそのまま真似するのが最適ではあり�
 - NetworkAcademy: フルメッシュが規模で破綻すること、2 層と 3 層の使い分け
   https://www.networkacademy.io/ccna/network-fundamentals/three-tier-architecture
 
-## third-party（Wikimedia、再配布時は各ファイルのライセンスを見る）
+## third-party（Wikimedia。作者とライセンスは `third-party/SOURCES.txt`）
 
 | ファイル | 何の例か | この製品での扱い |
 |---|---|---|
