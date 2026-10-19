@@ -159,3 +159,33 @@ def test_a_name_with_a_space_keeps_its_vlan():
     assert _port("vlan 81").vlan == 81
     assert _port("171").vlan == 171
     assert _port("dyn59").vlan == 59
+
+
+#: 公式の作例。「Configure VLANs on Wireless LAN Controllers」の `show wlan summary`
+#: （Interface Name に `vlan 81` と空白が入り、末尾に PMIPv6 Mobility の列が付く）
+OFFICIAL_WLANS = """(Cisco Controller) >show wlan summary
+Number of WLANs.................................. 2
+
+WLAN ID  WLAN Profile Name / SSID               Status    Interface Name        PMIPv6 Mobility
+-------  -------------------------------------  --------  --------------------  ---------------
+1        self-anchor / self-anchor              Disabled  management            none
+2        Students / Students                    Enabled   vlan 81               none
+"""
+
+
+def test_a_wlan_takes_the_vlan_of_its_interface():
+    """`show wlan summary` の Interface Name を `show interface summary` の口に引き、VLAN を持つ。
+
+    出典: Cisco「Configure VLANs on Wireless LAN Controllers」
+    （`config wlan interface 2 "vlan 81"` とその `show wlan summary`）、
+    「Cisco Wireless Controller Command Reference, Release 8.5」と Mobility Express Command
+    Reference 8.9 の show wlan summary の作例（WLAN ID / WLAN Profile Name / SSID / Status /
+    Interface Name）。management は untagged なので VLAN を持たない。
+    """
+    wlans = {
+        w.name: w for w in configparse.parse(OFFICIAL_INTERFACES + OFFICIAL_WLANS).wireless.wlans
+    }
+    assert {name: (w.ssid, w.enabled, w.vlan) for name, w in wlans.items()} == {
+        "self-anchor": ("self-anchor", False, None),
+        "Students": ("Students", True, 81),
+    }

@@ -1993,3 +1993,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 変えたい場合に触る場所: `allied.py` の `_mark_hardware_acls`、`policyreview.py` の `_acls` と `_drops_without_a_trace`。
 - 見なかったこと: ほかの機種で末尾が暗黙の permit のもの。資料で確かめたものから足す。点検以外（到達の判定など）で末尾の既定を使っている所は
   見ていない。
+
+## AireOS の `show wlan summary` の Interface Name を読まず、WLAN の VLAN が空だった（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/aireos.py` の冒頭は「SSID と、載せている口」を読むと書いていたが、
+  `show wlan summary` の行は Status までしか読んでいなかった。`show interface summary` が一緒に貼ってあっても、WLAN の VLAN は空のままだった。
+- 確かめた資料: Cisco「Configure VLANs on Wireless LAN Controllers」（`config wlan interface 2 "vlan 81"` と、その `show wlan summary` の
+  Interface Name が `vlan 81`、末尾に PMIPv6 Mobility の列）、「Cisco Wireless Controller Command Reference, Release 8.5」と Mobility Express
+  Command Reference 8.9 の show wlan summary の作例（WLAN ID / WLAN Profile Name / SSID / Status / Interface Name）。
+- 直したこと: 行の Interface Name（空白入りの `vlan 81` を含む）を読み、`show interface summary` の同じ名前の口の VLAN を WLAN に持たせる。
+  untagged の口（management）は VLAN を持たない。試験は `test_configparse_aireos.py` の `test_a_wlan_takes_the_vlan_of_its_interface`。
+- 残る未確認: `show ap summary` と `show sysinfo` の列。名前が長くて Interface Name の列と空白1つでつながる形は試していない。

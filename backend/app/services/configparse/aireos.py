@@ -18,7 +18,10 @@ AireOS は設定ファイルを持ち出す形が現場に馴染まないので�
 「Cisco Mobility Express Command Reference, Release 8.10」の Ports and Interfaces Commands の
 作例（`management LAG 56 …`、`redundancy-port - untagged …`）。名前に空白が入る
 `vlan 81` は、同社の技術資料「Configure VLANs on Wireless LAN Controllers」の出力で確かめた。
-表番号は無い。`show wlan summary`・`show ap summary`・`show sysinfo` の列は未確認。
+`show wlan summary` の列（WLAN ID / Profile Name / SSID / Status / Interface Name）は
+「Cisco Wireless Controller Command Reference, Release 8.5」と上の技術資料の作例で確かめた。
+表番号は無い。
+`show ap summary`・`show sysinfo` の列は未確認。
 """
 
 from __future__ import annotations
@@ -33,6 +36,7 @@ from app.services.configparse.base import (
     ParsedWlan,
     Vendor,
 )
+from app.services.configparse.ifname import normalize
 
 #: `show sysinfo` の点線区切り。AireOS 以外でこの形は出てこない
 _FIELD = re.compile(r"^([A-Za-z][\w'’ /()\.-]*?)\.{3,}\s*(.*)$", re.MULTILINE)
@@ -50,7 +54,10 @@ _INTERFACE_ROW = re.compile(
 #: `show wlan summary` の行。`1  Corp / Corp-WiFi  Enabled  management`
 _WLAN_ROW = re.compile(
     r"^(?P<id>\d+)\s+(?P<profile>\S.*?)\s*/\s*(?P<ssid>\S.*?)\s{2,}"
-    r"(?P<status>Enabled|Disabled)\b",
+    r"(?P<status>Enabled|Disabled)\b"
+    # 載せている口。名前に空白が入ることがある（`vlan 81`）。
+    # 後ろに PMIPv6 Mobility の列が付く版がある
+    r"(?:[ \t]+(?P<interface>[\w-]+(?: \d+)?))?",
     re.MULTILINE | re.IGNORECASE,
 )
 #: `show ap summary` の行。名前・スロット数・型番・MAC のあとに国とアドレスが続く
@@ -90,7 +97,7 @@ def parse(text: str) -> ParsedConfig:
         parsed.serial_number = found.group(2)
 
     _read_interfaces(text, fields, parsed)
-    parsed.wireless = _read_wireless(text, fields)
+    parsed.wireless = _read_wireless(text, fields, parsed)
     return parsed
 
 
@@ -113,8 +120,10 @@ def _read_interfaces(text: str, fields: dict[str, str], parsed: ParsedConfig) ->
         parsed.add_interface(ParsedInterface(name="management", mode="routed", ip_address=address))
 
 
-def _read_wireless(text: str, fields: dict[str, str]) -> ParsedWireless:
+def _read_wireless(text: str, fields: dict[str, str], parsed: ParsedConfig) -> ParsedWireless:
     wireless = ParsedWireless()
+    # WLAN の VLAN は、載せている口の VLAN（`show interface summary` が貼られていれば引ける）
+    vlans = {normalize(i.name): i.vlan for i in parsed.interfaces}
     country = fields.get("Configured Country") or fields.get("Country")
     if country:
         wireless.country = country.split()[0]
@@ -125,6 +134,7 @@ def _read_wireless(text: str, fields: dict[str, str]) -> ParsedWireless:
                 name=row.group("profile").strip(),
                 ssid=row.group("ssid").strip(),
                 enabled=row.group("status").lower() == "enabled",
+                vlan=vlans.get(normalize(row.group("interface") or "")),
                 # 一覧の表には守り方が出てこない。`show wlan <id>` が要る
                 security_read=False,
                 raw=row.group(0).strip(),
