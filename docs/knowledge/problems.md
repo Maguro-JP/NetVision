@@ -2004,3 +2004,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 行の Interface Name（空白入りの `vlan 81` を含む）を読み、`show interface summary` の同じ名前の口の VLAN を WLAN に持たせる。
   untagged の口（management）は VLAN を持たない。試験は `test_configparse_aireos.py` の `test_a_wlan_takes_the_vlan_of_its_interface`。
 - 残る未確認: `show ap summary` と `show sysinfo` の列。名前が長くて Interface Name の列と空白1つでつながる形は試していない。
+
+## 見張り: AireOS の `show ap summary` を Cisco の作例の形で読めている（2026-10-19 JST）
+
+- 確かめたこと: `configparse/aireos.py` の AP の行（名前・スロット数・型番・MAC と、その後ろ）が、アドレスの列が無い版の作例でも AP を落とさないか。
+  直す所は無かった（アドレスは空のまま、名前・型番・MAC を持つ）。
+- 確かめた資料: Cisco「Configure AireOS Wireless LAN Controller and Lightweight Access Point」の Verify（見出し `AP Name Slots AP Model
+  Ethernet MAC Location Port Country Priority`、行 `AP001b.d4e3.a81b 2 AIR-LAP1232AG-A-K9 00:1b:d4:e3:a8:1b default location 2 IN 1`）。
+- 試験: `test_configparse_aireos.py` の `test_the_official_ap_summary_row_is_read`。冒頭の「show ap summary の列は未確認」を外した。
+- 見なかったこと: 国（Country）の列。版によって列の並びが違い（アドレスの列の有無）、場所に空白が入るので、見出しを見ずに位置で読むと取り違える。
+  `show sysinfo` の列は未確認のまま。

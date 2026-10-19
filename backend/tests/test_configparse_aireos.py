@@ -189,3 +189,28 @@ def test_a_wlan_takes_the_vlan_of_its_interface():
         "self-anchor": ("self-anchor", False, None),
         "Students": ("Students", True, 81),
     }
+
+
+def test_the_official_ap_summary_row_is_read():
+    """見張り。`show ap summary` の行を Cisco の作例の形で読む。アドレスの列が無い版でも落とさない。
+
+    出典: Cisco「Configure AireOS Wireless LAN Controller and Lightweight Access Point」の Verify
+    （`AP Name Slots AP Model Ethernet MAC Location Port Country Priority` の見出しと、
+    `AP001b.d4e3.a81b 2 AIR-LAP1232AG-A-K9 00:1b:d4:e3:a8:1b default location 2 IN 1` の行）。
+    """
+    text = (
+        "(Cisco Controller) >show ap summary\n\n"
+        "Number of APs.................................... 1\n\n"
+        "Global AP User Name.............................. Not Configured\n"
+        "Global AP Dot1x User Name........................ Not Configured\n\n"
+        "AP Name             Slots  AP Model             Ethernet MAC       Location          "
+        "Port  Country  Priority\n"
+        "------------------  -----  -------------------  -----------------  ----------------  "
+        "----  -------  ------\n"
+        "AP001b.d4e3.a81b    2      AIR-LAP1232AG-A-K9   00:1b:d4:e3:a8:1b  default location  "
+        "2     IN       1\n"
+    )
+    aps = configparse.parse(text).wireless.aps
+    assert [(ap.name, ap.model, ap.mac, ap.ip_address) for ap in aps] == [
+        ("AP001b.d4e3.a81b", "AIR-LAP1232AG-A-K9", "00:1b:d4:e3:a8:1b", None)
+    ]

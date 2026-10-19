@@ -21,7 +21,8 @@ AireOS は設定ファイルを持ち出す形が現場に馴染まないので�
 `show wlan summary` の列（WLAN ID / Profile Name / SSID / Status / Interface Name）は
 「Cisco Wireless Controller Command Reference, Release 8.5」と上の技術資料の作例で確かめた。
 表番号は無い。
-`show ap summary`・`show sysinfo` の列は未確認。
+`show ap summary` の列は「Configure AireOS Wireless LAN Controller and Lightweight Access
+Point」の作例で確かめた（アドレスの列が無い版）。`show sysinfo` の列は未確認。
 """
 
 from __future__ import annotations
