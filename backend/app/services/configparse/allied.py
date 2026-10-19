@@ -19,7 +19,8 @@
 使えるかはコマンドリファレンスで未確認なので、`-` と `,` の両方を読む。
 アドレスの長さ付きの書き方（`ip address 192.168.10.1/24`）は同社サポートポータルの
 作例で、経路の書き方は「Route Selection Feature Overview and Configuration Guide」
-（C613-22029-00 REV G）の Static routes で確かめた。`access-list hardware` は未確認。
+（C613-22029-00 REV G）の Static routes で、`access-list hardware` は「ACL Feature Overview and
+Configuration Guide」（C613-22039-00 REV M）で確かめた。
 """
 
 from __future__ import annotations
@@ -31,6 +32,7 @@ from app.services.configparse import cisco, policy
 from app.services.configparse.base import (
     NeighborProtocol,
     ParsedAcl,
+    ParsedAclEntry,
     ParsedConfig,
     ParsedNeighbor,
     ParsedRoute,
@@ -54,6 +56,13 @@ _PORT_RANGE = re.compile(
 _IP_ADDRESS = re.compile(r"^ip address\s+(\d+\.\d+\.\d+\.\d+/\d+)", re.IGNORECASE)
 _INTERFACE = re.compile(r"^interface\s+(\S+)\s*$", re.IGNORECASE)
 _ACL_HARDWARE = re.compile(r"^access-list\s+hardware\s+(\S+)\s*$", re.IGNORECASE)
+#: 番号付きのハードウェア IP ACL（3000-3699）。出典: C613-22039-00 REV M の
+#: Defining hardware IP ACLs
+_ACL_HARDWARE_NUMBERED = re.compile(r"^access-list\s+(3[0-6]\d\d)\s+(\S.*)$", re.IGNORECASE)
+#: 番号付きのハードウェア MAC ACL（4000-4699）。送信元・宛先は `any` か `MAC マスク`
+#: （出典: C613-22039-00 REV M の Defining hardware MAC ACLs）
+_ACL_MAC_NUMBERED = re.compile(r"^access-list\s+(4[0-6]\d\d)\s+(\S.*)$", re.IGNORECASE)
+_MAC = re.compile(r"^[0-9a-f]{4}\.[0-9a-f]{4}\.[0-9a-f]{4}$", re.IGNORECASE)
 _ACCESS_GROUP = re.compile(r"^access-group\s+(\S+)\s*$", re.IGNORECASE)
 #: `show lldp neighbors` の見出し
 _LLDP_HEADER = re.compile(
@@ -102,6 +111,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_addresses(text, parsed)
     _parse_routes(text, parsed)
     _parse_hardware_acls(text, parsed)
+    _parse_mac_acls(text, parsed)
     _parse_lldp_table(text, parsed)
     return parsed
 
@@ -203,6 +213,92 @@ def _parse_routes(text: str, parsed: ParsedConfig) -> None:
         parsed.routes.append(route)
 
 
+#: ハードウェア ACL の動作を、通す（permit）か捨てる（deny）かに寄せる。出典: Allied Telesis
+#: 「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Table 2: Hardware ACL
+#: parameter actions（copy-to-* は転送もする。send-to-cpu・send-to-mirror・deny-and-not-cpu は
+#: 転送しない）。
+#: send-to-vlan-port は別の口へ送り直すので、どちらにも寄せない（読まない）
+_HARDWARE_ACTIONS = {
+    "copy-to-cpu": "permit",
+    "copy-to-mirror": "permit",
+    "send-to-cpu": "deny",
+    "send-to-mirror": "deny",
+    "deny-and-not-cpu": "deny",
+}
+
+
+def _hardware_acl_entry(line: str) -> ParsedAclEntry | None:
+    """名前付きのハードウェア ACL の1行。動作の語を寄せてから IOS と同じ形で読み、元の行を残す。"""
+    words = line.split(maxsplit=2)
+    index = 1 if words and words[0].isdigit() else 0
+    if len(words) <= index:
+        return None
+    action = _HARDWARE_ACTIONS.get(words[index].lower())
+    if action is None:
+        return policy.acl_entry(line)
+    words[index] = action
+    entry = policy.acl_entry(" ".join(words))
+    if entry is not None:
+        entry.raw = line
+    return entry
+
+
+def _mac_side(words: list[str], index: int) -> tuple[str, int] | None:
+    """`any` か `MAC マスク` を1つ読み、次の位置を返す。"""
+    if index >= len(words):
+        return None
+    if words[index].lower() == "any":
+        return "any", index + 1
+    if index + 1 < len(words) and _MAC.match(words[index]) and _MAC.match(words[index + 1]):
+        return f"{words[index].lower()} {words[index + 1].lower()}", index + 2
+    return None
+
+
+def _mac_acl_entry(line: str) -> ParsedAclEntry | None:
+    """MAC ACL の1行（`permit 0030.841A.1234 0000.0000.0000 any`）。読めない形は None。"""
+    words = line.split()
+    if not words:
+        return None
+    action = words[0].lower()
+    action = _HARDWARE_ACTIONS.get(action, action)
+    if action not in ("permit", "deny"):
+        return None
+    source = _mac_side(words, 1)
+    if source is None:
+        return None
+    destination = _mac_side(words, source[1])
+    if destination is None:
+        return None
+    return ParsedAclEntry(
+        action=action, protocol="mac", source=source[0], destination=destination[0], raw=line
+    )
+
+
+def _parse_mac_acls(text: str, parsed: ParsedConfig) -> None:
+    """番号付きの MAC ACL を読み直す。
+
+    IOS の読み手は IP の行として読むので、MAC アドレスがプロトコルに化けている。
+    """
+    by_name = {acl.name: acl for acl in parsed.acls}
+    redone: set[str] = set()
+    for raw in text.splitlines():
+        found = _ACL_MAC_NUMBERED.match(raw.strip()) if not raw.startswith(" ") else None
+        if found is None:
+            continue
+        name = found.group(1)
+        acl = by_name.get(name)
+        if acl is None:
+            acl = by_name[name] = ParsedAcl(name=name, kind="mac")
+            parsed.acls.append(acl)
+        if name not in redone:
+            acl.kind = "mac"
+            acl.entries = []
+            redone.add(name)
+        entry = _mac_acl_entry(found.group(2))
+        if entry is not None:
+            acl.entries.append(entry)
+
+
 def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
     """ハードウェア ACL と、ポートへの当て方。
 
@@ -221,6 +317,17 @@ def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
         stripped = line.strip()
 
         if not line.startswith(" "):
+            numbered = _ACL_HARDWARE_NUMBERED.match(stripped)
+            if numbered and numbered.group(2).split()[0].lower() in _HARDWARE_ACTIONS:
+                # IOS の読み手は permit / deny の行しか拾わないので、ほかの動作の行をここで足す
+                entry = _hardware_acl_entry(numbered.group(2))
+                if entry is not None:
+                    acl = by_name.setdefault(
+                        numbered.group(1), ParsedAcl(name=numbered.group(1), kind="extended")
+                    )
+                    if acl not in parsed.acls:
+                        parsed.acls.append(acl)
+                    acl.entries.append(entry)
             head = _ACL_HARDWARE.match(stripped)
             if head:
                 current = by_name.setdefault(
@@ -236,7 +343,7 @@ def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:
             continue
 
         if current is not None:
-            entry = policy.acl_entry(stripped)
+            entry = _hardware_acl_entry(stripped)
             if entry is not None:
                 current.entries.append(entry)
             continue

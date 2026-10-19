@@ -150,3 +150,12 @@
 - 気付いたこと: 8/23・8/24 の手動実行は、支払いか使用上限の都合でジョブが始まらずに失敗していた（workflow の不具合ではない）。
   同じことが起きると毎月の分も作られない。失敗は GitHub から、定期実行を最後に変えた人へメールで届く
 - 触る場所: `.github/workflows/bundle.yml` の `on.schedule` と `retention-days`
+
+## リポジトリを public にした。Actions の枠は気にしない（2026-10-18 JST）
+
+- 決めたこと（利用者）: リポジトリを public にした。Actions の実行時間の制限は気にしなくてよい。かわりに、公開にあわせて情報を精査する
+- 理由: public のリポジトリは標準ランナーの Actions が無料になる。枠を理由に CI を絞る前提が無くなった
+- やったこと: 履歴を含めた精査（#205、docs/reports/audit/2026-10-18-public.md）。第三者の画像の帰属表示を足し、.worklog/ を git から外した
+- まだ変えていないもの: CI の回し方（`.github/workflows/ci.yml` の「private の枠」を前提にした絞り込み、README の CI の節）。
+  どこまで広げるかは決めていない。今の絞り込みのままでも動く
+- 触る場所: `.github/workflows/ci.yml`、README の CI の節

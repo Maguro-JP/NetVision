@@ -162,3 +162,105 @@ def test_route_weight_and_description_are_not_taken_as_distance_or_port():
     assert routes["10.1.0.0/16"].distance == 20
     assert routes["10.1.0.0/16"].interface is None
     assert routes["192.168.2.0/24"].interface is not None
+
+
+def test_hardware_acl_actions_follow_the_acl_feature_overview():
+    """ハードウェア ACL の動作は permit / deny だけではない。通すか捨てるかで読む。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining named hardware ACLs（`access-list hardware hw_name` の下に `permit ip 192.168.1.0
+    0.0.0.255 192.168.2.0 0.0.0.255`）、Table 2: Hardware ACL parameter actions（copy-to-cpu・
+    copy-to-mirror は転送もする、send-to-cpu・send-to-mirror・deny-and-not-cpu は転送しない）、
+    Attaching hardware ACLs to interfaces（`interface port1.0.1` の `access-group`）。
+    send-to-vlan-port は別の口へ送り直すので、通す・捨てるのどちらにも決めずに読まない。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list hardware hw_name\n"
+        " permit ip 192.168.1.0 0.0.0.255 192.168.2.0 0.0.0.255\n"
+        " copy-to-mirror ip any 236.5.8.213/32\n"
+        " send-to-cpu ip 192.168.9.0/24 any\n"
+        " deny-and-not-cpu tcp 1.1.1.1/32 any eq 10\n"
+        " send-to-vlan-port vlan 10 port1.0.2 ip any any\n"
+        " deny ip 192.168.1.0 0.0.0.255 any\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group hw_name\n"
+        "!\n"
+    )
+    parsed = configparse.parse(text)
+    acl = {a.name: a for a in parsed.acls}["hw_name"]
+    assert [(e.action, e.raw.split()[0]) for e in acl.entries] == [
+        ("permit", "permit"),
+        ("permit", "copy-to-mirror"),
+        ("deny", "send-to-cpu"),
+        ("deny", "deny-and-not-cpu"),
+        ("deny", "deny"),
+    ]
+    assert acl.applied_to == ["interface port1.0.1 入り"]
+
+
+def test_numbered_hardware_acl_actions_are_read_too():
+    """番号付き（3000 番台）のハードウェア ACL も、permit / deny 以外の動作の行を落とさない。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining hardware IP ACLs（`access-list 3000 permit ip any 192.168.1.1/32`。3000-3699 が
+    ハードウェア IP ACL）と Table 2: Hardware ACL parameter actions。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list 3000 permit ip 192.168.1.0/24 any\n"
+        "access-list 3002 copy-to-mirror ip any 236.5.8.213/32\n"
+        "access-list 3003 deny-and-not-cpu ip 10.0.0.0/8 any\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group 3003\n"
+        "!\n"
+    )
+    acls = {a.name: a for a in configparse.parse(text).acls}
+    assert [e.action for e in acls["3000"].entries] == ["permit"]
+    assert [(e.action, e.raw) for e in acls["3002"].entries] == [
+        ("permit", "copy-to-mirror ip any 236.5.8.213/32")
+    ]
+    assert [e.action for e in acls["3003"].entries] == ["deny"]
+    assert acls["3003"].applied_to == ["interface port1.0.1 入り"]
+
+
+def test_numbered_hardware_mac_acls_are_read_as_mac_addresses():
+    """4000 番台はハードウェア MAC ACL。IP の ACL として読むと、MAC アドレスがプロトコルに化ける。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Defining hardware MAC ACLs（`access-list 4000 permit 0030.841A.1234 0000.0000.0000 any`。
+    送信元 MAC・マスク・宛先 MAC・マスクの順で、any にはマスクを付けない）と、Filtering traffic on
+    VLANs の `access-list 4000 deny any any`、Table 2: Hardware ACL parameter actions。
+    """
+    text = (
+        "hostname awplus\n!\n"
+        "access-list 4000 permit 0030.841A.1234 0000.0000.0000 any\n"
+        "access-list 4001 deny any any\n"
+        "access-list 4002 copy-to-mirror any 0000.5e00.0101 0000.0000.0000\n"
+        "!\n"
+        "interface port1.0.1\n"
+        " switchport\n"
+        " access-group 4001\n"
+        "!\n"
+    )
+    acls = {a.name: a for a in configparse.parse(text).acls}
+    assert {name: acls[name].kind for name in ("4000", "4001", "4002")} == {
+        "4000": "mac",
+        "4001": "mac",
+        "4002": "mac",
+    }
+    rows = {
+        name: [(e.action, e.protocol, e.source, e.destination) for e in acls[name].entries]
+        for name in ("4000", "4001", "4002")
+    }
+    assert rows == {
+        "4000": [("permit", "mac", "0030.841a.1234 0000.0000.0000", "any")],
+        "4001": [("deny", "mac", "any", "any")],
+        "4002": [("permit", "mac", "any", "0000.5e00.0101 0000.0000.0000")],
+    }
+    assert acls["4001"].entries[0].is_any_any
+    assert acls["4001"].applied_to == ["interface port1.0.1 入り"]

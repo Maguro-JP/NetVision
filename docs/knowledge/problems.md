@@ -1918,3 +1918,63 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `test_arista_snooping_querier_follows_the_vlan_setting_over_the_global_one`。
 - 気付いたが手を付けなかったこと: 同じ読み手を Cisco IOS と NX-OS も使う。帯の設定が全体より優先する考え方は Cisco の資料では
   確かめていない（範囲で書けるかも未確認）。
+
+## 見張り: Cisco の帯ごとの IGMP スヌーピングと querier を読めている（2026-10-18 JST）
+
+- 確かめたこと: Arista と共用の読み手（`configparse/multicast.py`）が、Cisco の `ip igmp snooping vlan 10 querier`・
+  `no ip igmp snooping vlan 20`・`ip igmp snooping vlan 40 querier address 10.0.40.1` を資料どおりに読むか。直す所は無かった。
+- 確かめた資料: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」の IP Multicast Routing Commands
+  （`ip igmp snooping [vlan vlan-id]`、`ip igmp snooping [vlan vlan-id] querier [address ip-address | ...]`。vlan-id は1つの番号で、
+  Arista のような範囲の書き方は無い）。
+- 試験: `test_multicast.py` の `test_cisco_snooping_vlan_lines_follow_the_catalyst_command_reference`。
+- 見なかったこと: 資料は `ip igmp snooping vlan N querier` が「その帯のスヌーピングも入れる」と書く。帯のスヌーピングを止めた後に
+  querier の行がある形は読み手が止めたまま扱うが、Arista で同じかを確かめていないので変えていない。
+
+## H3C の `interface tunnel 0 mode gre`（見出しに種別）のトンネルを丸ごと読み落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/tunnels.py` の区画の見出しは `interface 名前 [番号]` までしか
+  受けず、H3C Comware 7 の `interface tunnel 0 mode gre` は見出しとして当たらなかった。そのトンネルは一覧から抜け、論理構成図に線が出なかった。
+- 確かめた資料: H3C「GRE over IPv4 Tunnel Configuration Examples」（Comware 7-based routers。`interface tunnel 0 mode gre`、`source 1.1.1.1`、
+  `destination 2.2.2.2`）と、Tunnel interface commands の interface tunnel（`interface tunnel number [ mode { ... | gre [ ipv6 ] | ... } ]`。
+  作るときは mode が要る）。
+- 直したこと: 見出しの末尾の `mode <種別>` を読み、種別として持つ。名前は `Tunnel0` にそろえる。試験は `test_topology_logical.py` の
+  `test_h3c_tunnel_with_the_mode_on_the_interface_line_is_read`。
+- 残る未確認: 保存した設定（display current-configuration）で `interface Tunnel0 mode gre` と出る形は資料で見ていない。両方の形を受ける。
+
+## アライドテレシスのハードウェア ACL の copy-to-mirror・send-to-cpu・deny-and-not-cpu を読み落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/allied.py` は名前付きのハードウェア ACL（`access-list hardware 名前`）の
+  行を IOS と同じ形で読んでいたので、動作が permit / deny 以外の行（`copy-to-mirror`、`send-to-cpu`、`deny-and-not-cpu` など）を黙って捨てていた。
+  捨てる側（`deny-and-not-cpu` など）が抜けると、止めている通信を止めていないと読む。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining named hardware ACLs、
+  Table 2: Hardware ACL parameter actions、Attaching hardware ACLs to interfaces（`access-group` で口に当てる）。
+- 直したこと（AI の判断）: 動作を、転送するか（copy-to-cpu・copy-to-mirror → permit）、転送しないか（send-to-cpu・send-to-mirror・
+  deny-and-not-cpu → deny）に寄せて読み、元の行は raw に残す。send-to-vlan-port は別の口へ送り直すので、どちらにも寄せずに読まない。
+  試験は `test_configparse_allied.py` の `test_hardware_acl_actions_follow_the_acl_feature_overview`。冒頭の「未確認」を外した。
+- 変えたい場合に触る場所: `allied.py` の `_HARDWARE_ACTIONS`。
+- 見なかったこと: 番号付き（3000 番台）の行は IOS の読み手が読むので、同じ動作の語はそちらでは寄せていない。保存した設定で行頭に番号
+  （`10 permit ...`）が付くかは資料で見ていない（付いても読む）。
+
+## アライドテレシスの番号付きハードウェア ACL（3000 番台）でも、permit / deny 以外の動作の行を落としていた（2026-10-18 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `access-list 3003 deny-and-not-cpu ip 10.0.0.0/8 any` のような行は、IOS の
+  読み手が permit / deny しか拾わないので捨てられ、ACL 3003 は中身が空のまま口に当たっていた（何も止めていないように見えた）。周3 の名前付きと同じ穴。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining hardware IP ACLs
+  （3000-3699 がハードウェア IP ACL）と Table 2: Hardware ACL parameter actions。
+- 直したこと: 3000-3699 の行で動作が Table 2 の語なら、周3 と同じ寄せ方（`_HARDWARE_ACTIONS`）で読んで足す。試験は
+  `test_configparse_allied.py` の `test_numbered_hardware_acl_actions_are_read_too`。
+- 見なかったこと: MAC ACL（4000 番台）の同じ動作の語。
+
+## アライドテレシスの番号付き MAC ACL（4000 番台）を IP の ACL として読み、MAC アドレスがプロトコルに化けていた（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `access-list 4000 permit 0030.841A.1234 0000.0000.0000 any` を IOS の読み手が
+  IP の拡張 ACL として読み、プロトコルが `0030.841a.1234`、送信元がマスクの `0000.0000.0000` になっていた。`access-list 4001 deny any any` は
+  宛先が空。`copy-to-mirror` などの行は捨てていた。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Defining hardware MAC ACLs
+  （4000-4699。送信元 MAC・マスク・宛先 MAC・マスクの順で、any にはマスクを付けない）、Filtering traffic on VLANs の
+  `access-list 4000 deny any any`、Table 2: Hardware ACL parameter actions。
+- 直したこと: 4000-4699 の行を読み直し、種別を `mac`、プロトコルを `mac`、送信元・宛先を `any` か `MAC マスク` で持つ。動作は周3 と同じ寄せ方。
+  読めない形の行は足さない。試験は `test_configparse_allied.py` の `test_numbered_hardware_mac_acls_are_read_as_mac_addresses`。
+- 気付いたが手を付けなかったこと: 資料はハードウェア ACL の末尾を「暗黙の permit」と書く（for AlliedWare Plus hardware ACLs, the ACL ends in an
+  implicit 'permit all else' clause）。ところが点検（`policyreview.py` の落とす行の指摘）は、アライドのハードウェア ACL 3000 にも
+  「末尾には、書かなくても残り全部を落とすが入っています」と出す。言っていることが逆になる。次の周で、機種ごとの末尾の既定として直す。

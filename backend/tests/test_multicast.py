@@ -537,3 +537,27 @@ def test_arista_snooping_querier_follows_the_vlan_setting_over_the_global_one():
     assert found is not None
     querier = {item.vlan: item.querier for item in found.vlans}
     assert querier == {1: False, 2: False, 3: False, 4: False, 5: True, 6: True, 7: True, 8: True}
+
+
+def test_cisco_snooping_vlan_lines_follow_the_catalyst_command_reference():
+    """見張り。Cisco の帯ごとのスヌーピングと querier を、コマンドリファレンスの形で読む。
+
+    出典: Cisco「Command Reference, Cisco IOS XE Cupertino 17.9.x (Catalyst 9300 Switches)」の
+    IP Multicast Routing Commands（`ip igmp snooping [vlan vlan-id]`、
+    `ip igmp snooping [vlan vlan-id] querier [address ip-address | ...]`。vlan-id は1つの番号）。
+    """
+    text = (
+        "ip igmp snooping\n"
+        "ip igmp snooping vlan 10 querier\n"
+        "ip igmp snooping vlan 30\n"
+        "no ip igmp snooping vlan 20\n"
+        "ip igmp snooping vlan 40 querier address 10.0.40.1\n"
+    )
+    found = multicast.parse(text, "cisco")
+    assert found is not None and found.snooping is True
+    assert {v.vlan: (v.enabled, v.querier) for v in found.vlans} == {
+        10: (True, True),
+        30: (True, False),
+        20: (False, False),
+        40: (True, True),
+    }
