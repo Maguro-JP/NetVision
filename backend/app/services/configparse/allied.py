@@ -112,6 +112,7 @@ def parse(text: str) -> ParsedConfig:
     _parse_routes(text, parsed)
     _parse_hardware_acls(text, parsed)
     _parse_mac_acls(text, parsed)
+    _mark_hardware_acls(text, parsed)
     _parse_lldp_table(text, parsed)
     return parsed
 
@@ -297,6 +298,24 @@ def _parse_mac_acls(text: str, parsed: ParsedConfig) -> None:
         entry = _mac_acl_entry(found.group(2))
         if entry is not None:
             acl.entries.append(entry)
+
+
+def _mark_hardware_acls(text: str, parsed: ParsedConfig) -> None:
+    """ハードウェア ACL（3000-4699 と `access-list hardware 名前`）の末尾は暗黙の permit。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Overview
+    （the ACL ends in an implicit 'permit all else' clause）と Hardware and software ACL types。
+    1-2699 のソフトウェア ACL は暗黙の deny のまま。
+    """
+    named = {
+        found.group(1)
+        for found in (_ACL_HARDWARE.match(raw.strip()) for raw in text.splitlines())
+        if found
+    }
+    for acl in parsed.acls:
+        if acl.name in named or (acl.name.isdigit() and 3000 <= int(acl.name) <= 4699):
+            acl.implicit_permit = True
 
 
 def _parse_hardware_acls(text: str, parsed: ParsedConfig) -> None:

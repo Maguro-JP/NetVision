@@ -982,7 +982,12 @@ def _acls(parsed: ParsedConfig) -> list[Finding]:
                 )
             )
             continue
-        if acl.applied_to and not any(entry.action == "permit" for entry in rules):
+        # 末尾で通す並び（アライドのハードウェア ACL）は、permit が無くても当たらない通信を通す
+        if (
+            acl.applied_to
+            and not acl.implicit_permit
+            and not any(entry.action == "permit" for entry in rules)
+        ):
             findings.append(
                 _note(
                     HIGH,
@@ -1199,7 +1204,8 @@ def _drops_without_a_trace(acl: ParsedAcl, rules: list[ParsedAclEntry]) -> list[
                 [last.raw],
             )
         ]
-    if not denies:
+    if not denies and not acl.implicit_permit:
+        # 末尾で通す並び（アライドのハードウェア ACL）には、隠れた「残り全部を落とす」が無い
         return [
             _note(
                 LOW,

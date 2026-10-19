@@ -1023,3 +1023,40 @@ def test_the_loopback_peering_finding_names_its_source():
     text = EBGP + " neighbor 203.0.113.1 update-source Loopback0\n"
     item = _one(_review(text), "接続が張れません")
     assert item.sources == [defaults.EBGP_CONNECTED_CHECK_SOURCE]
+
+
+ALLIED_HARDWARE_ACLS = """hostname awplus
+!
+access-list 3001 deny ip 192.168.0.0/24 any
+access-list hardware hw1
+ deny ip 10.0.0.0/8 any
+!
+interface port1.0.1
+ switchport
+ access-group 3001
+ access-group hw1
+!
+"""
+
+
+def test_allied_hardware_acls_end_in_an_implicit_permit():
+    """アライドテレシスのハードウェア ACL は、どの行にも当たらなければ通す。全部落とすとは言わない。
+
+    出典: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の
+    Overview
+    （for AlliedWare Plus hardware ACLs, the ACL ends in an implicit 'permit all else' clause）と
+    Hardware and software ACL types（hardware ACLs will permit access unless explicitly denied）。
+    """
+    titles = _titles(_review(ALLIED_HARDWARE_ACLS))
+    assert "全部落とします" not in titles
+    assert "明示的に落とす行がありません" not in titles
+    assert "落とした通信を記録していません" not in titles
+
+
+def test_allied_software_acls_still_end_in_an_implicit_deny():
+    """見張り。ソフトウェア ACL（1-2699）は暗黙の deny のまま。番号で取り違えない。"""
+    text = ALLIED_HARDWARE_ACLS.replace("access-list 3001", "access-list 101").replace(
+        "access-group 3001", "access-group 101"
+    )
+    acls = {a.name: a for a in configparse.parse(text).acls}
+    assert (acls["101"].implicit_permit, acls["hw1"].implicit_permit) == (False, True)

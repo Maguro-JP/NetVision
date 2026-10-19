@@ -551,6 +551,9 @@ class ParsedAcl:
     #: 戻りの通信を動的に通す仕組みと組み合わせて使っている並びか
     #: （ヤマハの dynamic フィルタなど）。「実質すべて通している」の判断が変わる
     stateful: bool = False
+    #: どの行にも当たらなかった通信を通す並びか。多くの機種は末尾で落とす（暗黙の deny）が、
+    #: アライドテレシスのハードウェア ACL は通す（暗黙の permit）
+    implicit_permit: bool = False
 
 
 @dataclass

@@ -1978,3 +1978,18 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 気付いたが手を付けなかったこと: 資料はハードウェア ACL の末尾を「暗黙の permit」と書く（for AlliedWare Plus hardware ACLs, the ACL ends in an
   implicit 'permit all else' clause）。ところが点検（`policyreview.py` の落とす行の指摘）は、アライドのハードウェア ACL 3000 にも
   「末尾には、書かなくても残り全部を落とすが入っています」と出す。言っていることが逆になる。次の周で、機種ごとの末尾の既定として直す。
+
+## アライドテレシスのハードウェア ACL を「全部落とす」と指摘していた（末尾は暗黙の permit）（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 点検（`policyreview.py`）は、どの機種の ACL も末尾で残りを落とす（暗黙の deny）
+  前提で説明していた。アライドの `access-list 3001 deny ip 192.168.0.0/24 any` を口に当てると、High の「当たった通信を全部落とします」が出ていた。
+  実機は当たらない通信を通すので、言っていることが逆だった。permit の無い ACL への「明示的に落とす行がありません」も同じ誤り。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Overview（for AlliedWare Plus hardware
+  ACLs, the ACL ends in an implicit 'permit all else' clause）と Hardware and software ACL types（hardware ACLs will permit access unless
+  explicitly denied、software ACLs will deny access unless explicitly permitted）。
+- 直したこと: ACL に「末尾で通す」印（`ParsedAcl.implicit_permit`）を足し、アライドの 3000-4699 と `access-list hardware` に付ける。点検は、印の
+  付いた ACL に「全部落とします」「明示的に落とす行がありません」を出さない。明示の deny に log が無い指摘はそのまま出す。
+  試験は `test_policyreview.py` の `test_allied_hardware_acls_end_in_an_implicit_permit` と、1-2699 が暗黙の deny のままの見張り。
+- 変えたい場合に触る場所: `allied.py` の `_mark_hardware_acls`、`policyreview.py` の `_acls` と `_drops_without_a_trace`。
+- 見なかったこと: ほかの機種で末尾が暗黙の permit のもの。資料で確かめたものから足す。点検以外（到達の判定など）で末尾の既定を使っている所は
+  見ていない。
