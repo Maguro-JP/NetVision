@@ -214,3 +214,29 @@ def test_the_official_ap_summary_row_is_read():
     assert [(ap.name, ap.model, ap.mac, ap.ip_address) for ap in aps] == [
         ("AP001b.d4e3.a81b", "AIR-LAP1232AG-A-K9", "00:1b:d4:e3:a8:1b", None)
     ]
+
+
+def test_sysinfo_with_several_countries_keeps_the_country_codes():
+    """`Configured Country` に国を並べた形でも、国コードを持つ。「Multiple」を国と読まない。
+
+    出典: Cisco「Cisco Wireless Controller Configuration Guide, Release 8.5」の Managing Licenses
+    （`show sysinfo` の作例。`Configured Country............ Multiple Countries : IN,US`、
+    `System Name`・`Product Version`・`IP Address` の見出し）。1か国の形（`US - United States`）は
+    8.10 の同じ作例の版と、既存の試験の形。
+    """
+    text = (
+        "(Cisco Controller) >show sysinfo\n\n"
+        "Manufacturer's Name.............................. Cisco Systems Inc.\n"
+        "Product Name..................................... Cisco Controller\n"
+        "Product Version.................................. 8.3.100.0\n"
+        "System Name...................................... TestSpartan8500Dev1\n"
+        "System Location.................................. \n"
+        "IP Address....................................... 8.1.4.2\n"
+        "Configured Country............................... Multiple Countries : IN,US\n"
+        "Number of WLANs.................................. 7\n"
+    ) + OFFICIAL_WLANS
+    parsed = configparse.parse(text)
+    assert parsed.hostname == "TestSpartan8500Dev1"
+    assert parsed.wireless.country == "IN,US"
+    single = text.replace("Multiple Countries : IN,US", "US - United States")
+    assert configparse.parse(single).wireless.country == "US"

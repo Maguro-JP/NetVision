@@ -2014,3 +2014,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `test_configparse_aireos.py` の `test_the_official_ap_summary_row_is_read`。冒頭の「show ap summary の列は未確認」を外した。
 - 見なかったこと: 国（Country）の列。版によって列の並びが違い（アドレスの列の有無）、場所に空白が入るので、見出しを見ずに位置で読むと取り違える。
   `show sysinfo` の列は未確認のまま。
+
+## AireOS の `show sysinfo` で国を並べた形（Multiple Countries : IN,US）を、国「Multiple」と読んでいた（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/aireos.py` は `Configured Country` の値の最初の語を国コードにしていた。
+  国を並べると値が `Multiple Countries : IN,US` になるので、国が `Multiple` になっていた。
+- 確かめた資料: Cisco「Cisco Wireless Controller Configuration Guide, Release 8.5」の Managing Licenses（`show sysinfo` の作例。
+  `Configured Country... Multiple Countries : IN,US`、`System Name`・`Product Version`・`IP Address` の見出し）。
+- 直したこと: `Multiple Countries :` の後ろの並び（`IN,US`）を国として持つ。1か国の形（`US - United States`）は今までどおり先頭の語。
+  試験は `test_configparse_aireos.py` の `test_sysinfo_with_several_countries_keeps_the_country_codes`。冒頭の「show sysinfo の列は未確認」を外した。
+- 見なかったこと: 国を並べたときに、AP ごとの国（`show ap summary` の Country）と食い違う点検。今は国を1つの文字列で持つだけ。

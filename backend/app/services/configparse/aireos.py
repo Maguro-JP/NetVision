@@ -22,7 +22,9 @@ AireOS は設定ファイルを持ち出す形が現場に馴染まないので�
 「Cisco Wireless Controller Command Reference, Release 8.5」と上の技術資料の作例で確かめた。
 表番号は無い。
 `show ap summary` の列は「Configure AireOS Wireless LAN Controller and Lightweight Access
-Point」の作例で確かめた（アドレスの列が無い版）。`show sysinfo` の列は未確認。
+Point」の作例で確かめた（アドレスの列が無い版）。`show sysinfo` の見出し（System Name・
+Product Version・IP Address・Configured Country）は Wireless Controller Configuration Guide 8.5
+の Managing Licenses の作例で確かめた。
 """
 
 from __future__ import annotations
@@ -127,7 +129,10 @@ def _read_wireless(text: str, fields: dict[str, str], parsed: ParsedConfig) -> P
     vlans = {normalize(i.name): i.vlan for i in parsed.interfaces}
     country = fields.get("Configured Country") or fields.get("Country")
     if country:
-        wireless.country = country.split()[0]
+        # 国を並べると `Multiple Countries : IN,US` になる（出典: Wireless Controller Configuration
+        # Guide 8.5 の Managing Licenses の show sysinfo）。1か国なら `US - United States`
+        several = re.match(r"^Multiple Countries\s*:\s*(\S+)", country, re.IGNORECASE)
+        wireless.country = several.group(1) if several else country.split()[0]
 
     for row in _WLAN_ROW.finditer(text):
         wireless.wlans.append(
