@@ -148,6 +148,18 @@
           }
         ]
       }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/follow-instructions/hooks/no_self_grant.py",
+            "timeout": 10
+          }
+        ]
+      }
     ]
   }
 }

@@ -6,6 +6,7 @@
 根拠と数えるのは、URL、コミットのハッシュ、バッククォートの中身、コードブロック、ファイルの場所、
 PR 番号、`exit=` の行。「確かめていない」と書いてあれば、それも通す（正直な方が良い）。
 ❔ が 1 ターンに 2 つ以上あれば、それも差し戻す。質問を並べると人が決める負担になる。
+訂正の合図がある発言への返事に、反論の形（しかし、ただし、おすすめしません、の方が良い）があれば差し戻す。反抗の禁止。
 返答ごとの数は metrics.jsonl に残し、週の報告（skill-upkeep）が読む。
 
 環境変数:
@@ -31,11 +32,20 @@ EVIDENCE = re.compile(
     re.M,
 )
 MARKS = "★⭐↩⏎❕❗❔❓"
+# 訂正の合図（follow-instructions の directives.py と同じ見方）と、訂正への返事に出てはいけない反論の形
+CORRECTION = re.compile(
+    r"違う|ちがう|やめて|やめろ|勝手に|言った(?:通り|とおり|のに|だろ|でしょ|はず)|言ってる|言ってない"
+    r"|聞いて(?:ない|いない|た\?|たか)|聞け|聞かない|それじゃない|そうじゃない|じゃなくて|ではなくて"
+    r"|戻して|元に戻|しないで|するな|使うな|やるな|書くな|禁止|またか|また同じ|何度も|何回|何度"
+    r"|反抗|従わ|改めない|貫く|頼んでない|余計な|指示通り|指示どおり|従え"
+)
+PUSHBACK = re.compile(r"しかし|ただし|とはいえ|おすすめしません|お勧めしません|の方が良い|のほうが良い|べきではない|やめた方が|やめたほうが|反対です|賛成できません|AI の判断で|私の判断で")
 
 
 def response_texts(path: str):
-    """この返答（最後の人の発言のあと）に書いた文。ツールの結果は区切りにしない。"""
+    """この返答（最後の人の発言のあと）に書いた文と、その人の発言。ツールの結果は区切りにしない。"""
     texts = []
+    user = ""
     for line in open(path, encoding="utf-8", errors="replace"):
         try:
             e = json.loads(line)
@@ -45,13 +55,14 @@ def response_texts(path: str):
         if e.get("type") == "user":
             if isinstance(c, str) or not any(isinstance(x, dict) and x.get("type") == "tool_result" for x in c):
                 texts = []
+                user = c if isinstance(c, str) else "\n".join(x.get("text", "") for x in c if isinstance(x, dict) and x.get("type") == "text")
             continue
         if e.get("type") != "assistant":
             continue
         t = c if isinstance(c, str) else "\n".join(x.get("text", "") for x in c if isinstance(x, dict) and x.get("type") == "text")
         if t.strip():
             texts.append(t)
-    return texts
+    return texts, user
 
 
 def record(session_id: str, row: dict) -> None:
@@ -79,7 +90,7 @@ def main() -> int:
     if not path or not os.path.isfile(path):
         return 0
     try:
-        texts = response_texts(path)
+        texts, user = response_texts(path)
     except OSError:
         return 0
     if not texts:
@@ -91,9 +102,14 @@ def main() -> int:
     claim = bool(CLAIM.search(text))
     evidence = bool(EVIDENCE.search(text))
     bare = claim and not evidence
+    corrected = bool(CORRECTION.search(user or ""))
+    pushback = [l for l in lines if PUSHBACK.search(l) and "権限" not in l] if corrected else []
     record(d.get("session_id", ""), {"lines": len(lines), "questions": questions, "outside_marks": outside,
-                                     "claim": claim, "claim_without_evidence": bare})
+                                     "claim": claim, "claim_without_evidence": bare, "corrected": corrected, "pushback": len(pushback)})
     reasons = []
+    if pushback:
+        reasons.append(f"訂正への返事に反論の形がある（「{PUSHBACK.search(pushback[0]).group(0)}」）。1文で認めて、言われた通りに直したものだけを出す。"
+                       "代案は直したあとに ❔ で1行だけ（follow-instructions。反抗の禁止）。")
     if bare:
         m = CLAIM.search(text)
         reasons.append(f"「{m.group(0)}」と書いているが、根拠（動かした出力、URL、コミットのハッシュ、ファイルの場所）が無い。"
