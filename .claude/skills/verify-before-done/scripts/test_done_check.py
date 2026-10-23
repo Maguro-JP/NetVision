@@ -31,9 +31,9 @@ class DoneCheck(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
-    def run_hook(self, assistant: str, active: bool = False):
+    def run_hook(self, assistant: str, active: bool = False, user: str = "直して"):
         t = self.dir / "t.jsonl"
-        transcript(t, "直して", assistant)
+        transcript(t, user, assistant)
         env = dict(os.environ, DONE_CHECK_STATE=str(self.dir / "state"))
         env.pop("DONE_CHECK_OFF", None)
         r = subprocess.run([sys.executable, "-I", str(HOOK)],
@@ -61,6 +61,17 @@ class DoneCheck(unittest.TestCase):
         code, err = self.run_hook("❔ A か B か。\n❔ いつまでに。")
         self.assertEqual(code, 2)
         self.assertIn("1 ターンに 1 つまで", err)
+
+    def test_pushback_after_correction_is_blocked(self):
+        code, err = self.run_hook("↩ 形: しかし、その形だと壊れます。https://example.invalid/x", user="違う。言った通りにして")
+        self.assertEqual(code, 2)
+        self.assertIn("反論", err)
+
+    def test_acknowledgement_after_correction_passes(self):
+        self.assertEqual(self.run_hook("↩ 形: 言われた形に直しました。README.md:3 を見てください。", user="違う。言った通りにして")[0], 0)
+
+    def test_pushback_without_correction_passes(self):
+        self.assertEqual(self.run_hook("❕ 比較: A は速い。ただし B は小さい。docs/x.md に表があります。", user="A と B を比べて")[0], 0)
 
     def test_stop_hook_active_passes(self):
         self.assertEqual(self.run_hook("直しました。", active=True)[0], 0)
