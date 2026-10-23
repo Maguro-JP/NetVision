@@ -1,8 +1,8 @@
 # repo-bootstrap が置いた最小の CI。人の PR と、ci の札を付けた PR で走る。
 name: test
 on:
-  # 本線への push では回さない。入るのは確かめ済みのものだけ。
-  # 自律開発（claude/ の枝）の PR も回さない。手元で検証してからマージするので、
+  # main ブランチへの push では回さない。入るのは確かめ済みのものだけ。
+  # 自律開発（claude/ のブランチ）の PR も回さない。手元で検証してからマージするので、
   # 同じものを Actions で回すと枠だけが減る。人が見てほしいときは `ci` の札を付ける
   pull_request:
     types: [opened, synchronize, reopened, ready_for_review, labeled]

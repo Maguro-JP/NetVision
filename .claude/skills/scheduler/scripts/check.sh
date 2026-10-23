@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Routine を起こしたあと、リポジトリ側に書き込みが増えたかを待って確かめる。
-# Routine の status は起きただけで緑になるので、根拠にしない。
+# Routine を起動したあと、リポジトリ側に書き込みが増えたかを待って確かめる。
+# Routine の status は実行されただけで緑になるので、根拠にしない。
 # 使い方: check.sh <owner/repo> <ブランチ名の一部> [待つ秒数=240]
 set -uo pipefail
 

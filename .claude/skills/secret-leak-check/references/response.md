@@ -88,7 +88,7 @@ git push --force origin --tags
 
 1. `.gitignore` に `.env` 等を追加（すでにあるか確認）
 2. 値は環境変数か secret manager に移す
-3. CI に走査を入れる
+3. CI にスキャンを入れる
 
 ```yaml
 - name: Secret scan
