@@ -1,0 +1,263 @@
+# 出典: tomkd555/prose-lint（MIT License, Copyright (c) 2026 tomkd555）の assets/textlint/prh/koyobun-kana.yml。
+# Ciel では ja-proofread の textlint 設定（textlintrc.json）から読む。
+
+# koyobun-kana.yml - words written in kana in official Japanese documents.
+#
+# Every rule below restates one line of the appendix (別紙) of
+# 「公用文における漢字使用等について」(平成22年11月30日 内閣訓令第1号),
+# https://www.bunka.go.jp/kokugo_nihongo/sisaku/joho/joho/kijun/naikaku/kanji/,
+# which 「公用文作成の考え方」(文化審議会建議, 2022) adopts for kana usage. The
+# `prh` field names the item of the appendix, and shows with each hit.
+#
+# The morphology rules of textlint cover the rest of the appendix:
+# ja-keishikimeishi (事, 時, 所, 物, 為), ja-hiragana-hojodoushi (頂く,
+# 下さい, 致す, 置く, 見る, 来る, 行く after て), ja-hiragana-fukushi (予め,
+# 概ね, 殆ど, 是非) and ja-hiragana-daimeishi. The rules here are the surface
+# forms those three do not reach: conjunctions, auxiliaries and the fixed
+# phrases of item キ. Each pattern carries a boundary guard so 出来事, 又は,
+# 第一位 and 一致 stay untouched; the specs are the guard's tests, and prh
+# refuses to load a rule whose spec fails.
+#
+# Loaded by .textlintrc.json through textlint-rule-prh. Add your own rows,
+# or drop a rule that misfires on your house style.
+
+version: 1
+
+rules:
+  # ---- (2)オ 接続詞は仮名。ただし 及び・並びに・又は・若しくは は漢字 ----
+  - expected: ただし
+    pattern: /(?<=^|。|\s|」|）)但し(?=、|\s)/
+    prh: 別紙1(2)オ 接続詞「ただし」は仮名で書く
+    specs:
+      - from: 但し、例外がある。
+        to: ただし、例外がある。
+  - expected: したがって
+    pattern: /(?<=^|。|\s|」|）)従って(?=、|\s)/
+    prh: 別紙1(2)オ 接続詞「したがって」は仮名で書く（「規則に従って」の動詞は漢字のまま）
+    specs:
+      - from: 従って、次の案とする。
+        to: したがって、次の案とする。
+      - from: 規則に従って処理する。
+        to: 規則に従って処理する。
+  - expected: かつ
+    pattern: /(?<=[^一-鿿])且つ/
+    prh: 別紙1(2)オ 接続詞「かつ」は仮名で書く
+    specs:
+      - from: 安全、且つ確実に行う。
+        to: 安全、かつ確実に行う。
+  - expected: また
+    pattern: /(?<=^|。|\s|」|）)又(?=、)/
+    prh: 別紙1(2)オ 接続詞「また」は仮名で書く（「又は」は漢字のまま）
+    specs:
+      - from: 又、次のとおりとする。
+        to: また、次のとおりとする。
+      - from: 甲又は乙とする。
+        to: 甲又は乙とする。
+  - expected: ゆえに
+    pattern: /(?<=^|。|\s|」|）)故に/
+    prh: 別紙1(2)オ 接続詞「ゆえに」は仮名で書く
+    specs:
+      - from: 故に、承認する。
+        to: ゆえに、承認する。
+  - expected: ついては
+    pattern: /(?<=^|。|\s|」|）)就いては/
+    prh: 別紙1(2)オ 接続詞「ついては」は仮名で書く
+    specs:
+      - from: 就いては、御確認願いたい。
+        to: ついては、御確認願いたい。
+  - expected: なお
+    pattern: /(?<=^|。|\s|」|）)尚(?=、)/
+    prh: 別紙1(2)オ 接続詞は仮名で書く（「なお」は常用漢字表の音訓にない）
+    specs:
+      - from: 尚、期限は五日とする。
+        to: なお、期限は五日とする。
+
+  # ---- (2)カ 助動詞・助詞は仮名 ----
+  - expected: な
+    pattern: /無(?=[いくけか])/
+    prh: 別紙1(2)カ・キ 助動詞・形容詞の「ない」は仮名で書く（現地には、行かない／欠点がない）
+    specs:
+      - from: 会場には行か無い。
+        to: 会場には行かない。
+      - from: 前例が無く、欠点も無い。
+        to: 前例がなく、欠点もない。
+      - from: 無効とする。
+        to: 無効とする。
+  - expected: $1よう
+    pattern: /([るいたなうくすつのぬむぶぐ])様(?=[にな]|だ|で)/
+    prh: 別紙1(2)カ 助動詞「ようだ」は仮名で書く（それ以外に方法がないようだ）
+    specs:
+      - from: 見える様に置く。
+        to: 見えるように置く。
+      - from: 同様に扱う。
+        to: 同様に扱う。
+  - expected: $1ぐらい
+    pattern: /([人日月年円件回個本枚るいたのこそあど])位(?=[のにでは、。]|$)/
+    prh: 別紙1(2)カ 助詞「ぐらい」は仮名で書く（二十歳ぐらいの人）
+    specs:
+      - from: 十人位の参加である。
+        to: 十人ぐらいの参加である。
+      - from: 第一位の成果である。
+        to: 第一位の成果である。
+      - from: 上位の案である。
+        to: 上位の案である。
+  - expected: $1だけ
+    pattern: /([るいたのこそあど])丈(?=[のにでは、。]|$)/
+    prh: 別紙1(2)カ 助詞「だけ」は仮名で書く（調査しただけである）
+    specs:
+      - from: 調査した丈である。
+        to: 調査しただけである。
+  - expected: $1ほど
+    pattern: /([日月年人回件個るいたのこそあど])程(?![度遠近よ])/
+    prh: 別紙1(2)カ 助詞「ほど」は仮名で書く（三日ほど経過した）
+    specs:
+      - from: 三日程経過した。
+        to: 三日ほど経過した。
+      - from: 程度の問題である。
+        to: 程度の問題である。
+
+  # ---- (2)キ 次の語句は仮名（例の用法のとき） ----
+  - expected: でき
+    pattern: /出来(?=[るまなれよたてずそ])/
+    prh: 別紙1(2)キ「できる」は仮名で書く（だれでも利用ができる）
+    specs:
+      - from: 利用が出来る。
+        to: 利用ができる。
+      - from: 利用が出来ます。
+        to: 利用ができます。
+      - from: 出来事を記す。
+        to: 出来事を記す。
+  - expected: あ
+    pattern: /(?<=[がはもにで、])有(?=[るりっれらろ])/
+    prh: 別紙1(2)キ「ある」は仮名で書く（その点に問題がある）
+    specs:
+      - from: その点に問題が有る。
+        to: その点に問題がある。
+      - from: 有無を確認する。
+        to: 有無を確認する。
+  - expected: い
+    pattern: /(?<=[がはもにで、て])居(?=[るりっれらろ])/
+    prh: 別紙1(2)キ「いる」は仮名で書く（ここに関係者がいる）
+    specs:
+      - from: ここに関係者が居る。
+        to: ここに関係者がいる。
+      - from: 住居を移す。
+        to: 住居を移す。
+  - expected: $1な
+    pattern: /([にくと])成(?=[るりっれらろ])/
+    prh: 別紙1(2)キ「なる」は仮名で書く（合計すると一万円になる）
+    specs:
+      - from: 一万円に成る。
+        to: 一万円になる。
+      - from: 成果を出す。
+        to: 成果を出す。
+  - expected: $1ともに
+    pattern: /([ると])共に/
+    prh: 別紙1(2)キ「とも」は仮名で書く（説明するとともに意見を聞く）
+    specs:
+      - from: 説明すると共に意見を聞く。
+        to: 説明するとともに意見を聞く。
+      - from: 共に歩む。
+        to: 共に歩む。
+  - expected: $1ほか
+    pattern: /([るいたく])他(?=[のにはを、。]|$)/
+    prh: 別紙1(2)キ「ほか」は仮名で書く（特別の場合を除くほか）
+    specs:
+      - from: 特別の場合を除く他、適用しない。
+        to: 特別の場合を除くほか、適用しない。
+      - from: その他の事項。
+        to: その他の事項。
+  - expected: $1ゆえ
+    pattern: /([るいたの])故(?=に)/
+    prh: 別紙1(2)キ「ゆえ」は仮名で書く（一部の反対のゆえにはかどらない）
+    specs:
+      - from: 反対の故に進まない。
+        to: 反対のゆえに進まない。
+      - from: 事故に遭う。
+        to: 事故に遭う。
+  - expected: $1わけ
+    pattern: /([るいたないうの])訳(?=[がにはでも]|$)/
+    prh: 別紙1(2)キ「わけ」は仮名で書く（賛成するわけにはいかない）
+    specs:
+      - from: 賛成する訳にはいかない。
+        to: 賛成するわけにはいかない。
+      - from: 翻訳を頼む。
+        to: 翻訳を頼む。
+  - expected: $1とおり
+    pattern: /([るのたい])通り(?=[にでのだ、。]|$)/
+    prh: 別紙1(2)キ「とおり」は仮名で書く（次のとおりである）
+    specs:
+      - from: 次の通りである。
+        to: 次のとおりである。
+      - from: 大通りを渡る。
+        to: 大通りを渡る。
+  - expected: よ
+    pattern: /(?<=て)良(?=[いくけか])/
+    prh: 別紙1(2)キ「…てよい」は仮名で書く
+    specs:
+      - from: 提出しなくて良い。
+        to: 提出しなくてよい。
+      - from: 良い案である。
+        to: 良い案である。
+  - expected: すぎ
+    pattern: /(?<=に)過ぎ(?=[なまず])/
+    prh: 別紙1(2)キ「…にすぎない」は仮名で書く
+    specs:
+      - from: 一例に過ぎない。
+        to: 一例にすぎない。
+      - from: 期限が過ぎた。
+        to: 期限が過ぎた。
+  - expected: ついて
+    pattern: /(?<=に)(?:就|付)いて(?=[、はの]|$)/
+    prh: 別紙1(2)キ「…について」は仮名で書く
+    specs:
+      - from: 本件に付いては、次のとおり。
+        to: 本件については、次のとおり。
+      - from: 机に付いている。
+        to: 机に付いている。
+  - expected: しれ
+    pattern: /(?<=かも)知れ/
+    prh: 別紙1(2)キ「…かもしれない」は仮名で書く
+    specs:
+      - from: 遅れるかも知れない。
+        to: 遅れるかもしれない。
+  - expected: いた
+    pattern: /(?<![一合拉極招誘筆不])致(?=[しさす])/
+    prh: 別紙1(2)キ「…いたします」は仮名で書く（補助動詞）
+    specs:
+      - from: 御連絡致します。
+        to: 御連絡いたします。
+      - from: 一致した意見。
+        to: 一致した意見。
+
+  # ---- 常用漢字表にない字 ----
+  - expected: おいて
+    pattern: /(?<=に)於(?:い|)て/
+    prh: 常用漢字表にない「於」は使わない（「において」）
+    specs:
+      - from: 会議に於いて決める。
+        to: 会議において決める。
+  - expected: おける
+    pattern: /(?<=に)於ける/
+    prh: 常用漢字表にない「於」は使わない（「における」）
+    specs:
+      - from: 日本に於ける事例。
+        to: 日本における事例。
+  - expected: あるいは
+    pattern: /或いは|或は/
+    prh: 常用漢字表にない「或」は使わない（「あるいは」）
+    specs:
+      - from: 甲或いは乙。
+        to: 甲あるいは乙。
+  - expected: まで
+    pattern: /迄/
+    prh: 常用漢字表にない「迄」は使わない（「まで」）
+    specs:
+      - from: 五日迄に出す。
+        to: 五日までに出す。
+  - expected: いわゆる
+    pattern: /所謂/
+    prh: 常用漢字表にない読み「所謂」は使わない（「いわゆる」）
+    specs:
+      - from: 所謂、例外である。
+        to: いわゆる、例外である。

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""機密情報の混入を走査する。
+"""機密情報の混入をスキャンする。
 
   scan.py --tree              作業ツリー全体
   scan.py --diff              未コミットの変更（staged + unstaged）

@@ -16,6 +16,15 @@
             "command": ".claude/hooks/lessons.sh"
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/finish-first/hooks/focus.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "UserPromptSubmit": [
@@ -28,6 +37,33 @@
           {
             "type": "command",
             "command": ".claude/hooks/skill-nudge.sh"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/token-efficiency/hooks/efficiency_core.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/follow-instructions/hooks/directives.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/finish-first/hooks/focus.py",
+            "timeout": 10
           }
         ]
       }
@@ -51,6 +87,24 @@
             "timeout": 600
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/token-efficiency/hooks/session_report.py",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/verify-before-done/hooks/done_check.py",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -70,6 +124,26 @@
           {
             "type": "command",
             "command": ".claude/hooks/pr-nudge.sh",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Read|Edit|Write|MultiEdit|NotebookEdit|Grep|Glob|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/token-efficiency/hooks/trajectory_guard.py",
+            "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/desktop-app/hooks/no_browser.py",
             "timeout": 10
           }
         ]
