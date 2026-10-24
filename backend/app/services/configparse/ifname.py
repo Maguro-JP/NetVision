@@ -6,7 +6,8 @@
 出典: Catalyst 9000 の mGig の名前（TwoGigabitEthernet・FiveGigabitEthernet・`Tw`）は
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
 Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE`・`FGE`・
-`HGE` は S6850・S7500E-XS・S12500R の Command Reference で確かめた（tests/test_ifname.py）。
+`HGE` は S6850・S7500E-XS・S12500R の Command Reference で、`XGE`・`GE` は
+「03-Interface Command Reference」の display interface で確かめた（tests/test_ifname.py）。
 ほかの略記は既存の試験の形のまま（未確認）。
 """
 
@@ -70,6 +71,8 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("hu", "HundredGigE"),
     ("tengig", "TenGigabitEthernet"),
     ("fortygig", "FortyGigabitEthernet"),
+    # H3C Comware の 10G 口の略記。出典: H3C「03-Interface Command Reference」02-Ethernet
+    # interface commands の display interface（ten-gigabitethernet 1/0/1 brief の出力が XGE1/0/1）
     ("xge", "TenGigabitEthernet"),
     ("gig", "GigabitEthernet"),
     ("fas", "FastEthernet"),
@@ -78,7 +81,9 @@ ABBREVIATIONS: tuple[tuple[str, str], ...] = (
     ("fo", "FortyGigabitEthernet"),
     ("te", "TenGigabitEthernet"),
     ("gi", "GigabitEthernet"),
-    ("ge", "GigabitEthernet"),  # NEC QX の GE1/0/1。Juniper の ge-0/0/1 は先に除外する
+    # NEC QX と H3C の GE1/0/1（H3C は上の xge と同じ資料の display interface brief で確かめた）。
+    # Juniper の ge-0/0/1 は先に除外する
+    ("ge", "GigabitEthernet"),
     ("fa", "FastEthernet"),
     ("po", "Port-channel"),
     ("lo", "Loopback"),

@@ -2041,3 +2041,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `rp address 10.17.255.83 override`、`router multicast` の `ipv4` の `routing`）。この章には `ip rp address` も `ip pim rp-address` も出てこない。
 - 試験: `test_multicast.py` の `test_arista_static_rp_follows_the_eos_user_manual`。`ip rp address` は古い試験の形として受けたまま残し、
   コメントを「公式に無い形」に書き換えた（読むのをやめると、今その形で貼っている人の RP が消えるため。AI の判断）。
+
+## 見張り: H3C の `XGE`・`GE` を Config の正式名と同じ口として読めている（2026-10-25 JST）
+
+- 確かめたこと: `configparse/ifname.py` の `xge` と `ge` の略記は「既存の試験の形（未確認）」だった。
+  H3C の出力に出る略記が、Config 側の `Ten-GigabitEthernet1/0/1`・`GigabitEthernet1/0/2` と同じ口になるかを見た。直す所は無かった。
+- 確かめた資料: H3C「03-Interface Command Reference」02-Ethernet interface commands の display interface
+  （`display interface ten-gigabitethernet 1/0/1 brief description` の出力が `XGE1/0/1`、`display interface brief` の出力が `GE1/0/2`）。
+- 試験: `test_ifname.py` の `test_h3c_ten_gig_and_gig_abbreviations_follow_the_command_reference`。
+  `xge` の行を外すと落ちることを確かめた。

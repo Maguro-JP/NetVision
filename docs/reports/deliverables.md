@@ -7,5 +7,5 @@
 | # | 成果物 | 完成条件 | 状態 | 残り | 更新 |
 |---|---|---|---|---|---|
 | 1 | NetVision をアプリのウィンドウで開く（ブラウザを使わない） | `uv run pytest tests/test_launcher.py tests/test_packaging.py` が通る（ウィンドウに渡す URL がサーバーのもので、閉じるとサーバーが止まり、ブラウザを開かない）。`grep -rn webbrowser backend/scripts backend/app` が 0 件。README と docs の起動手順に URL を開く手順が無い。Windows の実機で NetVision.bat からウィンドウが開く | 確認待ち | Windows の実機で一式を作り、NetVision.bat からウィンドウが開いて × で止まることを見る（ここには Windows も画面も無い） | 2026-10-24 |
-| 2 | 機器の読み手の「未確認」を、公式資料に届くものから無くす | `grep -rn "未確認" backend/app/services/configparse --include=*.py` に出る行が、どれも「資料に届かない」理由（届かない資料の名前）を同じ行か直前の行に書いてある。`./scripts/check.sh` が通る（仮） | 進行中 | 10 行のうち、arubaos.py のスタックの範囲（`1/1-1/48`。HPE の公式資料が見つかっていない）、exos.py のほかの行、linkstate.py の表、ifname.py の略記、multicast.py の NEC QX を順に当たる | 2026-10-24 |
+| 2 | 機器の読み手の「未確認」を、公式資料に届くものから無くす | `grep -rn "未確認" backend/app/services/configparse --include=*.py` に出る行が、どれも「資料に届かない」理由（届かない資料の名前）を同じ行か直前の行に書いてある。`./scripts/check.sh` が通る（仮） | 進行中 | 10 行のうち、arubaos.py のスタックの範囲（`1/1-1/48`。HPE の公式資料が見つかっていない）、exos.py のほかの行、linkstate.py の表、ifname.py の残りの略記（`XGE`・`GE` は確かめた）、multicast.py の NEC QX を順に当たる | 2026-10-24 |
 | 3 | Junos の論理システムを、論理システムごとの機器として取り込む | 論理システムを2つ持つ Junos の Config を1ファイル取り込むと、台帳に本体と論理システム2つの計3台が載り、それぞれの口と経路が出る試験が `uv run pytest` で通る（仮） | 未着手 | decisions.md の「決めていないこと」3つにデフォルトを決める | 2026-10-24 |
