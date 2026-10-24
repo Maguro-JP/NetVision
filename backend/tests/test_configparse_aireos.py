@@ -159,3 +159,84 @@ def test_a_name_with_a_space_keeps_its_vlan():
     assert _port("vlan 81").vlan == 81
     assert _port("171").vlan == 171
     assert _port("dyn59").vlan == 59
+
+
+#: 公式の作例。「Configure VLANs on Wireless LAN Controllers」の `show wlan summary`
+#: （Interface Name に `vlan 81` と空白が入り、末尾に PMIPv6 Mobility の列が付く）
+OFFICIAL_WLANS = """(Cisco Controller) >show wlan summary
+Number of WLANs.................................. 2
+
+WLAN ID  WLAN Profile Name / SSID               Status    Interface Name        PMIPv6 Mobility
+-------  -------------------------------------  --------  --------------------  ---------------
+1        self-anchor / self-anchor              Disabled  management            none
+2        Students / Students                    Enabled   vlan 81               none
+"""
+
+
+def test_a_wlan_takes_the_vlan_of_its_interface():
+    """`show wlan summary` の Interface Name を `show interface summary` の口に引き、VLAN を持つ。
+
+    出典: Cisco「Configure VLANs on Wireless LAN Controllers」
+    （`config wlan interface 2 "vlan 81"` とその `show wlan summary`）、
+    「Cisco Wireless Controller Command Reference, Release 8.5」と Mobility Express Command
+    Reference 8.9 の show wlan summary の作例（WLAN ID / WLAN Profile Name / SSID / Status /
+    Interface Name）。management は untagged なので VLAN を持たない。
+    """
+    wlans = {
+        w.name: w for w in configparse.parse(OFFICIAL_INTERFACES + OFFICIAL_WLANS).wireless.wlans
+    }
+    assert {name: (w.ssid, w.enabled, w.vlan) for name, w in wlans.items()} == {
+        "self-anchor": ("self-anchor", False, None),
+        "Students": ("Students", True, 81),
+    }
+
+
+def test_the_official_ap_summary_row_is_read():
+    """見張り。`show ap summary` の行を Cisco の作例の形で読む。アドレスの列が無い版でも落とさない。
+
+    出典: Cisco「Configure AireOS Wireless LAN Controller and Lightweight Access Point」の Verify
+    （`AP Name Slots AP Model Ethernet MAC Location Port Country Priority` の見出しと、
+    `AP001b.d4e3.a81b 2 AIR-LAP1232AG-A-K9 00:1b:d4:e3:a8:1b default location 2 IN 1` の行）。
+    """
+    text = (
+        "(Cisco Controller) >show ap summary\n\n"
+        "Number of APs.................................... 1\n\n"
+        "Global AP User Name.............................. Not Configured\n"
+        "Global AP Dot1x User Name........................ Not Configured\n\n"
+        "AP Name             Slots  AP Model             Ethernet MAC       Location          "
+        "Port  Country  Priority\n"
+        "------------------  -----  -------------------  -----------------  ----------------  "
+        "----  -------  ------\n"
+        "AP001b.d4e3.a81b    2      AIR-LAP1232AG-A-K9   00:1b:d4:e3:a8:1b  default location  "
+        "2     IN       1\n"
+    )
+    aps = configparse.parse(text).wireless.aps
+    assert [(ap.name, ap.model, ap.mac, ap.ip_address) for ap in aps] == [
+        ("AP001b.d4e3.a81b", "AIR-LAP1232AG-A-K9", "00:1b:d4:e3:a8:1b", None)
+    ]
+
+
+def test_sysinfo_with_several_countries_keeps_the_country_codes():
+    """`Configured Country` に国を並べた形でも、国コードを持つ。「Multiple」を国と読まない。
+
+    出典: Cisco「Cisco Wireless Controller Configuration Guide, Release 8.5」の Managing Licenses
+    （`show sysinfo` の作例。`Configured Country............ Multiple Countries : IN,US`、
+    `System Name`・`Product Version`・`IP Address` の見出し）。1か国の形（`US - United States`）は
+    8.10 の同じ作例の版と、既存の試験の形。
+    """
+    text = (
+        "(Cisco Controller) >show sysinfo\n\n"
+        "Manufacturer's Name.............................. Cisco Systems Inc.\n"
+        "Product Name..................................... Cisco Controller\n"
+        "Product Version.................................. 8.3.100.0\n"
+        "System Name...................................... TestSpartan8500Dev1\n"
+        "System Location.................................. \n"
+        "IP Address....................................... 8.1.4.2\n"
+        "Configured Country............................... Multiple Countries : IN,US\n"
+        "Number of WLANs.................................. 7\n"
+    ) + OFFICIAL_WLANS
+    parsed = configparse.parse(text)
+    assert parsed.hostname == "TestSpartan8500Dev1"
+    assert parsed.wireless.country == "IN,US"
+    single = text.replace("Multiple Countries : IN,US", "US - United States")
+    assert configparse.parse(single).wireless.country == "US"

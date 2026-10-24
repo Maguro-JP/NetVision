@@ -1978,3 +1978,49 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 気付いたが手を付けなかったこと: 資料はハードウェア ACL の末尾を「暗黙の permit」と書く（for AlliedWare Plus hardware ACLs, the ACL ends in an
   implicit 'permit all else' clause）。ところが点検（`policyreview.py` の落とす行の指摘）は、アライドのハードウェア ACL 3000 にも
   「末尾には、書かなくても残り全部を落とすが入っています」と出す。言っていることが逆になる。次の周で、機種ごとの末尾の既定として直す。
+
+## アライドテレシスのハードウェア ACL を「全部落とす」と指摘していた（末尾は暗黙の permit）（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: 点検（`policyreview.py`）は、どの機種の ACL も末尾で残りを落とす（暗黙の deny）
+  前提で説明していた。アライドの `access-list 3001 deny ip 192.168.0.0/24 any` を口に当てると、High の「当たった通信を全部落とします」が出ていた。
+  実機は当たらない通信を通すので、言っていることが逆だった。permit の無い ACL への「明示的に落とす行がありません」も同じ誤り。
+- 確かめた資料: Allied Telesis「ACL Feature Overview and Configuration Guide」C613-22039-00 REV M の Overview（for AlliedWare Plus hardware
+  ACLs, the ACL ends in an implicit 'permit all else' clause）と Hardware and software ACL types（hardware ACLs will permit access unless
+  explicitly denied、software ACLs will deny access unless explicitly permitted）。
+- 直したこと: ACL に「末尾で通す」印（`ParsedAcl.implicit_permit`）を足し、アライドの 3000-4699 と `access-list hardware` に付ける。点検は、印の
+  付いた ACL に「全部落とします」「明示的に落とす行がありません」を出さない。明示の deny に log が無い指摘はそのまま出す。
+  試験は `test_policyreview.py` の `test_allied_hardware_acls_end_in_an_implicit_permit` と、1-2699 が暗黙の deny のままの見張り。
+- 変えたい場合に触る場所: `allied.py` の `_mark_hardware_acls`、`policyreview.py` の `_acls` と `_drops_without_a_trace`。
+- 見なかったこと: ほかの機種で末尾が暗黙の permit のもの。資料で確かめたものから足す。点検以外（到達の判定など）で末尾の既定を使っている所は
+  見ていない。
+
+## AireOS の `show wlan summary` の Interface Name を読まず、WLAN の VLAN が空だった（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/aireos.py` の冒頭は「SSID と、載せている口」を読むと書いていたが、
+  `show wlan summary` の行は Status までしか読んでいなかった。`show interface summary` が一緒に貼ってあっても、WLAN の VLAN は空のままだった。
+- 確かめた資料: Cisco「Configure VLANs on Wireless LAN Controllers」（`config wlan interface 2 "vlan 81"` と、その `show wlan summary` の
+  Interface Name が `vlan 81`、末尾に PMIPv6 Mobility の列）、「Cisco Wireless Controller Command Reference, Release 8.5」と Mobility Express
+  Command Reference 8.9 の show wlan summary の作例（WLAN ID / WLAN Profile Name / SSID / Status / Interface Name）。
+- 直したこと: 行の Interface Name（空白入りの `vlan 81` を含む）を読み、`show interface summary` の同じ名前の口の VLAN を WLAN に持たせる。
+  untagged の口（management）は VLAN を持たない。試験は `test_configparse_aireos.py` の `test_a_wlan_takes_the_vlan_of_its_interface`。
+- 残る未確認: `show ap summary` と `show sysinfo` の列。名前が長くて Interface Name の列と空白1つでつながる形は試していない。
+
+## 見張り: AireOS の `show ap summary` を Cisco の作例の形で読めている（2026-10-19 JST）
+
+- 確かめたこと: `configparse/aireos.py` の AP の行（名前・スロット数・型番・MAC と、その後ろ）が、アドレスの列が無い版の作例でも AP を落とさないか。
+  直す所は無かった（アドレスは空のまま、名前・型番・MAC を持つ）。
+- 確かめた資料: Cisco「Configure AireOS Wireless LAN Controller and Lightweight Access Point」の Verify（見出し `AP Name Slots AP Model
+  Ethernet MAC Location Port Country Priority`、行 `AP001b.d4e3.a81b 2 AIR-LAP1232AG-A-K9 00:1b:d4:e3:a8:1b default location 2 IN 1`）。
+- 試験: `test_configparse_aireos.py` の `test_the_official_ap_summary_row_is_read`。冒頭の「show ap summary の列は未確認」を外した。
+- 見なかったこと: 国（Country）の列。版によって列の並びが違い（アドレスの列の有無）、場所に空白が入るので、見出しを見ずに位置で読むと取り違える。
+  `show sysinfo` の列は未確認のまま。
+
+## AireOS の `show sysinfo` で国を並べた形（Multiple Countries : IN,US）を、国「Multiple」と読んでいた（2026-10-19 JST）
+
+- 起きていたこと（直す前のコードで試験が落ちることを確かめた）: `configparse/aireos.py` は `Configured Country` の値の最初の語を国コードにしていた。
+  国を並べると値が `Multiple Countries : IN,US` になるので、国が `Multiple` になっていた。
+- 確かめた資料: Cisco「Cisco Wireless Controller Configuration Guide, Release 8.5」の Managing Licenses（`show sysinfo` の作例。
+  `Configured Country... Multiple Countries : IN,US`、`System Name`・`Product Version`・`IP Address` の見出し）。
+- 直したこと: `Multiple Countries :` の後ろの並び（`IN,US`）を国として持つ。1か国の形（`US - United States`）は今までどおり先頭の語。
+  試験は `test_configparse_aireos.py` の `test_sysinfo_with_several_countries_keeps_the_country_codes`。冒頭の「show sysinfo の列は未確認」を外した。
+- 見なかったこと: 国を並べたときに、AP ごとの国（`show ap summary` の Country）と食い違う点検。今は国を1つの文字列で持つだけ。
