@@ -6,5 +6,5 @@
 
 | # | 成果物 | 完成条件 | 状態 | 残り | 更新 |
 |---|---|---|---|---|---|
-| 1 | 機器の読み手の「未確認」を、公式資料に届くものから無くす | `grep -rn "未確認" backend/app/services/configparse --include=*.py` に出る行が、どれも「資料に届かない」理由（届かない資料の名前）を同じ行か直前の行に書いてある。`./scripts/check.sh` が通る（仮） | 進行中 | 12 行のうち、arubaos.py のスタックの範囲（`1/1-1/48`）、multicast.py の `ip rp address`、allied.py の範囲の区切り、exos.py のほかの行、linkstate.py の表を順に当たる | 2026-10-24 |
+| 1 | 機器の読み手の「未確認」を、公式資料に届くものから無くす | `grep -rn "未確認" backend/app/services/configparse --include=*.py` に出る行が、どれも「資料に届かない」理由（届かない資料の名前）を同じ行か直前の行に書いてある。`./scripts/check.sh` が通る（仮） | 進行中 | 11 行のうち、arubaos.py のスタックの範囲（`1/1-1/48`。HPE の公式資料が見つかっていない）、multicast.py の `ip rp address`、exos.py のほかの行、linkstate.py の表を順に当たる | 2026-10-24 |
 | 2 | Junos の論理システムを、論理システムごとの機器として取り込む | 論理システムを2つ持つ Junos の Config を1ファイル取り込むと、台帳に本体と論理システム2つの計3台が載り、それぞれの口と経路が出る試験が `uv run pytest` で通る（仮） | 未着手 | decisions.md の「決めていないこと」3つにデフォルトを決める | 2026-10-24 |

@@ -2024,3 +2024,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `Multiple Countries :` の後ろの並び（`IN,US`）を国として持つ。1か国の形（`US - United States`）は今までどおり先頭の語。
   試験は `test_configparse_aireos.py` の `test_sysinfo_with_several_countries_keeps_the_country_codes`。冒頭の「show sysinfo の列は未確認」を外した。
 - 見なかったこと: 国を並べたときに、AP ごとの国（`show ap summary` の Country）と食い違う点検。今は国を1つの文字列で持つだけ。
+
+## 見張り: アライドテレシスの vlan database の `vlan 10,20,30,40-49` を読めている（2026-10-24 JST）
+
+- 確かめたこと: `configparse/allied.py` は、`<vid-range>` にカンマが使えるか分からないまま、`-` と `,` の両方を読んでいた（未確認）。
+  直す所は無かった。
+- 確かめた資料: アライドテレシス「CentreCOM x540Lシリーズ コマンドリファレンス 5.5.6」の vlan（`vlan VLANRANGE [name VLANNAME] ...`。
+  VLANRANGE は「ハイフン、カンマを使った複数指定も可能」、使用例 `vlan 10,20,30,40-49`）。
+- 試験: `test_configparse_allied.py` の `test_vlan_database_ranges_with_commas_follow_the_command_reference`。冒頭の「未確認」を外した。
