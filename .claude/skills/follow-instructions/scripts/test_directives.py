@@ -52,6 +52,11 @@ class Directives(unittest.TestCase):
     def test_system_prompt_is_ignored(self):
         self.assertEqual("", run("<wake reason=\"external-event\">必ず見ろ</wake>", self.state))
 
+    def test_several_directives_are_counted(self):
+        out = run("テストを足して スキルも配って CLAUDE.md にも書け", self.state)
+        self.assertIn("指示が 3 個ある", out)
+        self.assertNotIn("個ある", run("README を直して", self.state))
+
     def test_off_switch(self):
         env = dict(os.environ, FOLLOW_INSTRUCTIONS_STATE=self.state, FOLLOW_INSTRUCTIONS_OFF="1")
         p = subprocess.run([sys.executable, "-I", str(HOOK)], input=json.dumps({"session_id": "x", "prompt": "違う"}),
