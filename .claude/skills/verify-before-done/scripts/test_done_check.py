@@ -70,6 +70,10 @@ class DoneCheck(unittest.TestCase):
     def test_acknowledgement_after_correction_passes(self):
         self.assertEqual(self.run_hook("↩ 形: 言われた形に直しました。README.md:3 を見てください。", user="違う。言った通りにして")[0], 0)
 
+    def test_quoted_marker_after_correction_passes(self):
+        # 検出する語を説明のために引用しただけの返事は差し戻さない
+        self.assertEqual(self.run_hook("★ フック: 訂正への返事に「しかし」「ただし」があれば差し戻します。docs/x.md に書きました。", user="反抗するな。指示通り動け")[0], 0)
+
     def test_pushback_without_correction_passes(self):
         self.assertEqual(self.run_hook("❕ 比較: A は速い。ただし B は小さい。docs/x.md に表があります。", user="A と B を比べて")[0], 0)
 
