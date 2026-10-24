@@ -62,6 +62,14 @@
         "hooks": [
           {
             "type": "command",
+            "command": "python3 .claude/skills/prompt-from-context/hooks/brief.py"
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
             "command": "python3 .claude/skills/finish-first/hooks/focus.py",
             "timeout": 10
           }
