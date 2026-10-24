@@ -29,35 +29,95 @@ logger = logging.getLogger(__name__)
 MODEL_DIR_ENV = "NETVISION_MODEL_DIR"
 #: 1つだけ名指ししたい場合
 MODEL_PATH_ENV = "NETVISION_MODEL_PATH"
+#: 自作のアプリどうしでモデルを共有する置き場。数 GB あるのでアプリごとに持たない
+SHARED_HOME_ENV = "LLM_HOME"
+#: Windows で LLM_HOME が無いときの置き場。道は ASCII だけにする
+#: （利用者名が全角だと、AppData の道で llama.cpp がモデルを開けなかった）
+WINDOWS_SHARED_HOME = r"C:\LLM"
+#: 共有の置き場に無ければ作る説明。既にあれば書き換えない（ほかのアプリも使う）
+SHARED_README = """この置き場は、手元で動かす AI のモデルを、複数のアプリで共有するためのものです。
+
+  gguf\\         言葉のモデル（llama.cpp などで読む .gguf）
+  huggingface\\  Hugging Face の形のままのモデル（画像生成など）
+
+置き場を変えるときは、環境変数 LLM_HOME に別のフォルダを指定します。
+ほかのアプリが置いたモデルも入っているので、消すときは使っているアプリを確かめてください。
+"""
 
 #: 役割ごとに、名前に含まれていたら選ぶ手がかり（小さいモデルを quick に回す）
 _QUICK_HINTS = ("0.5b", "1.5b", "3b", "mini", "small")
 
 
+def shared_home() -> Path | None:
+    """モデルを共有する置き場。LLM_HOME が先、無ければ Windows だけ C:\\LLM。
+
+    Windows 以外で LLM_HOME が無いときは共有しない（これまでの置き場のまま）。
+    """
+    named = os.environ.get(SHARED_HOME_ENV)
+    if named:
+        return Path(named).expanduser()
+    if _is_windows():
+        return Path(WINDOWS_SHARED_HOME)
+    return None
+
+
+def _is_windows() -> bool:
+    return os.name == "nt"
+
+
+def shared_gguf_dir() -> Path | None:
+    """共有の置き場のうち、GGUF を置くところ。"""
+    home = shared_home()
+    return home / "gguf" if home is not None else None
+
+
+def prepare_shared_home() -> Path | None:
+    """共有の置き場に gguf と huggingface のフォルダと説明を用意する。
+
+    書けない場所でも起動は止めない。モデルが無ければ規則ベースで動くので、
+    置き場が作れないことはアプリを止める理由にならない。
+    """
+    home = shared_home()
+    if home is None:
+        return None
+    try:
+        for name in ("gguf", "huggingface"):
+            (home / name).mkdir(parents=True, exist_ok=True)
+        readme = home / "README.txt"
+        if not readme.exists():
+            readme.write_text(SHARED_README, encoding="utf-8")
+    except OSError as exc:
+        logger.warning("モデルの置き場（%s）を用意できませんでした: %s", home, exc)
+        return None
+    return home
+
+
 def model_dirs() -> list[Path]:
     """モデルを探す場所。
 
-    アプリの隣と、データの置き場所の両方を見る。アプリのフォルダを入れ替えても
-    モデルが残るようにするため、また、アプリ側が書けない場所に置かれていても
-    データ側に置けば使えるようにするため。
+    共有の置き場（shared_home の gguf）を先に見る。続けて、これまでの置き場
+    （アプリの隣と、データの置き場所の models）を見る。これまでの置き場は、
+    前に置いたモデルを取り直さずに使うためで、新しく置く先には案内しない。
     """
     from app.services import appsettings
 
-    # 画面で決めた置き場所が勝つ。次に環境変数、無ければ既定の2か所
+    # 画面で決めた置き場所が勝つ。次に環境変数、無ければ既定の置き場
     chosen = appsettings.text("model_dir", os.environ.get(MODEL_DIR_ENV) or "")
     if chosen:
         return [Path(chosen).expanduser()]
 
     from scripts.standalone import default_data_dir
 
-    return [
+    shared = shared_gguf_dir()
+    legacy = [
         Path(__file__).resolve().parents[3] / "models",
         default_data_dir() / "models",
     ]
+    return ([shared] if shared is not None else []) + legacy
 
 
 def model_dir() -> Path:
-    """探す場所のうち、代表の1つ（画面の案内に使う）。"""
+    """探す場所のうち、代表の1つ（画面の案内に使う）。共有の置き場があればそこ。"""
     return model_dirs()[0]
 
 

@@ -155,6 +155,10 @@ def _main(argv: list[str] | None = None) -> int:
         args.data_dir or str(standalone.default_data_dir()), demo=args.demo
     )
     attach_log(data_dir)
+    # AI のモデルは自作のアプリどうしで共有する置き場（C:\LLM か LLM_HOME）に置く
+    from app.services import llm_inproc
+
+    llm_inproc.prepare_shared_home()
 
     if standalone.frontend_dist() is None:
         _report(standalone.NO_FRONTEND)

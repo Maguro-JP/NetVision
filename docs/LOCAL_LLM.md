@@ -24,19 +24,33 @@ NetVision は、モデルが無くても全部の機能が動きます。モデ�
 端末に新しい実行ファイルを置けない場合の道です。増えるのは NetVision が使う
 ライブラリ1つだけで、実行ファイルは増えず、外にも出ません。
 
-モデルの実体（GGUF ファイル）は、アプリの隣の `models` フォルダに置きます。
+モデルの実体（GGUF ファイル）は、自作のアプリどうしで共有する置き場の `gguf`
+フォルダに置きます。モデルは数 GB あるので、アプリごとに持たずに1か所へ置きます。
 ファイル名は問いません。複数置くと、名前から使い分けます（3B のような小さいものを
 要約に、大きいものを Config の下書きに）。
 
 ```
-NetVision/
-  models/
+C:\LLM\
+  README.txt      この置き場の説明（無ければ NetVision が作る。あれば書き換えない）
+  gguf\
     qwen2.5-3b-instruct-q4_k_m.gguf
     qwen2.5-coder-7b-instruct-q4_k_m.gguf
+  huggingface\    Hugging Face の形のままのモデル（NetVision は今は使わない）
 ```
 
-置き場所を変えるなら `NETVISION_MODEL_DIR`、1つを名指しするなら
-`NETVISION_MODEL_PATH` です。何も置かなければ、規則ベースだけで動きます。
+| 置き場 | いつ使うか |
+|---|---|
+| `LLM_HOME` の `gguf` | 環境変数 `LLM_HOME` があるとき。OS を問わない |
+| `C:\LLM\gguf` | Windows で `LLM_HOME` が無いとき。初めて起動したときに作る |
+| アプリの隣の `models`、`~/.netvision/models` | 前に置いたモデルを読むためだけに見る。新しく置く先には案内しない |
+
+道は ASCII だけにしてあります。利用者名が全角だと、ユーザーのフォルダの下の道で
+llama.cpp がモデルを開けないことがあるためです。
+
+ほかのアプリが置いたモデルは、NetVision からは消さず、動かさず、名前も変えません。
+
+置き場所を1つに決め打ちするなら `NETVISION_MODEL_DIR`（設定の画面でも変えられます）、
+1つを名指しするなら `NETVISION_MODEL_PATH` です。何も置かなければ、規則ベースだけで動きます。
 
 ### モデルの入手先
 
@@ -67,8 +81,11 @@ WITH_MODEL=https://…/qwen2.5-coder-7b-instruct-q4_k_m.gguf ./packaging/make-bu
 ```
 
 ```
-./packaging/make-bundle-windows.ps1 -WithModel C:\models\qwen2.5-coder-7b.gguf
+./packaging/make-bundle-windows.ps1 -WithModel C:\LLM\gguf\qwen2.5-coder-7b.gguf
 ```
+
+同梱したモデルは一式の `models` に入り、そこから読みます。導入先で `C:\LLM\gguf` に
+移しておくと、一式を入れ替えてもモデルが残り、ほかのアプリとも共有できます。
 
 モデルの実体をリポジトリに置かないのは、GitHub が1ファイル 100MB までという
 制約があるためと、モデルは数か月で新しいものが出るためです。アプリと一緒に

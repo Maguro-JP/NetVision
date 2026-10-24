@@ -111,3 +111,53 @@ def test_it_can_be_switched_from_the_screen(client, tmp_path, monkeypatch):
     on = client.post("/api/v1/llm/enabled", json={"enabled": True})
     assert on.json()["enabled"] is True
     assert llm.enabled() is True
+
+
+def _use_shared_home(monkeypatch, home):
+    """画面と環境変数の置き場を外し、共有の置き場だけが効く形にする。"""
+    from app.services import appsettings
+
+    monkeypatch.delenv(llm_inproc.MODEL_DIR_ENV, raising=False)
+    monkeypatch.delenv(llm_inproc.MODEL_PATH_ENV, raising=False)
+    monkeypatch.setattr(appsettings, "text", lambda key, default="": default)
+    monkeypatch.setenv(llm_inproc.SHARED_HOME_ENV, str(home))
+
+
+def test_models_are_looked_for_in_the_shared_home_first(monkeypatch, tmp_path):
+    """モデルは数 GB あるので、自作のアプリどうしで LLM_HOME の gguf を共有する。"""
+    _use_shared_home(monkeypatch, tmp_path)
+
+    assert llm_inproc.model_dirs()[0] == tmp_path / "gguf"
+    assert llm_inproc.model_dir() == tmp_path / "gguf", "画面の案内が共有の置き場を指していない"
+
+
+def test_a_model_already_in_the_shared_home_is_used_as_is(monkeypatch, tmp_path):
+    """ほかのアプリが置いたモデルを、取り直さずにそのまま使う。"""
+    _use_shared_home(monkeypatch, tmp_path)
+    (tmp_path / "gguf").mkdir()
+    (tmp_path / "gguf" / "qwen2.5-3b-instruct.gguf").write_bytes(b"dummy")
+
+    assert [path.name for path in llm_inproc.available()] == ["qwen2.5-3b-instruct.gguf"]
+
+
+def test_the_shared_home_is_prepared_without_overwriting(monkeypatch, tmp_path):
+    """gguf と huggingface を用意する。既にある説明は、ほかのアプリのものなので書き換えない。"""
+    _use_shared_home(monkeypatch, tmp_path)
+    (tmp_path / "README.txt").write_text("ほかのアプリの説明", encoding="utf-8")
+
+    assert llm_inproc.prepare_shared_home() == tmp_path
+    assert (tmp_path / "gguf").is_dir()
+    assert (tmp_path / "huggingface").is_dir()
+    assert (tmp_path / "README.txt").read_text(encoding="utf-8") == "ほかのアプリの説明"
+
+
+def test_windows_uses_c_llm_without_llm_home(monkeypatch):
+    """Windows で LLM_HOME が無ければ C:\\LLM。ほかの OS はこれまでの置き場のまま。"""
+    monkeypatch.delenv(llm_inproc.SHARED_HOME_ENV, raising=False)
+
+    monkeypatch.setattr(llm_inproc, "_is_windows", lambda: True)
+    assert str(llm_inproc.shared_gguf_dir()).replace("/", "\\") == "C:\\LLM\\gguf"
+
+    monkeypatch.setattr(llm_inproc, "_is_windows", lambda: False)
+    assert llm_inproc.shared_home() is None
+    assert llm_inproc.prepare_shared_home() is None
