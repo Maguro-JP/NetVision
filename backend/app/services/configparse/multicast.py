@@ -114,7 +114,8 @@ _RP = re.compile(
     re.IGNORECASE,
 )
 #: Arista `rp address 10.0.0.9`（`router pim sparse-mode` の `ipv4` の中）、
-#: AOS-CX `rp-address 10.0.0.9`。`ip rp address` は既存の試験の形（未確認）。
+#: AOS-CX `rp-address 10.0.0.9`。`ip rp address` は Arista EOS User Manual の PIM の章に無い形
+#: （作例は `rp address` だけ）。古い試験の形として受けたまま残す。
 #: どちらも router pim の中に書くので、字下がりの中だけで見る
 _RP_BLOCK = re.compile(
     r"^\s+(?:ip\s+rp\s+address|rp\s+address|rp-address)\s+(?P<address>\S+)(?:\s+(?P<scope>.+))?$",

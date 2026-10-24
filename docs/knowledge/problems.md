@@ -2032,3 +2032,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 確かめた資料: アライドテレシス「CentreCOM x540Lシリーズ コマンドリファレンス 5.5.6」の vlan（`vlan VLANRANGE [name VLANNAME] ...`。
   VLANRANGE は「ハイフン、カンマを使った複数指定も可能」、使用例 `vlan 10,20,30,40-49`）。
 - 試験: `test_configparse_allied.py` の `test_vlan_database_ranges_with_commas_follow_the_command_reference`。冒頭の「未確認」を外した。
+
+## 見張り: Arista の静的な RP を EOS User Manual の作例の形で読めている（`ip rp address` は公式に無い形）（2026-10-24 JST）
+
+- 確かめたこと: `configparse/multicast.py` は、Arista の `router pim sparse` の中の `ip rp address` を「既存の試験の形（未確認）」として受けていた。
+  公式の作例（`rp address`）でも読めるかを見た。直す所は無かった。
+- 確かめた資料: Arista EOS User Manual「Protocol Independent Multicast」（Router-PIM Sparse-mode IPv4 の `rp address 10.21.18.23 238.1.12.0/24`、
+  `rp address 10.17.255.83 override`、`router multicast` の `ipv4` の `routing`）。この章には `ip rp address` も `ip pim rp-address` も出てこない。
+- 試験: `test_multicast.py` の `test_arista_static_rp_follows_the_eos_user_manual`。`ip rp address` は古い試験の形として受けたまま残し、
+  コメントを「公式に無い形」に書き換えた（読むのをやめると、今その形で貼っている人の RP が消えるため。AI の判断）。
