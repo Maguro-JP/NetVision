@@ -34,7 +34,9 @@ DIRECTIVE = re.compile(
     r"[てで](?:ください|下さい|くれ|ね|よ|ほしい|欲しい)?$|[ろせ]$|すること|必ず|常に|毎回|今後|これから|以後|次から"
     r"|だけに|のみ|以外|使わない|しない|にして|で統一|優先|最初に|先に|お願い|頼む|にしろ|やめ"
 )
-SYSTEMISH = re.compile(r"^\s*<|wake reason|task-notification|SYSTEM NOTIFICATION")
+SYSTEMISH = re.compile(r"^\s*<|wake reason|task-notification|SYSTEM NOTIFICATION|This session is being continued")
+# 1つの塊（空白か句点で切る）が指示で終わる形。「〜しろ」「〜して」「〜するな」「〜で」
+IMPERATIVE = re.compile(r"(?:しろ|せよ|やれ|やめろ|なさい|ください|下さい|くれ|しとけ|とけ|すること|ように|して|で|な|[ろけせてねめれげべ])$")
 
 
 def state_path(session_id: str) -> Path:
@@ -69,6 +71,12 @@ def classify(prompt: str):
     return bool(DIRECTIVE.search(prompt)), False
 
 
+def count_directives(prompt: str) -> int:
+    """空白か句点で切った塊のうち、指示の形で終わるものの数。一部だけやって残りを落とすのを防ぐため。"""
+    parts = [p for p in re.split(r"[\s。]+", prompt) if p]
+    return sum(1 for p in parts if IMPERATIVE.search(p))
+
+
 def main() -> int:
     if os.environ.get("FOLLOW_INSTRUCTIONS_OFF") == "1":
         return 0
@@ -98,6 +106,9 @@ def main() -> int:
         k = sum(1 for e in st["entries"] if e.get("c"))
         if k >= 2:
             lines.append(f"このセッションで訂正は {k} 回目。CLAUDE.md の「ユーザーの決めたこと」に1行足し、足したことを ↩ に書く。")
+    n = count_directives(prompt) if (prompt and not SYSTEMISH.search(prompt) and len(prompt) <= PASTE_LEN) else 0
+    if n >= 2:
+        lines.append(f"この一言には指示が {n} 個ある。分けて並べ、それぞれに ★ か ↩ を1行ずつ返す。やらなかったものは「やっていない」と書く。")
     if st["entries"]:
         lines.append("このセッションでユーザーが言ったこと（新しい順）。出す前にこれと照合する:")
         for e in reversed(st["entries"]):

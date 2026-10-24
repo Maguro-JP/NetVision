@@ -29,7 +29,7 @@ HINT = re.compile(
     r"それ|これ|あれ|そっち|こっち|さっき|前の|同じ|全部|続き|続けて|やり直|戻せ|戻して"
     r"|(?:も|を)?(?:やれ|やって|やろ|直して|直せ|進めて|入れて|消して|出して|見て|お願い|頼む)$"
 )
-SYSTEMISH = re.compile(r"^\s*<|wake reason|task-notification|SYSTEM NOTIFICATION|system-reminder|hook (?:success|additional)")
+SYSTEMISH = re.compile(r"^\s*<|wake reason|task-notification|SYSTEM NOTIFICATION|system-reminder|hook (?:success|additional)|This session is being continued|Summary:")
 REMINDER = re.compile(r"<system-reminder>.*?</system-reminder>", re.S)
 MARKS = "★⭐↩⏎❕❗❔❓"
 

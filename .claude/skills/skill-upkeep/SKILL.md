@@ -56,6 +56,7 @@ Ciel 自身のツール（`scripts/`、`.claude/hooks/`、各スキルの `scrip
 | ゲートの差し戻し | 各リポジトリの transcript は読めないので、スキルの「会話に出すもの」に外れた PR の説明・コミット文の数で代える |
 | 会話の形から外れた数 | Ciel のセッションでは `~/.claude/state/verify-before-done/metrics.jsonl`（done_check.py が返答ごとに書く）の、マーク以外の行・2 つ以上の ❔・根拠の無い完了の数 |
 | 短い一言の数と、そのあとの聞き返し | Ciel のセッションでは `~/.claude/state/prompt-from-context/metrics.jsonl`（brief.py が短い一言ごとに書く）の件数と、同じセッションの直後の返答で ❔ を出した数（verify-before-done の metrics.jsonl の questions） |
+| ツールの出力に根拠の無い主張、矛盾、撤回 | 同じ metrics.jsonl の unbacked（完了の語の種類の一覧）、contradiction、retraction の数 |
 | Routine の成果 | 実行された回数に対して、リポジトリにコミットか PR が増えた回数 |
 
 数が良くならない物差しがあれば、次の週の改修はそこに絞る。

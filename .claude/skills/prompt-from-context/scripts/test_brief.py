@@ -34,6 +34,7 @@ ROWS = [
     user("<wake reason=\"external-event\">通知</wake>"),
     tool_result(),
     user("週報も書いて"),
+    user("This session is being continued from a previous conversation that ran out of context. Summary: 1. Primary Request"),
     assistant("❕ 週報: 書きました。\n❔ 配布: 8 本に今配りますか。"),
 ]
 
@@ -69,6 +70,7 @@ class Brief(unittest.TestCase):
     def test_notice_and_tool_result_are_not_context(self):
         out = self.run_hook("やれ")
         self.assertNotIn("wake", out)
+        self.assertNotIn("continued", out)
         self.assertNotIn("ok", out.split("直前の文脈:")[1])
 
     def test_long_prompt_is_silent(self):
