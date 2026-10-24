@@ -38,7 +38,7 @@
 変数名が `secret` `token` `password` `api_key` `credential` 等を含み、
 値が16文字以上・エントロピー 3.6 以上のとき `medium` で報告する。
 
-形式の決まっていない自社トークンや DB パスワードを拾うための網。
+形式の決まっていない自社トークンや DB パスワードを拾うためのルール。
 そのぶん誤検知も出るので、必ず1件ずつ確認する。
 
 ## 誤検知の抑止
@@ -54,7 +54,7 @@
    tests/fixtures/*
    docs/examples/**
    ```
-3. **既定の除外** — `.example` / `.sample` 付きファイル、ロックファイル
+3. **デフォルトの除外** — `.example` / `.sample` 付きファイル、ロックファイル
    （`package-lock.json` `go.sum` 等）、バイナリ、`node_modules` `vendor`
    `dist` `build` `corpus` などのディレクトリ
 4. **プレースホルダ判定** — `YOUR_…` `xxx` `<token>` `${VAR}` `{{ }}`
@@ -99,7 +99,7 @@ printf 'k = "acme_tok_%s"\n' "$(head -c48 /dev/urandom | base64 | tr -d '/+=' | 
 printf 'k = "acme_tok_YOUR_TOKEN_HERE"\n' >> /tmp/t.py
 ```
 
-**誤検知を増やすルールは、無いルールより悪い。** 報告が読み飛ばされるようになる。
+**誤検知を増やすルールは、ないルールより悪い。** 報告が読み飛ばされるようになる。
 
 ## 外部ツールを使う場合
 
@@ -114,7 +114,7 @@ trufflehog filesystem . --only-verified
 ```
 
 `trufflehog --only-verified` は**鍵が実際に有効かを提供元に問い合わせて確認する**ため、
-誤検知がほぼ無くなる。使える場面では最も強い。
+誤検知がほぼなくなる。使える場面では最も強い。
 
-同梱の `scan.py` はこれらが無い環境のための最低限の代替であり、
+同梱の `scan.py` はこれらがない環境のための最低限の代替であり、
 外部ツールの置き換えではない。

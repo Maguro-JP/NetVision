@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # リポジトリを横断して、GitHub 側の状態を1行ずつ出す。
-# 既定ブランチの最後のコミット、開いている PR、最後の Actions、枝の数、答え待ちの判断。
+# デフォルトブランチの最後のコミット、開いている PR、最後の Actions、ブランチの数、答え待ちの判断。
 # セッションと Routine の状態は API では取れないので、SKILL.md の手順で別に見る。
 # 使い方: patrol.sh <owner/repo> [<owner/repo> ...]
 set -uo pipefail
@@ -26,5 +26,5 @@ for r in "$@"; do
   echo "  最後のコミット: $(ago "$last_t")  $last_m"
   echo "  開いている PR : ${prs:-なし}"
   echo "  最後の Actions: ${run:-なし}"
-  echo "  枝: ${br:-?} 本   答え待ち: ${pend} 件"
+  echo "  ブランチ: ${br:-?} 本   答え待ち: ${pend} 件"
 done

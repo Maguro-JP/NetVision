@@ -1,6 +1,6 @@
 # コマンド対応表
 
-環境によって使える道具が違う。手元にある方を使う。
+環境によって使えるツールが違う。手元にある方を使う。
 
 ## 目次
 
@@ -108,7 +108,7 @@ git pull origin <default-branch>
 git branch -d <branch>          # -D は使わない（未マージを消してしまう）
 ```
 
-既定ブランチ名の取得:
+デフォルトブランチ名の取得:
 
 ```bash
 git symbolic-ref --short refs/remotes/origin/HEAD | sed 's#^origin/##'
@@ -186,7 +186,7 @@ MCP なら `list_releases` / `list_tags`。1件でもあれば停止。
 
 ```bash
 gh pr diff <n> --name-only     # F1, F3, F4, F5, F6, F7
-gh pr diff <n>                 # F2（秘密情報の走査）
+gh pr diff <n>                 # F2（秘密情報のスキャン）
 gh pr view <n> --json additions,deletions,changedFiles   # F8
 ```
 
@@ -207,7 +207,7 @@ gh pr view <n> --json additions,deletions,changedFiles   # F8
 
 ## acknowledged の書き方
 
-停止条件を「今後は許容する」と決めたときだけ `.claude/policy/<利用者名>.json` に追記する。**観測値を必ず一緒に記録する。**
+停止条件を「今後は許容する」と決めたときだけ `.claude/policy/<ユーザー名>.json` に追記する。**観測値を必ず一緒に記録する。**
 
 ```json
 {
@@ -223,7 +223,7 @@ gh pr view <n> --json additions,deletions,changedFiles   # F8
 - `stargazers_count` が 1 のまま → 許容が有効。止まらない
 - 2 になった → **許容は失効**。再び停止して報告する
 
-一覧型（コミット著者など）は配列で記録し、記録に無い人物が現れたら失効:
+一覧型（コミット著者など）は配列で記録し、記録にない人物が現れたら失効:
 
 ```json
 {
@@ -238,8 +238,8 @@ F 系は記録しても次回また止まる。差分は毎回別物なので、
 
 ## F1 の bootstrap 判定
 
-「既定ブランチに workflow が1つも無い」ことを確認してから適用する。
-**PR ブランチではなく既定ブランチを見る。**
+「デフォルトブランチに workflow が1つもない」ことを確認してから適用する。
+**PR ブランチではなくデフォルトブランチを見る。**
 
 ```bash
 gh api "repos/<owner>/<repo>/contents/.github/workflows?ref=<default-branch>" --jq 'length'
@@ -247,12 +247,12 @@ gh api "repos/<owner>/<repo>/contents/.github/workflows?ref=<default-branch>" --
 
 404 または 0 件なら bootstrap の条件を満たす。1件でもあれば通常どおり F1 で停止する。
 
-MCP なら `get_file_contents` に `.github/workflows` と既定ブランチの ref を渡す。
+MCP なら `get_file_contents` に `.github/workflows` とデフォルトブランチの ref を渡す。
 **取得に失敗したら停止条件 A に該当**。bootstrap を適用してはいけない。
 
 ## draft の扱い
 
-`draft_is_default: true` は「この利用者は常に draft で PR を作る」という宣言。
+`draft_is_default: true` は「このユーザーは常に draft で PR を作る」という宣言。
 このとき draft は「未完成」の signal ではないので E1 では停止せず、マージ前に draft を外す。
 
 ```bash
@@ -261,4 +261,4 @@ gh pr ready <n>
 
 MCP なら `update_pull_request` で `draft: false`。
 
-`draft_is_default: false`（既定）なら draft は従来どおり停止条件。
+`draft_is_default: false`（デフォルト）なら draft は従来どおり停止条件。

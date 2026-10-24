@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""使い終えたリモートの枝を見つけて消す。
+"""使い終えたリモートのブランチを見つけて消す。
 
-  tidy.py <owner/repo>            消せる枝を出すだけ（何も消さない）
+  tidy.py <owner/repo>            消せるブランチを出すだけ（何も消さない）
   tidy.py <owner/repo> --apply    消す
 
-消せるのは次のどちらか。どちらでもない枝は残す。
-  - その枝の PR がマージ済み（squash でも可。本線に同じコミットが無くても PR の状態で判定する）
-  - 本線に全部含まれている（PR を作らずに取り込んだもの、空の枝）
-既定ブランチ、開いている PR の枝、PR が無く本線に無いコミットを持つ枝は消さない。
+消せるのは次のどちらか。どちらでもないブランチは残す。
+  - そのブランチの PR がマージ済み（squash でも可。main ブランチに同じコミットが無くても PR の状態で判定する）
+  - main ブランチに全部含まれている（PR を作らずに取り込んだもの、空のブランチ）
+デフォルトブランチ、開いている PR のブランチ、PR が無くmain ブランチに無いコミットを持つブランチは消さない。
 
-削除は API（DELETE git/refs）で行う。この環境の `git push --delete` は中継で切られることがある。
+削除は API（DELETE git/refs）で行う。この環境の `git push --delete` はプロキシで切られることがある。
 """
 import json, subprocess, sys, tempfile, urllib.parse
 
@@ -42,7 +42,7 @@ def main():
 
     open_heads = {p["head"]["ref"] for p in json.loads(gh(f"repos/{repo}/pulls?state=open&per_page=100"))}
 
-    # 本線に含まれるかは、コミットだけ取った clone で見る（compare API は枝名に / があると通らない）
+    # main ブランチに含まれるかは、コミットだけ取った clone で見る（compare API はブランチ名に / があると通らない）
     with tempfile.TemporaryDirectory() as d:
         subprocess.run(["git", "clone", "-q", "--filter=blob:none", "--no-checkout", f"https://github.com/{repo}.git", d], check=True)
         merged_local = subprocess.run(["git", "-C", d, "branch", "-r", "--merged", f"origin/{default}", "--format=%(refname:short)"],
@@ -55,16 +55,16 @@ def main():
             keep.append((b, "PR が開いている"))
             continue
         if b in contained:
-            drop.append((b, "本線に含まれる"))
+            drop.append((b, "main ブランチに含まれる"))
             continue
         q = urllib.parse.quote(f"{owner}:{b}", safe="")
         prs = json.loads(gh(f"repos/{repo}/pulls?state=closed&head={q}&per_page=5", check=False) or "[]")
         if any(p.get("merged_at") for p in prs):
             drop.append((b, f"PR #{[p['number'] for p in prs if p.get('merged_at')][0]} がマージ済み"))
         else:
-            keep.append((b, "PR が無く、本線に無いコミットがある" if not prs else "PR は閉じたがマージされていない"))
+            keep.append((b, "PR が無く、main ブランチに無いコミットがある" if not prs else "PR は閉じたがマージされていない"))
 
-    print(f"{repo}（本線 {default}）: 枝 {len(branches)} 本、消せる {len(drop)}、残す {len(keep)}")
+    print(f"{repo}（main ブランチ {default}）: ブランチ {len(branches)} 本、消せる {len(drop)}、残す {len(keep)}")
     for b, why in drop:
         print(f"  消す  {b}  — {why}")
     for b, why in keep:
@@ -85,7 +85,7 @@ def main():
                 print(f"  消せない: {r.stderr.strip()[:120]}")
     print(f"消した: {done}/{len(drop)}")
     if failed:
-        # クラウドのセッションは、中継が削除の API も git push --delete も通さない。
+        # クラウドのセッションは、プロキシが削除の API も git push --delete も通さない。
         # 手元の端末で1行で消せるように、そのまま貼れる形で出す
         print("この環境からは消せない。手元の端末で次を実行するか、GitHub の画面（Branches）で消す:")
         print(f"  git push origin --delete {' '.join(failed)}")

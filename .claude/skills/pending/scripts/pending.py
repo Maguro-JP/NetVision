@@ -4,10 +4,10 @@
   pending.py list <owner/repo>...                答えの無い項目を出す
   pending.py list --count <owner/repo>           答えの無い項目の数だけ出す（patrol が使う）
   pending.py answer <owner/repo> <番号|見出しの一部> <答え>
-                                                答えを書き、枝 claude/ANSWER-<番号>-<日付> で PR を作ってマージする
+                                                答えを書き、ブランチ claude/ANSWER-<番号>-<日付> で PR を作ってマージする
 
-自律開発は判断待ちに答えが入るまでその件を脇に置く。答えが pending.md に入れば、次の周が取り込む。
-GitHub の画面でファイルを直してもよい。この道具は、会話から答えるためのもの。
+自律開発は判断待ちに答えが入るまでその件を脇に置く。答えが pending.md に入れば、次のサイクルが取り込む。
+GitHub の画面でファイルを直してもよい。このツールは、会話から答えるためのもの。
 """
 import base64, datetime, json, re, subprocess, sys, tempfile
 from pathlib import Path
@@ -100,9 +100,9 @@ def cmd_answer(repo, which, answer):
         raise SystemExit(f"{repo}: 「答え:」の行が無い項目: {s['title']}")
     lines = text.splitlines()
     m = ANSWER.match(lines[s["ans_i"]])
-    # 日付は利用者の時間（JST）。コンテナの時計は UTC で、0〜9 時に前日の日付になる
+    # 日付はユーザーの時間（JST）。コンテナの時計は UTC で、0〜9 時に前日の日付になる
     today = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=9))).date().isoformat()
-    stamp = f"（{today}、利用者の返答）"
+    stamp = f"（{today}、ユーザーの返答）"
     lines[s["ans_i"]] = f"{m.group('lead')}答え: {answer}{stamp}" if not s["ans"] else f"{lines[s['ans_i']]} / {answer}{stamp}"
     new = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
 
@@ -116,10 +116,10 @@ def cmd_answer(repo, which, answer):
         subprocess.run(["git", "-C", d, "commit", "-q", "-am", msg], check=True)
         subprocess.run(["git", "-C", d, "push", "-q", "-u", "origin", branch], check=True)
     pr = json.loads(gh(f"repos/{repo}/pulls", "-X", "POST", "-f", f"title={msg}", "-f", f"head={branch}", "-f", f"base={default}",
-                       "-f", "body=docs/reports/pending.md の答えだけ。次の周で取り込まれる。"))
+                       "-f", "body=docs/reports/pending.md の答えだけ。次のサイクルで取り込まれる。"))
     gh(f"repos/{repo}/pulls/{pr['number']}/merge", "-X", "PUT", "-f", "merge_method=squash")
     print(f"{repo}: 判断待ち {s['num']} に答えを書いた。PR #{pr['number']} をマージした（{default}）")
-    print("次の周で取り込まれる。すぐ知らせるなら、結びつけ先のセッションに一回きりの Routine で「判断待ちに答えが入った」と送る（SKILL.md）")
+    print("次のサイクルで取り込まれる。すぐ知らせるなら、紐づけ先のセッションに一回きりの Routine で「判断待ちに答えが入った」と送る（SKILL.md）")
 
 
 def main():

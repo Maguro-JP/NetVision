@@ -1,0 +1,94 @@
+{
+  "filters": {
+    "comments": true
+  },
+  "rules": {
+    "@textlint-ja/preset-ai-writing": {
+      "no-ai-list-formatting": false,
+      "no-ai-emphasis-patterns": false,
+      "no-ai-colon-continuation": false,
+      "ai-tech-writing-guideline": {
+        "disableStructureGuidance": true,
+        "enableDocumentAnalysis": false
+      }
+    },
+    "@textlint-ja/no-filler": true,
+    "@textlint-ja/no-insert-dropping-sa": true,
+    "@textlint-ja/no-dropping-i": true,
+    "ja-keishikimeishi": {
+      "detection_hou_kata": false,
+      "detection_ue": false
+    },
+    "ja-hiragana-hojodoushi": true,
+    "ja-hiragana-daimeishi": true,
+    "ja-hiragana-fukushi": {
+      "rulePath": "./dict/fukushi.yml"
+    },
+    "prh": {
+      "rulePaths": [
+        "./prh/koyobun-kana.yml"
+      ]
+    },
+    "preset-ja-technical-writing": {
+      "sentence-length": {
+        "max": 100
+      },
+      "max-ten": {
+        "max": 4
+      },
+      "max-comma": {
+        "max": 4
+      },
+      "max-kanji-continuous-len": {
+        "max": 6
+      },
+      "no-exclamation-question-mark": false,
+      "ja-no-mixed-period": false,
+      "no-doubled-joshi": {
+        "strict": false,
+        "allow": [
+          "も",
+          "や",
+          "か",
+          "に",
+          "は",
+          "と"
+        ]
+      },
+      "ja-no-weak-phrase": true,
+      "ja-no-redundant-expression": true,
+      "ja-no-successive-word": true,
+      "no-dropping-the-ra": true,
+      "no-mix-dearu-desumasu": {
+        "preferInHeader": "",
+        "preferInBody": "",
+        "preferInList": "",
+        "strict": false
+      }
+    },
+    "preset-jtf-style": {
+      "1.1.1.本文": false,
+      "3.1.1.全角文字と半角文字の間": false,
+      "2.2.2.算用数字と漢数字の使い分け": false,
+      "4.1.1.句点(。)": false,
+      "4.2.1.感嘆符(！)": false,
+      "4.2.2.疑問符(？)": false,
+      "4.2.7.コロン(：)": false,
+      "1.1.3.箇条書き": false,
+      "4.3.7.山かっこ<>": false,
+      "3.3.かっこ類と隣接する文字の間のスペースの有無": false
+    },
+    "preset-ja-spacing": {
+      "ja-space-between-half-and-full-width": false,
+      "ja-space-around-code": {
+        "before": true,
+        "after": true
+      },
+      "ja-no-space-around-parentheses": true,
+      "ja-no-space-around-slash": false,
+      "ja-space-around-link": false,
+      "ja-space-after-exclamation": false,
+      "ja-space-after-question": false
+    }
+  }
+}

@@ -16,7 +16,7 @@
 |---|---|---|
 | PR の現在の head | `gh pr view <n> --json headRefOid` | `pull_request_read` method=`get` の `head.sha` |
 | チェック一覧 | `gh pr checks <n>` | `pull_request_read` method=`get_check_runs` |
-| ワークフローの実行 | `gh run list --branch <枝>` | `actions_list` method=`list_workflow_runs` |
+| ワークフローの実行 | `gh run list --branch <ブランチ>` | `actions_list` method=`list_workflow_runs` |
 | 実行の中のジョブ | `gh run view <run-id> --json jobs` | `actions_list` method=`list_workflow_jobs` |
 | ジョブのログ | `gh run view --job <job-id> --log-failed` | `get_job_logs` |
 
@@ -62,11 +62,11 @@ concurrency:
 `cancelled` を見たときの確認。
 
 ```bash
-gh run list --workflow <ファイル名> --branch <枝> --limit 5
+gh run list --workflow <ファイル名> --branch <ブランチ> --limit 5
 ```
 
 同じワークフローのより新しい実行があれば、そちらが本当の結果。
-無ければ、手動での中断や実行時間の上限など別の原因なので調べる。
+なければ、手動での中断や実行時間の上限など別の原因なので調べる。
 
 ## ログを取って落ちたステップを特定する
 
@@ -108,14 +108,14 @@ grep -A5 '^on:' .github/workflows/*.yml
 | 発火条件 | PR での扱い |
 |---|---|
 | `pull_request` | PR で走る。結果を待つ |
-| `push` （枝の除外に注意） | PR とは別に走ることがある |
+| `push` （ブランチの除外に注意） | PR とは別に走ることがある |
 | `workflow_dispatch` のみ | 手動。PR では走らない。待たない |
 | `release` のみ | 公開時のみ。待たない |
 
 規約を検査するワークフローの見分け方。
 
 - ファイル名や `name` に `policy`、`規約`、`rule` が入っている
-- 中身が PR の base や枝、他の PR の状態を見ている
+- 中身が PR の base やブランチ、他の PR の状態を見ている
 - コードをチェックアウトせず、`github-script` や API だけで完結している
 
 3つ目が確実な手がかりになる。**コードを見ていないなら、コードの検査ではない。**

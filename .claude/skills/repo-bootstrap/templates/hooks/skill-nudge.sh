@@ -1,7 +1,38 @@
 #!/usr/bin/env bash
-# 毎回の入力で「この場面ならこのスキル」を1行差し込む。
+# 入力の場面に合うスキルだけを1行差し込む。
 # スキルは description が合えば読まれるはずだが、軽い作業だと素通りする。
-# 場面とスキル名を毎回目の前に置いて、判断に頼る部分を減らす。
-cat <<'NUDGE'
-場面とスキル: PR を作った・push した→solo-pr-flow（自分のリポジトリなら CI を待ってマージまで進める）／「できました」と言う前→verify-before-done（出力を貼る。確かめていないことを書く）／CI が落ちた→ci-triage／公開・マージ前→secret-leak-check／新しいリポジトリ→repo-bootstrap／定期実行・Routine→scheduler（リポジトリを渡したセッションに結びつける）／ずっと開発→long-dev／調べて身につける・上達させる→self-learn／「動いてる?」全体の状況→patrol／判断待ちを見る・答える→pending／枝や Routine の掃除→tidy／題目ごとにセッションを分けて成果物で回す・並列で開発→feedback-session／セッションを見てスキルを直す・作る→skill-upkeep
-NUDGE
+# 以前は全部の対応表を毎回出していたが、1 ターンに約 1300 文字かかり、ほとんどの行はその場面に無関係だった。
+# 入力の語に当たった行だけを出し、当たらなければ何も出さない。
+input="$(cat)"
+python3 - "$input" <<'PY'
+import json, re, sys
+try:
+    prompt = json.loads(sys.argv[1]).get("prompt", "") or ""
+except Exception:
+    prompt = sys.argv[1]
+# (入力に当たる語, 出す行)。語は正規表現。全部に当たる行は無い。
+TABLE = [
+    (r"PR|プルリク|push|マージ|merge", "PR を作った・push した→solo-pr-flow（自分のリポジトリなら CI を待ってマージまで進める。作成直後に PR の購読を解除する）"),
+    (r"できました|完了|直しました|通りました|終わり", "「できました」と言う前→verify-before-done（出力を貼る。確かめていないことを書く。Stop フックが根拠の無い完了を差し戻す）"),
+    (r"CI|チェックが落ち|テストが落ち|Actions|失敗した", "CI が落ちた→ci-triage"),
+    (r"公開|public|秘密|鍵|トークン|個人情報|見せて|記録を書|PR", "PR やマージの前・記録を書いたあと→secret-leak-check と content-audit（鍵は前者、名前・メール・ID・費用・不快な表現・履歴・GitHub 側は後者）"),
+    (r"日本語|校正|文章|読みやす|表記|翻訳|文を|書き直", "文章を書いたあと・会話を出す前→ja-proofread（文字の混入、翻訳調、ら抜き、表記ゆれ）"),
+    (r"新しいリポジトリ|初期設定|セットアップ|bootstrap", "新しいリポジトリ→repo-bootstrap"),
+    (r"定期|毎日|毎週|毎月|Routine|スケジュール|cron", "定期実行・Routine→scheduler（リポジトリを渡したセッションに紐づける）"),
+    (r"ずっと|長期|継続的|放って|回し続け", "ずっと開発→long-dev"),
+    (r"学習|勉強|身につけ|上達|覚えて", "調べて身につける・上達させる→self-learn"),
+    (r"動いて|回って|状況|止まって|見回り", "「動いてる?」全体の状況→patrol"),
+    (r"判断待ち|決めて|答え", "判断待ちを見る・答える→pending"),
+    (r"ブランチ.*(整理|消|多い)|掃除|片付け", "ブランチや Routine の掃除→tidy"),
+    (r"フィードバック|トピック|並列|成果物だけ", "トピックごとにセッションを分けて成果物で回す・並列で開発→feedback-session"),
+    (r"スキル", "セッションを見てスキルを直す・作る→skill-upkeep／1つのスキルの診断→skill-audit／配るだけ→skill-sync"),
+    (r"トークン|文脈|頭打ち|長いセッション|節約|無駄", "文脈が膨らむ・トークンを節約する→token-efficiency（読む前に探す、要る範囲だけ読む、出力を絞る、一覧には limit）"),
+    (r"権限|許可|permissions|policy|auto_merge", "権限や方針を足したくなった→follow-instructions（AI は自分に権限を付与しない。ユーザーが入れる）"),
+    (r"違う|勝手に|言った(通り|とおり)|聞いて|反抗|指示|やめ|戻して", "訂正された・自分の案の方が良いと思った→follow-instructions（1文で認めて言われた通りに直す。代案は直したあとに1行。ユーザーが決めた形は変えない）"),
+    (r"アプリ|GUI|CLI|ブラウザ|ウィンドウ|Setup|起動|デスクトップ", "アプリを作る・起動の仕方を決める→desktop-app（CLI ではなく GUI、ブラウザではなくアプリのウィンドウ。URL を人に見せない）"),
+    (r"完成|終わらない|中途半端|いつ終わ|成果物", "「完成させて」「終わらない」・成果物に関わる判断待ちで止まりそう→finish-first（完成条件を先に書く。1つずつ。戻せる判断はデフォルトで進める）"),
+]
+hits = [line for pat, line in TABLE if re.search(pat, prompt)]
+if hits:
+    print("場面とスキル: " + "／".join(hits))
+PY
