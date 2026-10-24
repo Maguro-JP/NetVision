@@ -15,7 +15,8 @@
 
 出典: VLAN を番号の並びで書く形と description-string は ExtremeXOS Command Reference Guide
 （22.1 / 30.1 / 31.7）で、束ね（enable sharing grouping）は v33.1.1 で、経路
-（configure iproute add の IPv4・IPv6・default）と disable port は 22.5 で確かめた。
+（configure iproute add の IPv4・IPv6・default）と disable port は 22.5 で、VLAN の住所
+（configure vlan ipaddress）は 32.4 で確かめた。
 LLDP は `_lldp_detail` の docstring。
 ほかの行は既存の試験の形のまま（未確認）。`disable port all` は読まない。
 """
@@ -54,8 +55,11 @@ _ADD_PORTS = re.compile(
     r"(?:\s+(?P<how>tagged|untagged))?",
     re.IGNORECASE,
 )
+#: VLAN の住所。`vlan` は省ける（名前で書いたとき）。出典: ExtremeXOS Command Reference Guide
+#: 32.4 の configure vlan ipaddress（`configure [{vlan} vlan_name | vlan vlan_id] ipaddress ...`）。
+#: 省いた形の名前は、作った VLAN の名前に当たったときだけ使う（numbers_of）
 _VLAN_IP = re.compile(
-    r'^\s*configure\s+vlan\s+"?(?P<name>[^"\s]+)"?\s+ipaddress\s+'
+    r'^\s*configure\s+(?:vlan\s+)?"?(?P<name>[^"\s]+)"?\s+ipaddress\s+'
     r"(?P<ip>\d+\.\d+\.\d+\.\d+)[\s/](?P<mask>\d+\.\d+\.\d+\.\d+|\d{1,2})(?![\d.])",
     re.IGNORECASE,
 )

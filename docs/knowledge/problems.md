@@ -2050,3 +2050,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`display interface ten-gigabitethernet 1/0/1 brief description` の出力が `XGE1/0/1`、`display interface brief` の出力が `GE1/0/2`）。
 - 試験: `test_ifname.py` の `test_h3c_ten_gig_and_gig_abbreviations_follow_the_command_reference`。
   `xge` の行を外すと落ちることを確かめた。
+
+## EXOS の VLAN の住所を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> ipaddress` だけを読んでいた。公式の書き方では `vlan` を省けるので、
+  `configure sales ipaddress 10.12.124.1 255.255.255.0` と書いた VLAN の住所が台帳に出なかった。
+- 確かめた資料: ExtremeXOS Command Reference Guide 32.4 の configure vlan ipaddress
+  （`configure [{vlan} vlan_name | vlan vlan_id] ipaddress ...`、作例の `/24` と `255.255.255.0` は同じ意味）。
+- 直したこと: `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（`configure ports ...` などを住所と取り違えない）。
+- 試験: `test_configparse_exos.py` の `test_vlan_addresses_follow_the_command_reference`。直す前のコードで `Vlan40` が欠けて落ちた。
+- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（あとの周で当たる）。
