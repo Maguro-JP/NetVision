@@ -114,3 +114,4 @@ settings.json への登録は `repo-bootstrap/templates/settings.json` にあり
 - 完了と言う前の検証: `verify-before-done`
 - 技術的な失敗の記録: `lessons`
 - 会話の日本語: `ja-proofread`
+- 短い一言を前の文脈から全文のプロンプトにしてから動く: `prompt-from-context`（聞き返す前に、対象と形を前の会話から補う）
