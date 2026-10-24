@@ -1,10 +1,10 @@
-"""窓のある起動役。
+"""アプリのウィンドウで開く起動役。
 
-黒い画面で動かしていたときは、止め方が Ctrl+C しか無く、そのあとに Windows が
-出す「バッチ ジョブを終了しますか」で、どちらを押しても意図とずれていた。
-窓から止められること、置き場所の決め方が黒い画面と同じであることを見る。
+サーバーを裏で起動し、応答が返ってからウィンドウを開き、閉じたら止めること。
+ブラウザを開かないこと。置き場所の決め方が黒い画面の起動と同じであることを見る。
 
-窓そのもの（tkinter）はこの環境に無いので、サーバーの起動と停止だけを試す。
+本物のウィンドウ（pywebview）はこの環境で開けないので、同じ呼び方を受ける
+偽物の webview を差し込んで、呼ばれ方と順番を見る。
 """
 
 import socket
@@ -51,18 +51,6 @@ def test_the_url_points_at_this_machine_only():
     assert launcher.Runner().url == "http://127.0.0.1:8000"
 
 
-def test_it_can_wait_without_tkinter(monkeypatch):
-    """同梱の Windows 版 Python には tkinter が入っていない。
-
-    それだけに頼ると、窓が出ないまま止め方が無くなる。標準のダイアログへ
-    落ちる道があることを見る（この環境は Windows ではないので、道が
-    用意されていることだけを確かめる）。
-    """
-    runner = launcher.Runner(port=_free_port())
-    assert launcher._dialog(runner, "/tmp") is False, "Windows 以外では使わない"
-    assert hasattr(launcher.Runner, "wait")
-
-
 def test_a_synced_folder_is_called_out(monkeypatch, tmp_path):
     """OneDrive の中やネットワークの共有に置くと、起動が戻ってこないことがある。
 
@@ -93,3 +81,79 @@ def test_the_log_is_written_next_to_the_data(tmp_path):
     """記録は置き場所に残す。窓のある起動には出力先が無いので、ここだけが手がかり。"""
     launcher.attach_log(tmp_path)
     assert (tmp_path / launcher.LOG_NAME).exists()
+
+
+class _FakeWebview:
+    """pywebview の代わり。開いた URL と、閉じた時点のサーバーの状態を残す。"""
+
+    def __init__(self, runner_box):
+        self.runner_box = runner_box
+        self.windows = []
+        self.alive_when_shown = None
+
+    def create_window(self, title, url, **kwargs):
+        self.windows.append((title, url))
+
+    def start(self):
+        # ウィンドウが出ている間はサーバーが動いていること
+        self.alive_when_shown = self.runner_box[0].running
+
+
+def test_the_window_opens_on_the_server_and_closing_it_stops_the_server(monkeypatch, tmp_path):
+    """応答が返ってからウィンドウを開き、閉じたらサーバーを止める。ブラウザは開かない。"""
+    pytest.importorskip("uvicorn")
+    monkeypatch.delenv("NETVISION_DATABASE_URL", raising=False)
+    monkeypatch.delenv("NETVISION_DOCUMENT_STORAGE_PATH", raising=False)
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("NETVISION_SERVE_FRONTEND", str(dist))
+
+    box = []
+    original = launcher.Runner
+
+    class Recorded(original):
+        def __post_init__(self):
+            super().__post_init__()
+            box.append(self)
+
+    fake = _FakeWebview(box)
+    monkeypatch.setattr(launcher, "Runner", Recorded)
+    monkeypatch.setitem(__import__("sys").modules, "webview", fake)
+    opened = []
+    monkeypatch.setattr("webbrowser.open", lambda *a, **k: opened.append(a))
+
+    port = _free_port()
+    code = launcher.main(["--data-dir", str(tmp_path / "data"), "--port", str(port)])
+
+    assert code == 0
+    assert fake.windows == [("NetVision", f"http://127.0.0.1:{port}")]
+    assert fake.alive_when_shown is True
+    assert not box[0].running, "ウィンドウを閉じてもサーバーが動き続けている"
+    assert opened == [], "ブラウザを開いている"
+
+
+def test_without_the_window_part_it_says_so_instead_of_opening_a_browser(monkeypatch, tmp_path):
+    """pywebview が無ければ、ブラウザで代わりに開かず、足りない部品を言って終わる。"""
+    monkeypatch.delenv("NETVISION_DATABASE_URL", raising=False)
+    monkeypatch.delenv("NETVISION_DOCUMENT_STORAGE_PATH", raising=False)
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    (dist / "index.html").write_text("<html></html>", encoding="utf-8")
+    monkeypatch.setenv("NETVISION_SERVE_FRONTEND", str(dist))
+    monkeypatch.setitem(__import__("sys").modules, "webview", None)
+    reported = []
+    monkeypatch.setattr(launcher, "_report", reported.append)
+
+    code = launcher.main(["--data-dir", str(tmp_path / "data"), "--port", str(_free_port())])
+
+    assert code == 1
+    assert reported == [launcher.NO_WINDOW]
+
+
+def test_the_launcher_never_opens_a_browser():
+    """起動の経路にブラウザを使わない（desktop-app の決まり）。"""
+    from pathlib import Path
+
+    text = Path(launcher.__file__).read_text(encoding="utf-8")
+    assert "webbrowser" not in text

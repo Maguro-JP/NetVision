@@ -87,7 +87,8 @@ packaging/       閉域へ持ち込むオフラインバンドルの作成・導
 サーバーは不要で、Docker も要らない1台完結モードがあります。
 
 ```bash
-cd backend && .venv/bin/python -m scripts.standalone   # http://127.0.0.1:8000
+cd backend && .venv/bin/pip install -e '.[desktop]'   # 初回のみ
+cd backend && .venv/bin/python -m scripts.launcher     # アプリのウィンドウが開く
 ```
 
 データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。

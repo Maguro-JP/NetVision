@@ -14,9 +14,9 @@ python -m venv .venv
 if errorlevel 1 ( pause & exit /b 1 )
 
 echo ==^> 同梱の wheel から入れます（ネット未使用）
-.venv\Scripts\pip install --quiet --no-index --find-links wheels netvision-backend
+.venv\Scripts\pip install --quiet --no-index --find-links wheels "netvision-backend[desktop]"
 if errorlevel 1 ( pause & exit /b 1 )
 
 echo.
-echo 導入できました。start.bat をダブルクリックすると起動します。
+echo 導入できました。start.bat をダブルクリックすると、アプリのウィンドウで起動します。
 pause

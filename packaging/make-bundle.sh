@@ -44,7 +44,7 @@ echo "==> Python の依存を wheel で集めます"
 # 依存を落とすだけでなく、**アプリ自身も wheel に固めておく**のが要点。
 # ソースのまま持ち込むと閉域側でビルドが走り、その際 pip が setuptools を
 # 取りに行って失敗する（ビルド分離のため同梱物からは解決されない）。
-python3 -m pip wheel --wheel-dir "$STAGE/wheels" "$REPO/backend" >/dev/null
+python3 -m pip wheel --wheel-dir "$STAGE/wheels" "$REPO/backend[desktop]" >/dev/null
 
 # 念のため venv 作成直後に必要になるものも同梱しておく
 python3 -m pip download --dest "$STAGE/wheels" pip setuptools wheel >/dev/null

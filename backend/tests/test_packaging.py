@@ -108,20 +108,32 @@ def test_both_bundles_write_the_same_launcher():
     assert _bat_from_shell() == _bat_from_powershell()
 
 
-def test_the_default_launcher_shows_what_is_happening():
-    """既定は黒い画面のまま動かす。
+def test_the_default_launcher_opens_the_app_window():
+    """既定はアプリのウィンドウで開く。ブラウザは開かない。
 
-    窓だけの起動にしたところ、失敗しても何も出ないまま消えて、原因が
-    分からなくなった。まずは様子が見えることを優先する。
-    窓から止めたい人向けに、別の起動を用意してある。
+    黒い画面の Ctrl+C では止め方が分かりにくかったので、ウィンドウの×で止める形に揃える。
+    失敗したときに様子を見るため、黒い画面つきの起動（NetVision-console.bat）も残す。
     """
     bat = _bat_from_shell()
-    assert "scripts.standalone" in bat
-    assert "pause" in bat, "終わったあとに内容が読めない"
+    assert "pythonw.exe" in bat and "scripts.launcher" in bat
+    assert "http://" not in bat, "ブラウザで開く起動が残っている"
+    assert "scripts.standalone" not in bat
     for script in (FOR_WINDOWS, POWERSHELL):
         text = script.read_text(encoding="utf-8")
-        assert "NetVision-window.bat" in text, f"{script.name} に窓つきの起動が無い"
-        assert "scripts.launcher" in text
+        assert "NetVision-console.bat" in text, f"{script.name} に様子を見る起動が無い"
+        assert "pywebview" in text and "pythonnet" in text, f"{script.name} に部品が無い"
+
+
+def test_the_local_launchers_open_the_app_window():
+    """手元の導入（start.sh / start.bat）もウィンドウで開く。URL を開かせない。"""
+    for name in ("start.sh", "start.bat"):
+        text = (REPO / "packaging" / name).read_text(encoding="utf-8")
+        assert "scripts.launcher" in text, name
+        assert "http://" not in text, name
+    for name in ("install.sh", "install.bat"):
+        text = (REPO / "packaging" / name).read_text(encoding="utf-8")
+        assert "netvision-backend[desktop]" in text, name
+        assert "http://" not in text, name
 
 
 def test_the_launcher_module_is_bundled():

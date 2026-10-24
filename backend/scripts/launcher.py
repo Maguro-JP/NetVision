@@ -1,21 +1,14 @@
-"""窓のある起動役。黒い画面を出さずに動かし、画面の中で終了できるようにする。
+"""アプリのウィンドウで開く起動役。
 
     pythonw.exe -m scripts.launcher
 
-黒い画面で動かしていたときは、止め方が Ctrl+C しか無かった。Windows は
-Ctrl+C のあとに「バッチ ジョブを終了しますか (Y/N)」と聞くが、その時点で
-アプリはもう止まっている。ふつう Y は「終了する」の意味で押すので、
-どちらを押しても意図とずれる、という状態だった。
+サーバーを裏で起動し、応答が返ったら NetVision の画面をアプリのウィンドウ
+（pywebview。Windows は WebView2、macOS は WebKit、Linux は WebKitGTK か Qt）で開く。
+ウィンドウを閉じたらサーバーも止める。ブラウザは開かない。URL を人に見せない。
 
-そこで、小さな窓を1つ出す。窓には「画面を開く」と「終了する」しか無い。
-窓を閉じても終了する。Windows のアプリとして当たり前の止め方に揃える。
-
-窓の出し方は3段構えにしてある。同梱している Windows 版の Python（embeddable）
-には tkinter が入っていないため、それだけに頼ると止め方が無くなる。
-
-  1. tkinter があれば、「画面を開く」「終了する」の付いた窓
-  2. 無ければ Windows の標準のダイアログ（ctypes 経由。追加の同梱物が要らない）
-  3. どちらも出せなければ、黒い画面のまま待つ
+止め方はウィンドウの×だけにする。黒い画面で動かしていたときは Ctrl+C しか無く、
+Windows が続けて聞く「バッチ ジョブを終了しますか (Y/N)」で、どちらを押しても
+意図とずれていた。アプリとして当たり前の止め方に揃える。
 
 黙って消えないこと
 ------------------
@@ -25,27 +18,41 @@ Ctrl+C のあとに「バッチ ジョブを終了しますか (Y/N)」と聞く
 実際に「一瞬だけ黒い窓が出て、あとは何も起きない」という状態になった。
 
 そのため、起動したら真っ先に記録の口を開き、置き場所に launcher.log を書く。
-落ちたときは、その場でダイアログにも出す。
+落ちたときは、その場でダイアログにも出す。同梱している Windows 版の Python
+（embeddable）には tkinter が入っていないので、ダイアログは Windows の標準の
+もの（ctypes 経由）を先に使う。
 """
 
 from __future__ import annotations
 
 import sys
 import threading
-import webbrowser
+import time
+import urllib.request
 from dataclasses import dataclass
 
 from scripts import standalone
 
 #: 起動の記録。何が起きたか分からないまま消えるのを防ぐ
 LOG_NAME = "launcher.log"
+#: ウィンドウの見出し
+TITLE = "NetVision"
+#: サーバーの応答を待つ上限（秒）。初回は DB の作成とマイグレーションが走る
+READY_TIMEOUT = 60.0
+
+NO_WINDOW = (
+    "アプリのウィンドウを開く部品（pywebview）が見つかりません。\n\n"
+    "配布された一式を使っている場合は、一式を作り直してください。\n"
+    "手元で動かしている場合は、backend で `pip install -e .[desktop]` を実行してください。"
+)
+NOT_READY = "NetVision のサーバーが起動しませんでした。記録（launcher.log）を確認してください。"
 
 
 @dataclass
 class Runner:
-    """サーバーの起動と停止。窓の作りから切り離しておく。
+    """サーバーの起動と停止。ウィンドウの作りから切り離しておく。
 
-    ここを窓と混ぜると、窓の出せない環境で試験できなくなる。
+    ここをウィンドウと混ぜると、ウィンドウの出せない環境で試験できなくなる。
     """
 
     host: str = "127.0.0.1"
@@ -71,6 +78,21 @@ class Runner:
         self._thread = threading.Thread(target=self._server.run, name="netvision", daemon=True)
         self._thread.start()
 
+    def wait_until_ready(self, timeout: float = READY_TIMEOUT) -> bool:
+        """`/health` が返るまで待つ。返る前にウィンドウを開くと、空の画面が出る。"""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            if not self.running:
+                return False
+            try:
+                with urllib.request.urlopen(f"{self.url}/health", timeout=2) as response:
+                    if response.status == 200:
+                        return True
+            except OSError:
+                pass
+            time.sleep(0.2)
+        return False
+
     def stop(self, timeout: float = 10.0) -> None:
         """止める。待っても終わらなければ、そのまま抜ける（daemon なので落ちる）。"""
         if self._server is not None:
@@ -78,55 +100,17 @@ class Runner:
         if self._thread is not None:
             self._thread.join(timeout=timeout)
 
-    def wait(self) -> None:
-        """止まるまで待つ。"""
-        while self._thread is not None and self._thread.is_alive():
-            self._thread.join(timeout=0.5)
 
-    def open_browser(self) -> None:
-        webbrowser.open(self.url)
+def open_window(runner: Runner) -> int:
+    """アプリのウィンドウを開き、閉じるまで待つ。閉じたらサーバーを止める。"""
+    import webview
 
-
-def _window(runner: Runner, data_dir: str) -> int:
-    import tkinter as tk
-
-    root = tk.Tk()
-    root.title("NetVision")
-    root.resizable(False, False)
-
-    frame = tk.Frame(root, padx=16, pady=14)
-    frame.pack()
-
-    tk.Label(frame, text="NetVision は動いています", font=("", 11, "bold")).pack(anchor="w")
-    tk.Label(frame, text=runner.url, fg="#1a5fb4").pack(anchor="w", pady=(4, 0))
-    tk.Label(frame, text=f"データの置き場所: {data_dir}", fg="#555").pack(anchor="w")
-
-    buttons = tk.Frame(frame, pady=12)
-    buttons.pack(anchor="w")
-
-    def quit_app() -> None:
-        # 押し間違いで止めてしまうと、開いている画面が急に動かなくなる。
-        # 一度だけ聞く
-        from tkinter import messagebox
-
-        if not messagebox.askyesno("NetVision", "NetVision を終了しますか。"):
-            return
-        # 先に窓を閉じて、押した手応えを出す。停止はそのあと
-        root.destroy()
-
-    tk.Button(buttons, text="画面を開く", width=12, command=runner.open_browser).pack(side="left")
-    tk.Button(buttons, text="終了する", width=12, command=quit_app).pack(side="left", padx=(8, 0))
-
-    tk.Label(
-        frame,
-        text="この窓を閉じても終了します。",
-        fg="#555",
-    ).pack(anchor="w")
-
-    # 窓の×も「終了する」と同じ扱いにする。閉じたのに動き続けるのが一番困る
-    root.protocol("WM_DELETE_WINDOW", quit_app)
-    root.mainloop()
-    runner.stop()
+    webview.create_window(TITLE, runner.url, width=1360, height=860, min_size=(960, 600))
+    try:
+        webview.start()
+    finally:
+        # ウィンドウを閉じたのに動き続けるのが一番困る
+        runner.stop()
     return 0
 
 
@@ -176,81 +160,51 @@ def _main(argv: list[str] | None = None) -> int:
         _report(standalone.NO_FRONTEND)
         return 1
 
+    # 部品が無いのに先にサーバーを立てると、ウィンドウが出ないまま動き続ける
+    try:
+        import webview  # noqa: F401
+    except ImportError:
+        _report(NO_WINDOW)
+        return 1
+
     runner = Runner(host=args.host, port=args.port)
     runner.start()
-    runner.open_browser()
-
-    try:
-        import tkinter  # noqa: F401
-    except ImportError:
-        pass
-    else:
-        return _window(runner, str(data_dir))
-
-    if _dialog(runner, str(data_dir)):
-        return 0
-
-    # どちらも出せない環境。黒い画面のまま待つ
-    print(f"NetVision は動いています: {runner.url}")
-    print("止めるときは Ctrl+C")
-    try:
-        runner.wait()
-    except KeyboardInterrupt:
-        pass
-    runner.stop()
-    return 0
-
-
-def _dialog(runner: Runner, data_dir: str) -> bool:
-    """Windows の標準のダイアログで待つ。閉じたら止める。
-
-    同梱の Python には tkinter が入っていないので、ここが実際に使われる道。
-    ctypes は標準で付いてくるため、同梱物を増やさずに済む。
-    """
-    try:
-        import ctypes
-    except ImportError:
-        return False
-    user32 = getattr(ctypes, "windll", None)
-    if user32 is None:
-        return False
-
-    text = (
-        "NetVision は動いています。\n\n"
-        f"画面 : {runner.url}\n"
-        f"データの置き場所 : {data_dir}\n\n"
-        "終了するときは、このダイアログの「OK」を押してください。"
-    )
-    #: MB_ICONINFORMATION / MB_YESNO+MB_ICONQUESTION / IDYES
-    info, ask, yes = 0x00000040, 0x00000024, 6
-    while True:
-        try:
-            ctypes.windll.user32.MessageBoxW(None, text, "NetVision", info)
-            # 押し間違いで止めてしまうと、開いている画面が急に動かなくなる。
-            # 一度だけ聞き、違うなら動かしたまま元のダイアログへ戻る
-            answer = ctypes.windll.user32.MessageBoxW(
-                None, "NetVision を終了しますか。", "NetVision", ask
-            )
-        except Exception:
-            return False
-        if answer == yes:
-            break
-    runner.stop()
-    return True
+    if not runner.wait_until_ready():
+        runner.stop()
+        _report(NOT_READY)
+        return 1
+    return open_window(runner)
 
 
 def _report(message: str) -> None:
-    """窓のある起動では標準出力が誰にも見えないので、出せるなら窓で出す。"""
+    """窓のある起動では標準出力が誰にも見えないので、ダイアログで出す。
+
+    同梱の Windows 版 Python には tkinter が無いので、Windows の標準のダイアログを先に試す。
+    """
+    try:
+        print(message, file=sys.stderr)
+    except Exception:
+        pass
+    try:
+        import ctypes
+
+        windll = getattr(ctypes, "windll", None)
+        if windll is not None:
+            #: MB_ICONERROR
+            windll.user32.MessageBoxW(None, message, TITLE, 0x00000010)
+            return
+    except Exception:
+        pass
     try:
         import tkinter as tk
         from tkinter import messagebox
 
         root = tk.Tk()
         root.withdraw()
-        messagebox.showerror("NetVision", message)
+        messagebox.showerror(TITLE, message)
         root.destroy()
     except Exception:
-        print(message, file=sys.stderr)
+        pass
 
 
 if __name__ == "__main__":
