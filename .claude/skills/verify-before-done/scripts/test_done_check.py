@@ -77,6 +77,20 @@ class DoneCheck(unittest.TestCase):
     def test_pushback_without_correction_passes(self):
         self.assertEqual(self.run_hook("❕ 比較: A は速い。ただし B は小さい。docs/x.md に表があります。", user="A と B を比べて")[0], 0)
 
+    def test_two_directives_without_marks_are_blocked(self):
+        code, err = self.run_hook("❕ 1つ目は見ました。", user="テストを足して スキルも配って")
+        self.assertEqual(code, 2)
+        self.assertIn("指示が 2 個", err)
+
+    def test_two_directives_with_marks_pass(self):
+        self.assertEqual(self.run_hook("★ テスト: 足しました。tests/a.py\n↩ 配布: 配りました。https://example.invalid/pull/2", user="テストを足して スキルも配って")[0], 0)
+        self.assertEqual(self.run_hook("❕ テストは足しました（tests/a.py）。配布はやっていない。", user="テストを足して スキルも配って")[0], 0)
+
+    def test_plan_lines_are_counted(self):
+        self.run_hook("❕ 直して validate を通します。")
+        rows = (self.dir / "state" / "metrics.jsonl").read_text(encoding="utf-8").strip().splitlines()
+        self.assertEqual(json.loads(rows[-1])["plan_lines"], 1)
+
     def test_stop_hook_active_passes(self):
         self.assertEqual(self.run_hook("直しました。", active=True)[0], 0)
 

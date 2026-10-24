@@ -39,6 +39,11 @@ CORRECTION = re.compile(
     r"|戻して|元に戻|しないで|するな|使うな|やるな|書くな|禁止|またか|また同じ|何度も|何回|何度"
     r"|反抗|従わ|改めない|貫く|頼んでない|余計な|指示通り|指示どおり|従え"
 )
+# 指示の形で終わる塊（directives.py と同じ見方）。指示が 2 つ以上あるのに ★ も ↩ も無い返事は、一部だけやったか何もやっていない
+IMPERATIVE = re.compile(r"(?:しろ|せよ|やれ|やめろ|なさい|ください|下さい|くれ|しとけ|とけ|すること|ように|して|で|な|[ろけせてねめれげべ])$")
+UNDONE = re.compile(r"やっていない|やっていません|できていない|できていません|未着手|手を付けていない|残り")
+# 予定の文（「〜します」）。やる前に書く行は無駄なので数える。返答の途中で出た行は消せないので、差し戻さずに数だけ残す
+PLAN = re.compile(r"(?:し|やり|進め|配り|通し|残し|作り|直し|見|調べ|確かめ|書き|入れ|送り|始め|続け|回し|試し|読み|探し|組み立て|足し|消し|外し)ます。?$")
 PUSHBACK = re.compile(r"しかし|ただし|とはいえ|おすすめしません|お勧めしません|の方が良い|のほうが良い|べきではない|やめた方が|やめたほうが|反対です|賛成できません|AI の判断で|私の判断で")
 
 
@@ -103,12 +108,17 @@ def main() -> int:
     evidence = bool(EVIDENCE.search(text))
     bare = claim and not evidence
     corrected = bool(CORRECTION.search(user or ""))
+    directives = sum(1 for p in re.split(r"[\s。]+", user or "") if p and IMPERATIVE.search(p)) if len(user or "") <= 400 else 0
+    marked = sum(1 for l in lines if l[0] in "★⭐↩⏎")
+    plan = sum(1 for l in lines if l[0] in MARKS and PLAN.search(l))
+    uncovered = directives >= 2 and marked == 0 and not UNDONE.search(text)
     # 引用（「…」）とコード（`…`）の中の語は、反論ではなく説明なので外してから見る
     def strip_quotes(l: str) -> str:
         return re.sub(r"「[^」]*」|`[^`]*`", "", l)
     pushback = [l for l in lines if PUSHBACK.search(strip_quotes(l)) and "権限" not in l] if corrected else []
     record(d.get("session_id", ""), {"lines": len(lines), "questions": questions, "outside_marks": outside,
-                                     "claim": claim, "claim_without_evidence": bare, "corrected": corrected, "pushback": len(pushback)})
+                                     "claim": claim, "claim_without_evidence": bare, "corrected": corrected, "pushback": len(pushback),
+                                     "directives": directives, "marked": marked, "plan_lines": plan})
     reasons = []
     if pushback:
         reasons.append(f"訂正への返事に反論の形がある（「{PUSHBACK.search(pushback[0]).group(0)}」）。1文で認めて、言われた通りに直したものだけを出す。"
@@ -117,6 +127,8 @@ def main() -> int:
         m = CLAIM.search(text)
         reasons.append(f"「{m.group(0)}」と書いているが、根拠（動かした出力、URL、コミットのハッシュ、ファイルの場所）が無い。"
                        "根拠を足すか、確かめていないなら「確かめていない」と書く（verify-before-done）。")
+    if uncovered:
+        reasons.append(f"指示が {directives} 個あるのに、★ か ↩ の行が無い。指示ごとに1行ずつ返し、やらなかったものは「やっていない」と書く（follow-instructions）。")
     if questions > 1:
         reasons.append(f"❔ が {questions} 行ある。1 ターンに 1 つまで。残りは決めて進めるか、ファイルに書いて ★ で渡す（follow-instructions）。")
     if reasons:
