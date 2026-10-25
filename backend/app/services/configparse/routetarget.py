@@ -12,7 +12,7 @@ VRF は RD で区別し、route-target で「どの VRF の経路を受け取る
   `route-target import|export [evpn|vpn-ipv4|vpn-ipv6] A:B`
 - Junos `set routing-instances X vrf-target target:A:B`（import / export 付きも）
 - NEC QX `ip vpn-instance X` の下の
-  `vpn-target A:B import-extcommunity|export-extcommunity|both`
+  `vpn-target A:B [C:D ...] [import-extcommunity|export-extcommunity|both]`（省くと both）
 
 値は `A:B` の形（AS 番号か IP アドレスと番号）のものだけを持つ。Junos の `vrf-target auto` や
 Arista の `route-target export evpn route-map 名前` は、ここでは比べられる値ではない。
@@ -23,7 +23,9 @@ Arista の `route-target export evpn route-map 名前` は、ここでは比べ�
 - Arista「EOS User Manual」の「Inter-VRF Local Route Leaking」（4.36.0F）
 - Juniper「Junos OS CLI Reference」の vrf-target と、「Configuring Policies for the VRF Table on PE
   Routers in VPNs」
-- NEC QX の `vpn-target` は未確認（公式の資料に当たれていない）。表番号はどれも無い
+- NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の MCE 1.1.11 vpn-target
+  （8 つまで並べられ、向きを省くと both）
+表番号はどれも無い
 """
 
 from __future__ import annotations
@@ -41,8 +43,9 @@ _CISCO_RT = re.compile(
 #: Arista は VRF の route-target を `router bgp` の下の `vrf X` に書く
 _BGP_HEAD = re.compile(r"^router bgp\s+\S+", re.IGNORECASE)
 _BGP_VRF = re.compile(r"^(\s+)vrf\s+(\S+)\s*$", re.IGNORECASE)
+#: 向きを省くと both（出典はモジュールの docstring の NEC QX）
 _UNDOFORM_RT = re.compile(
-    r"^\s+vpn-target\s+(.+?)\s+(import-extcommunity|export-extcommunity|both)\s*$",
+    r"^\s+vpn-target\s+(.+?)(?:\s+(import-extcommunity|export-extcommunity|both))?\s*$",
     re.IGNORECASE,
 )
 _JUNOS_RT = re.compile(
@@ -105,9 +108,11 @@ def parse(text: str) -> dict[str, RouteTargets]:
             continue
         rule = _UNDOFORM_RT.match(raw)
         if rule:
-            direction = rule.group(2).lower().replace("-extcommunity", "")
+            direction = (rule.group(2) or "both").lower().replace("-extcommunity", "")
             for value in rule.group(1).split():
-                _add(out[current], direction, _bare(value))
+                # `auto`（EVPN の自動の値）は比べられる値ではない
+                if ":" in value:
+                    _add(out[current], direction, _bare(value))
     return out
 
 

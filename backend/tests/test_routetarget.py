@@ -130,3 +130,23 @@ def test_an_automatic_junos_target_is_not_compared():
     parsed = routetarget.parse("set routing-instances EVPN-1 vrf-target auto\n")
     assert parsed["EVPN-1"].imports == set()
     assert parsed["EVPN-1"].exports == set()
+
+
+def test_necqx_targets_follow_the_command_manual():
+    """向きを省いた `vpn-target` は both。1行に並べた複数のターゲットも全部読む。
+
+    出典: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の
+    MCE 1.1.11 vpn-target（`vpn-target vpn-target&<1-8> [ both | export-extcommunity |
+    import-extcommunity ]`。「both パラメータ、export-extcommunity パラメータ、
+    import-extcommunity パラメータが指定されない場合、デフォルトで both パラメータが
+    指定されます」）。
+    """
+    parsed = routetarget.parse(
+        "ip vpn-instance vpn1\n"
+        " route-distinguisher 100:1\n"
+        " vpn-target 1:1\n"
+        " vpn-target 3:3 4:4 export-extcommunity\n"
+        " vpn-target 5:5 both\n"
+    )
+    assert parsed["vpn1"].imports == {"1:1", "5:5"}
+    assert parsed["vpn1"].exports == {"1:1", "3:3", "4:4", "5:5"}

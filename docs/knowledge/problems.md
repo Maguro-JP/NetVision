@@ -2077,3 +2077,14 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `vlan` を省いた行は、create vlan で作った名前に当たったときだけ読む。
 - 試験: `test_configparse_exos.py` の `test_create_vlan_and_sysname_follow_the_command_reference`。直す前のコードで `vlans[40]` が無く落ちた。
 - 残り: exos.py の「未確認」は、保存した設定の先頭のコメント（版数と機種）だけになった。公式の資料には届いていない。
+
+## NEC QX の向きを省いた `vpn-target` を both として読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/routetarget.py` は `vpn-target A:B` の後ろに向き（import-extcommunity / export-extcommunity / both）がある行だけを読んでいた。
+  向きを省いた `vpn-target 1:1` が読まれず、その VRF は import も export も無いように見えていた。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版（qx-s67_s75_cmd_2_2_ns.pdf）の MCE 1.1.11 vpn-target。
+  「both パラメータ、export-extcommunity パラメータ、import-extcommunity パラメータが指定されない場合、デフォルトで both パラメータが指定されます」。
+  同じマニュアルの作例に `vpn-target 1:1` がある。
+- 直したこと: 向きは省けるようにし、省いたら both にした。`auto`（EVPN の自動の値）は比べられないので持たない。
+- 試験: `test_routetarget.py` の `test_necqx_targets_follow_the_command_manual`。直す前のコードで import の `1:1` が欠けて落ちた。
+- 分かったこと: NEC の QX のマニュアルは https://www.support.nec.co.jp/ の製品マニュアルの頁から PDF で取れる。テキストは backend の pypdf で抜ける。
