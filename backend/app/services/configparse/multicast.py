@@ -37,7 +37,10 @@ Huawei、H3C、Aruba CX の書き方。判断はしない。判断は multicastr
   `rp candidate vlan 24 ...`、`router pim bsr`、口の `pim ipv4 sparse-mode`）。
   IGMP スヌーピングは EOS 4.35.1F User Manual「IGMP and IGMP Snooping」の Snooping Querier
   （`ip igmp snooping vlan 5-8 querier`、帯の設定が全体の `ip igmp snooping querier` より優先）
-- NEC QX の書き方は未確認（既存の試験の形のまま）
+- NEC QX: 「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の
+  3.1.13 multicast routing（`multicast routing [ vpn-instance 名前 ]`）、5.1.33 pim sm、
+  5.1.49 static-rp (PIM view)（`static-rp A [ ACL 番号 | preferred ] *`）、IGMP snooping の
+  VLAN ビューの `igmp-snooping enable` / `igmp-snooping querier`
 """
 
 from __future__ import annotations

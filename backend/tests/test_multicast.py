@@ -589,3 +589,39 @@ interface Vlan10
         ("10.17.255.83", None),
     ]
     assert [item.name for item in multicast.pim_interfaces] == ["Vlan10"]
+
+
+def test_necqx_follows_the_command_manual():
+    """NEC QX の PIM、静的な RP、IGMP スヌーピングを、公式の作例の書き方で読む。
+
+    出典: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の
+    3.1.13 multicast routing（`multicast routing [ vpn-instance vpn-instance-name ]`）、
+    5.1.33 pim sm（作例 `[Switch-Vlan-interface100] pim sm`）、5.1.49 static-rp (PIM view)
+    （`static-rp rp-address [ ipv4-acl-number | preferred ] *`、作例
+    `[Switch-pim] static-rp 11.110.0.6 2001 preferred`）、IGMP snooping の
+    igmp-snooping enable / igmp-snooping querier（作例 `[Switch-vlan2] igmp-snooping querier`）。
+    """
+    text = """sysname qx-01
+#
+multicast routing vpn-instance vpna
+#
+vlan 2
+ igmp-snooping enable
+ igmp-snooping querier
+#
+interface Vlan-interface100
+ ip address 10.110.1.1 255.255.255.0
+ pim sm
+#
+pim
+ static-rp 11.110.0.6 2001 preferred
+#
+"""
+    parsed = configparse.parse(text)
+    assert parsed.multicast.routing is True
+    assert [p.name for p in parsed.multicast.pim_interfaces] == ["Vlan-interface100"]
+    assert parsed.multicast.rps[0].address == "11.110.0.6"
+    assert parsed.multicast.rps[0].scope == "2001"
+    vlan2 = next(v for v in parsed.multicast.vlans if v.vlan == 2)
+    assert vlan2.enabled is True
+    assert vlan2.querier is True

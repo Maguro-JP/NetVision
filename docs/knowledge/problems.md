@@ -2088,3 +2088,10 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: 向きは省けるようにし、省いたら both にした。`auto`（EVPN の自動の値）は比べられないので持たない。
 - 試験: `test_routetarget.py` の `test_necqx_targets_follow_the_command_manual`。直す前のコードで import の `1:1` が欠けて落ちた。
 - 分かったこと: NEC の QX のマニュアルは https://www.support.nec.co.jp/ の製品マニュアルの頁から PDF で取れる。テキストは backend の pypdf で抜ける。
+
+## 見張り: NEC QX の PIM・静的な RP・IGMP スヌーピングをコマンドマニュアルの作例の形で読めている（2026-10-26 JST）
+
+- 確かめたこと: `configparse/multicast.py` の NEC QX は「既存の試験の形（未確認）」だった。公式の作例の形で読めるかを見た。直す所は無かった。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の 3.1.13 multicast routing、5.1.33 pim sm、
+  5.1.49 static-rp (PIM view)（作例 `static-rp 11.110.0.6 2001 preferred`）、IGMP snooping の `igmp-snooping enable` と `igmp-snooping querier`（VLAN ビュー）。
+- 試験: `test_multicast.py` の `test_necqx_follows_the_command_manual`。querier の読み方を `igmp-snooping querier enable` だけに変えると落ちることを確かめた。
