@@ -2095,3 +2095,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の 3.1.13 multicast routing、5.1.33 pim sm、
   5.1.49 static-rp (PIM view)（作例 `static-rp 11.110.0.6 2001 preferred`）、IGMP snooping の `igmp-snooping enable` と `igmp-snooping querier`（VLAN ビュー）。
 - 試験: `test_multicast.py` の `test_necqx_follows_the_command_manual`。querier の読み方を `igmp-snooping querier enable` だけに変えると落ちることを確かめた。
+
+## NEC QX の `display interface brief` の route mode の表を読む（2026-10-26 JST）
+
+- 起きたこと: `configparse/linkstate.py` は NEC QX の `display interface brief` のうち、bridge mode の表（Interface / Link / Speed / Duplex / Type / PVID）だけを読んでいた。
+  同じ出力の先頭に出る route mode の表（Interface / Link / Protocol / Primary IP）の口は、線の上下が付かなかった。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の 4 章 Ethernet インタフェースの display interface
+  （作例の `display interface brief` と、表 4-4 の Link は UP / DOWN / ADM / Stby）。
+- 直したこと: route mode の表の見出しも同じ読み方（2 列目が Link）で読む。
+- 試験: `test_linkstate.py` の `test_necqx_brief_reads_both_the_route_and_the_bridge_tables`。直す前のコードで route mode の口が欠けて落ちた。

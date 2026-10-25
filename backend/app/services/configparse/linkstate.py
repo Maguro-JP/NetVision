@@ -18,16 +18,18 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
 - Cisco NX-OS `show interface brief`
   （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port。出典は _read_nxos）
-- NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID）
+- NEC QX `display interface brief`（bridge mode の Interface / Link / Speed / Duplex / Type /
+  PVID と、route mode の Interface / Link / Protocol / Primary IP。出典は _UNDOFORM_HEADER）
 - Huawei VRP `display interface brief`（Interface / PHY / Protocol ...。出典は _vrp_state）
 
 公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
 status、Cisco show ip interface brief、Arista show ip interface brief、Junos terse、
-NX-OS brief、PAN-OS、FastIron、Cisco の `show interfaces` の段落（_PARAGRAPH の上）。
-未確認の表: Aruba CX、FortiGate、NEC QX、NEC IX（`show interfaces` の段落を含む）、
+NX-OS brief、PAN-OS、FastIron、Cisco の `show interfaces` の段落（_PARAGRAPH の上）、
+NEC QX の brief。
+未確認の表: Aruba CX、FortiGate、NEC IX（`show interfaces` の段落を含む）、
 アラクサラ。Aruba CX と FortiGate は公式の出力例に当たれず、
-HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC とアラクサラは
-マニュアル置き場にこの環境から届かなかった。
+HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC IX とアラクサラは
+マニュアル置き場にこの環境から届かなかった（NEC QX は support.nec.co.jp の PDF に届いた）。
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -76,9 +78,13 @@ _STATE_PARAGRAPH = re.compile(
 )
 #: NX-OS `show interface brief`。Ethernet の行は 5 列目が up / down
 _NXOS_HEADER = re.compile(r"^\s*Ethernet\s+VLAN\s+Type\s+Mode\s+Status\s+Reason\b", re.IGNORECASE)
-#: NEC QX `display interface brief`（Interface / Link / Speed / Duplex / Type / PVID ...）
+#: NEC QX `display interface brief`。bridge mode の表（Interface / Link / Speed / Duplex / Type /
+#: PVID）と route mode の表（Interface / Link / Protocol / Primary IP）を続けて出す。どちらも
+#: 2 列目が Link。出典: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の
+#: 4 章 display interface の作例と表 4-4（Link は UP / DOWN / ADM / Stby）
 _UNDOFORM_HEADER = re.compile(
-    r"^\s*Interface\s+Link\s+Speed\s+Duplex\s+Type\s+PVID\b", re.IGNORECASE
+    r"^\s*Interface\s+Link\s+(?:Speed\s+Duplex\s+Type\s+PVID|Protocol\s+Primary\s+IP)\b",
+    re.IGNORECASE,
 )
 #: VRP の `display interface brief`。物理の状態は PHY の列に出る
 _VRP_HEADER = re.compile(r"^\s*Interface\s+PHY\s+Protocol\b", re.IGNORECASE)
