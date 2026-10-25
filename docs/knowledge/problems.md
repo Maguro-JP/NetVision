@@ -2059,4 +2059,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`configure [{vlan} vlan_name | vlan vlan_id] ipaddress ...`、作例の `/24` と `255.255.255.0` は同じ意味）。
 - 直したこと: `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（`configure ports ...` などを住所と取り違えない）。
 - 試験: `test_configparse_exos.py` の `test_vlan_addresses_follow_the_command_reference`。直す前のコードで `Vlan40` が欠けて落ちた。
-- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（あとの周で当たる）。
+- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（2026-10-25 に直した。下の項）。
+
+## EXOS の `add ports` を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> add ports ...` だけを読んでいた。`configure USERS add ports 1-2 untagged` と書いた口が台帳に出なかった。
+- 確かめた資料: ExtremeXOS Command Reference Guide 22.1 / 31.7 の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`）。
+- 直したこと: VLAN の住所と同じく `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う。
+- 試験: `test_configparse_exos.py` の `test_ports_are_added_to_a_vlan_written_without_the_vlan_keyword`。直す前のコードで落ちた。

@@ -50,8 +50,11 @@ _CREATE_VLAN = re.compile(
     r'^\s*create\s+vlan\s+"?(?P<name>[^"\s]+)"?(?:\s+tag\s+(?P<tag>\d+))?', re.IGNORECASE
 )
 _VLAN_TAG = re.compile(r'^\s*configure\s+vlan\s+"?(?P<name>[^"\s]+)"?\s+tag\s+(?P<tag>\d+)', re.I)
+#: VLAN に口を足す。名前で書いたときは `vlan` を省ける。出典: ExtremeXOS Command Reference
+#: Guide 22.1 / 31.7 の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list]
+#: add ports ...`）。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（numbers_of）
 _ADD_PORTS = re.compile(
-    r'^\s*configure\s+vlan\s+"?(?P<name>[^"\s]+)"?\s+add\s+ports?\s+(?P<ports>[\d\-,:]+)'
+    r'^\s*configure\s+(?:vlan\s+)?"?(?P<name>[^"\s]+)"?\s+add\s+ports?\s+(?P<ports>[\d\-,:]+)'
     r"(?:\s+(?P<how>tagged|untagged))?",
     re.IGNORECASE,
 )
