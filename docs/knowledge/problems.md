@@ -2067,3 +2067,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 確かめた資料: ExtremeXOS Command Reference Guide 22.1 / 31.7 の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`）。
 - 直したこと: VLAN の住所と同じく `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う。
 - 試験: `test_configparse_exos.py` の `test_ports_are_added_to_a_vlan_written_without_the_vlan_keyword`。直す前のコードで落ちた。
+
+## EXOS の `configure <名前> tag` を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> tag <番号>` だけを読んでいた。`vlan` を省いて番号を付けた VLAN は番号が付かず、口が繋がらなかった。
+- 確かめた資料: ExtremeXOS User Guide 32.6.1 の VLAN Configuration Overview（`configure {vlan} vlan_name tag tag`）。
+  あわせて Command Reference Guide 32.3 の create vlan（`create vlan [vlan_name {tag tag} | vlan_list] {description ...} {vr name}`）と、
+  31.5 の configure snmp sysName（作例は `configure snmp sysname engineeringlab`）も見た。この2つは今の読み方で読めていた。
+- 直したこと: `vlan` を省いた行は、create vlan で作った名前に当たったときだけ読む。
+- 試験: `test_configparse_exos.py` の `test_create_vlan_and_sysname_follow_the_command_reference`。直す前のコードで `vlans[40]` が無く落ちた。
+- 残り: exos.py の「未確認」は、保存した設定の先頭のコメント（版数と機種）だけになった。公式の資料には届いていない。

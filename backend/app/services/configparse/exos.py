@@ -16,9 +16,12 @@
 出典: VLAN を番号の並びで書く形と description-string は ExtremeXOS Command Reference Guide
 （22.1 / 30.1 / 31.7）で、束ね（enable sharing grouping）は v33.1.1 で、経路
 （configure iproute add の IPv4・IPv6・default）と disable port は 22.5 で、VLAN の住所
-（configure vlan ipaddress）は 32.4 で確かめた。
+（configure vlan ipaddress）は 32.4 で、create vlan は 32.3 で、sysName は 31.5 で、
+`vlan` を省いた tag は User Guide 32.6.1 で確かめた。
 LLDP は `_lldp_detail` の docstring。
-ほかの行は既存の試験の形のまま（未確認）。`disable port all` は読まない。
+ほかの行（保存した設定の先頭のコメントにある版数 `ExtremeXOS version` と機種 `# Switch :`）は
+既存の試験の形のまま（未確認。資料に届かない: ExtremeXOS Command Reference Guide のコマンドの項には
+コメントの形が無く、ほかの公式の資料でも見つけていない）。`disable port all` は読まない。
 """
 
 from __future__ import annotations
@@ -49,7 +52,12 @@ _MODEL = re.compile(r"^\s*#\s*Switch\s*:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
 _CREATE_VLAN = re.compile(
     r'^\s*create\s+vlan\s+"?(?P<name>[^"\s]+)"?(?:\s+tag\s+(?P<tag>\d+))?', re.IGNORECASE
 )
-_VLAN_TAG = re.compile(r'^\s*configure\s+vlan\s+"?(?P<name>[^"\s]+)"?\s+tag\s+(?P<tag>\d+)', re.I)
+#: VLAN に番号を後から付ける。`vlan` は省ける。出典: ExtremeXOS User Guide 32.6.1 の VLAN
+#: Configuration Overview（`configure {vlan} vlan_name tag tag`）。省いた形は、作った VLAN の名前の
+#: ときだけ使う（`configure <ほかの名前> tag` を VLAN と取り違えない）
+_VLAN_TAG = re.compile(
+    r'^\s*configure\s+(?P<keyword>vlan\s+)?"?(?P<name>[^"\s]+)"?\s+tag\s+(?P<tag>\d+)', re.I
+)
 #: VLAN に口を足す。名前で書いたときは `vlan` を省ける。出典: ExtremeXOS Command Reference
 #: Guide 22.1 / 31.7 の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list]
 #: add ports ...`）。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（numbers_of）
@@ -124,10 +132,14 @@ def parse(text: str) -> ParsedConfig:
     tags: dict[str, int] = {}
     untagged: dict[str, int] = {}
 
+    #: create vlan で作った名前。`vlan` を省いた行は、この名前に当たったときだけ読む
+    created: set[str] = set()
+
     for raw in text.splitlines():
         create = _CREATE_VLAN.match(raw)
         if create:
             name = create.group("name")
+            created.add(name)
             for number in _vlan_numbers(name):
                 parsed.vlans.setdefault(number, "")
             if create.group("tag"):
@@ -136,7 +148,7 @@ def parse(text: str) -> ParsedConfig:
                 parsed.vlans[number] = name
             continue
         tag = _VLAN_TAG.match(raw)
-        if tag:
+        if tag and (tag.group("keyword") or tag.group("name") in created):
             number = int(tag.group("tag"))
             tags[tag.group("name")] = number
             parsed.vlans[number] = tag.group("name")
