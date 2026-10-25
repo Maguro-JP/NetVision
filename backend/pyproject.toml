@@ -29,6 +29,10 @@ dev = [
     "httpx>=0.27",
     "ruff>=0.8",
 ]
+# アプリのウィンドウで開くための部品（scripts.launcher が使う）
+desktop = [
+    "pywebview>=5.0",
+]
 
 [tool.setuptools.packages.find]
 include = ["app*"]

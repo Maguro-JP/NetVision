@@ -126,7 +126,7 @@ if ($LASTEXITCODE -ne 0) { throw "pip の準備に失敗しました" }
 
 $packages = @(
     "fastapi", "sqlalchemy", "alembic", "pydantic", "pydantic-settings", "python-dateutil",
-    "openpyxl", "python-multipart", "jinja2", "uvicorn", "tzdata"
+    "openpyxl", "python-multipart", "jinja2", "uvicorn", "tzdata", "pywebview", "pythonnet"
 )
 & $python -m pip install --quiet --target (Join-Path $Stage "lib") --no-warn-script-location @packages
 if ($LASTEXITCODE -ne 0) { throw "ライブラリの取得に失敗しました" }
@@ -172,7 +172,7 @@ Step "起動用バッチと説明書きを作ります"
 # UTF-8 BOM 付きで、いずれも改行は CRLF にする。
 $bat = @'
 @echo off
-rem NetVision を起動します。インストールは不要です。
+rem NetVision を起動します。インストールは不要です。アプリのウィンドウが開きます。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
@@ -180,28 +180,21 @@ rem データ（DB と資料）の置き場所。空なら C:\Users\...\.netvisi
 set NETVISION_DATA_DIR=
 rem 中間ファイルは同梱済み。同期フォルダで固まらないよう、実行時には書かせない
 set PYTHONDONTWRITEBYTECODE=1
-echo NetVision を起動しています...
-echo.
-echo   画面 : http://127.0.0.1:8000
-echo   停止 : このウィンドウを閉じてください
-echo.
-timeout /t 2 >nul
-start "" http://127.0.0.1:8000
-"%~dp0python\python.exe" -m scripts.standalone
-echo.
-echo 終了しました。上に出ている内容を控えてください。
-pause
+start "" "%~dp0python\pythonw.exe" -m scripts.launcher
 '@
 $diag = @'
 @echo off
-rem 黒い画面を出さずに起動します（小さな窓から終了できます）。
-rem 様子を見ながら動かしたいときは NetVision.bat を使ってください。
+rem 様子を見ながら起動します。アプリのウィンドウと、記録を流す黒い画面が出ます。
+rem ふだんは NetVision.bat を使ってください。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
 set NETVISION_DATA_DIR=
 set PYTHONDONTWRITEBYTECODE=1
-start "" "%~dp0python\pythonw.exe" -m scripts.launcher
+"%~dp0python\python.exe" -m scripts.launcher
+echo.
+echo 終了しました。上に出ている内容を控えてください。
+pause
 '@
 $crlf = ($bat -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllBytes(
@@ -210,7 +203,7 @@ $crlf = ($bat -replace "`r`n", "`n") -replace "`n", "`r`n"
 
 $diagCrlf = ($diag -replace "`r`n", "`n") -replace "`n", "`r`n"
 [IO.File]::WriteAllBytes(
-    (Join-Path $Stage "NetVision-window.bat"),
+    (Join-Path $Stage "NetVision-console.bat"),
     [Text.Encoding]::GetEncoding(932).GetBytes($diagCrlf))
 
 $mcp = @'
@@ -239,17 +232,24 @@ NetVision （インストール不要版）
 
   1. このフォルダを、書き込める場所に置く
   2. 「NetVision.bat」をダブルクリック
-  3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
+  3. NetVision のウィンドウが開きます
 
-  黒い画面が1つ出ます。止めるときは、その画面を閉じてください。
+  止めるときは、そのウィンドウを閉じてください。
+  ウィンドウが出ないときは、Microsoft Edge WebView2 ランタイムが入っているかを確かめてください
+  （Windows 11 には入っています）。
 
 ■ AI を使うとき（任意）
 
-  models フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  C:\LLM\gguf フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  このフォルダは初めて起動したときに作られます。
   置かなければ、AI を使わない形でそのまま動きます。
 
-  データの置き場所の中（C:\Users\（あなたのユーザー名）\.netvision\models）に
-  置いても構いません。アプリのフォルダを入れ替えても、そちらは残ります。
+  C:\LLM は、自作のアプリどうしでモデルを共有する置き場です。
+  モデルは数 GB あるので、アプリごとに持たずにここへ1つだけ置きます。
+  アプリのフォルダを入れ替えても、モデルはそのまま残ります。
+  置き場を変えるときは、環境変数 LLM_HOME に別のフォルダを指定します。
+
+  前に models フォルダや .netvision\models に置いたモデルも、そのまま読みます。
 
 ■ 置き場所について
 
@@ -277,11 +277,10 @@ NetVision （インストール不要版）
   読むだけで、台帳は書き換わりません。使い方は docs\MCP.md にあります。
   普段の利用では使いません。
 
-■ 黒い画面を出したくないとき
+■ 起動しないとき
 
-  「NetVision-window.bat」を使ってください。小さな窓が1つ出るだけになり、
-  終了はその窓から行います。
-  起動の記録は次の場所に残ります。
+  「NetVision-console.bat」を使ってください。アプリのウィンドウと一緒に、
+  記録を流す黒い画面が出ます。起動の記録は次の場所にも残ります。
 
     C:\Users\（あなたのユーザー名）\.netvision\launcher.log
 

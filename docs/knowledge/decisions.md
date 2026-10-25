@@ -159,3 +159,19 @@
 - まだ変えていないもの: CI の回し方（`.github/workflows/ci.yml` の「private の枠」を前提にした絞り込み、README の CI の節）。
   どこまで広げるかは決めていない。今の絞り込みのままでも動く
 - 触る場所: `.github/workflows/ci.yml`、README の CI の節
+
+## アプリのウィンドウで開く（2026-10-24 JST）
+
+- 決めたこと: 起動役（`scripts.launcher`）は pywebview でウィンドウを開き、閉じたらサーバーも止める。
+  ブラウザは開かない。Windows の一式は `pythonw.exe` で起動し、様子を見る `NetVision-console.bat` を残す。
+- 理由: ユーザーの指示（アプリケーションウィンドウで作って）。黒い画面の Ctrl+C は止め方が分かりにくかった。
+- 採らなかった案: Tauri / Electron（Python のサーバーを包むと実行ファイルが増え、閉域の職場で止まる）。
+- 触る場所: `backend/scripts/launcher.py`、`packaging/make-bundle-windows.*`、`packaging/start.*`
+
+## AI のモデルの置き場を共有にする（2026-10-24 JST）
+
+- 決めたこと: GGUF は `LLM_HOME` の `gguf`、無ければ Windows は `C:\LLM\gguf` で探す。起動時に
+  `gguf` と `huggingface` と `README.txt` を無ければ作る（あれば書き換えない）。前の `models` は読むだけ。
+- 理由: ユーザーの指示（LLM のディレクトリとかも整えて）。数 GB のモデルを自作のアプリどうしで共有する。
+- 採らなかった案: 設定やデータも `C:\ProgramData\NetVision` へ移す（今の利用者の DB の道が変わるので別の作業にする）。
+- 触る場所: `backend/app/services/llm_inproc.py`、`docs/LOCAL_LLM.md`

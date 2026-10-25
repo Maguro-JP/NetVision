@@ -109,12 +109,19 @@ import site
 PTH
 
 echo "==> 依存ライブラリを Windows 向けに集めます"
-# 閉域側で pip を動かさずに済むよう、あらかじめ展開した状態で入れておく
-"$PY" -m pip install --quiet --target "$STAGE/lib" \
+# アプリのウィンドウ（pywebview）が使う proxy_tools は wheel が配られていない。
+# 中身は Python だけなので、ここで wheel にしてから同じ取得に混ぜる
+EXTRA_WHEELS="$OUT/wheels-extra"
+mkdir -p "$EXTRA_WHEELS"
+"$PY" -m pip wheel --quiet --no-deps --wheel-dir "$EXTRA_WHEELS" proxy_tools
+# 閉域側で pip を動かさずに済むよう、あらかじめ展開した状態で入れておく。
+# pythonnet は pywebview の Windows だけの依存で、ここ（Linux）では条件が合わず
+# 自動では入らないので、名前を並べて入れる
+"$PY" -m pip install --quiet --target "$STAGE/lib" --find-links "$EXTRA_WHEELS" \
   --platform win_amd64 --python-version "${PY_VERSION%.*}" --only-binary=:all: \
   --implementation cp --abi "$PY_TAG" \
   fastapi sqlalchemy alembic pydantic pydantic-settings python-dateutil \
-  openpyxl python-multipart jinja2 uvicorn tzdata
+  openpyxl python-multipart jinja2 uvicorn tzdata pywebview pythonnet
 find "$STAGE/lib" -name __pycache__ -type d -prune -exec rm -rf {} + 2>/dev/null || true
 
 # モデルをアプリの中で動かすためのライブラリ。実行ファイルは増えないので、
@@ -159,7 +166,7 @@ from pathlib import Path
 stage, py_version, version = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
 
 bat = """@echo off
-rem NetVision を起動します。インストールは不要です。
+rem NetVision を起動します。インストールは不要です。アプリのウィンドウが開きます。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
@@ -167,31 +174,24 @@ rem データ（DB と資料）の置き場所。空なら C:\\Users\\...\\.netv
 set NETVISION_DATA_DIR=
 rem 中間ファイルは同梱済み。同期フォルダで固まらないよう、実行時には書かせない
 set PYTHONDONTWRITEBYTECODE=1
-echo NetVision を起動しています...
-echo.
-echo   画面 : http://127.0.0.1:8000
-echo   停止 : このウィンドウを閉じてください
-echo.
-timeout /t 2 >nul
-start "" http://127.0.0.1:8000
-"%~dp0python\\python.exe" -m scripts.standalone
-echo.
-echo 終了しました。上に出ている内容を控えてください。
-pause
+start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
 """
 (stage / "NetVision.bat").write_bytes(bat.replace("\n", "\r\n").encode("cp932"))
 
 diag = """@echo off
-rem 黒い画面を出さずに起動します（窓から終了できます）。
-rem 様子を見ながら動かしたいときは NetVision.bat を使ってください。
+rem 様子を見ながら起動します。アプリのウィンドウと、記録を流す黒い画面が出ます。
+rem ふだんは NetVision.bat を使ってください。
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\\dist
 set NETVISION_DATA_DIR=
 set PYTHONDONTWRITEBYTECODE=1
-start "" "%~dp0python\\pythonw.exe" -m scripts.launcher
+"%~dp0python\\python.exe" -m scripts.launcher
+echo.
+echo 終了しました。上に出ている内容を控えてください。
+pause
 """
-(stage / "NetVision-window.bat").write_bytes(
+(stage / "NetVision-console.bat").write_bytes(
     diag.replace("\n", "\r\n").encode("cp932")
 )
 
@@ -216,17 +216,24 @@ readme = f"""NetVision （インストール不要版）
 
   1. このフォルダを、書き込める場所に置く
   2. 「NetVision.bat」をダブルクリック
-  3. ブラウザが開きます（開かない場合は http://127.0.0.1:8000 ）
+  3. NetVision のウィンドウが開きます
 
-  黒い画面が1つ出ます。止めるときは、その画面を閉じてください。
+  止めるときは、そのウィンドウを閉じてください。
+  ウィンドウが出ないときは、Microsoft Edge WebView2 ランタイムが入っているかを確かめてください
+  （Windows 11 には入っています）。
 
 ■ AI を使うとき（任意）
 
-  models フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  C:\\LLM\\gguf フォルダに、モデルのファイル（.gguf）を1つ置くだけです。
+  このフォルダは初めて起動したときに作られます。
   置かなければ、AI を使わない形でそのまま動きます。
 
-  データの置き場所の中（C:\\Users\\（あなたのユーザー名）\\.netvision\\models）に
-  置いても構いません。アプリのフォルダを入れ替えても、そちらは残ります。
+  C:\\LLM は、自作のアプリどうしでモデルを共有する置き場です。
+  モデルは数 GB あるので、アプリごとに持たずにここへ1つだけ置きます。
+  アプリのフォルダを入れ替えても、モデルはそのまま残ります。
+  置き場を変えるときは、環境変数 LLM_HOME に別のフォルダを指定します。
+
+  前に models フォルダや .netvision\\models に置いたモデルも、そのまま読みます。
 
 ■ 置き場所について
 
@@ -254,11 +261,10 @@ readme = f"""NetVision （インストール不要版）
   読むだけで、台帳は書き換わりません。使い方は docs\\MCP.md にあります。
   普段の利用では使いません。
 
-■ 黒い画面を出したくないとき
+■ 起動しないとき
 
-  「NetVision-window.bat」を使ってください。小さな窓が1つ出るだけになり、
-  終了はその窓から行います。
-  起動の記録は次の場所に残ります。
+  「NetVision-console.bat」を使ってください。アプリのウィンドウと一緒に、
+  記録を流す黒い画面が出ます。起動の記録は次の場所にも残ります。
 
     C:\\Users\\（あなたのユーザー名）\\.netvision\\launcher.log
 

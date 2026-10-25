@@ -15,8 +15,8 @@
 `vlan <vid> [name <vlan-name>] [state {enable|disable}]` か
 `vlan <vid-range> [state {enable|disable}]` で作る。口の範囲書きは同社
 「Getting Started with AlliedWare Plus」の既定の設定の作例
-（`interface port1.0.1-1.0.24`）。表番号は無い。`<vid-range>` にカンマ区切りが
-使えるかはコマンドリファレンスで未確認なので、`-` と `,` の両方を読む。
+（`interface port1.0.1-1.0.24`）。表番号は無い。`<vid-range>` はハイフンとカンマで並べて書ける
+（「CentreCOM x540Lシリーズ コマンドリファレンス 5.5.6」の vlan。例 `vlan 10,20,30,40-49`）。
 アドレスの長さ付きの書き方（`ip address 192.168.10.1/24`）は同社サポートポータルの
 作例で、経路の書き方は「Route Selection Feature Overview and Configuration Guide」
 （C613-22029-00 REV G）の Static routes で、`access-list hardware` は「ACL Feature Overview and

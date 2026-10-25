@@ -264,3 +264,17 @@ def test_numbered_hardware_mac_acls_are_read_as_mac_addresses():
     }
     assert acls["4001"].entries[0].is_any_any
     assert acls["4001"].applied_to == ["interface port1.0.1 入り"]
+
+
+def test_vlan_database_ranges_with_commas_follow_the_command_reference():
+    """見張り。vlan database の `vlan 10,20,30,40-49` を、カンマとハイフンの並びとして読む。
+
+    出典: アライドテレシス「CentreCOM x540Lシリーズ コマンドリファレンス 5.5.6」の vlan
+    （`vlan VLANRANGE [name VLANNAME] ...`。VLANRANGE は「ハイフン、カンマを使った複数指定も可能」、
+    使用例 `vlan 10,20,30,40-49`）。
+    """
+    text = (
+        "hostname awplus\n!\nvlan database\n vlan 100 name silver\n vlan 10,20,30,40-49\n!\n"
+        "interface port1.0.1\n switchport\n switchport access vlan 100\n!\n"
+    )
+    assert sorted(configparse.parse(text).vlans) == [10, 20, 30, *range(40, 50), 100]

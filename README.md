@@ -87,7 +87,8 @@ packaging/       閉域へ持ち込むオフラインバンドルの作成・導
 サーバーは不要で、Docker も要らない1台完結モードがあります。
 
 ```bash
-cd backend && .venv/bin/python -m scripts.standalone   # http://127.0.0.1:8000
+cd backend && .venv/bin/pip install -e '.[desktop]'   # 初回のみ
+cd backend && .venv/bin/python -m scripts.launcher     # アプリのウィンドウが開く
 ```
 
 データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
@@ -1479,7 +1480,8 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 その初期値として扱います（画面で決めたほうが勝ちます）。
 
 | `NETVISION_LLM_ENABLED` | `true` | モデルを使うか。置いてあっても切れる（規則ベースだけと見比べたいとき） |
-| `NETVISION_MODEL_DIR` | アプリの隣の `models` | アプリの中で動かすモデル（GGUF）の置き場所 |
+| `LLM_HOME` | Windows は `C:\LLM`、ほかは無し | 自作のアプリどうしでモデルを共有する置き場。GGUF はその下の `gguf` に置く |
+| `NETVISION_MODEL_DIR` | `LLM_HOME` の `gguf` | アプリの中で動かすモデル（GGUF）の置き場所を1つに決め打ちする |
 | `NETVISION_MODEL_PATH` | なし | モデルを1つだけ名指しする場合 |
 | `NETVISION_LLM_URL` | なし | 閉域の中に置いたモデル（OpenAI 互換 API）。例: `http://127.0.0.1:11434/v1` |
 | `NETVISION_LLM_MODEL` | なし | 使うモデル名。例: `qwen2.5-coder:7b` |

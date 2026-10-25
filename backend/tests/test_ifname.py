@@ -87,3 +87,19 @@ def test_comware_forty_and_hundred_gig_short_names_are_expanded():
     assert ifname.expand("FortyGigE1/1/3") == "FortyGigabitEthernet1/1/3"
     assert ifname.normalize("HGE1/0/3") == ifname.normalize("HundredGigE1/0/3")
     assert ifname.expand("HGE1/0/3") == "HundredGigE1/0/3"
+
+
+def test_h3c_ten_gig_and_gig_abbreviations_follow_the_command_reference():
+    """H3C Comware の 10G 口 `XGE` と 1G 口 `GE` を、Config の正式名と同じ口として扱う。
+
+    出典: H3C「03-Interface Command Reference」02-Ethernet interface commands の
+    display interface（`display interface ten-gigabitethernet 1/0/1 brief description` の
+    出力が `XGE1/0/1`、`display interface brief` の出力が `GE1/0/2`。Config 側の名前は
+    `Ten-GigabitEthernet1/0/1`）。10G は Cisco の `Te`・`TenGigabitEthernet` と
+    同じ正式名にそろえる。
+    """
+    assert ifname.normalize("XGE1/0/1") == ifname.normalize("Ten-GigabitEthernet1/0/1")
+    assert ifname.normalize("XGE1/0/1") == ifname.normalize("Te1/0/1")
+    assert ifname.expand("XGE1/0/1") == "TenGigabitEthernet1/0/1"
+    assert ifname.normalize("GE1/0/2") == ifname.normalize("GigabitEthernet1/0/2")
+    assert ifname.expand("GE1/0/2") == "GigabitEthernet1/0/2"

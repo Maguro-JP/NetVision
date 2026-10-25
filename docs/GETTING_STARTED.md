@@ -26,23 +26,17 @@ cd frontend && npm ci && npm run build && cd ..
 
 # バックエンドの用意（初回のみ）
 cd backend
-python3 -m venv .venv && .venv/bin/pip install -e .
+python3 -m venv .venv && .venv/bin/pip install -e '.[desktop]'
 
 # 起動
-.venv/bin/python -m scripts.standalone
+.venv/bin/python -m scripts.launcher
 ```
 
-ブラウザで <http://127.0.0.1:8000> を開けば使えます。止めるのは `Ctrl+C`。
+NetVision のウィンドウが開きます。止めるのはウィンドウを閉じるだけです。
+裏で動いていたサーバーも一緒に止まります。
 
-これは URL です。ファイルを開くのではありません。 アドレス欄に入れてください。
-将来サーバーに置いて全員で使う場合も、変わるのはこの URL のホスト名部分だけです
-（`http://サーバーのIP:8000`）。今のうちからブラウザで使っておけば、そのまま移行できます。
-
-```
-データの置き場所 : /Users/you/.netvision
-DB               : /Users/you/.netvision/netvision.db
-画面             : http://127.0.0.1:8000
-```
+将来サーバーに置いて全員で使う場合は、`scripts.standalone` をサーバーで動かし、
+各自の端末から開く形に切り替えます（[INSTALL.md](INSTALL.md)）。
 
 | オプション | 意味 |
 |---|---|
@@ -50,7 +44,7 @@ DB               : /Users/you/.netvision/netvision.db
 | `--port 9000` | ポートを変える |
 | `--demo` | デモデータを入れて起動する（お試し用） |
 
-2回目以降は `cd backend && .venv/bin/python -m scripts.standalone` だけです。
+2回目以降は `cd backend && .venv/bin/python -m scripts.launcher` だけです。
 
 ### バックアップ
 

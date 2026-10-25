@@ -236,3 +236,30 @@ def test_ipv6_routes_are_read() -> None:
     assert routes["10.1.1.0/24"] == "123.45.67.1"
     assert routes["::/0"] == "2001:db8::1234:5678"
     assert routes["2001:db8:0:1111::/64"] == "fe80::1111"
+
+
+def test_vlan_addresses_follow_the_command_reference() -> None:
+    """VLAN の住所は、`vlan` を省いた形と VLAN の番号で書いた形でも読む。
+
+    出典: ExtremeXOS Command Reference Guide 32.4 の configure vlan ipaddress
+    （`configure [{vlan} vlan_name | vlan vlan_id] ipaddress [ipaddress {netmask} |
+    {ipNetmask} ...]`。
+    作例は `configure vlan accounting ipaddress 10.12.123.1/24` と
+    `configure vlan accounting ipaddress 10.12.123.1 255.255.255.0` が同じ意味）。
+    """
+    parsed = configparse.parse(
+        'configure snmp sysName "exos-sw1"\n'
+        'create vlan "accounting" tag 30\n'
+        'create vlan "sales" tag 40\n'
+        "create vlan 50\n"
+        "configure vlan accounting ipaddress 10.12.123.1/24\n"
+        "configure sales ipaddress 10.12.124.1 255.255.255.0\n"
+        "configure vlan 50 ipaddress 10.12.125.1/31\n",
+        Vendor.EXOS,
+    )
+    addresses = {i.name: i.ip_address for i in parsed.interfaces if i.ip_address}
+    assert addresses == {
+        "Vlan30": "10.12.123.1/24",
+        "Vlan40": "10.12.124.1/24",
+        "Vlan50": "10.12.125.1/31",
+    }

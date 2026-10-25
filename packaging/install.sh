@@ -21,12 +21,11 @@ python3 -m venv "$HERE/.venv"
 
 echo "==> 同梱の wheel から入れます（ネット未使用）"
 # ビルド済みの wheel を入れるだけなので、閉域側でビルドは走らない
-"$HERE/.venv/bin/pip" install --quiet --no-index --find-links "$HERE/wheels" netvision-backend
+"$HERE/.venv/bin/pip" install --quiet --no-index --find-links "$HERE/wheels" "netvision-backend[desktop]"
 
 echo
 echo "導入できました。"
-echo "  起動      : ./start.sh"
-echo "  画面      : http://127.0.0.1:8000"
+echo "  起動      : ./start.sh（アプリのウィンドウが開きます）"
 echo "  データ    : \$HOME/.netvision"
 echo
-echo "常時起動させる場合は netvision.service を参考にしてください。"
+echo "常時起動させる（サーバーとして置く）場合は netvision.service を参考にしてください。"

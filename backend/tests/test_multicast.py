@@ -561,3 +561,31 @@ def test_cisco_snooping_vlan_lines_follow_the_catalyst_command_reference():
         20: (False, False),
         40: (True, True),
     }
+
+
+def test_arista_static_rp_follows_the_eos_user_manual():
+    """見張り。Arista の静的な RP を、EOS User Manual の作例の形で読む。
+
+    出典: Arista EOS User Manual「Protocol Independent Multicast」（Router-PIM Sparse-mode IPv4 の
+    `rp address 10.21.18.23 238.1.12.0/24` と `rp address 10.17.255.83 override`、
+    `router multicast` の
+    `ipv4` の `routing`）。
+    """
+    text = """! device: dc-01
+router multicast
+   ipv4
+      routing
+router pim sparse-mode
+   ipv4
+      rp address 10.21.18.23 238.1.12.0/24
+      rp address 10.17.255.83 override
+interface Vlan10
+   ip address 10.0.10.1/24
+   pim ipv4 sparse-mode
+"""
+    multicast = configparse.parse(text).multicast
+    assert [(rp.address, rp.scope) for rp in multicast.rps] == [
+        ("10.21.18.23", "238.1.12.0/24"),
+        ("10.17.255.83", None),
+    ]
+    assert [item.name for item in multicast.pim_interfaces] == ["Vlan10"]

@@ -2024,3 +2024,39 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `Multiple Countries :` の後ろの並び（`IN,US`）を国として持つ。1か国の形（`US - United States`）は今までどおり先頭の語。
   試験は `test_configparse_aireos.py` の `test_sysinfo_with_several_countries_keeps_the_country_codes`。冒頭の「show sysinfo の列は未確認」を外した。
 - 見なかったこと: 国を並べたときに、AP ごとの国（`show ap summary` の Country）と食い違う点検。今は国を1つの文字列で持つだけ。
+
+## 見張り: アライドテレシスの vlan database の `vlan 10,20,30,40-49` を読めている（2026-10-24 JST）
+
+- 確かめたこと: `configparse/allied.py` は、`<vid-range>` にカンマが使えるか分からないまま、`-` と `,` の両方を読んでいた（未確認）。
+  直す所は無かった。
+- 確かめた資料: アライドテレシス「CentreCOM x540Lシリーズ コマンドリファレンス 5.5.6」の vlan（`vlan VLANRANGE [name VLANNAME] ...`。
+  VLANRANGE は「ハイフン、カンマを使った複数指定も可能」、使用例 `vlan 10,20,30,40-49`）。
+- 試験: `test_configparse_allied.py` の `test_vlan_database_ranges_with_commas_follow_the_command_reference`。冒頭の「未確認」を外した。
+
+## 見張り: Arista の静的な RP を EOS User Manual の作例の形で読めている（`ip rp address` は公式に無い形）（2026-10-24 JST）
+
+- 確かめたこと: `configparse/multicast.py` は、Arista の `router pim sparse` の中の `ip rp address` を「既存の試験の形（未確認）」として受けていた。
+  公式の作例（`rp address`）でも読めるかを見た。直す所は無かった。
+- 確かめた資料: Arista EOS User Manual「Protocol Independent Multicast」（Router-PIM Sparse-mode IPv4 の `rp address 10.21.18.23 238.1.12.0/24`、
+  `rp address 10.17.255.83 override`、`router multicast` の `ipv4` の `routing`）。この章には `ip rp address` も `ip pim rp-address` も出てこない。
+- 試験: `test_multicast.py` の `test_arista_static_rp_follows_the_eos_user_manual`。`ip rp address` は古い試験の形として受けたまま残し、
+  コメントを「公式に無い形」に書き換えた（読むのをやめると、今その形で貼っている人の RP が消えるため。AI の判断）。
+
+## 見張り: H3C の `XGE`・`GE` を Config の正式名と同じ口として読めている（2026-10-25 JST）
+
+- 確かめたこと: `configparse/ifname.py` の `xge` と `ge` の略記は「既存の試験の形（未確認）」だった。
+  H3C の出力に出る略記が、Config 側の `Ten-GigabitEthernet1/0/1`・`GigabitEthernet1/0/2` と同じ口になるかを見た。直す所は無かった。
+- 確かめた資料: H3C「03-Interface Command Reference」02-Ethernet interface commands の display interface
+  （`display interface ten-gigabitethernet 1/0/1 brief description` の出力が `XGE1/0/1`、`display interface brief` の出力が `GE1/0/2`）。
+- 試験: `test_ifname.py` の `test_h3c_ten_gig_and_gig_abbreviations_follow_the_command_reference`。
+  `xge` の行を外すと落ちることを確かめた。
+
+## EXOS の VLAN の住所を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> ipaddress` だけを読んでいた。公式の書き方では `vlan` を省けるので、
+  `configure sales ipaddress 10.12.124.1 255.255.255.0` と書いた VLAN の住所が台帳に出なかった。
+- 確かめた資料: ExtremeXOS Command Reference Guide 32.4 の configure vlan ipaddress
+  （`configure [{vlan} vlan_name | vlan vlan_id] ipaddress ...`、作例の `/24` と `255.255.255.0` は同じ意味）。
+- 直したこと: `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（`configure ports ...` などを住所と取り違えない）。
+- 試験: `test_configparse_exos.py` の `test_vlan_addresses_follow_the_command_reference`。直す前のコードで `Vlan40` が欠けて落ちた。
+- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（あとの周で当たる）。
