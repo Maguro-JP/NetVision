@@ -175,3 +175,14 @@
 - 理由: ユーザーの指示（LLM のディレクトリとかも整えて）。数 GB のモデルを自作のアプリどうしで共有する。
 - 採らなかった案: 設定やデータも `C:\ProgramData\NetVision` へ移す（今の利用者の DB の道が変わるので別の作業にする）。
 - 触る場所: `backend/app/services/llm_inproc.py`、`docs/LOCAL_LLM.md`
+
+## Windows は Setup.exe でも配る（2026-10-26 JST）
+
+- 決めたこと: CharacterDesigner と同じく、NSIS の makensis で Linux の上で Setup.exe を組む（`packaging/make-setup-windows.sh`、
+  `packaging/windows/installer.nsi`）。入れる場所は `%LOCALAPPDATA%\Programs\NetVision`（管理者権限なし）で、
+  スタートメニューとデスクトップのショートカットは `pythonw.exe -m scripts.launcher` を指す。ZIP（インストール不要）も残す。
+- 理由: ユーザーの指示（CharacterDesigner みたいにアプリケーションウィンドウで動かしてね）。ZIP を展開して .bat を探すより、
+  スタートメニューから開く方がアプリとして当たり前の入口になる。
+- 採らなかった案: ZIP をやめて Setup.exe だけにする（インストーラを使えない職場がある）。ショートカットを .bat に向ける
+  （黒い画面が一瞬出る）。アンインストールでデータも消す（消すと戻せない。データと AI のモデルは入れた場所の外にある）。
+- 触る場所: `packaging/make-setup-windows.sh`、`packaging/windows/installer.nsi`、`.github/workflows/bundle.yml`

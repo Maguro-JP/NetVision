@@ -36,7 +36,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - run: ./packaging/make-bundle-windows.sh
+      # Setup.exe は Linux の上で NSIS が組む（Windows のランナーは使わない）
+      - name: NSIS
+        run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+
+      # ZIP（インストール不要）と Setup.exe（スタートメニューとデスクトップから開く）を両方作る
+      - run: ./packaging/make-setup-windows.sh
 
       - id: find
         run: echo "zip=$(ls dist/NetVision-*-windows.zip)" >> "$GITHUB_OUTPUT"
@@ -70,7 +75,7 @@ jobs:
         if: github.event_name == 'release'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.find.outputs.zip }}" --clobber
+        run: gh release upload "${{ github.event.release.tag_name }}" "${{ steps.find.outputs.zip }}" dist/NetVision-Setup.exe --clobber
 
       # 手で走らせたときと、毎月1日の受け取り口。ZIP は 1 個で約 20 MB あり、
       # Actions のストレージ枠（無料は 0.5 GB）を直に削る。手で走らせたときは
@@ -85,5 +90,7 @@ jobs:
         if: github.event_name != 'release'
         with:
           name: NetVision-windows
-          path: dist/NetVision-*-windows.zip
+          path: |
+            dist/NetVision-*-windows.zip
+            dist/NetVision-Setup.exe
           retention-days: ${{ github.event_name == 'schedule' && 35 || 3 }}
