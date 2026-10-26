@@ -68,7 +68,9 @@ jobs:
         run: |
           $ErrorActionPreference = "Stop"
           $failed = @()
-          function Note($text) { Write-Host "::notice title=smoke::$text" }
+          # 注記は1つの手順に種類ごと 10 個までなので、確かめたことは最後に1つの注記にまとめる
+          $notes = New-Object System.Collections.Generic.List[string]
+          function Note($text) { Write-Host $text; $script:notes.Add($text) }
           function Fail($text) { Write-Host "::error title=smoke::$text"; $script:failed += $text }
 
           Start-Process -FilePath .\NetVision-Setup.exe -ArgumentList "/S" -Wait
@@ -115,11 +117,12 @@ jobs:
               if (-not $window) { Start-Sleep 1 }
             }
             if ($window) { Note "${label}: ウィンドウが開いた（$($window.ProcessName) pid $($window.Id)）" } else { Fail "${label}: NetVision のウィンドウが見つからない" }
-            $views = @(Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue)
+            # 画面が描かれるのを待ってから、WebView2 とブラウザを見る（窓が出た直後は WebView2 がまだ起きていない）
+            Start-Sleep 8
+            $views = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'")
             if ($views.Count -gt 0) { Note "${label}: WebView2 が $($views.Count) 個動いている" } else { Fail "${label}: WebView2 が動いていない" }
             $browsers = @(Get-Process -Name msedge, chrome, firefox -ErrorAction SilentlyContinue)
             if ($browsers.Count -eq 0) { Note "${label}: ブラウザは開いていない" } else { Fail "${label}: ブラウザが開いた（$($browsers.ProcessName -join ', ')）" }
-            Start-Sleep 8
             Shot $label
 
             if ($window) {
@@ -142,6 +145,7 @@ jobs:
             Write-Host "::warning title=launcher.log::$tail"
           } else { Fail "launcher.log が無い: $log" }
 
+          Write-Host "::notice title=smoke::$($notes -join '%0A')"
           if ($failed.Count -gt 0) { exit 1 }
 
       - name: 画面の写しをブランチに置く
