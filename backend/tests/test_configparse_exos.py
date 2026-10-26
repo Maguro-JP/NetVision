@@ -263,3 +263,48 @@ def test_vlan_addresses_follow_the_command_reference() -> None:
         "Vlan40": "10.12.124.1/24",
         "Vlan50": "10.12.125.1/31",
     }
+
+
+def test_ports_are_added_to_a_vlan_written_without_the_vlan_keyword() -> None:
+    """名前で書いた VLAN は `vlan` を省ける（`configure USERS add ports 1-2 untagged`）。
+
+    出典: ExtremeXOS Command Reference Guide 22.1 / 31.7 の configure vlan add ports
+    （`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`。`{vlan}` は省ける語）。
+    """
+    parsed = configparse.parse(
+        'configure snmp sysName "exos-sw1"\n'
+        'create vlan "USERS" tag 20\n'
+        'create vlan "VOICE" tag 30\n'
+        "configure USERS add ports 1-2 untagged\n"
+        "configure VOICE add ports 2 tagged\n",
+        Vendor.EXOS,
+    )
+    ports = {i.name: i for i in parsed.interfaces}
+    assert ports["Port1"].vlan == 20
+    assert ports["Port2"].trunk_vlans == [30]
+    assert ports["Port2"].native_vlan == 20
+
+
+def test_create_vlan_and_sysname_follow_the_command_reference() -> None:
+    """VLAN の作成と機器名を、公式の作例の書き方で読む。
+
+    出典: ExtremeXOS Command Reference Guide 32.3 の create vlan
+    （`create vlan [vlan_name {tag tag} | vlan_list] {description vlan-description} {vr name}`、
+    作例は `create vlan accounting description "Accounting Dept"`）と、31.5 の
+    configure snmp sysName（`configure snmp sysname sysName`、作例は
+    `configure snmp sysname engineeringlab`。小文字で引用符なし）。
+    番号を後から付ける形は、User Guide 32.6.1 の VLAN Configuration Overview
+    （`configure {vlan} vlan_name tag tag`。`vlan` は省ける）。
+    """
+    parsed = configparse.parse(
+        "configure snmp sysname engineeringlab\n"
+        'create vlan accounting description "Accounting Dept"\n'
+        'create vlan "USERS" tag 20 description "Users" vr VR-Default\n'
+        "create vlan 30-31\n"
+        "configure accounting tag 40\n",
+        Vendor.EXOS,
+    )
+    assert parsed.hostname == "engineeringlab"
+    assert parsed.vlans[20] == "USERS"
+    assert {30, 31} <= set(parsed.vlans)
+    assert parsed.vlans[40] == "accounting"

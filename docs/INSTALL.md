@@ -167,6 +167,30 @@ sudo systemctl enable --now netvision
 
 アンインストールはフォルダを削除するだけです。
 
+### ②' Setup.exe で入れる（Windows、スタートメニューから開きたい場合）
+
+同じ中身を Setup.exe に包んだものもあります。入れるとスタートメニューとデスクトップに
+NetVision が並び、そこからアプリのウィンドウで開きます。ブラウザは使いません。
+
+```bash
+sudo apt install nsis                  # 組む側（Linux）に1回だけ
+./packaging/make-setup-windows.sh      # ネット側で実行
+# → dist/NetVision-Setup.exe と、同じ中身の dist/NetVision-YYYYMMDD-windows.zip
+```
+
+GitHub の `Windows bundle` の workflow でも、ZIP と一緒に Setup.exe を作ります。
+
+| 項目 | 内容 |
+|---|---|
+| 入れる場所 | `%LOCALAPPDATA%\Programs\NetVision`（利用者ごと。管理者権限は不要） |
+| レジストリ | 「アプリと機能」に出すための `HKCU` の1か所だけ |
+| ショートカット | スタートメニューとデスクトップ（`pythonw.exe -m scripts.launcher` を指す） |
+| データ | `%USERPROFILE%\.netvision`（入れた場所の外） |
+| AI のモデル | `C:\LLM\gguf`（入れた場所の外。[LOCAL_LLM.md](LOCAL_LLM.md)） |
+
+消すときは「設定 → アプリ → インストールされているアプリ」から NetVision をアンインストールします。
+消えるのは入れたプログラムだけで、データと AI のモデルは残ります。
+
 ### ③ 実行ファイル（.bat / .exe）の実行自体が禁止
 
 AppLocker や WDAC で未署名の実行ファイルが止められている場合、

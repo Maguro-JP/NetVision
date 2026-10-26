@@ -187,3 +187,48 @@ def test_the_bundle_carries_every_guide():
         assert "docs/*.md" in text or "docs\\*.md" in text, (
             f"{script.name} が手引きを個別に並べている"
         )
+
+
+SETUP_SCRIPT = REPO / "packaging" / "make-setup-windows.sh"
+INSTALLER = REPO / "packaging" / "windows" / "installer.nsi"
+
+
+def test_the_setup_installs_per_user_and_opens_the_app_window():
+    """Setup.exe は利用者ごとの場所に入れ、ショートカットからアプリのウィンドウで開く。
+
+    管理者の権限を求めると、職場の端末では入れられない。ショートカットが URL やバッチを
+    指すと、ブラウザや黒い画面が開いてしまう。
+    """
+    nsi = INSTALLER.read_text(encoding="utf-8")
+    assert "RequestExecutionLevel user" in nsi
+    assert r'InstallDir "$LOCALAPPDATA\Programs\NetVision"' in nsi
+    shortcuts = [line for line in nsi.splitlines() if line.strip().startswith("CreateShortcut")]
+    app_links = [line for line in shortcuts if "NetVision.lnk" in line]
+    assert len(app_links) == 2, "スタートメニューとデスクトップの両方に置く"
+    for line in app_links:
+        assert r"python\pythonw.exe" in line and "-m scripts.launcher" in line
+    assert "http://" not in nsi and "127.0.0.1" not in nsi
+
+
+def test_uninstalling_keeps_the_data_and_the_models():
+    """消すのは入れたものだけ。データ（.netvision）とモデル（C:\\LLM）は入れた場所の外にあり、触らない。"""
+    nsi = INSTALLER.read_text(encoding="utf-8")
+    uninstall = nsi.split('Section "Uninstall"', 1)[1]
+    # 消す命令の行だけを見る（説明のコメントと、残したことを知らせる文は除く）
+    removals = [
+        line.strip()
+        for line in uninstall.splitlines()
+        if line.strip().startswith(("RMDir", "Delete"))
+    ]
+    assert 'RMDir /r "$INSTDIR"' in removals
+    for line in removals:
+        assert ".netvision" not in line and "LLM" not in line and "$PROFILE" not in line, line
+
+
+def test_the_setup_build_checks_for_missing_parts_before_packing():
+    """欠けたまま組むと、入れた先で起動して初めて分かる。組む前に止める。"""
+    script = SETUP_SCRIPT.read_text(encoding="utf-8")
+    parts = ("python/pythonw.exe", "backend/scripts/launcher.py", "frontend/dist/index.html")
+    for part in (*parts, "lib/webview"):
+        assert part in script, part
+    assert "make-bundle-windows.sh" in script, "ZIP と Setup.exe の中身をそろえる"

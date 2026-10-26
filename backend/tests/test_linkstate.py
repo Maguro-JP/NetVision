@@ -729,3 +729,36 @@ def test_arista_errdisabled_is_read_as_err_disabled():
     states = _states(configparse.parse(text))
     assert states["Ethernet1"] == "err-disabled"
     assert states["Ethernet2"] == "err-disabled"
+
+
+NECQX_BRIEF_BOTH_MODES = """
+display interface brief
+Brief information on interfaces in route mode:
+Link: ADM - administratively down; Stby - standby
+Protocol: (s) - spoofing
+Interface            Link Protocol Primary IP      Description
+GE1/0/1              DOWN DOWN     --
+Loop0                UP   UP(s)    2.2.2.9
+Brief information on interfaces in bridge mode:
+Link: ADM - administratively down; Stby - standby
+Speed: (a) - auto
+Duplex: (a)/A - auto; H - half; F - full
+Type: A - access; T - trunk; H - hybrid
+Interface            Link Speed   Duplex Type PVID Description
+GE1/0/8              UP   auto    F(a)   A    1    aaaaaaaaaaaaaaaaaaaaaaaaaaa
+"""
+
+
+def test_necqx_brief_reads_both_the_route_and_the_bridge_tables():
+    """`display interface brief` は route mode と bridge mode の2つの表を続けて出す。
+
+    出典: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の
+    4 章 Ethernet インタフェースの display interface（作例の `display interface brief` は
+    route mode の表が Interface / Link / Protocol / Primary IP / Description、
+    bridge mode の表が Interface / Link / Speed / Duplex / Type / PVID / Description。
+    表 4-4 の Link は UP / DOWN / ADM / Stby）。
+    """
+    text = (FIXTURES / "qx-sw-01.txt").read_text() + NECQX_BRIEF_BOTH_MODES
+    states = _states(configparse.parse(text))
+    assert states["GigabitEthernet1/0/1"] == "down"
+    assert states["GigabitEthernet1/0/8"] == "up"

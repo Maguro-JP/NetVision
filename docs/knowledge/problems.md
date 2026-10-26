@@ -2059,4 +2059,48 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （`configure [{vlan} vlan_name | vlan vlan_id] ipaddress ...`、作例の `/24` と `255.255.255.0` は同じ意味）。
 - 直したこと: `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う（`configure ports ...` などを住所と取り違えない）。
 - 試験: `test_configparse_exos.py` の `test_vlan_addresses_follow_the_command_reference`。直す前のコードで `Vlan40` が欠けて落ちた。
-- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（あとの周で当たる）。
+- 残り: `add ports` も公式では `vlan` を省けるが、まだ受けていない（2026-10-25 に直した。下の項）。
+
+## EXOS の `add ports` を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> add ports ...` だけを読んでいた。`configure USERS add ports 1-2 untagged` と書いた口が台帳に出なかった。
+- 確かめた資料: ExtremeXOS Command Reference Guide 22.1 / 31.7 の configure vlan add ports（`configure [{vlan} vlan_name | vlan vlan_list] add ports ...`）。
+- 直したこと: VLAN の住所と同じく `vlan` を省ける形にした。省いた形の名前は、作った VLAN の名前に当たったときだけ使う。
+- 試験: `test_configparse_exos.py` の `test_ports_are_added_to_a_vlan_written_without_the_vlan_keyword`。直す前のコードで落ちた。
+
+## EXOS の `configure <名前> tag` を、`vlan` を省いた公式の書き方でも読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/exos.py` は `configure vlan <名前> tag <番号>` だけを読んでいた。`vlan` を省いて番号を付けた VLAN は番号が付かず、口が繋がらなかった。
+- 確かめた資料: ExtremeXOS User Guide 32.6.1 の VLAN Configuration Overview（`configure {vlan} vlan_name tag tag`）。
+  あわせて Command Reference Guide 32.3 の create vlan（`create vlan [vlan_name {tag tag} | vlan_list] {description ...} {vr name}`）と、
+  31.5 の configure snmp sysName（作例は `configure snmp sysname engineeringlab`）も見た。この2つは今の読み方で読めていた。
+- 直したこと: `vlan` を省いた行は、create vlan で作った名前に当たったときだけ読む。
+- 試験: `test_configparse_exos.py` の `test_create_vlan_and_sysname_follow_the_command_reference`。直す前のコードで `vlans[40]` が無く落ちた。
+- 残り: exos.py の「未確認」は、保存した設定の先頭のコメント（版数と機種）だけになった。公式の資料には届いていない。
+
+## NEC QX の向きを省いた `vpn-target` を both として読む（2026-10-25 JST）
+
+- 起きたこと: `configparse/routetarget.py` は `vpn-target A:B` の後ろに向き（import-extcommunity / export-extcommunity / both）がある行だけを読んでいた。
+  向きを省いた `vpn-target 1:1` が読まれず、その VRF は import も export も無いように見えていた。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版（qx-s67_s75_cmd_2_2_ns.pdf）の MCE 1.1.11 vpn-target。
+  「both パラメータ、export-extcommunity パラメータ、import-extcommunity パラメータが指定されない場合、デフォルトで both パラメータが指定されます」。
+  同じマニュアルの作例に `vpn-target 1:1` がある。
+- 直したこと: 向きは省けるようにし、省いたら both にした。`auto`（EVPN の自動の値）は比べられないので持たない。
+- 試験: `test_routetarget.py` の `test_necqx_targets_follow_the_command_manual`。直す前のコードで import の `1:1` が欠けて落ちた。
+- 分かったこと: NEC の QX のマニュアルは https://www.support.nec.co.jp/ の製品マニュアルの頁から PDF で取れる。テキストは backend の pypdf で抜ける。
+
+## 見張り: NEC QX の PIM・静的な RP・IGMP スヌーピングをコマンドマニュアルの作例の形で読めている（2026-10-26 JST）
+
+- 確かめたこと: `configparse/multicast.py` の NEC QX は「既存の試験の形（未確認）」だった。公式の作例の形で読めるかを見た。直す所は無かった。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の 3.1.13 multicast routing、5.1.33 pim sm、
+  5.1.49 static-rp (PIM view)（作例 `static-rp 11.110.0.6 2001 preferred`）、IGMP snooping の `igmp-snooping enable` と `igmp-snooping querier`（VLAN ビュー）。
+- 試験: `test_multicast.py` の `test_necqx_follows_the_command_manual`。querier の読み方を `igmp-snooping querier enable` だけに変えると落ちることを確かめた。
+
+## NEC QX の `display interface brief` の route mode の表を読む（2026-10-26 JST）
+
+- 起きたこと: `configparse/linkstate.py` は NEC QX の `display interface brief` のうち、bridge mode の表（Interface / Link / Speed / Duplex / Type / PVID）だけを読んでいた。
+  同じ出力の先頭に出る route mode の表（Interface / Link / Protocol / Primary IP）の口は、線の上下が付かなかった。
+- 確かめた資料: NEC「UNIVERGE QX-S6700X/QX-S7500シリーズ コマンドマニュアル」2.2 版の 4 章 Ethernet インタフェースの display interface
+  （作例の `display interface brief` と、表 4-4 の Link は UP / DOWN / ADM / Stby）。
+- 直したこと: route mode の表の見出しも同じ読み方（2 列目が Link）で読む。
+- 試験: `test_linkstate.py` の `test_necqx_brief_reads_both_the_route_and_the_bridge_tables`。直す前のコードで route mode の口が欠けて落ちた。
