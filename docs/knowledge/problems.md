@@ -2136,3 +2136,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `network dhcp interface <口> server ip-pool` を DHCP サーバー、`relay ip ... server <IP>` を DHCP リレー（転送先）として拾う。前の `template <名前> config` は有っても無くてもよい。
 - 試験: `test_features.py` の `test_panos_dhcp_server_and_relay_are_found`。直す前のコードで落ちた。
 - 残り: `server mode disabled` は別の行に出るので、ip-pool があって mode が disabled の口も DHCP サーバーとして数える（行ごとに読む作りのため）。
+
+## 見張り: AOS-S のスタックのメンバー番号付きの口（`1/A3`）を名前のまま読めている（2026-10-27 JST）
+
+- 確かめたこと: `configparse/arubaos.py` のスタックの口の書き方は「作例の形に合わせた（未確認）」だった。
+- 確かめた資料: HPE Aruba Networking「ArubaOS-Switch 16.11 Advanced Traffic Management Guide」の Configuring interswitch link (ISL) ports
+  （PVLAN member ports）の作例 `vlan 300 tagged 1/A3`（arubanetworking.hpe.com/techdocs/AOS-S/16.11/ATMG）。
+- 試験: `test_configparse_arubaos.py` の `test_a_stack_members_module_port_keeps_its_name`。並びの読み方を壊すと落ちることを確かめた。
+- 届かなかったもの: 範囲の書き方（`1/1-1/48`）。公式の作例に見当たらず、コミュニティの設定例（HPE Community、Airheads）では使われている。
+  docstring に「資料に届かない」として資料の名前を書いた。

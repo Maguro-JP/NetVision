@@ -185,3 +185,23 @@ def test_vlans_written_under_a_port_are_read() -> None:
     access = _stacked("1/5")
     assert access.mode == "access"
     assert access.vlan == 40
+
+
+def test_a_stack_members_module_port_keeps_its_name() -> None:
+    """スタックのメンバー番号付きの口（`1/A3`）は、その名前のまま VLAN に載る。
+
+    出典: HPE Aruba Networking「ArubaOS-Switch 16.11 Advanced Traffic Management Guide」の
+    Configuring interswitch link (ISL) ports (PVLAN member ports)（`vlan 300 tagged 1/A3`）。
+    範囲の書き方（`1/1-1/48`）はこの作例に無いので、ここでは押さえない。
+    """
+    parsed = configparse.parse(
+        "; JL322A Configuration Editor; Created on release #WC.16.11.0001\n"
+        'hostname "sw-stack-01"\n'
+        "vlan 300\n"
+        '   name "PVLAN"\n'
+        "   tagged 1/A3\n"
+        "   exit\n",
+        Vendor.ARUBA_OS,
+    )
+    port = next(i for i in parsed.interfaces if i.name == "1/A3")
+    assert port.trunk_vlans == [300]

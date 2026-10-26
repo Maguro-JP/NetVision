@@ -17,7 +17,10 @@ VLAN の下に口を並べる。
 Cisco IOS」の作例（`vlan 10` の下の `untagged a1`・`tagged a1`、
 `trunk a1-a2 trk1 lacp`）。口の側に書く `tagged vlan 20-22,25` の形は
 HPE Aruba の Airheads コミュニティの作例で確かめた。どちらも表番号は未確認。
-スタックの `1/1-1/48` の範囲の書き方は作例の形に合わせた（未確認）。
+スタックのメンバー番号付きの口の名前（`1/A3`）は ArubaOS-Switch 16.11 Advanced Traffic
+Management Guide の Configuring interswitch link (ISL) ports の作例で確かめた。
+スタックの `1/1-1/48` の範囲の書き方は作例の形に合わせた（未確認。資料に届かない:
+ArubaOS-Switch 16.10 / 16.11 Advanced Traffic Management Guide の作例に範囲の形が無い）。
 """
 
 from __future__ import annotations

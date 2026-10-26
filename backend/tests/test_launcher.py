@@ -108,6 +108,8 @@ def test_the_window_opens_on_the_server_and_closing_it_stops_the_server(monkeypa
     dist.mkdir()
     (dist / "index.html").write_text("<html></html>", encoding="utf-8")
     monkeypatch.setenv("NETVISION_SERVE_FRONTEND", str(dist))
+    # 画面をビルドする前（CI の backend の試験など）でも、組んだ画面があるものとして動かす
+    monkeypatch.setattr(standalone, "frontend_dist", lambda: dist)
 
     box = []
     original = launcher.Runner
@@ -141,6 +143,8 @@ def test_without_the_window_part_it_says_so_instead_of_opening_a_browser(monkeyp
     dist.mkdir()
     (dist / "index.html").write_text("<html></html>", encoding="utf-8")
     monkeypatch.setenv("NETVISION_SERVE_FRONTEND", str(dist))
+    # 画面をビルドする前（CI の backend の試験など）でも、組んだ画面があるものとして動かす
+    monkeypatch.setattr(standalone, "frontend_dist", lambda: dist)
     monkeypatch.setitem(__import__("sys").modules, "webview", None)
     reported = []
     monkeypatch.setattr(launcher, "_report", reported.append)
