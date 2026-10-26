@@ -237,7 +237,9 @@ def _read_arista_brief(rows: list[str], parsed: ParsedConfig) -> None:
 
     出典: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
     （Interface / IP Address / Status / Protocol / MTU）。Status の値は出力例に up しか無く、
-    up / down 以外の言葉は未確認（_read_brief と同じく、上下を決めずに飛ばす）。
+    up / down 以外の言葉は未確認（_read_brief と同じく、上下を決めずに飛ばす）。資料に届かない:
+    EOS 4.36.2F User Manual の IPv4 の章と Arista ATD Lab Guides（Layer 3 Leaf-Spine）の出力例は、
+    どれも up だけ（2026-10-27 JST に見た）。
     """
     trimmed = []
     for row in rows:

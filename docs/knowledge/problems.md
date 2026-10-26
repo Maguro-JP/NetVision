@@ -2145,3 +2145,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 試験: `test_configparse_arubaos.py` の `test_a_stack_members_module_port_keeps_its_name`。並びの読み方を壊すと落ちることを確かめた。
 - 届かなかったもの: 範囲の書き方（`1/1-1/48`）。公式の作例に見当たらず、コミュニティの設定例（HPE Community、Airheads）では使われている。
   docstring に「資料に届かない」として資料の名前を書いた。
+
+## Arista の `show ip interface brief` の up 以外の言葉は公式の出力例に無い（2026-10-27 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の `_read_arista_brief` は、Status の up / down 以外の言葉を「未確認」としていた。
+- 見た資料: Arista「EOS 4.36.2F User Manual」の IPv4 の章（arista.com/en/um-eos/eos-ipv4。この環境からは Client Challenge で本文が取れない）と、
+  Arista ATD Lab Guides の Layer 3 Leaf-Spine（labguides-dev.testdrive.arista.com）の出力例。どれも Status は up だけだった。
+- 結論: 直す所は無い。docstring に「資料に届かない」として見た資料を書いた（成果物 2 の完成条件）。
+  `show interfaces` の段落（`line protocol is lowerlayerdown (notconnect)`）は Arista Community の記事にあるが、公式の資料ではないので根拠にしない。
