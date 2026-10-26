@@ -2117,3 +2117,13 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: alembic.ini を ASCII だけにした（コメントを英語にし、ASCII だけにする理由も書いた）。
 - 試験: `test_alembic_ini_ascii.py`（ASCII だけか、OS の文字コードが ASCII でも設定が読めるか）。直す前の alembic.ini で 2 件とも落ちた。
 - 次から: 手元の Linux で通っても、Windows の起動は Windows の実機試験で見る。ユーザーに確かめてもらう前に自分で流す。
+
+## NEC IX の `show interfaces` の段落（line protocol の無い形）を読む（2026-10-26 JST）
+
+- 起きたこと: `configparse/linkstate.py` は NEC IX の `show interfaces` を Cisco と同じ `... is up, line protocol is up` の形で読んでいた。
+  NEC IX の実際の形は `Interface GigaEthernet2.0 is down`（line protocol が無い）なので、線の上下が付かなかった。
+- 確かめた資料: NEC プラットフォームズ「UNIVERGE IX-R/IX-V シリーズ 機能説明書」2.3 物理、リンクレイヤの設定のリスト 2.3.5 表示例
+  （https://support.necplatforms.co.jp/ix-nrv/manual/fd/02_router/04_layer1-2.html）。この環境の curl は 502 で届かず、Exa の取得で読めた。
+- 直したこと: `Interface <名前> is up|down` の段落を読む。up / down 以外の言葉は資料に無いので読まない。
+- 試験: `test_linkstate.py` の `test_necix_show_interfaces_follows_the_function_guide`。直す前のコードで落ちた。
+- 残り: NEC IX の `show ip interface brief` は、IX-R/IX-V のコマンドリファレンス 1.3 の IPv4 編に作例が無く、未確認のまま。
