@@ -129,7 +129,11 @@ jobs:
 
           $log = Join-Path $env:USERPROFILE ".netvision\launcher.log"
           # 生のログは API で取れないので、注記にして読めるようにする
-          if (Test-Path $log) { Get-Content $log -Tail 60 | Where-Object { $_.Trim() } | ForEach-Object { Write-Host "::warning title=launcher.log::$_" } } else { Fail "launcher.log が無い: $log" }
+          # 注記は1つの手順に 10 個までなので、末尾をまとめて1つにする（改行は %0A）
+          if (Test-Path $log) {
+            $tail = (Get-Content $log -Tail 40 | Where-Object { $_.Trim() }) -join "%0A"
+            Write-Host "::warning title=launcher.log::$tail"
+          } else { Fail "launcher.log が無い: $log" }
 
           if ($failed.Count -gt 0) { exit 1 }
 
