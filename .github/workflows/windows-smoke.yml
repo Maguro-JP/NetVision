@@ -1,0 +1,145 @@
+# Windows の実機で Setup.exe を入れ、アプリのウィンドウが開いて閉じると止まることを確かめる。
+#
+# 手元（Linux）には Windows も画面も無いので、ここで初めて Windows の上で動かす。
+# 1. ubuntu で Setup.exe を組む（bundle.yml と同じ手順）
+# 2. windows で黙って入れ（/S）、スタートメニューのショートカットから起こす
+# 3. サーバーの応答、NetVision の見出しのウィンドウ、WebView2 の子の処理、画面の写しを見る
+# 4. ウィンドウを閉じ、起動役とサーバーが止まることを見る。NetVision.bat からも同じことを見る
+#
+# 結果は注記（::notice / ::error）に書く。注記は API の check-runs/<id>/annotations で読める。
+# 画面の写しは claude/windows-smoke-shots のブランチに置く（git で取れる）。
+name: Windows smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["claude/**"]
+    paths:
+      - "packaging/**"
+      - "backend/scripts/**"
+      - ".github/workflows/windows-smoke.yml"
+
+concurrency:
+  group: windows-smoke-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: NSIS
+        run: sudo apt-get update -q && sudo apt-get install -y -q nsis
+      - run: ./packaging/make-setup-windows.sh
+      - uses: actions/upload-artifact@v6
+        with:
+          name: setup
+          path: dist/NetVision-Setup.exe
+          retention-days: 1
+
+  smoke:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v6
+        with:
+          name: setup
+      - name: 入れて、起こして、閉じる
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = "Stop"
+          $failed = @()
+          function Note($text) { Write-Host "::notice title=smoke::$text" }
+          function Fail($text) { Write-Host "::error title=smoke::$text"; $script:failed += $text }
+
+          Start-Process -FilePath .\NetVision-Setup.exe -ArgumentList "/S" -Wait
+          $dir = Join-Path $env:LOCALAPPDATA "Programs\NetVision"
+          foreach ($f in "python\pythonw.exe", "backend\scripts\launcher.py", "frontend\dist\index.html", "Uninstall.exe", "NetVision.bat") {
+            if (Test-Path (Join-Path $dir $f)) { Note "入った: $f" } else { Fail "入っていない: $f" }
+          }
+
+          $shell = New-Object -ComObject WScript.Shell
+          $menu = Join-Path ([Environment]::GetFolderPath("Programs")) "NetVision\NetVision.lnk"
+          $desk = Join-Path ([Environment]::GetFolderPath("Desktop")) "NetVision.lnk"
+          foreach ($lnk in $menu, $desk) {
+            if (-not (Test-Path $lnk)) { Fail "ショートカットが無い: $lnk"; continue }
+            $s = $shell.CreateShortcut($lnk)
+            Note "ショートカット: $lnk -> $($s.TargetPath) $($s.Arguments)（作業フォルダ $($s.WorkingDirectory)）"
+          }
+
+          New-Item -ItemType Directory -Force shots | Out-Null
+          Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+
+          function Shot($name) {
+            $b = [System.Windows.Forms.Screen]::PrimaryScreen.Bounds
+            $bmp = New-Object System.Drawing.Bitmap $b.Width, $b.Height
+            $g = [System.Drawing.Graphics]::FromImage($bmp)
+            $g.CopyFromScreen($b.Location, [System.Drawing.Point]::Empty, $b.Size)
+            $bmp.Save("shots\$name.png", [System.Drawing.Imaging.ImageFormat]::Png)
+            Note "画面の写し: $name.png（$($b.Width)x$($b.Height)）"
+          }
+
+          function Healthy {
+            try { (Invoke-WebRequest -UseBasicParsing -TimeoutSec 2 http://127.0.0.1:8000/health).StatusCode -eq 200 } catch { $false }
+          }
+
+          function Check($label, [scriptblock]$start) {
+            & $start
+            $deadline = (Get-Date).AddSeconds(120)
+            while (-not (Healthy) -and (Get-Date) -lt $deadline) { Start-Sleep 1 }
+            if (Healthy) { Note "${label}: サーバーが応答した" } else { Fail "${label}: サーバーが 120 秒で応答しない" }
+
+            $window = $null
+            $deadline = (Get-Date).AddSeconds(60)
+            while (-not $window -and (Get-Date) -lt $deadline) {
+              $window = Get-Process -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle -eq "NetVision" } | Select-Object -First 1
+              if (-not $window) { Start-Sleep 1 }
+            }
+            if ($window) { Note "${label}: ウィンドウが開いた（$($window.ProcessName) pid $($window.Id)）" } else { Fail "${label}: NetVision のウィンドウが見つからない" }
+            $views = @(Get-Process -Name msedgewebview2 -ErrorAction SilentlyContinue)
+            if ($views.Count -gt 0) { Note "${label}: WebView2 が $($views.Count) 個動いている" } else { Fail "${label}: WebView2 が動いていない" }
+            $browsers = @(Get-Process -Name msedge, chrome, firefox -ErrorAction SilentlyContinue)
+            if ($browsers.Count -eq 0) { Note "${label}: ブラウザは開いていない" } else { Fail "${label}: ブラウザが開いた（$($browsers.ProcessName -join ', ')）" }
+            Start-Sleep 8
+            Shot $label
+
+            if ($window) {
+              $null = $window.CloseMainWindow()
+              if ($window.WaitForExit(30000)) { Note "${label}: ウィンドウを閉じたら起動役が終わった" } else { Fail "${label}: ウィンドウを閉じても起動役が 30 秒で終わらない"; $window.Kill() }
+            }
+            Start-Sleep 3
+            if (Healthy) { Fail "${label}: 閉じたあともサーバーが応答する" } else { Note "${label}: 閉じたらサーバーも止まった" }
+            Get-Process -Name pythonw, python -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+          }
+
+          Check "shortcut" { Start-Process -FilePath $menu }
+          Check "bat" { Start-Process -FilePath (Join-Path $dir "NetVision.bat") -WorkingDirectory $dir }
+
+          $log = Join-Path $env:USERPROFILE ".netvision\launcher.log"
+          if (Test-Path $log) { Get-Content $log -Tail 40 | ForEach-Object { Write-Host "launcher.log: $_" } }
+
+          if ($failed.Count -gt 0) { exit 1 }
+
+      - name: 画面の写しをブランチに置く
+        if: always()
+        shell: bash
+        run: |
+          [ -d shots ] || exit 0
+          git init -q shots-repo && cd shots-repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          mkdir -p "${{ github.run_id }}" && cp ../shots/*.png "${{ github.run_id }}/"
+          git add . && git commit -q -m "Windows smoke ${{ github.run_id }}（${{ github.sha }}）[skip ci]"
+          git push -q -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" HEAD:refs/heads/claude/windows-smoke-shots
