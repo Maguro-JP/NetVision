@@ -30,8 +30,8 @@
 - スタック: Catalyst（provision）、H3C（irf-port）、Huawei CE（stack-port）。
   どれも2台分以上あるときだけ載せる
 
-未確認のまま残している行: PAN-OS の DHCP。Huawei S シリーズ（V200）の
-スタックは設定が Config に出ないので、ここでは読めない。
+PAN-OS の DHCP は Knowledge Base の Panorama の例（rules の上の出典）で確かめた。
+Huawei S シリーズ（V200）のスタックは設定が Config に出ないので、ここでは読めない。
 ほかの行（Cisco の書き方など）は、それぞれの読み手（hapair.py、multicast.py、
 loadbalance.py など）で確かめた書き方と同じ形を拾うもの、または既存の試験の形のまま。
 """
@@ -169,6 +169,23 @@ _RULES: tuple[_Rule, ...] = (
         DHCP,
         "DHCP サーバー",
         r"^\s*set\s+system\s+services\s+dhcp-local-server\s+group\s+\S+\s+interface\s",
+    ),
+    # PAN-OS の set 形式（Panorama のテンプレートは前に `template <名前> config` が付く）。出典:
+    # Palo Alto Networks Knowledge Base「Unable to drop down layer3 interfaces for dhcp
+    # configuration in Panorama template」の Resolution。
+    # `server mode disabled` は別の行に出るので、ここでは見ない
+    _rule(
+        DHCP,
+        "DHCP サーバー",
+        r"^\s*set\s+(?:template\s+\S+\s+config\s+)?network\s+dhcp\s+interface\s+\S+\s+"
+        r"server\s+ip-pool\s",
+    ),
+    _rule(
+        DHCP,
+        "DHCP リレー",
+        r"^\s*set\s+(?:template\s+\S+\s+config\s+)?network\s+dhcp\s+interface\s+\S+\s+"
+        r"relay\s+ip\s.*\bserver\s+\[?\s*(\d+\.\d+\.\d+\.\d+)",
+        "転送先",
     ),
     _rule(DHCP, "DHCP リレー", r"^\s*ip\s+helper-address\s+(\S+)", "転送先"),
     _rule(DHCP, "DHCP リレー", r"^\s*dhcp\s+relay\s+server-address\s+(\S+)", "転送先"),

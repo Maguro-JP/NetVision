@@ -2127,3 +2127,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 直したこと: `Interface <名前> is up|down` の段落を読む。up / down 以外の言葉は資料に無いので読まない。
 - 試験: `test_linkstate.py` の `test_necix_show_interfaces_follows_the_function_guide`。直す前のコードで落ちた。
 - 残り: NEC IX の `show ip interface brief` は、IX-R/IX-V のコマンドリファレンス 1.3 の IPv4 編に作例が無く、未確認のまま。
+
+## PAN-OS の DHCP サーバーとリレーを機能の一覧に載せる（2026-10-26 JST）
+
+- 起きたこと: `configparse/features.py` は PAN-OS の DHCP を拾っておらず、PAN-OS で DHCP を配っていても機能の一覧に出なかった（「未確認のまま残している行」）。
+- 確かめた資料: Palo Alto Networks Knowledge Base「Unable to drop down layer3 interfaces for dhcp configuration in Panorama template」の Resolution
+  （`set template <name> config network dhcp interface <interface> server ip-pool <Value> ...` と `... relay ip enabled yes server <IP Value>`）。
+- 直したこと: `network dhcp interface <口> server ip-pool` を DHCP サーバー、`relay ip ... server <IP>` を DHCP リレー（転送先）として拾う。前の `template <名前> config` は有っても無くてもよい。
+- 試験: `test_features.py` の `test_panos_dhcp_server_and_relay_are_found`。直す前のコードで落ちた。
+- 残り: `server mode disabled` は別の行に出るので、ip-pool があって mode が disabled の口も DHCP サーバーとして数える（行ごとに読む作りのため）。
