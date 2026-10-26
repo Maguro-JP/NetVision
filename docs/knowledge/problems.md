@@ -2104,3 +2104,16 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （作例の `display interface brief` と、表 4-4 の Link は UP / DOWN / ADM / Stby）。
 - 直したこと: route mode の表の見出しも同じ読み方（2 列目が Link）で読む。
 - 試験: `test_linkstate.py` の `test_necqx_brief_reads_both_the_route_and_the_bridge_tables`。直す前のコードで route mode の口が欠けて落ちた。
+
+## Windows で起動の途中にサーバーが立たない（alembic.ini の日本語のコメント）（2026-10-26 JST）
+
+- 起きたこと: Windows の実機試験（`.github/workflows/windows-smoke.yml`、windows-latest）で Setup.exe を入れて開くと、
+  「NetVision のサーバーが起動しませんでした」のダイアログが出た。launcher.log の末尾は
+  `UnicodeDecodeError: 'charmap' codec can't decode byte 0x81`（alembic の `read_config_parser` が `encoding="locale"` で alembic.ini を読む）。
+- 原因: alembic.ini の日本語のコメント。Alembic は OS の既定の文字コード（英語の Windows は cp1252）で読む。
+  手元の Linux は UTF-8 なので、試験も手元の起動も通っていた。
+- 試したが効かなかった手: Python の UTF-8 モード（`-X utf8`、`PYTHONUTF8=1`）。Python 3.11 の `encoding="locale"` は UTF-8 モードでも OS の文字コードのままで、
+  手元で `LC_ALL=POSIX` にして `-X utf8=1` でも同じく落ちた。
+- 直したこと: alembic.ini を ASCII だけにした（コメントを英語にし、ASCII だけにする理由も書いた）。
+- 試験: `test_alembic_ini_ascii.py`（ASCII だけか、OS の文字コードが ASCII でも設定が読めるか）。直す前の alembic.ini で 2 件とも落ちた。
+- 次から: 手元の Linux で通っても、Windows の起動は Windows の実機試験で見る。ユーザーに確かめてもらう前に自分で流す。

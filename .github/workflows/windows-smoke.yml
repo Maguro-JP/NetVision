@@ -17,6 +17,13 @@ on:
     paths:
       - "packaging/**"
       - "backend/scripts/**"
+      # 起動の途中で読むもの（alembic.ini の文字コードで一度落ちた）
+      - "backend/alembic.ini"
+      - "backend/alembic/**"
+      - "backend/app/main.py"
+      - "backend/app/bootstrap.py"
+      - "backend/app/schema_alembic.py"
+      - "backend/pyproject.toml"
       - ".github/workflows/windows-smoke.yml"
 
 concurrency:
