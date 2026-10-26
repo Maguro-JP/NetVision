@@ -174,6 +174,10 @@ def _main(argv: list[str] | None = None) -> int:
     runner = Runner(host=args.host, port=args.port)
     runner.start()
     if not runner.wait_until_ready():
+        # 止まったのか、遅いだけなのかで直し方が違う。記録に残してから知らせる
+        waited = f"{READY_TIMEOUT:.0f} 秒待っても応答が無い"
+        reason = "途中で止まった" if not runner.running else waited
+        print(f"サーバーが起動しない: {reason}（{runner.url}/health）", file=sys.stderr)
         runner.stop()
         _report(NOT_READY)
         return 1
