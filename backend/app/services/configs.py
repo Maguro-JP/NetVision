@@ -236,34 +236,110 @@ def ingest_many(
 
     `device_id` が指定されているときは分けない。どの機器のものかを人が
     決めているのに、こちらで分けると指定と食い違う。
+
+    Junos の論理システムも、ここで論理システムごとの塊に分けて別の機器として取り込む
+    （_with_logical_systems。設計は docs/knowledge/decisions.md）。
     """
-    chunks = [text] if device_id is not None else configsplit.split(text)
-    if len(chunks) == 1:
+    if device_id is None:
+        chunks = configsplit.split(text)
+        return _ingest_with_logical_systems(
+            db,
+            filename,
+            chunks,
+            apply_inventory=apply_inventory,
+            create_missing=create_missing,
+        )
+    return [
+        ingest(
+            db,
+            filename,
+            text,
+            device_id=device_id,
+            apply_inventory=apply_inventory,
+            create_missing=create_missing,
+        )
+    ]
+
+
+#: 論理システムの機器名の区切り（`pe-01_LS1`）。`/` と `:` は書き出しのファイル名で使えず、
+#: `.` は normalize_hostname がドメインとして切り落とす（decisions.md の 2026-10-31）
+LOGICAL_SYSTEM_SEPARATOR = "_"
+
+
+def _with_logical_systems(chunk: str) -> list[tuple[str, str]]:
+    """塊を（名前の後ろに付ける字, 中身）の並びにする。論理システムが無ければ元の1つだけ。
+
+    全体の塊は元の字のまま渡す（世代に残す中身を変えない）。論理システムの塊は、
+    `logical-systems NAME` を外した set 行の頭に `set system host-name 全体_NAME` を足す。
+    """
+    if configparse.detect_vendor(chunk) is not Vendor.JUNIPER:
+        return [("", chunk)]
+    from app.services.configparse import juniper
+
+    _, systems = juniper.split_logical_systems(chunk)
+    hostname = configparse.parse(chunk).hostname
+    if not systems or not hostname:
+        return [("", chunk)]
+    parts = [("", chunk)]
+    for name, lines in systems.items():
+        child = f"{hostname}{LOGICAL_SYSTEM_SEPARATOR}{name}"
+        parts.append((name, f"set system host-name {child}\n{lines}\n"))
+    return parts
+
+
+def _ingest_with_logical_systems(
+    db: Session,
+    filename: str,
+    chunks: list[str],
+    *,
+    apply_inventory: bool,
+    create_missing: bool,
+) -> list[IngestResult]:
+    """塊ごとに取り込み、Junos の論理システムは別の機器として足す。"""
+    parts: list[tuple[str, str]] = []
+    for chunk in chunks:
+        parts.extend(_with_logical_systems(chunk))
+    if len(parts) == 1:
         return [
             ingest(
                 db,
                 filename,
-                text,
-                device_id=device_id,
+                parts[0][1],
                 apply_inventory=apply_inventory,
                 create_missing=create_missing,
             )
         ]
 
     results: list[IngestResult] = []
-    for number, chunk in enumerate(chunks, start=1):
+    parent: IngestResult | None = None
+    for number, (system, body) in enumerate(parts, start=1):
         # どの塊から出たのかを名前に残す。1つのファイルから複数の結果が並ぶので、
-        # 名前が同じだと、どれがどれか分からなくなる
-        results.append(
-            ingest(
-                db,
-                f"{filename} ({number}/{len(chunks)})",
-                chunk,
-                apply_inventory=apply_inventory,
-                create_missing=create_missing,
-            )
+        # 名前が同じだと、どれがどれか分からなくなる。論理システムは名前で分かるようにする
+        label = f"{filename} ({system})" if system else f"{filename} ({number}/{len(parts)})"
+        if len(chunks) == 1 and not system:
+            label = filename
+        result = ingest(
+            db, label, body, apply_inventory=apply_inventory, create_missing=create_missing
         )
+        if not system:
+            parent = result
+        elif parent is not None:
+            _copy_from_parent(db, parent, result)
+        results.append(result)
     return results
+
+
+def _copy_from_parent(db: Session, parent: IngestResult, child: IngestResult) -> None:
+    """論理システムの機器に、全体の機器の種別と拠点を写す（AP の登録が拠点を写すのと同じ）。"""
+    if parent.device_id is None or child.device_id is None or not child.created:
+        return
+    main = db.get(Device, parent.device_id)
+    device = db.get(Device, child.device_id)
+    if main is None or device is None:
+        return
+    device.device_type = main.device_type
+    device.site_id = main.site_id
+    db.commit()
 
 
 def ingest(

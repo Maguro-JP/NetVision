@@ -114,7 +114,7 @@
 - 触る場所: `backend/app/services/configcheck.py` の `_JUNOS_LOGICAL_SYSTEM`、読むときは `configparse/juniper.py` と
   `configparse/__init__.py` の `parse`。
 
-## Junos の論理システムを取り込むときの設計（2026-10-12 JST。未実装）
+## Junos の論理システムを取り込むときの設計（2026-10-12 JST。2026-11-01 JST に `configs.ingest_many` へつないだ）
 
 - 決めたこと: 論理システムは「1つのファイルに何台分も入っている」の一種として扱う。
   `configs.ingest_many` が今 `configsplit.split` で台数ぶんに分けているのと同じ段で、Junos の塊に論理システムがあれば
