@@ -112,3 +112,9 @@ CLAUDE.md、全スキルの description、フックの出力を数え、300 文�
 - 自律の作業で文脈を小さく保つ: `auto-dev`、`long-dev`、`feedback-session`
 - 一回きりの Routine とブランチの掃除: `tidy`
 - description と本文の長さの診断: `skill-audit`
+
+## フックの差し込み量
+
+毎ターン同じ決まりを差し込むと、それ自体が無駄になる。`scripts/measure_hooks.py` が settings.json のフックを無害な入力で 2 回動かし、
+2 ターン目の文字数を出す。目安は UserPromptSubmit の合計 1,200 文字、SessionStart の合計 5,000 文字。超えたら出す頻度を落とすか短くする。
+lang-rule は 10 ターンに 1 回と止められた直後だけ、CORE は 10 ターンに 1 回、directives は 3 件 80 文字、focus は 300 文字、lessons は新しい 12 件。

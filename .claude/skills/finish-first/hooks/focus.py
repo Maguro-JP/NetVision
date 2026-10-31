@@ -9,6 +9,7 @@ docs/reports/deliverables.md の先頭の未完成の行を「今の成果物・
   FINISH_FIRST_OFF=1   止める
 """
 
+import json
 import os
 import re
 import sys
@@ -33,9 +34,18 @@ def rows(text: str):
     return out
 
 
+SYSTEMISH = re.compile(r"^\s*<|wake reason|task-notification|SYSTEM NOTIFICATION|This session is being continued")
+
+
 def main() -> int:
     if os.environ.get("FINISH_FIRST_OFF") == "1" or not TABLE.is_file():
         return 0
+    try:
+        d = json.load(sys.stdin)
+    except ValueError:
+        d = {}
+    if SYSTEMISH.search(str(d.get("prompt") or "")):
+        return 0  # 通知のターンには出さない
     try:
         table = rows(TABLE.read_text(encoding="utf-8"))
     except OSError:
@@ -47,7 +57,9 @@ def main() -> int:
         print(f"成果物の表（{TABLE}）に未完成はない。新しい成果物は、完成条件を書いてから始める（finish-first）。")
         return 0
     num, name, cond, state, rest = current[0], current[1], current[2], current[3], current[4]
-    lines = [f"今の成果物 {num}: {name}（{state}）。完成条件: {cond}。残り: {rest}。これが完成するまで新しい成果物を始めない（finish-first）。"]
+    cond = cond if len(cond) <= 120 else cond[:119] + "…"
+    rest = rest if len(rest) <= 140 else "…" + rest[-139:]
+    lines = [f"今の成果物 {num}: {name}（{state}）。完成条件: {cond}。残り: {rest}。完成まで新しい成果物を始めない（finish-first）。"]
     if WEAK.search(cond) and not CHECKABLE.search(cond):
         lines.append(f"注意: 成果物 {num} の完成条件が、動かして確かめられる文になっていない。コマンド名かテスト名か、出る結果を書く。")
     print("\n".join(lines))

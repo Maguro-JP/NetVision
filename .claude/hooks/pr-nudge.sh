@@ -15,7 +15,7 @@ hit = ("create_pull_request" in tool) or (tool == "Bash" and re.search(r"\bgh pr
 if not hit:
     sys.exit(0)
 msg = ("PR を作った、または push した。solo-pr-flow の判定に入る。"
-       "自分のリポジトリで他人が見ていなければ、CI を待ってマージと後片付けまで進める。"
+       "マージの前に「出す前の確認」（precheck の記録と、❔ へのユーザーの返事）があることを確かめる。無ければ ❔ を出して待つ。"
        "止まるなら条件名を挙げる。")
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
 PY

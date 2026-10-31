@@ -9,7 +9,7 @@
           },
           {
             "type": "command",
-            "command": "cat .claude/skills/work-style/SKILL.md 2>/dev/null || true"
+            "command": "awk '/^## 着手前/{a=1} /^## 会話に出すもの/{b=1} /^## 人が決める/{b=0} (!a||b){print}' .claude/skills/work-style/SKILL.md 2>/dev/null || true"
           },
           {
             "type": "command",
@@ -74,6 +74,15 @@
             "timeout": 10
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/user-terms/hooks/terms_learn.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -110,6 +119,15 @@
           {
             "type": "command",
             "command": "python3 .claude/skills/verify-before-done/hooks/done_check.py",
+            "timeout": 15
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/user-terms/hooks/terms_check.py",
             "timeout": 15
           }
         ]
@@ -165,6 +183,15 @@
             "type": "command",
             "command": "python3 .claude/skills/follow-instructions/hooks/no_self_grant.py",
             "timeout": 10
+          }
+        ]
+      },
+      {
+        "matcher": "mcp__github__create_pull_request|mcp__github__merge_pull_request|Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/verify-before-done/hooks/pr_gate.py"
           }
         ]
       }

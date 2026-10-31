@@ -44,8 +44,9 @@ long-dev は、auto-dev と報告を毎日起動する Routine を作るスキ�
 ```
 <owner/repo> の long-dev。今日の日付（JST）で次を順にやる。
 1. 報告: 昨日の作業ブランチの上で書く。1日なら dev-report monthly、月曜なら dev-report weekly、それ以外は dev-report daily
-2. まとめ: 昨日の作業ブランチに未マージのものがあれば、報告と一緒に1本の PR にし、手元の検証を通して solo-pr-flow でマージする
+2. まとめ: 昨日の作業ブランチに未マージのものがあれば、報告と一緒に 1 本の PR にし、手元の検証（precheck）を通して solo-pr-flow でマージする。PR を作る前とマージの前にユーザーの確認が要る。返事が無ければ PR を作らず、pending.md に「PR 待ち」と書く
 3. 開発: main から新しい作業ブランチ claude/DEV-<YYYYMMDD>（日付は JST）を切り、auto-dev L=<L> E=<E> <優先の指示>（PR の出し方は区分で決まる）
+月の最初の実行では、報告の前に tidy の「月に 1 回の整理整頓」（.claude/skills/tidy/SKILL.md）を行い、結果を月報に書く。平日だけの Routine なら月の最初の平日。
 回っている auto-dev があれば止めて、この指定で回し直す。
 会話に出す行は ★ ↩ ❕ ❔ の4種類だけ（work-style）。長い報告は dev-report のファイルに書き、★ で URL を出す。ツールの間に文を書かない。
 ```
