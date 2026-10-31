@@ -49,7 +49,8 @@ WIPE_HINT = (
     "このデータベースは表があるのに版の記録が無く、どの版か判別できません。"
     "台帳はそのまま置いておいてください。SQL を手で直す必要もありません。"
     "先にデータフォルダごと控えを取ってください"
-    "（1台完結は ~/.netvision、Windows は %USERPROFILE%\\.netvision）。"
+    "（1台完結は Windows が %LOCALAPPDATA%\\NetVision、Linux が ~/.local/share/netvision、"
+    "macOS が ~/Library/Application Support/NetVision。前の版から使っている場合は ~/.netvision）。"
     "控えを取ったあとであれば、中身を捨ててよいと判断できる場合にかぎり"
     "作り直せます。中に台帳が入っているなら消さないでください。"
 )

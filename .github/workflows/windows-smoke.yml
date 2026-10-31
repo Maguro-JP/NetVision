@@ -137,7 +137,8 @@ jobs:
           Check "shortcut" { Start-Process -FilePath $menu }
           Check "bat" { Start-Process -FilePath (Join-Path $dir "NetVision.bat") -WorkingDirectory $dir }
 
-          $log = Join-Path $env:USERPROFILE ".netvision\launcher.log"
+          # データの置き場所（docs/DATA_LOCATIONS.md）。新しい環境なので前の版の .netvision は無い
+          $log = Join-Path $env:LOCALAPPDATA "NetVision\launcher.log"
           # 生のログは API で取れないので、注記にして読めるようにする
           # 注記は1つの手順に 10 個までなので、末尾をまとめて1つにする（改行は %0A）
           if (Test-Path $log) {

@@ -222,7 +222,8 @@ def test_uninstalling_keeps_the_data_and_the_models():
     ]
     assert 'RMDir /r "$INSTDIR"' in removals
     for line in removals:
-        assert ".netvision" not in line and "LLM" not in line and "$PROFILE" not in line, line
+        for kept in (".netvision", "LLM", "$PROFILE", "$LOCALAPPDATA", "AppData"):
+            assert kept not in line, line
 
 
 def test_the_setup_build_checks_for_missing_parts_before_packing():
@@ -232,3 +233,15 @@ def test_the_setup_build_checks_for_missing_parts_before_packing():
     for part in (*parts, "lib/webview"):
         assert part in script, part
     assert "make-bundle-windows.sh" in script, "ZIP と Setup.exe の中身をそろえる"
+
+
+def test_the_server_unit_writes_the_data_where_systemd_allows():
+    """systemd の例はホームを読み取り専用にしているので、データの置き場所を /var/lib に向ける。
+
+    向けないと、既定の置き場所（ホームの下）に DB を作れずに起動で落ちる。
+    """
+    unit = (REPO / "packaging" / "netvision.service").read_text(encoding="utf-8")
+    assert "ProtectHome=read-only" in unit
+    assert "Environment=NETVISION_DATA_DIR=/var/lib/netvision" in unit
+    assert "ReadWritePaths=/var/lib/netvision" in unit
+    assert "StateDirectory=netvision" in unit

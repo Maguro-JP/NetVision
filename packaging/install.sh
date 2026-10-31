@@ -26,6 +26,6 @@ echo "==> 同梱の wheel から入れます（ネット未使用）"
 echo
 echo "導入できました。"
 echo "  起動      : ./start.sh（アプリのウィンドウが開きます）"
-echo "  データ    : \$HOME/.netvision"
+echo "  データ    : \$HOME/.local/share/netvision（前の版の \$HOME/.netvision に DB があればそちら）"
 echo
 echo "常時起動させる（サーバーとして置く）場合は netvision.service を参考にしてください。"

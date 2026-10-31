@@ -91,7 +91,8 @@ cd backend && .venv/bin/pip install -e '.[desktop]'   # 初回のみ
 cd backend && .venv/bin/python -m scripts.launcher     # アプリのウィンドウが開く
 ```
 
-データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
+データは `netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
+置き場所は OS ごとに決まっていて（Windows は `%LOCALAPPDATA%\NetVision`）、サーバーで複数人で使うときは PostgreSQL にします（[docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md)）。
 認証がまだ無いため、既定では自分の端末からのみ待ち受けます。
 
 ### 閉域環境へ導入する
@@ -1489,7 +1490,7 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_LLM_API_KEY` | なし | 事業者の API を使う場合の鍵。閉域では空のまま |
 | `NETVISION_LLM_ALLOWED_HOSTS` | なし | 外へ出してよい宛先（カンマ区切り）。並べると、そこ以外へは出さない |
 | `NETVISION_LLM_ALLOW_EXTERNAL` | `false` | 外向きの宛先を許すか。既定は不可で、社内・手元の宛先だけ繋ぐ |
-| `NETVISION_DATA_DIR` | `~/.netvision` | 1台完結で動かすときの、DB と資料の置き場所。C ドライブに置けない端末向け |
+| `NETVISION_DATA_DIR` | OS ごとの場所（[docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md)） | 1台完結で動かすときの、DB と資料の置き場所。C ドライブに置けない端末向け |
 | `NETVISION_ENV_FILE` | なし | 客先ごとの設定ファイル。`.env` の後に読み、書いてある項目だけ上書きする |
 | `NETVISION_LLM_PROFILES` | なし | 役割ごとにモデルを分ける場合の一覧（JSON）。下の例を参照 |
 

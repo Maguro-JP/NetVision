@@ -33,13 +33,13 @@ http://127.0.0.1:8000/api/v1/meta
 
 | 動かし方 | 取るもの |
 |---|---|
-| Windows のインストール不要版 | `C:\Users\（ユーザー名）\.netvision` フォルダをコピー |
-| 1台完結モード（Linux / macOS） | `~/.netvision` ディレクトリをコピー |
+| Windows のインストール不要版 | `C:\Users\（ユーザー名）\AppData\Local\NetVision` フォルダをコピー |
+| 1台完結モード（Linux / macOS） | データの置き場所（Linux は `~/.local/share/netvision`、macOS は `~/Library/Application Support/NetVision`。前の版からなら `~/.netvision`）をコピー |
 | Docker Compose | DB のダンプと資料の領域（下記） |
 
 ```bash
 # 1台完結モード
-cp -r ~/.netvision ~/backup/netvision-$(date +%Y%m%d)
+cp -r ~/.local/share/netvision ~/backup/netvision-$(date +%Y%m%d)
 
 # Docker Compose
 docker compose exec db pg_dump -U netvision netvision > netvision-$(date +%Y%m%d).sql
@@ -62,7 +62,7 @@ docker run --rm -v netvision_documents:/d -v "$PWD:/out" alpine \
 4. 新しいフォルダの `NetVision.bat` をダブルクリックする
 
 古いフォルダは消さずに残しておいてください。何かあればそちらを起動すれば戻せます。
-データは `.netvision` にあるので、どちらのフォルダから起動しても同じものが見えます。
+データはアプリのフォルダの外（[DATA_LOCATIONS.md](DATA_LOCATIONS.md)）にあるので、どちらのフォルダから起動しても同じものが見えます。
 
 問題がないことを確かめてから、古いフォルダを消します。
 
@@ -124,7 +124,7 @@ docker compose logs -f api     # 起動しきるまで見る
 
 | 動かし方 | 消すもの |
 |---|---|
-| 1台完結 / Windows | `~/.netvision`（Windows は `%USERPROFILE%\.netvision`） |
+| 1台完結 / Windows | `~/.local/share/netvision`（Windows は `%LOCALAPPDATA%\NetVision`） |
 | Docker Compose | ボリューム（`docker compose down -v`。資料領域も消える） |
 
 判別できない古い DB があったときも、まず控えを取る案内をします。SQL は書きません。
@@ -156,15 +156,15 @@ docker compose logs -f api     # 起動しきるまで見る
 ### Windows のインストール不要版
 
 1. 黒いウィンドウを閉じて止める
-2. `C:\Users\（ユーザー名）\.netvision` を、控えておいたフォルダで置き換える
+2. `C:\Users\（ユーザー名）\AppData\Local\NetVision` を、控えておいたフォルダで置き換える
 3. 古いフォルダの `NetVision.bat` を起動する
 
 ### 1台完結モード
 
 ```bash
 # 止めてから
-rm -rf ~/.netvision
-cp -r ~/backup/netvision-20260810 ~/.netvision
+rm -rf ~/.local/share/netvision
+cp -r ~/backup/netvision-20260810 ~/.local/share/netvision
 # アプリも古い版に戻してから起動する
 ```
 

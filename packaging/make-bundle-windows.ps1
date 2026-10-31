@@ -176,7 +176,7 @@ rem NetVision を起動します。インストールは不要です。アプリ
 setlocal
 cd /d "%~dp0"
 set NETVISION_SERVE_FRONTEND=%~dp0frontend\dist
-rem データ（DB と資料）の置き場所。空なら C:\Users\...\.netvision
+rem データ（DB と資料）の置き場所。空なら %LOCALAPPDATA%\NetVision（前の版の .netvision に DB があればそちら）
 set NETVISION_DATA_DIR=
 rem 中間ファイルは同梱済み。同期フォルダで固まらないよう、実行時には書かせない
 set PYTHONDONTWRITEBYTECODE=1
@@ -249,7 +249,7 @@ NetVision （インストール不要版）
   アプリのフォルダを入れ替えても、モデルはそのまま残ります。
   置き場を変えるときは、環境変数 LLM_HOME に別のフォルダを指定します。
 
-  前に models フォルダや .netvision\models に置いたモデルも、そのまま読みます。
+  前に models フォルダやデータの置き場所の models に置いたモデルも、そのまま読みます。
 
 ■ 置き場所について
 
@@ -261,7 +261,7 @@ NetVision （インストール不要版）
 
   データ（DB と資料）の置き場所は、既定では次の場所です。
 
-    C:\Users\（あなたのユーザー名）\.netvision
+    C:\Users\（あなたのユーザー名）\AppData\Local\NetVision
 
   ここに置けない端末では、NetVision.bat の中の
 
@@ -282,11 +282,11 @@ NetVision （インストール不要版）
   「NetVision-console.bat」を使ってください。アプリのウィンドウと一緒に、
   記録を流す黒い画面が出ます。起動の記録は次の場所にも残ります。
 
-    C:\Users\（あなたのユーザー名）\.netvision\launcher.log
+    C:\Users\（あなたのユーザー名）\AppData\Local\NetVision\launcher.log
 
 ■ データの保存先
 
-  C:\Users\（あなたのユーザー名）\.netvision
+  C:\Users\（あなたのユーザー名）\AppData\Local\NetVision
 
   このフォルダをコピーすればバックアップになります。
   アプリのフォルダを入れ替えても、データはそのまま残ります。

@@ -40,7 +40,7 @@ NetVision のウィンドウが開きます。止めるのはウィンドウを�
 
 | オプション | 意味 |
 |---|---|
-| `--data-dir <パス>` | データの置き場所を変える（既定 `~/.netvision`） |
+| `--data-dir <パス>` | データの置き場所を変える（既定 `~/.local/share/netvision`） |
 | `--port 9000` | ポートを変える |
 | `--demo` | デモデータを入れて起動する（お試し用） |
 
@@ -51,7 +51,7 @@ NetVision のウィンドウが開きます。止めるのはウィンドウを�
 止めてから、データディレクトリごとコピーするだけです。
 
 ```bash
-cp -r ~/.netvision ~/netvision-backup-$(date +%Y%m%d)
+cp -r ~/.local/share/netvision ~/netvision-backup-$(date +%Y%m%d)
 ```
 
 ## 方法B: Docker Compose（チームで共有するとき）

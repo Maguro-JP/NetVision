@@ -193,3 +193,16 @@
 - 理由: 決めてあった「Node.js の版は、その時点で最新の LTS に合わせる」（判断待ち 5 の答え）。nodejs/Release の schedule.json で、v26 の lts は 2026-10-28。
   手元で Node 26.13.0（LTS「Lithium」）を使い、frontend の npm ci・型チェック・試験（230 passed）・ビルドが通った。
 - 触る場所: `.github/workflows/ci.yml`、`.github/workflows/bundle.yml`、`.github/workflows/windows-smoke.yml`、`frontend/Dockerfile`
+
+## データの置き場所を OS の決まりの場所にし、複数人は PostgreSQL にする（2026-10-31 JST）
+
+- 決めたこと: 1台で使うときの既定の置き場所を、Windows は `%LOCALAPPDATA%\NetVision`、macOS は `~/Library/Application Support/NetVision`、
+  Linux は `$XDG_DATA_HOME/netvision`（無ければ `~/.local/share/netvision`）にした。前の既定 `~/.netvision` に DB があれば、そのまま使い続ける。
+  サーバーで複数人で使うときは `NETVISION_DATABASE_URL` で PostgreSQL にし、systemd の例は `/var/lib/netvision`（StateDirectory）に置く。
+- 理由: ユーザーの指示（DB の置き方も一番良いのを考えて、今後の拡張性やサーバーでの利用も考慮して）。Setup.exe は利用者ごとに入るので、
+  データも利用者ごとの OS の決まりの場所にそろえる。複数人で書くなら SQLite の1ファイルより PostgreSQL が向いていて、表は Alembic で同じものが作れる。
+  あわせて、systemd の例がホームを読み取り専用にしたまま既定の置き場所（ホームの下）に書こうとしていた食い違いを直した。
+- 採らなかった案: `C:\ProgramData\NetVision`（端末で共有する場所で、別の利用者が作ったファイルは既定で書き換えられない。shared-models の決まりの
+  「設定は ProgramData」は Program Files に入れるアプリ向けで、利用者ごとに入れる Setup.exe とは合わない）。`%APPDATA%`（Roaming。同期で SQLite が壊れることがある）。
+  `~/.netvision` のまま（OS の決まりから外れ、Windows ではホームの直下に隠しフォルダが増える）。前の場所から自動で移す（黙って動かすとデータを見失う）。
+- 触る場所: `backend/scripts/standalone.py`（default_data_dir、os_data_dir）、`packaging/netvision.service`、`docs/DATA_LOCATIONS.md`

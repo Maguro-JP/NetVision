@@ -42,7 +42,7 @@ C:\LLM\
 |---|---|
 | `LLM_HOME` の `gguf` | 環境変数 `LLM_HOME` があるとき。OS を問わない |
 | `C:\LLM\gguf` | Windows で `LLM_HOME` が無いとき。初めて起動したときに作る |
-| アプリの隣の `models`、`~/.netvision/models` | 前に置いたモデルを読むためだけに見る。新しく置く先には案内しない |
+| アプリの隣の `models`、データの置き場所の `models` | 前に置いたモデルを読むためだけに見る。新しく置く先には案内しない |
 
 道は ASCII だけにしてあります。利用者名が全角だと、ユーザーのフォルダの下の道で
 llama.cpp がモデルを開けないことがあるためです。
@@ -117,7 +117,7 @@ NETVISION_LLM_ALLOWED_HOSTS=ai.example.co.jp
   /30 なのかが消え、返ってくる設定が使えない）
 - 宛先を限る: `NETVISION_LLM_ALLOWED_HOSTS` に並べた宛先以外へは出さない
 - 記録する: いつ・どの作法で・どこへ・何文字送り・何件伏せたかを
-  `~/.netvision/llm-usage.log` に残す。送った中身は残さない（記録そのものが
+  `~/.local/share/netvision/llm-usage.log` に残す。送った中身は残さない（記録そのものが
   漏れ口になるため）
 
 手元やアプリの中で動かすときは伏せません。外へ出ていないうえ、伏せると答えが

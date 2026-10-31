@@ -89,7 +89,7 @@ Python が入っていない場合は、先に python.org のインストーラ�
 
 どちらも NetVision のウィンドウが開きます。ブラウザは使いません。
 ウィンドウを閉じると、裏で動いていたサーバーも止まります。
-起動の記録はデータの置き場所（既定 `~/.netvision`）の `launcher.log` に残ります。
+起動の記録はデータの置き場所（既定 `~/.local/share/netvision`）の `launcher.log` に残ります。
 
 > `index.html` を直接ダブルクリックしても動きません（画面だけでは動かず、
 > 起動したプログラムとやりとりする必要があるためです）。
@@ -100,7 +100,7 @@ Python が入っていない場合は、先に python.org のインストーラ�
 
 | オプション | 意味 |
 |---|---|
-| `--data-dir <パス>` | データの置き場所（既定 `~/.netvision`） |
+| `--data-dir <パス>` | データの置き場所（既定 `~/.local/share/netvision`） |
 | `--port 9000` | ポートを変える |
 
 ## 5. 常時起動させる（任意）
@@ -162,7 +162,7 @@ sudo systemctl enable --now netvision
 | 環境変数（システム） | 変更しない |
 | サービス登録 | しない |
 | 外部通信 | 一切行わない |
-| 書き込み先 | 展開したフォルダと `%USERPROFILE%\.netvision` のみ |
+| 書き込み先 | 展開したフォルダと `%LOCALAPPDATA%\NetVision` のみ |
 | 待ち受け | `127.0.0.1` のみ（他端末からは見えない） |
 
 アンインストールはフォルダを削除するだけです。
@@ -185,7 +185,7 @@ GitHub の `Windows bundle` の workflow でも、ZIP と一緒に Setup.exe を
 | 入れる場所 | `%LOCALAPPDATA%\Programs\NetVision`（利用者ごと。管理者権限は不要） |
 | レジストリ | 「アプリと機能」に出すための `HKCU` の1か所だけ |
 | ショートカット | スタートメニューとデスクトップ（`pythonw.exe -m scripts.launcher` を指す） |
-| データ | `%USERPROFILE%\.netvision`（入れた場所の外） |
+| データ | `%LOCALAPPDATA%\NetVision`（入れた場所の外） |
 | AI のモデル | `C:\LLM\gguf`（入れた場所の外。[LOCAL_LLM.md](LOCAL_LLM.md)） |
 
 消すときは「設定 → アプリ → インストールされているアプリ」から NetVision をアンインストールします。
