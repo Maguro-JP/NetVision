@@ -762,3 +762,28 @@ def test_necqx_brief_reads_both_the_route_and_the_bridge_tables():
     states = _states(configparse.parse(text))
     assert states["GigabitEthernet1/0/1"] == "down"
     assert states["GigabitEthernet1/0/8"] == "up"
+
+
+NECIX_SHOW_INTERFACES = """
+Router(config-GigaEthernet2)# show interfaces GigaEthernet0.0
+Interface GigaEthernet0.0 is up
+  Fundamental MTU is 1500 octets
+  Current bandwidth 1G b/s, QoS is disabled
+Router(config-GigaEthernet2)# show interfaces GigaEthernet1.0
+Interface GigaEthernet1.0 is down
+  Fundamental MTU is 1500 octets
+  Current bandwidth 1G b/s, QoS is disabled
+"""
+
+
+def test_necix_show_interfaces_follows_the_function_guide():
+    """NEC IX の `show interfaces` は `Interface ... is down` の形。line protocol は無い。
+
+    出典: NEC プラットフォームズ「UNIVERGE IX-R/IX-V シリーズ 機能説明書」
+    2.3 物理、リンクレイヤの設定のリスト 2.3.5 表示例
+    （`show interfaces GigaEthernet2.0` の1行目が `Interface GigaEthernet2.0 is down`）。
+    """
+    text = (FIXTURES / "ix-rt-01.txt").read_text() + NECIX_SHOW_INTERFACES
+    states = _states(configparse.parse(text))
+    assert states["GigaEthernet0.0"] == "up"
+    assert states["GigaEthernet1.0"] == "down"

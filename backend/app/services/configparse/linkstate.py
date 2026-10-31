@@ -15,7 +15,8 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 - Aruba CX `show interface brief`（Port / ... / Enabled / Status / ...）
 - PAN-OS `show interface all`（name / id / speed/duplex/state / mac address。出典は _PANOS_STATE）
 - FortiGate `get system interface physical`（`==[port1]` の下に `status: up`）
-- Cisco / NEC IX `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）
+- Cisco `show interfaces`（`GigabitEthernet1/0/1 is up, line protocol is up` の段落）と、
+  NEC IX `show interfaces`（`Interface GigaEthernet2.0 is down` の段落。出典は _IX_PARAGRAPH）
 - Cisco NX-OS `show interface brief`
   （Ethernet / VLAN / Type / Mode / Status / Reason / Speed / Port。出典は _read_nxos）
 - NEC QX `display interface brief`（bridge mode の Interface / Link / Speed / Duplex / Type /
@@ -25,11 +26,12 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
 status、Cisco show ip interface brief、Arista show ip interface brief、Junos terse、
 NX-OS brief、PAN-OS、FastIron、Cisco の `show interfaces` の段落（_PARAGRAPH の上）、
-NEC QX の brief。
-未確認の表: Aruba CX、FortiGate、NEC IX（`show interfaces` の段落を含む）、
+NEC QX の brief、NEC IX の `show interfaces` の段落。
+未確認の表: Aruba CX、FortiGate、NEC IX の `show ip interface brief`、
 アラクサラ。Aruba CX と FortiGate は公式の出力例に当たれず、
-HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC IX とアラクサラは
-マニュアル置き場にこの環境から届かなかった（NEC QX は support.nec.co.jp の PDF に届いた）。
+HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC IX の brief は、
+IX-R/IX-V のコマンドリファレンス 1.3 の IPv4 編に `show ip interface` だけがあり、brief の作例を
+見つけていない。アラクサラはマニュアル置き場にこの環境から届かなかった。
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -72,6 +74,10 @@ _PARAGRAPH = re.compile(
     r"^(\S+(?: \d\S*)?) is (up|down|administratively down),\s*line protocol is (up|down)\b",
     re.IGNORECASE,
 )
+#: NEC IX の `show interfaces`。`Interface GigaEthernet2.0 is down` の形で、line protocol が無い。
+#: 出典: NEC プラットフォームズ「UNIVERGE IX-R/IX-V シリーズ 機能説明書」
+#: 2.3 物理、リンクレイヤの設定のリスト 2.3.5 表示例。up / down 以外の言葉は資料に無いので読まない
+_IX_PARAGRAPH = re.compile(r"^Interface\s+(\S+)\s+is\s+(up|down)\s*$", re.IGNORECASE)
 #: NEC QX / VRP の `display interface`。`GigabitEthernet1/0/1 current state: UP`
 _STATE_PARAGRAPH = re.compile(
     r"^(\S+)\s+current state\s*:\s*(UP|DOWN|Administratively DOWN)\b", re.IGNORECASE
@@ -231,7 +237,9 @@ def _read_arista_brief(rows: list[str], parsed: ParsedConfig) -> None:
 
     出典: Arista「EOS 4.36.2F User Manual - IPv4」の show ip interface brief の出力例
     （Interface / IP Address / Status / Protocol / MTU）。Status の値は出力例に up しか無く、
-    up / down 以外の言葉は未確認（_read_brief と同じく、上下を決めずに飛ばす）。
+    up / down 以外の言葉は未確認（_read_brief と同じく、上下を決めずに飛ばす）。資料に届かない:
+    EOS 4.36.2F User Manual の IPv4 の章と Arista ATD Lab Guides（Layer 3 Leaf-Spine）の出力例は、
+    どれも up だけ（2026-10-27 JST に見た）。
     """
     trimmed = []
     for row in rows:
@@ -465,6 +473,12 @@ def _read_paragraphs(lines: list[str], parsed: ParsedConfig) -> None:
                 current.link_state = "disabled"
             else:
                 current.link_state = "up" if admin == "up" and protocol == "up" else "down"
+            continue
+        ix = _IX_PARAGRAPH.match(raw.strip())
+        if ix:
+            current = _port(parsed, ix.group(1))
+            if current is not None:
+                current.link_state = ix.group(2).lower()
             continue
         state = _STATE_PARAGRAPH.match(raw.strip())
         if state:

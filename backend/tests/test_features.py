@@ -516,3 +516,26 @@ def test_ios_dhcp_pool_is_found_as_dhcp_server():
     assert f"{features.DHCP}:DHCP サーバー" in _found(pool)
     client = head + "interface GigabitEthernet1/0/1\n ip address dhcp\n"
     assert f"{features.DHCP}:DHCP サーバー" not in _found(client)
+
+
+def test_panos_dhcp_server_and_relay_are_found() -> None:
+    """PAN-OS の set 形式の DHCP サーバーとリレーを拾う。Panorama のテンプレートの形も同じ。
+
+    出典: Palo Alto Networks Knowledge Base「Unable to drop down layer3 interfaces for dhcp
+    configuration in Panorama template」の Resolution（`set template <name> config network dhcp
+    interface <interface> server ip-pool <Value> option subnet-mask <Value>` と、
+    `... network dhcp interface <interface> relay ip enabled yes server <IP Value>`）。
+    ファイアウォールの set 形式は `template <name> config` の無い形。
+    """
+    server = _found(
+        "set network dhcp interface ethernet1/2 server ip-pool 192.168.1.10-192.168.1.20\n"
+    )
+    assert f"{features.DHCP}:DHCP サーバー" in server
+    relay = _found(
+        "set template T1 config network dhcp interface ethernet1/3 "
+        "relay ip enabled yes server 10.0.0.5\n"
+    )
+    assert "10.0.0.5" in relay[f"{features.DHCP}:DHCP リレー"].detail
+    assert f"{features.DHCP}:DHCP サーバー" not in _found(
+        "set network dhcp interface ethernet1/2 server mode disabled\n"
+    ), "ip-pool が無ければ配っていない"

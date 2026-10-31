@@ -2104,3 +2104,52 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   （作例の `display interface brief` と、表 4-4 の Link は UP / DOWN / ADM / Stby）。
 - 直したこと: route mode の表の見出しも同じ読み方（2 列目が Link）で読む。
 - 試験: `test_linkstate.py` の `test_necqx_brief_reads_both_the_route_and_the_bridge_tables`。直す前のコードで route mode の口が欠けて落ちた。
+
+## Windows で起動の途中にサーバーが立たない（alembic.ini の日本語のコメント）（2026-10-26 JST）
+
+- 起きたこと: Windows の実機試験（`.github/workflows/windows-smoke.yml`、windows-latest）で Setup.exe を入れて開くと、
+  「NetVision のサーバーが起動しませんでした」のダイアログが出た。launcher.log の末尾は
+  `UnicodeDecodeError: 'charmap' codec can't decode byte 0x81`（alembic の `read_config_parser` が `encoding="locale"` で alembic.ini を読む）。
+- 原因: alembic.ini の日本語のコメント。Alembic は OS の既定の文字コード（英語の Windows は cp1252）で読む。
+  手元の Linux は UTF-8 なので、試験も手元の起動も通っていた。
+- 試したが効かなかった手: Python の UTF-8 モード（`-X utf8`、`PYTHONUTF8=1`）。Python 3.11 の `encoding="locale"` は UTF-8 モードでも OS の文字コードのままで、
+  手元で `LC_ALL=POSIX` にして `-X utf8=1` でも同じく落ちた。
+- 直したこと: alembic.ini を ASCII だけにした（コメントを英語にし、ASCII だけにする理由も書いた）。
+- 試験: `test_alembic_ini_ascii.py`（ASCII だけか、OS の文字コードが ASCII でも設定が読めるか）。直す前の alembic.ini で 2 件とも落ちた。
+- 次から: 手元の Linux で通っても、Windows の起動は Windows の実機試験で見る。ユーザーに確かめてもらう前に自分で流す。
+
+## NEC IX の `show interfaces` の段落（line protocol の無い形）を読む（2026-10-26 JST）
+
+- 起きたこと: `configparse/linkstate.py` は NEC IX の `show interfaces` を Cisco と同じ `... is up, line protocol is up` の形で読んでいた。
+  NEC IX の実際の形は `Interface GigaEthernet2.0 is down`（line protocol が無い）なので、線の上下が付かなかった。
+- 確かめた資料: NEC プラットフォームズ「UNIVERGE IX-R/IX-V シリーズ 機能説明書」2.3 物理、リンクレイヤの設定のリスト 2.3.5 表示例
+  （https://support.necplatforms.co.jp/ix-nrv/manual/fd/02_router/04_layer1-2.html）。この環境の curl は 502 で届かず、Exa の取得で読めた。
+- 直したこと: `Interface <名前> is up|down` の段落を読む。up / down 以外の言葉は資料に無いので読まない。
+- 試験: `test_linkstate.py` の `test_necix_show_interfaces_follows_the_function_guide`。直す前のコードで落ちた。
+- 残り: NEC IX の `show ip interface brief` は、IX-R/IX-V のコマンドリファレンス 1.3 の IPv4 編に作例が無く、未確認のまま。
+
+## PAN-OS の DHCP サーバーとリレーを機能の一覧に載せる（2026-10-26 JST）
+
+- 起きたこと: `configparse/features.py` は PAN-OS の DHCP を拾っておらず、PAN-OS で DHCP を配っていても機能の一覧に出なかった（「未確認のまま残している行」）。
+- 確かめた資料: Palo Alto Networks Knowledge Base「Unable to drop down layer3 interfaces for dhcp configuration in Panorama template」の Resolution
+  （`set template <name> config network dhcp interface <interface> server ip-pool <Value> ...` と `... relay ip enabled yes server <IP Value>`）。
+- 直したこと: `network dhcp interface <口> server ip-pool` を DHCP サーバー、`relay ip ... server <IP>` を DHCP リレー（転送先）として拾う。前の `template <名前> config` は有っても無くてもよい。
+- 試験: `test_features.py` の `test_panos_dhcp_server_and_relay_are_found`。直す前のコードで落ちた。
+- 残り: `server mode disabled` は別の行に出るので、ip-pool があって mode が disabled の口も DHCP サーバーとして数える（行ごとに読む作りのため）。
+
+## 見張り: AOS-S のスタックのメンバー番号付きの口（`1/A3`）を名前のまま読めている（2026-10-27 JST）
+
+- 確かめたこと: `configparse/arubaos.py` のスタックの口の書き方は「作例の形に合わせた（未確認）」だった。
+- 確かめた資料: HPE Aruba Networking「ArubaOS-Switch 16.11 Advanced Traffic Management Guide」の Configuring interswitch link (ISL) ports
+  （PVLAN member ports）の作例 `vlan 300 tagged 1/A3`（arubanetworking.hpe.com/techdocs/AOS-S/16.11/ATMG）。
+- 試験: `test_configparse_arubaos.py` の `test_a_stack_members_module_port_keeps_its_name`。並びの読み方を壊すと落ちることを確かめた。
+- 届かなかったもの: 範囲の書き方（`1/1-1/48`）。公式の作例に見当たらず、コミュニティの設定例（HPE Community、Airheads）では使われている。
+  docstring に「資料に届かない」として資料の名前を書いた。
+
+## Arista の `show ip interface brief` の up 以外の言葉は公式の出力例に無い（2026-10-27 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の `_read_arista_brief` は、Status の up / down 以外の言葉を「未確認」としていた。
+- 見た資料: Arista「EOS 4.36.2F User Manual」の IPv4 の章（arista.com/en/um-eos/eos-ipv4。この環境からは Client Challenge で本文が取れない）と、
+  Arista ATD Lab Guides の Layer 3 Leaf-Spine（labguides-dev.testdrive.arista.com）の出力例。どれも Status は up だけだった。
+- 結論: 直す所は無い。docstring に「資料に届かない」として見た資料を書いた（成果物 2 の完成条件）。
+  `show interfaces` の段落（`line protocol is lowerlayerdown (notconnect)`）は Arista Community の記事にあるが、公式の資料ではないので根拠にしない。
