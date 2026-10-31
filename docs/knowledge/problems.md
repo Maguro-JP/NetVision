@@ -2160,3 +2160,12 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
 - 見た資料: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、Cupertino 17.9.x・Dublin 17.11.x・17.16.x・17.17.x）の
   Checking Port Status and Connectivity。`show interface status` の出力例は connected と notconnect、err-disabled の例だけだった。
 - 結論: 直す所は無い。コメントに「資料に届かない」と見た資料を書いた。
+
+## 見張り: AOS-CX の `show interfaces brief` を公式の作例の形で読めている（2026-10-31 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の Aruba CX の表は「公式の出力例に当たれず（未確認）」だった。
+- 確かめた資料: HPE Aruba Networking「AOS-CX 10.09 / 10.13 Virtual Switching Framework (VSF) Guide」の One Virtual Device の作例
+  （見出し `Port Native Mode Type Enabled Status Reason Speed` と `VLAN (Mb/s)` の2行、`1/1/1 10 access SFP+DA3 yes up 10000`、
+  `1/1/2 -- routed -- no down No XCVR installed --`）。コマンドは `show interfaces brief`（複数形）。
+- 試験: `test_linkstate.py` の `test_aruba_cx_brief_follows_the_vsf_guide`。見出しの読み方を壊すと落ちることを確かめた。
+- あわせて: 冒頭の「未確認の表」の行に、FortiGate・NEC IX の brief・アラクサラの届かなかった資料の名前を書いた。

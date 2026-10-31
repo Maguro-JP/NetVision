@@ -787,3 +787,28 @@ def test_necix_show_interfaces_follows_the_function_guide():
     states = _states(configparse.parse(text))
     assert states["GigaEthernet0.0"] == "up"
     assert states["GigaEthernet1.0"] == "down"
+
+
+ARUBA_BRIEF_VSF_GUIDE = """
+switch# show interfaces brief
+----------------------------------------------------------------------------------
+Port Native Mode Type Enabled Status Reason Speed
+VLAN (Mb/s)
+----------------------------------------------------------------------------------
+1/1/1 10 access SFP+DA3 yes up 10000
+1/1/10 -- routed -- no down No XCVR installed --
+"""
+
+
+def test_aruba_cx_brief_follows_the_vsf_guide():
+    """AOS-CX の `show interfaces brief` を、公式の作例の形で読む。
+
+    出典: HPE Aruba Networking「AOS-CX 10.09 / 10.13 Virtual Switching Framework (VSF) Guide」の
+    One Virtual Device の作例（見出し `Port Native Mode Type Enabled Status Reason Speed` と
+    `VLAN (Mb/s)` の2行、`1/1/1 10 access SFP+DA3 yes up 10000`、
+    `1/1/2 -- routed -- no down No XCVR installed --`）。Enabled が no なら止めてある。
+    """
+    text = (FIXTURES / "aruba-cx-01.txt").read_text() + ARUBA_BRIEF_VSF_GUIDE
+    states = _states(configparse.parse(text))
+    assert states["1/1/1"] == "up"
+    assert states["1/1/10"] == "disabled"

@@ -26,12 +26,12 @@ notconnect なら、それは図と実機のずれそのものなので、持ち
 公式の資料で確かめた表（出典は各関数の docstring）: Huawei VRP、Cisco show interfaces
 status、Cisco show ip interface brief、Arista show ip interface brief、Junos terse、
 NX-OS brief、PAN-OS、FastIron、Cisco の `show interfaces` の段落（_PARAGRAPH の上）、
-NEC QX の brief、NEC IX の `show interfaces` の段落。
-未確認の表: Aruba CX、FortiGate、NEC IX の `show ip interface brief`、
-アラクサラ。Aruba CX と FortiGate は公式の出力例に当たれず、
-HPE のラボ手引き・コミュニティ・第三者の作例とは合っていた。NEC IX の brief は、
+NEC QX の brief、NEC IX の `show interfaces` の段落、Aruba CX の brief（_ARUBA_HEADER の上）。
+未確認の表: FortiGate、NEC IX の `show ip interface brief`、アラクサラ。資料に届かない:
+FortiGate は FortiOS の CLI Reference の `get system interface physical` の出力例に当たれず、
+第三者の作例とは合っていた。NEC IX の brief は、
 IX-R/IX-V のコマンドリファレンス 1.3 の IPv4 編に `show ip interface` だけがあり、brief の作例を
-見つけていない。アラクサラはマニュアル置き場にこの環境から届かなかった。
+見つけていない。アラクサラは AX シリーズのコマンドリファレンスの置き場に、この環境から届かなかった。
 
 状態は書いてあった言葉をそのまま持つ（connected / notconnect / up / down /
 disabled / err-disabled）。読めない行は黙って飛ばす。
@@ -53,8 +53,9 @@ from app.services.configparse.ifname import normalize
 _STATUS_HEADER = re.compile(
     r"^\s*Port\s+Name\s+Status\s+(?:Vlan\s+Duplex\s+Speed\s+Type|Reason\s*$)", re.IGNORECASE
 )
-#: Aruba CX `show interface brief`（Port / Native VLAN / Mode / Type / Enabled / Status / ...）
-#: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）
+#: Aruba CX `show interfaces brief`（Port / Native VLAN / Mode / Type / Enabled / Status / ...）
+#: 見出しは2行に分かれる（1行目 Port Native Mode Type Enabled Status …、2行目 VLAN …）。
+#: 出典: AOS-CX 10.09 / 10.13 Virtual Switching Framework (VSF) Guide の One Virtual Device の作例
 _ARUBA_HEADER = re.compile(r"^\s*Port\s+Native\s+Mode\s+Type\s+Enabled\s+Status\b", re.IGNORECASE)
 _ARUBA_ROW = re.compile(r"^\s*(\S+)\s+.*?\b(yes|no)\s+(up|down)\b", re.IGNORECASE)
 #: PAN-OS `show interface all`。行の3列目が `1000/full/up` の形
@@ -113,8 +114,8 @@ _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 #: 9400、16.11.x・17.2.x）「Checking Port Status and Connectivity」の出力例（connected、
 #: notconnect、err-disabled）。inactive は「Command Reference, Cisco IOS XE Cupertino 17.9.x
 #: (Catalyst 9300 Switches)」の show interfaces（status inactive: interfaces in an inactive
-#: state）。ほかの言葉（disabled、monitoring、切り詰めた notconnec）は既存の試験の形（未確認。
-#: 資料に届かない: Interface and Hardware Components Configuration Guide（Catalyst 9400、
+#: state）。ほかの言葉（disabled、monitoring、切り詰めた notconnec）は既存の試験の形のまま。
+#: 未確認で資料に届かない: Interface and Hardware Components Configuration Guide（Catalyst 9400、
 #: 17.9.x〜17.17.x）の Checking Port Status and Connectivity の出力例は、connected と
 #: notconnect だけ）
 _STATUS_WORDS = (
