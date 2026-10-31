@@ -86,7 +86,7 @@ dry run は書き込みの経路を通らない。dry run が通っても本番�
 - マークの後ろは、です・ますの文で書く。主語と述語があり、助詞を省かない。体言止めの羅列、矢印やコロンだけの連結、英語の語順のままの文、自分で作った訳語（枝、門、容器）を使わない。用語は `ja-proofread` の glossary.md、直訳の癖は translationese.md <!-- ja-proofread: ignore -->
 
 自律で回るもの（auto-dev、long-dev、feedback-session、Routine で始まった作業）は、この4種類しか出さない。
-マーカー `.claude/quiet`（`.git/info/exclude` に足す）を置くと、Stop フック（feedback-session の `scripts/gate.sh`）が外れた文を差し戻す。
+マーカー `.claude/quiet`（`.git/info/exclude` に足す）を置くと、Stop フック（`feedback-session/scripts/gate.sh`）が外れた文を差し戻す。
 フックは起動時に読まれるので、マーカーを置いたあとに開いたセッションから効く。
 
 ## 人が決める
@@ -135,5 +135,4 @@ UTC で付けると、JST の 0〜9 時に切ったブランチが前日の日�
 - 完了と言う前の検証: `verify-before-done`
 - 失敗の記録と読み直し: `lessons`
 
-着手前の確認は、この先独立したスキルにする予定。
-それまでは、このファイルの「着手前」がその役目を持つ。
+着手前の読み取りは `prompt-from-context`、訂正の受け方は `follow-instructions` が詳しく持つ。

@@ -29,7 +29,7 @@ def assistant(text):
 
 
 ROWS = [
-    user("CharacterDesigner のスキルを作って"),
+    user("絵のアプリ用のスキルを作って"),
     assistant("★ スキル: 作りました。PR は https://example.invalid/pull/1 です。"),
     user("<wake reason=\"external-event\">通知</wake>"),
     tool_result(),
@@ -74,7 +74,7 @@ class Brief(unittest.TestCase):
         self.assertNotIn("ok", out.split("直前の文脈:")[1])
 
     def test_long_prompt_is_silent(self):
-        self.assertEqual(self.run_hook("CharacterDesigner の app/launch.py で、ウィンドウが開かないときにサーバーだけを残す流れを、tests を足してから直してください。"), "")
+        self.assertEqual(self.run_hook("絵のアプリの app/launch.py で、ウィンドウが開かないときにサーバーだけを残す流れを、tests を足してから直してください。"), "")
 
     def test_hint_in_longer_prompt_counts(self):
         out = self.run_hook("さっきのスキルと同じようにテストも足して、validate が通るまでやって")

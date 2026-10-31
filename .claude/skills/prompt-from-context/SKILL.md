@@ -83,10 +83,10 @@ description: 短い一言を、前の文脈から全文のプロンプトにし�
 ## 6. フックが差し込むもの
 
 `hooks/brief.py`（UserPromptSubmit）。一言が 40 文字以下か、指示語があって 120 文字以下のとき、
-transcript から直前のユーザーの一言（3 件）、自分の ★ ↩ ❕ ❔（4 行）、答え待ちの ❔ を拾って差し込む。
+transcript から直前のユーザーの一言と自分の ★ ↩ ❕ ❔ を少しだけ、答え待ちの ❔ と一緒に差し込む。
 通知とツールの結果は数えない。長い一言には何も出さない（毎ターンの差し込みを増やさない）。
 短い一言の数は `~/.claude/state/prompt-from-context/metrics.jsonl` に残し、`skill-upkeep` が週報で「短い一言の数」と「聞き返した数」を比べる。
-テストは `scripts/test_brief.py`（7 件）。`PROMPT_FROM_CONTEXT_OFF=1` で止まる。
+テストは `scripts/test_brief.py`。`PROMPT_FROM_CONTEXT_OFF=1` で止まる。
 
 ## 7. 他のスキルとの関係
 

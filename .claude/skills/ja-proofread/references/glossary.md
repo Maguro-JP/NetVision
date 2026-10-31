@@ -48,7 +48,7 @@
 
 ## 書き方
 
-- 固有名詞とコマンド、設定のキー、ツール名は原文のまま（Routine、PR、Issue、`gh api`）
+- 固有名詞とコマンド、設定のキー、ツール名は原文のまま（PR、Issue、`gh api`）。ただし、ユーザーが別の語を使っていれば、その語が先（Routine はユーザーの語ではルーティン。`.claude/skills/user-terms/references/user-terms.md`）
 - カタカナ語の長音は付ける（サーバー、ユーザー）。`rules.md` の表記の既定と同じ <!-- ja-proofread: ignore -->
 - 1行の報告でも、助詞のある文にする。「枝移動完了」のような電報の形や、矢印だけでつないだ羅列にしない <!-- ja-proofread: ignore -->
 - 新しい語を使いたくなったら、この表に足してから使う。表にない訳語は `proofread.py` が「勝手な訳語」として拾う

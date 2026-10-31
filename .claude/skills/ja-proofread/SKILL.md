@@ -132,5 +132,5 @@ echo "<返事やコミットメッセージ>" | .claude/skills/ja-proofread/scri
 - 記録の書き方: `lessons`（4行の形）、`dev-report`
 - 決まりのデフォルト、言い換え表、同音異義語、開く漢字の一覧: `references/rules.md`
 - 直訳の癖と直し方、会話の返事の形、英語を日本語にする手順: `references/translationese.md`
-- 使う語と使わない訳語: `references/glossary.md`
-- textlint の設定: `assets/textlintrc.json`。入れ方: `scripts/setup-textlint.sh`
+- 使う語と使わない訳語: `references/glossary.md`。ユーザーが使った語への言い換え（略語・訳語・造語）: `user-terms`。重なったら user-terms が先
+- textlint の設定: `assets/textlint/.textlintrc.json`。入れ方: `scripts/setup-textlint.sh`
