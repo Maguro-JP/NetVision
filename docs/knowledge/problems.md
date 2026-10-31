@@ -2153,3 +2153,10 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   Arista ATD Lab Guides の Layer 3 Leaf-Spine（labguides-dev.testdrive.arista.com）の出力例。どれも Status は up だけだった。
 - 結論: 直す所は無い。docstring に「資料に届かない」として見た資料を書いた（成果物 2 の完成条件）。
   `show interfaces` の段落（`line protocol is lowerlayerdown (notconnect)`）は Arista Community の記事にあるが、公式の資料ではないので根拠にしない。
+
+## Cisco の `show interfaces status` の disabled・monitoring は公式の出力例に無い（2026-10-31 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の `_STATUS_WORDS` のうち、disabled・monitoring・切り詰めた notconnec は「既存の試験の形（未確認）」だった。
+- 見た資料: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、Cupertino 17.9.x・Dublin 17.11.x・17.16.x・17.17.x）の
+  Checking Port Status and Connectivity。`show interface status` の出力例は connected と notconnect、err-disabled の例だけだった。
+- 結論: 直す所は無い。コメントに「資料に届かない」と見た資料を書いた。

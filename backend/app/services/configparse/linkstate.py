@@ -113,7 +113,10 @@ _TERSE_HEADER = re.compile(r"^\s*Interface\s+Admin\s+Link\s+Proto\b", re.I)
 #: 9400、16.11.x・17.2.x）「Checking Port Status and Connectivity」の出力例（connected、
 #: notconnect、err-disabled）。inactive は「Command Reference, Cisco IOS XE Cupertino 17.9.x
 #: (Catalyst 9300 Switches)」の show interfaces（status inactive: interfaces in an inactive
-#: state）。ほかの言葉は既存の試験の形（未確認）
+#: state）。ほかの言葉（disabled、monitoring、切り詰めた notconnec）は既存の試験の形（未確認。
+#: 資料に届かない: Interface and Hardware Components Configuration Guide（Catalyst 9400、
+#: 17.9.x〜17.17.x）の Checking Port Status and Connectivity の出力例は、connected と
+#: notconnect だけ）
 _STATUS_WORDS = (
     "connected",
     "notconnect",
