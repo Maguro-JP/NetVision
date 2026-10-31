@@ -7,8 +7,11 @@
 Cisco の Command Reference と Migration Guide で、`fi`・`hu` の略記は Interface and Hardware
 Components Configuration Guide で、H3C Comware の `BAGG`・`RAGG` は S9820 の、`WGE`・`FGE`・
 `HGE` は S6850・S7500E-XS・S12500R の Command Reference で、`XGE`・`GE` は
-「03-Interface Command Reference」の display interface で確かめた（tests/test_ifname.py）。
-ほかの略記は既存の試験の形のまま（未確認）。
+「03-Interface Command Reference」の display interface で、Cisco の `Gi`・`Fa` は
+Interface and Hardware Components Configuration Guide（Catalyst 9400）の
+show interfaces status の出力例で確かめた（tests/test_ifname.py）。
+資料に届かない: ほかの略記（`Te`・`Fo`・`Po`・`Lo`・`Vl`・`Tu`・`Et` など）は未確認。
+既存の試験の形のままで、上の資料の出力例には出てこない。
 """
 
 from __future__ import annotations

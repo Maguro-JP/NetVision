@@ -103,3 +103,15 @@ def test_h3c_ten_gig_and_gig_abbreviations_follow_the_command_reference():
     assert ifname.expand("XGE1/0/1") == "TenGigabitEthernet1/0/1"
     assert ifname.normalize("GE1/0/2") == ifname.normalize("GigabitEthernet1/0/2")
     assert ifname.expand("GE1/0/2") == "GigabitEthernet1/0/2"
+
+
+def test_cisco_gi_and_fa_follow_the_configuration_guide() -> None:
+    """Cisco の `show interfaces status` に出る `Gi` と `Fa` を正式名にそろえる。
+
+    出典: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、
+    Cupertino 17.9.x〜17.17.x）の Checking Port Status and Connectivity の出力例
+    （`Gi1/0/1 connected ...`、`show interfaces status err-disabled` の
+    `Fa9/4 err-disabled link-flap`）。
+    """
+    assert ifname.expand("Gi1/0/1") == "GigabitEthernet1/0/1"
+    assert ifname.expand("Fa9/4") == "FastEthernet9/4"

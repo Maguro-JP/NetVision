@@ -2169,3 +2169,11 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   `1/1/2 -- routed -- no down No XCVR installed --`）。コマンドは `show interfaces brief`（複数形）。
 - 試験: `test_linkstate.py` の `test_aruba_cx_brief_follows_the_vsf_guide`。見出しの読み方を壊すと落ちることを確かめた。
 - あわせて: 冒頭の「未確認の表」の行に、FortiGate・NEC IX の brief・アラクサラの届かなかった資料の名前を書いた。
+
+## 見張り: Cisco の `Gi`・`Fa` を公式の出力例の形で正式名にそろえている（2026-10-31 JST）
+
+- 確かめたこと: `configparse/ifname.py` の Cisco の略記は「既存の試験の形（未確認）」だった。
+- 確かめた資料: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、17.9.x〜17.17.x）の Checking Port Status and Connectivity
+  （`show interface status` の `Gi1/0/1`、`show interfaces status err-disabled` の `Fa9/4`）。
+- 試験: `test_ifname.py` の `test_cisco_gi_and_fa_follow_the_configuration_guide`。
+- あわせて: ifname.py のほかの略記と arubaos.py の表番号に「資料に届かない」を書いた。これで成果物 2 の完成条件を満たした。
