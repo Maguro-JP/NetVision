@@ -122,7 +122,7 @@ Routine で始まったセッションは、最初に `git remote -v` を出す�
 
 報告と開発は long-dev の1つの Routine にまとめる。4つに分けると一覧が埋まり、順番もずれる。
 
-Raphael の配布は Actions の schedule で、Routine ではない。土曜 09:00 JST。
+配布用の private リポジトリの配布は Actions の schedule で、Routine ではない。土曜 09:00 JST。
 
 ## 費用
 

@@ -18,8 +18,8 @@ import sys
 import time
 from pathlib import Path
 
-KEEP = 8          # 差し込む件数
-MAX_LEN = 120     # 1件の長さ
+KEEP = 3          # 差し込む件数。多いと毎ターンの無駄になる
+MAX_LEN = 80      # 1件の長さ
 PASTE_LEN = 400   # これより長い一言は貼り付けとみなして保持しない
 
 # 訂正の合図。「直して」「改善して」は普通の依頼にも多いので入れない
@@ -85,6 +85,8 @@ def main() -> int:
     except ValueError:
         return 0
     prompt = re.sub(r"\s+", " ", (data.get("prompt") or "")).strip()
+    if SYSTEMISH.search(prompt):
+        return 0  # 通知のターンには何も差し込まない
     path = state_path(data.get("session_id") or "")
     st = load(path)
     st["turns"] += 1
@@ -110,7 +112,7 @@ def main() -> int:
     if n >= 2:
         lines.append(f"この一言には指示が {n} 個ある。分けて並べ、それぞれに ★ か ↩ を1行ずつ返す。やらなかったものは「やっていない」と書く。")
     if st["entries"]:
-        lines.append("このセッションでユーザーが言ったこと（新しい順）。出す前にこれと照合する:")
+        lines.append("このセッションの指示（新しい順）:")
         for e in reversed(st["entries"]):
             lines.append(f"- {'（訂正）' if e.get('c') else ''}{e['t']}")
     if lines:

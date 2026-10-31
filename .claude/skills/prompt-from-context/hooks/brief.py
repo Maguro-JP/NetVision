@@ -21,9 +21,9 @@ from pathlib import Path
 
 SHORT = 40      # これ以下の長さは短い一言
 WITH_HINT = 120  # 指示語があれば、この長さまで短い一言として扱う
-KEEP_USER = 3   # 差し込む前の一言の数
-KEEP_MARK = 4   # 差し込む自分の行の数
-CUT = 110       # 1行の長さ
+KEEP_USER = 2   # 差し込む前の一言の数
+KEEP_MARK = 3   # 差し込む自分の行の数
+CUT = 90        # 1行の長さ
 # 対象を前の会話に頼る語。「それ」「同じ」「も」「続けて」「やれ」など
 HINT = re.compile(
     r"それ|これ|あれ|そっち|こっち|さっき|前の|同じ|全部|続き|続けて|やり直|戻せ|戻して"
@@ -110,9 +110,7 @@ def main() -> int:
             pass
     record(d.get("session_id", ""), {"len": len(prompt), "context_lines": len(users) + len(marks), "pending": bool(pending)})
     out = [
-        f"短い一言（{len(prompt)} 文字）。前の文脈から全文のプロンプト（対象・やること・形・完成条件）を組み立ててから動く"
-        "（prompt-from-context）。動く前に「↩ 読み取り: 「<一言>」を<材料>から<対象>を<やること>と読みました」を1行出す。"
-        "聞き返さない。取り返しのつかない操作だけは対象を ❔ で1行確かめる。"
+        f"短い一言（{len(prompt)} 文字）。前の文脈から対象・やること・形・完成条件を補い、「↩ 読み取り: …と読みました」を 1 行出してから動く（prompt-from-context）。聞き返さない。"
     ]
     if users or marks:
         out.append("直前の文脈:")

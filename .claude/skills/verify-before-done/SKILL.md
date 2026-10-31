@@ -119,6 +119,15 @@ git show --stat HEAD
   週の報告（skill-upkeep）が「会話の形から外れた数」として読む
 - `DONE_CHECK_OFF=1` で止まる。登録は `repo-bootstrap/templates/settings.json` にあり、skill-sync が配る
 
+## 出す前の確認（precheck と pr_gate）
+
+PR を作る前・マージの前・main に push する前の検査は、`scripts/precheck.py` で 1 本にまとめる。
+手で選んで動かすと抜けて、出したあとに間違いが分かる。precheck は、あるものだけを順に動かし、結果と HEAD を
+`~/.claude/state/pr-gate/<repo>.json` に残す。`hooks/pr_gate.py`（PreToolUse）が、その記録と、出す内容を ❔ で見せたあとの
+ユーザーの返事の無い PR の作成・マージ・main への push を止める。手順は `solo-pr-flow` の「出す前の確認」。
+返事は、❔ を出した直後の一言だけを数える。別の話のあとでは、もう一度 ❔ を出す。
+頼まれていない Release やタグの作成も止める。テストは `scripts/test_pr_gate.py`。`PR_GATE_OFF=1` で止まる。
+
 ## 他のスキルとの関係
 
 姿勢全体は `work-style`。このスキルはその「完了前」を詳しくしたもの。

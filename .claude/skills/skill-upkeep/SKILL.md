@@ -15,12 +15,15 @@ description: 走っているセッションを観察して、使われている�
 
 - `list_sessions` で動いているセッションを見る。タイトル、`post_turn_summary`、`context_usage`、`rate_limit_info`。止まっている・同じことを繰り返している・文脈が膨らんでいるものを控える
 - `list_triggers` で Routine を見る。実行されたのに成果がないもの、1回きりのまま残っているもの
-- 各リポジトリ（Routine の紐づけ先）で、この1週間の PR のタイトルと、`.claude/skills/lessons/LESSONS.md` に増えた項目、`docs/reports/pending.md` の答え待ちを読む
+- 各リポジトリ（ルーティンの紐づけ先）で、この1週間の PR のタイトルと、`.claude/skills/lessons/LESSONS.md` に増えた項目、`docs/reports/pending.md` の答え待ちを読む。
+  手元に clone があれば `scripts/observe.py` が 1 本で表にする（コミット・PR のマージ・DEV/SYNC/FB の数・Ciel に無い lessons の題・答えの無い判断待ち）
 - ユーザーがこの1週間に直させたこと（Ciel の git log と lessons）
 - Ciel に `content-audit` の `--all` と `ja-proofread` の `--tree` を当て、見せてはいけないものと壊れた日本語が増えていないか見る。見つかったら直す PR を先に出す
 
 止まっているセッション（IDLE で次の実行がない）があれば、`patrol` の判定に従って1回きりの Routine で起動する。
 週の上限（`rate_limit_info.status` が `rejected`）で止まったものは起こさない。枠の使い道はユーザーが決める（patrol）。
+
+月の最初の回は、観察の前に Ciel 自身に tidy の「月に 1 回の整理整頓」を行い、結果を週報に書く。
 
 ### 2. 教訓の収穫
 
@@ -40,6 +43,9 @@ Ciel の LESSONS.md に写す。固有名（非公開リポジトリの名前、
 
 直す前に、そのスキルをこのセッションで1回使い、書いてあることと実際の動きの差を見る。使わずに直さない。
 1つ直すごとに `./scripts/validate.sh` と `scan.py --diff` を通し、PR を1本にして `solo-pr-flow` でマージする。
+
+直す前に docs/GUIDELINES.md の 10（干渉の表）を見る。足した・消したスキルは同じ PR で README と USAGE の一覧に反映する（docs-upkeep が止める）。フックを足したら token-efficiency の measure_hooks.py で 1 ターンの差し込み量を測り、目安（1,200 文字）に収める。
+毎回、user-terms の `terms_learn.py --candidates` で、ユーザーが 2 回以上使っていて対応表に無い語を見る。自分がその語を別の言い方で書いていれば、`.claude/skills/user-terms/references/user-terms.md` に行を足す。差し戻した語の数（`~/.claude/state/user-terms/metrics.jsonl`）は週報に書く。
 
 ### 3.5 自分のための開発
 
@@ -82,6 +88,7 @@ Ciel は public なので、非公開リポジトリの名前と ID は伏せる
 
 - 人が決めたこと（出力の形、名前、方針）は変えない。変えたくなったら `❔` で1行聞いて、答えが来るまでそのまま
 - 走っているセッションのブランチ・PR・Routine には触らない。観察だけ
+- 前の周の作業ブランチが、ユーザーの確認待ち（❔ に返事が無い）のまま残っているときは、main から切り直さず、そのブランチに積む。PR を 2 本にしない（tidy「散らかさない」）。週報も同じブランチに入れ、❔ は前の ❔ を指して短く出し直す
 - 走っているセッションにスキルの直しは届かない（起動時に読まれる）。届けたいことは1回きりの Routine で1行送る
 - 1周で直すのは3件まで。多く直すと、どれが効いたか分からない
 
