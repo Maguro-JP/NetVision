@@ -186,3 +186,10 @@
 - 採らなかった案: ZIP をやめて Setup.exe だけにする（インストーラを使えない職場がある）。ショートカットを .bat に向ける
   （黒い画面が一瞬出る）。アンインストールでデータも消す（消すと戻せない。データと AI のモデルは入れた場所の外にある）。
 - 触る場所: `packaging/make-setup-windows.sh`、`packaging/windows/installer.nsi`、`.github/workflows/bundle.yml`
+
+## Node.js を 26 に上げる（2026-10-31 JST）
+
+- 決めたこと: CI（ci.yml）、Windows bundle、Windows の実機試験の node-version と、frontend/Dockerfile の FROM を 26 にした。
+- 理由: 決めてあった「Node.js の版は、その時点で最新の LTS に合わせる」（判断待ち 5 の答え）。nodejs/Release の schedule.json で、v26 の lts は 2026-10-28。
+  手元で Node 26.13.0（LTS「Lithium」）を使い、frontend の npm ci・型チェック・試験（230 passed）・ビルドが通った。
+- 触る場所: `.github/workflows/ci.yml`、`.github/workflows/bundle.yml`、`.github/workflows/windows-smoke.yml`、`frontend/Dockerfile`
