@@ -71,8 +71,8 @@ docker run --rm -v netvision_documents:/d -v "$PWD:/out" alpine \
 ```bash
 # 止める（動かしている端末で Ctrl+C）
 cd ~/NetVision
-git pull                       # または新しいバンドルを展開
-./packaging/install.sh
+git pull
+(cd backend && .venv/bin/pip install -e '.[desktop]')
 ./packaging/start.sh
 ```
 

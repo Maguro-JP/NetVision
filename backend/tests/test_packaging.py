@@ -47,44 +47,13 @@ def test_the_windows_bundle_script_does_not_hardcode_python3():
     assert '"$PY"' in FOR_WINDOWS.read_text(encoding="utf-8")
 
 
-POWERSHELL = REPO / "packaging" / "make-bundle-windows.ps1"
-
-
-def test_the_powershell_version_bundles_the_same_libraries():
-    """Git を入れられない端末向けの PowerShell 版。
-
-    2つに分かれている以上、片方だけ直して食い違うのが一番怖い。
-    同梱するライブラリが一致していることを見張る。
-    """
-    shell = FOR_WINDOWS.read_text(encoding="utf-8")
-    powershell = POWERSHELL.read_text(encoding="utf-8")
-
-    block = shell.split("--implementation cp --abi")[1].split("\n", 1)[1]
-    expected = set(block.split("find ")[0].replace("\\", " ").split())
-
-    listed = re.search(r"\$packages\s*=\s*@\((.*?)\)", powershell, re.DOTALL)
-    assert listed, "PowerShell 版にライブラリの一覧が見つからない"
-    actual = set(re.findall(r'"([^"]+)"', listed.group(1)))
-
-    assert actual == expected, f"同梱するライブラリが食い違っている: {actual ^ expected}"
-
-
-def test_the_powershell_version_needs_no_python_on_the_build_machine():
-    """作業用の端末に Python を入れられないこともある。
-    先に取ってくる組み込み版の Python で依存を集めること。
-    """
-    powershell = POWERSHELL.read_text(encoding="utf-8")
-    assert "get-pip.py" in powershell
-    assert "& $python -m pip install" in powershell
-
-
 def test_the_bundles_carry_the_time_zone_database():
     """Windows には地域の時計のデータが入っていない。
 
     同梱しないと、日本時間を出そうとした時点で例外になる。落ちるのは画面を
     開いた後なので、作る側では気づけない。実際に表の更新が止まった。
     """
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         assert "tzdata" in script.read_text(encoding="utf-8"), f"{script.name} に tzdata が無い"
 
 
@@ -93,19 +62,6 @@ def _bat_from_shell() -> str:
     body = text.split('bat = """', 1)[1].split('"""', 1)[0]
     # Python の文字列リテラルとして書かれているので、二重のバックスラッシュを戻す
     return body.replace("\\\\", "\\")
-
-
-def _bat_from_powershell() -> str:
-    text = POWERSHELL.read_text(encoding="utf-8")
-    return text.split("$bat = @'\n", 1)[1].split("\n'@", 1)[0] + "\n"
-
-
-def test_both_bundles_write_the_same_launcher():
-    """起動用バッチが2つのスクリプトで食い違わないこと。
-
-    片方だけ直すと、配る相手によって挙動が違うことになる。
-    """
-    assert _bat_from_shell() == _bat_from_powershell()
 
 
 def test_the_default_launcher_opens_the_app_window():
@@ -118,7 +74,7 @@ def test_the_default_launcher_opens_the_app_window():
     assert "pythonw.exe" in bat and "scripts.launcher" in bat
     assert "http://" not in bat, "ブラウザで開く起動が残っている"
     assert "scripts.standalone" not in bat
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         text = script.read_text(encoding="utf-8")
         assert "NetVision-console.bat" in text, f"{script.name} に様子を見る起動が無い"
         assert "pywebview" in text and "pythonnet" in text, f"{script.name} に部品が無い"
@@ -130,16 +86,12 @@ def test_the_local_launchers_open_the_app_window():
         text = (REPO / "packaging" / name).read_text(encoding="utf-8")
         assert "scripts.launcher" in text, name
         assert "http://" not in text, name
-    for name in ("install.sh", "install.bat"):
-        text = (REPO / "packaging" / name).read_text(encoding="utf-8")
-        assert "netvision-backend[desktop]" in text, name
-        assert "http://" not in text, name
 
 
 def test_the_launcher_module_is_bundled():
     """起動役そのものが同梱されていること。無いと起動しない。"""
     assert (REPO / "backend" / "scripts" / "launcher.py").is_file()
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         assert "scripts" in script.read_text(encoding="utf-8")
 
 
@@ -156,7 +108,7 @@ def test_the_bundle_avoids_writing_bytecode_at_runtime():
     先に作って同梱し、実行時には書かせない。OneDrive の中で起動が戻って
     こない、という形で実際に踏んだ。
     """
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         text = script.read_text(encoding="utf-8")
         assert "compileall" in text, f"{script.name} が中間ファイルを作っていない"
         assert "PYTHONDONTWRITEBYTECODE" in text, f"{script.name} が実行時に書かせている"
@@ -169,7 +121,7 @@ def test_the_model_can_be_bundled_without_adding_an_executable():
     増えないので、ライブラリは既定で入れる。使う人がやることを「GGUF を1つ置く」
     だけにするため。モデルの実体は数 GB あるので、指定したときだけ入れる。
     """
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         text = script.read_text(encoding="utf-8")
         assert "llama-cpp-python" in text, f"{script.name} にモデルを動かす道が無い"
         assert "models" in text
@@ -182,7 +134,7 @@ def test_the_bundle_carries_every_guide():
     抜けたまま配りかけた。渡した相手の手元では、書いてあるはずの手順が無い、
     という形で困る。
     """
-    for script in (FOR_WINDOWS, POWERSHELL):
+    for script in (FOR_WINDOWS,):
         text = script.read_text(encoding="utf-8")
         assert "docs/*.md" in text or "docs\\*.md" in text, (
             f"{script.name} が手引きを個別に並べている"

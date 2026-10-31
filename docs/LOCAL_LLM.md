@@ -80,10 +80,6 @@ LICENSE も一緒に入れてください。
 WITH_MODEL=https://…/qwen2.5-coder-7b-instruct-q4_k_m.gguf ./packaging/make-bundle-windows.sh
 ```
 
-```
-./packaging/make-bundle-windows.ps1 -WithModel C:\LLM\gguf\qwen2.5-coder-7b.gguf
-```
-
 同梱したモデルは一式の `models` に入り、そこから読みます。導入先で `C:\LLM\gguf` に
 移しておくと、一式を入れ替えてもモデルが残り、ほかのアプリとも共有できます。
 
@@ -104,7 +100,7 @@ NETVISION_LLM_ALLOW_EXTERNAL=true
 NETVISION_LLM_ALLOWED_HOSTS=ai.example.co.jp
 ```
 
-独自の作法の事業者でも、`app/services/llm.py` に関数を1つ足して `_PROVIDERS` に
+独自の作法の事業者でも、`backend/app/services/llm.py` に関数を1つ足して `_PROVIDERS` に
 登録すれば繋がります。呼び出し側（Config の下書きなど）は変えません。
 
 ### 外へ出すときにやっていること
