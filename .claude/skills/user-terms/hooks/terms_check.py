@@ -87,7 +87,7 @@ def main() -> int:
         return 0
     shown = "、".join(f"「{v}」→「{u}」" for v, u in pairs[:8])
     more = f" ほか {len(pairs) - 8} 個" if len(pairs) > 8 else ""
-    print(f"ユーザーの語と違う言い方が {len(pairs)} 個ある: {shown}{more}。ユーザーが使った語で書き直す"
+    print(f"ユーザーの語と違う言い方が {len(pairs)} 個ある: {shown}{more}。その行だけをユーザーの語で直し、前の行を出し直さない"
           f"（user-terms。表は {TABLE.relative_to(Path.cwd()) if TABLE.is_relative_to(Path.cwd()) else TABLE}）", file=sys.stderr)
     return 2
 

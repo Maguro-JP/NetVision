@@ -156,6 +156,31 @@ class PrGate(unittest.TestCase):
         self.assertEqual(r.returncode, 1, r.stdout)
         self.assertIn("commit messages", r.stdout)
 
+    def test_repo_test_hook_is_used_instead_of_pytest(self):
+        # そのリポジトリの .claude/hooks/test.sh があれば、素の pytest ではなく台本を流す
+        repo = self.dir / "repo2"
+        (repo / ".claude/hooks").mkdir(parents=True)
+        (repo / ".claude/hooks/test.sh").write_text("#!/usr/bin/env bash\ncat >/dev/null\necho ok\n", encoding="utf-8")
+        (repo / "tests").mkdir()
+        g = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, check=True)
+        g("init", "-q", "-b", "main"), g("add", "-A")
+        g("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "a")
+        g("remote", "add", "origin", "https://example.invalid/o/Demo2.git")
+        env = dict(os.environ, PR_GATE_STATE=str(self.state))
+        r = subprocess.run([sys.executable, "-I", str(PRECHECK), "--base", "HEAD"], cwd=str(repo), capture_output=True, text=True, env=env)
+        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
+        names = [s["name"] for s in json.loads((self.state / "demo2.json").read_text(encoding="utf-8"))["steps"]]
+        self.assertIn("test.sh", names)
+        self.assertNotIn("pytest", names)
+
+    def test_pytest_with_no_tests_passes(self):
+        # tests/ に Python 以外のテストしか無いリポジトリでは pytest が 5（0 件）で終わる。落ちた扱いにしない
+        sys.path.insert(0, str(PRECHECK.parent))
+        from precheck import pass_by_text
+        self.assertTrue(pass_by_text("pytest", 5, "no tests ran in 0.02s"))
+        self.assertTrue(pass_by_text("pytest", 0, "3 passed"))
+        self.assertFalse(pass_by_text("pytest", 1, "1 failed"))
+
 
 if __name__ == "__main__":
     unittest.main()

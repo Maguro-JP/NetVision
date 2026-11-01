@@ -131,6 +131,15 @@
             "timeout": 15
           }
         ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/verify-before-done/hooks/reread_check.py",
+            "timeout": 15
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -171,11 +180,26 @@
             "type": "command",
             "command": "python3 .claude/skills/desktop-app/hooks/no_browser.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/ui-design/hooks/ui_nudge.py",
+            "timeout": 10
           }
         ]
       }
     ],
     "PreToolUse": [
+      {
+        "matcher": "Bash|Read|Edit|Write|MultiEdit|Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/background-first/hooks/background_first.py",
+            "timeout": 10
+          }
+        ]
+      },
       {
         "matcher": "Edit|Write|MultiEdit|Bash",
         "hooks": [

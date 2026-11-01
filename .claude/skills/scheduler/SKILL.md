@@ -15,7 +15,7 @@ Routine の1回の起動は1セッション分のトークンを使う。回数�
 リポジトリの欄があるが、クラウドセッションの中からその画面は使えない。
 だから、次の順で作る。リポジトリを持つセッションを先に作り、Routine をそれに紐づける。
 
-1. `create_session` に `source_url`（対象リポジトリの URL）と `permission_mode: auto` を渡してセッションを作る。返答の `session_context.sources` にそのリポジトリが入っていることを見る
+1. `create_session` に `source_url`（対象リポジトリの URL）と、元のセッションの設定（`get_session` で取った自分の `model` と `permission_mode` をそのまま）、`tags`（`ciel:<skill>:<repo>`。消すときの目印）を渡してセッションを作る。返答の `session_context.sources` にそのリポジトリが入っていることを見る。effort は渡す欄が無く、作られた側は low になるので、作ったら ❕ で 1 行知らせ、上げるかはユーザーが決める（feedback-session の表）
 2. `create_trigger` に `persistent_session_id`（1 の session_id）、cron、プロンプトを渡す。`create_new_session_on_fire` は使わない
 3. `fire_trigger` で1回起動する
 4. `scripts/check.sh <owner/repo> <ブランチの一部>` でリポジトリ側にブランチかコミットが増えるのを待つ。増えたら「動く」。増えなければ Routine を無効にして原因を見る
@@ -24,7 +24,7 @@ Routine の1回の起動は1セッション分のトークンを使う。回数�
 コミットが入った。作った側のセッション（Ciel を開いていた）とは別のリポジトリでも通る。
 
 ```
-create_session(title, source_url="https://github.com/<owner>/<repo>", permission_mode="auto")
+create_session(title, source_url="https://github.com/<owner>/<repo>", model=<元のセッションの model>, permission_mode=<元のセッションの permission_mode>, tags=["ciel:<skill>:<repo>"])
 create_trigger(name, prompt, cron_expression, persistent_session_id=<session_id>, initiation="human_request")
 fire_trigger(trigger_id)
 scripts/check.sh <owner>/<repo> <branch-part>
