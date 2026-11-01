@@ -4,10 +4,10 @@ version = "0.1.0"
 description = "NetVision - ネットワーク機器のインベントリ / 保守期限 / ライフサイクル管理 API"
 requires-python = ">=3.11"
 dependencies = [
-    "fastapi>=0.115",
+    "fastapi>=0.133.0",
     # 422 と 413 の定数は 0.48 で今の名前になった（旧名は非推奨で、いずれ消える）。
     # FastAPI の下限だけでは 0.48 未満が入りうるので、ここで下限を持つ
-    "starlette>=0.48",
+    "starlette>=1.0.1",
     "uvicorn[standard]>=0.32",
     "sqlalchemy>=2.0.36",
     "alembic>=1.14",
