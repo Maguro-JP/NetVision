@@ -73,6 +73,8 @@ CORRECTION = re.compile(
 )
 IMPERATIVE = re.compile(r"(?:しろ|せよ|やれ|やめろ|なさい|ください|下さい|くれ|しとけ|とけ|すること|ように|して|で|な|[ろけせてねめれげべ])$")
 UNDONE = re.compile(r"やっていない|やっていません|できていない|できていません|未着手|手を付けていない|残り")
+# 経過の行。ユーザーに見せる文字は成果物と答えだけ。長いなら裏に出してターンを終える（background-first）
+PROGRESS = re.compile(r"^[❕!]\s*(?:進み|進捗|経過)[:：]|(?:してい|動かしてい|書いてい|直してい|回してい)ます。?$")
 PLAN = re.compile(r"(?:し|やり|進め|配り|通し|残し|作り|直し|見|調べ|確かめ|書き|入れ|送り|始め|続け|回し|試し|読み|探し|組み立て|足し|消し|外し)ます。?$")
 PUSHBACK = re.compile(r"しかし|ただし|とはいえ|おすすめしません|お勧めしません|の方が良い|のほうが良い|べきではない|やめた方が|やめたほうが|反対です|賛成できません|AI の判断で|私の判断で")
 OUT_LIMIT = 400_000  # 照合するツールの出力の上限（文字）
@@ -171,6 +173,7 @@ def main() -> int:
     directives = sum(1 for p in re.split(r"[\s。]+", user or "") if p and IMPERATIVE.search(p)) if len(user or "") <= 400 else 0
     marked = sum(1 for l in lines if l[0] in "★⭐↩⏎")
     plan = sum(1 for l in lines if l[0] in MARKS and PLAN.search(l))
+    progress = [l for l in lines if l[0] in MARKS and PROGRESS.search(l)]
     uncovered = directives >= 2 and marked == 0 and not UNDONE.search(text)
     pushback = [l for l in lines if PUSHBACK.search(strip_quotes(l)) and "権限" not in l] if corrected else []
     # 完了の語を、このターンのツールの出力と照合する
@@ -179,7 +182,7 @@ def main() -> int:
     retraction = bool(RETRACTION.search(said))
     record(d.get("session_id", ""), {"lines": len(lines), "questions": questions, "outside_marks": outside,
                                      "claim": claim, "claim_without_evidence": bare, "corrected": corrected, "pushback": len(pushback),
-                                     "directives": directives, "marked": marked, "plan_lines": plan,
+                                     "directives": directives, "marked": marked, "plan_lines": plan, "progress_lines": len(progress),
                                      "tools": len(tools), "unbacked": [n for n, _ in unbacked], "contradiction": contradiction, "retraction": retraction})
     reasons = []
     if pushback:
@@ -195,10 +198,12 @@ def main() -> int:
                        "根拠を足すか、確かめていないなら「確かめていない」と書く（verify-before-done）。")
     if uncovered:
         reasons.append(f"指示が {directives} 個あるのに、★ か ↩ の行が無い。指示ごとに1行ずつ返し、やらなかったものは「やっていない」と書く（follow-instructions）。")
+    if progress:
+        reasons.append(f"経過の行がある（「{progress[0][:30]}」）。ユーザーに見せる文字は成果物と答えだけ。途中で一言を求められたら、残りを裏に出してターンを終える（background-first）。")
     if questions > 1:
         reasons.append(f"❔ が {questions} 行ある。1 ターンに 1 つまで。残りは決めて進めるか、ファイルに書いて ★ で渡す（follow-instructions）。")
     if reasons:
-        print("\n".join(reasons), file=sys.stderr)
+        print("\n".join(reasons) + "\n足りない行だけを足す。前の行を出し直さない。", file=sys.stderr)
         return 2
     return 0
 

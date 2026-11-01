@@ -5,8 +5,9 @@
 HEAD ごとの結果を ~/.claude/state/pr-gate/<repo>.json に残す。pr_gate.py（PreToolUse）がこの記録を見て、
 通っていない HEAD の PR の作成と main への push を止める。
 
-動かすもの（あるものだけ）: コミットメッセージの ID・URL・メールの検査、git diff --check、./scripts/validate.sh、.claude/skills/*/scripts/test_*.py、pytest、
-ja-proofread・content-audit・secret-leak-check・user-terms の差分（base から。user-terms は注意で、落とさない）、npm test（package.json に test があり node_modules があるとき）。
+動かすもの（あるものだけ）: コミットメッセージの ID・URL・メールの検査、git diff --check、./scripts/validate.sh、.claude/skills/*/scripts/test_*.py、
+.claude/hooks/test.sh（リポジトリ自身のテストの台本。無ければ pytest）、
+ja-proofread・content-audit・secret-leak-check・user-terms・ui-design の差分（base から。user-terms と ui-design は注意で、落とさない）、npm test（package.json に test があり node_modules があるとき）。
 
 使い方: precheck.py [--base <ref>]   base の既定は origin のデフォルトブランチ
 環境変数: PR_GATE_STATE=dir  記録の保存先（既定は ~/.claude/state/pr-gate）
@@ -54,6 +55,9 @@ def pass_by_text(name: str, code: int, out: str) -> bool:
         return bool(re.search(r"重大 0 / 注意 0", out))
     if name == "secret-leak-check":
         return "検出なし" in out
+    if name == "pytest":
+        # 5 は「集めたテストが 0 件」。tests/ に Python 以外のテストしか無いリポジトリで出る。落ちたのではない
+        return code in (0, 5)
     return code == 0
 
 
@@ -70,12 +74,17 @@ def main() -> int:
     for t in sorted(glob.glob(".claude/skills/*/scripts/test_*.py")):
         steps.append((t.split("/")[2] + "/" + Path(t).name, f"{sys.executable} -I {t}"))
     has_pytest = sh([sys.executable, "-c", "import pytest"])[0] == 0
-    if has_pytest and (Path("tests").is_dir() or Path("pytest.ini").exists()):
+    if Path(".claude/hooks/test.sh").exists():
+        # repo-bootstrap が置いた、そのリポジトリ自身のテストの台本。何をどう流すか（部品が無ければ飛ばす、など）はここが決める。
+        # 素の pytest を全体に当てると、台本が飛ばす試験まで集めて、環境に無い依存で落ちる
+        steps.append(("test.sh", "echo '{}' | bash .claude/hooks/test.sh"))
+    elif has_pytest and (Path("tests").is_dir() or Path("pytest.ini").exists()):
         steps.append(("pytest", f"{sys.executable} -m pytest -q -x"))
     for name, path in (("proofread", ".claude/skills/ja-proofread/scripts/proofread.py"),
                        ("content-audit", ".claude/skills/content-audit/scripts/audit.py"),
                        ("secret-leak-check", ".claude/skills/secret-leak-check/scripts/scan.py"),
-                       ("user-terms", ".claude/skills/user-terms/scripts/terms.py")):
+                       ("user-terms", ".claude/skills/user-terms/scripts/terms.py"),
+                       ("ui-design", ".claude/skills/ui-design/scripts/ui_check.py")):
         if Path(path).exists():
             steps.append((name, f"{sys.executable} {path} --diff {base}"))
     if Path("package.json").exists() and Path("node_modules").is_dir():

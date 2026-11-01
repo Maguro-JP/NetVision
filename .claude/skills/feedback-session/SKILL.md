@@ -104,10 +104,22 @@ PR をマージし、親セッションがいれば下の「セッション間�
 create_session(
   title="FB <repo> <トピック>",
   source_url="https://github.com/<owner>/<repo>",
-  permission_mode="auto",
-  tags=["feedback-session:auto"],
+  model=<元のセッションの model>,
+  permission_mode=<元のセッションの permission_mode>,
+  tags=["feedback-session:auto", "ciel:<親の skill>:<トピック>"],
   prompt=<下の定型>)
 ```
+
+AI が作るセッションは、元のセッション（作る側）の設定を引き継ぐ。先に `get_session`（session_id 無し）で自分の
+`session_context.model`、`permission_mode`、`effort_level` を取り、そのまま渡す。省くと模型とエフォートがずれて、あとでユーザーが直すことになる。
+
+| 設定 | 値 | 理由 |
+|---|---|---|
+| model | 元のセッションの `session_context.model` をそのまま | ユーザーが元のセッションで選んだ模型が、作った側にも効くように |
+| permission_mode | 元のセッションの `permission_mode` をそのまま（親より緩くは作れない） | `plan` は人の承認で止まる。自律のセッションには使わない |
+| effort | 元のセッションの `effort_level` を引き継ぎたいが、`create_session` に渡す欄が無く、作られた側は low になる。作ったら `❕ <題> を作った（effort は low。元は <値>。上げるならユーザーが切り替える）` と 1 行出す | ツールに欄が無い。黙っていると low のまま回る |
+| tags | `feedback-session:auto` と `ciel:<親の skill>:<トピック>` | 消すときに、自分で立てたものを見分ける |
+| title | work-style「名前の付け方」の形 | 一覧で見分ける |
 
 ```
 <owner>/<repo> の feedback-session <トピック>。成果物: <形1行>。判定: <1行>。
@@ -118,6 +130,7 @@ create_session(
 4. 立てたら `❕ <トピック> ×N 開始` の1行を出して返答を終える。見に行かない
 5. 連絡が届いたら、その1行をそのまま出す。PR がマージ済みで、そのセッションが IDLE なら `archive_session` で片付ける
 6. 実行されたあとの1回きりの Routine は `tidy` で消す
+7. 連絡が来ないまま終わっているものは、週 1 回（skill-upkeep）に `tidy`「終わったセッション」の手順で消す。立てたまま残さない
 
 片付けてよいのは自分で立てたもの（`parent_session_id` が自分、tag `feedback-session:auto`）だけ。
 人が開いたセッションと、人が「残して」と言って `feedback-session:keep` を付けたものは片付けない

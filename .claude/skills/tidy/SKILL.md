@@ -43,6 +43,15 @@ squash マージは作業ブランチを残す。自律開発は毎日ブラン�
 2. `ended_reason` が `run_once_fired` のものを `delete_trigger` で消す
 3. 有効なものと、これから実行される1回きりのものは残す
 
+## 終わったセッション
+
+並列で立てたセッションは、終わっても一覧に残る。残すほど一覧が読めなくなり、紐づいたルーティンの行き先も分からなくなる。
+
+1. `list_sessions` で、自分（か自分の親）が立てたもの（`parent_session_id` がある、tag が `feedback-session:auto` か `ciel:`、tag `config:meta-mcp-own-entry`）を選ぶ
+2. 終わっているもの（IDLE か COMPLETED で、紐づく有効なルーティンが無く、3 日以上動いていない。PR がマージ済みか close）を `archive_session` で消す（アーカイブ。`unarchive_session` で戻せる）。`get_session` の `post_turn_summary` と `list_triggers` の `persistent_session_id` で見る
+3. 人が開いたセッション（`origin` が ios・web・desktop で、上の目印が無い）、`feedback-session:keep` の付いたもの、答え待ちで止まっているもの（BLOCKED）は残す。残したものは週報に 1 行で書く
+4. その週に立てたものは、終わった回の中で消す（feedback-session の 5）。毎日は session-watch が消し、週 1 回の skill-upkeep で取りこぼしを拾う。ツールの権限で消せなかったものは、名前を週報に書く。人には聞かない
+
 ## 散らかさない（予防）
 
 掃除より先に、散らかさない。1 日に表の直しだけの PR を 4 本出し、配布ブランチを -2 から -7 まで増やした日があった。
@@ -66,7 +75,7 @@ squash マージは作業ブランチを残す。自律開発は毎日ブラン�
 1. `python3 .claude/skills/tidy/scripts/tidy_report.py` を動かす。消せるリモートブランチ、残すブランチ、余計なファイル、
    大きなファイル、空のディレクトリ、文書の検査（docs-upkeep）、古い判断待ち、古い PR と Issue を Markdown で出す
 2. 消す。消せるリモートブランチは上の「ブランチ」の手順で（消せない環境では一覧を月報に書き、ユーザーが消す）。
-   実行済みの一回きりの Routine は上の「一回きりの Routine」の手順で。余計なファイルは消してコミットし、`.gitignore` に足す
+   実行済みの一回きりのルーティンは上の「一回きりの Routine」の手順で。終わったセッションは上の「終わったセッション」の手順で。余計なファイルは消してコミットし、`.gitignore` に足す
 3. 直す。docs-upkeep の誤りを直す。30 日より古い判断待ちは、戻せる判断なら決めて進め、そうでなければ月報に「まだ待っている」と 1 行で書く
 4. 残す。開いている PR と Issue、人が作ったブランチは消さない。古いものは月報に一覧で書くだけ
 5. 月報に「整理整頓」の節を書く。消したもの、直したもの、残したものと理由。報告の PR に入れ、整理整頓だけの PR を作らない

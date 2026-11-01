@@ -56,6 +56,12 @@ class DoneCheck(unittest.TestCase):
         self.assertEqual(code, 2)
         self.assertIn("根拠", err)
 
+    def test_progress_line_is_blocked(self):
+        code, err = self.run_hook("❕ 進み: 表を直しています。続けて push します。", tools=())
+        self.assertEqual(code, 2)
+        self.assertIn("経過の行", err)
+        self.assertEqual(self.run_hook("❕ 疑い: 境界は動かしていない。", tools=())[0], 0)  # 疑いの行は経過ではない
+
     def test_honest_unverified_passes(self):
         self.assertEqual(self.run_hook("❕ 設定を足しました。動かしては確かめていない。", tools=())[0], 0)
 
