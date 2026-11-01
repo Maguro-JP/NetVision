@@ -16,7 +16,7 @@ GitHub もコマンド操作も初めてという前提で書いてあります�
 > 方法A の手順で ZIP と一緒に落ちてきます。ダブルクリックして「次へ」を押すと入り、
 > スタートメニューとデスクトップの NetVision から、アプリのウィンドウで開きます。
 > 管理者権限は要りません。消すときは「設定 → アプリ」からアンインストールします。
-> データ（`C:\Users\<名前>\.netvision`）は消えずに残ります。
+> データ（`C:\Users\<名前>\AppData\Local\NetVision`）は消えずに残ります。
 
 ---
 
@@ -24,13 +24,12 @@ GitHub もコマンド操作も初めてという前提で書いてあります�
 
 この作業は1回だけです。作った ZIP を配れば、以降は配るだけで済みます。
 
-作り方は3通りあります。作業用の端末に何を入れられるかで選んでください。
+作り方は2通りあります。作業用の端末に何を入れられるかで選んでください。
 
 | 方法 | 必要なもの | 向いている場合 |
 |---|---|---|
 | A. GitHub に作らせる | ブラウザだけ | 作業用の端末に何も入れられない |
-| B. PowerShell で作る | Node.js のみ | Git を入れられない |
-| C. Git Bash で作る | Git・Node.js・Python | 従来どおり |
+| B. Git Bash で作る | Git・Node.js・Python | 従来どおり |
 
 ---
 
@@ -49,35 +48,11 @@ GitHub もコマンド操作も初めてという前提で書いてあります�
 落ちてきたファイルは ZIP が二重になっています。展開すると中にもう1つ
 `NetVision-（日付）-windows.zip` があるので、それを第2部で使います。
 
-これで作れたなら、方法B・C は読まなくて構いません。
+これで作れたなら、方法B は読まなくて構いません。
 
 ---
 
-## 方法B. PowerShell で作る
-
-Git は要りません。Windows に最初から入っている PowerShell だけで動きます。
-Python も、この処理が組み込み用のものを勝手に取ってくるので入れなくて構いません。
-
-必要なのは Node.js（LTS 版）だけです。<https://nodejs.org/> から入れてください。
-
-ソースコードは、ブラウザで <https://github.com/Maguro-JP/NetVision> を開き、
-緑の `Code` ボタン →`Download ZIP` で落とし、デスクトップに展開します。
-
-展開したフォルダを開き、アドレス欄に `powershell` と打って Enter を押すと、
-そのフォルダで青い画面が開きます。次の1行を貼り付けて Enter を押します。
-
-```powershell
-powershell -ExecutionPolicy Bypass -File packaging\make-bundle-windows.ps1
-```
-
-`-ExecutionPolicy Bypass` は、この1回だけスクリプトの実行を許すという意味です。
-パソコンの設定は変わりません。
-
-終わると `dist` フォルダに ZIP ができます。第2部へ進んでください。
-
----
-
-## 方法C. Git Bash で作る
+## 方法B. Git Bash で作る
 
 ### 1-1. 道具を3つ入れる
 
@@ -175,7 +150,7 @@ NetVision のウィンドウ右上の × で閉じると止まります。裏で
 ## データはどこにあるか
 
 ```
-C:\Users\（あなたのユーザー名）\.netvision
+C:\Users\（あなたのユーザー名）\AppData\Local\NetVision
 ```
 
 このフォルダをコピーすればバックアップになります。
@@ -183,8 +158,10 @@ C:\Users\（あなたのユーザー名）\.netvision
 
 ## 消したいとき
 
-展開したフォルダを削除するだけです。データも消すなら、上の `.netvision` フォルダも
-削除します。レジストリなどは一切触っていないので、他に残るものはありません。
+展開したフォルダを削除するだけです。データも消すなら、先に上の `NetVision` フォルダを
+USB メモリなどへコピーして控えを取り、控えが開けることを確かめてから削除します。
+前の版から使っている場合、データは `C:\Users\（あなたのユーザー名）\.netvision` にあります（[DATA_LOCATIONS.md](DATA_LOCATIONS.md)）。
+レジストリなどは一切触っていないので、他に残るものはありません。
 
 ## 他の人に見せたいとき
 
@@ -208,14 +185,12 @@ C:\Users\（あなたのユーザー名）\.netvision
 | ウィンドウが開かない | `NetVision-console.bat` をダブルクリックし、黒い画面に出た内容を控えて連絡する。展開先が書き込めない場所（Program Files など）の可能性もあるので、デスクトップに置き直す |
 | 「WebView2」が無いと言われる | Windows 10 の古い版で起きる。職場の管理者に Microsoft Edge WebView2 Runtime の導入を相談する |
 | `ポートが使用中` と出る | 他のソフトが 8000 番を使っている。`NetVision.bat` を右クリック →「編集」で `-m scripts.launcher` の後ろに ` --port 9000` を足す |
-| 画面は出るがデータが出ない | データの置き場所（`C:\Users\<名前>\.netvision`）にある `launcher.log` を控えて連絡する |
+| 画面は出るがデータが出ない | データの置き場所（`C:\Users\<名前>\AppData\Local\NetVision`）にある `launcher.log` を控えて連絡する |
 | ウイルス対策ソフトに止められた | 職場の管理者に相談する。中身はソースコードごと開示できる |
 | 第1部の `./packaging/...` で `command not found` | `cd ~/Desktop/NetVision` を先に実行したか確認する |
 | 第1部で `npm: command not found` | Node.js が入っていないか、再起動していない |
 | 第1部で `bad interpreter` や `^M` を含むエラー | 下の「`bad interpreter` と出る」を見る |
 | 第1部で `Python が見つかりません` と出る | Python を「Add python.exe to PATH」にチェックを入れて入れ直し、Git Bash を開き直す |
-| 方法B で `このシステムではスクリプトの実行が無効` と出る | `powershell -ExecutionPolicy Bypass -File ...` の形で打っているか確認する |
-| 方法B で `画面の材料がありません` と出る | Node.js を入れて PowerShell を開き直すか、方法A に切り替える |
 | 方法A で `Run workflow` のボタンが無い | そのリポジトリへの書き込み権限が要る。持っている人に実行を頼む |
 
 ## `bad interpreter` と出る

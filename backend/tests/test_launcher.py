@@ -74,7 +74,32 @@ def test_the_data_folder_can_be_set_without_touching_the_command(monkeypatch, tm
     assert standalone.default_data_dir() == tmp_path / "elsewhere"
 
     monkeypatch.delenv(standalone.DATA_DIR_ENV)
-    assert standalone.default_data_dir() == standalone.DEFAULT_DATA
+    monkeypatch.setattr(standalone, "LEGACY_DATA", tmp_path / "no-legacy")
+    assert standalone.default_data_dir() == standalone.os_data_dir()
+
+
+def test_an_existing_database_in_the_old_place_keeps_being_used(monkeypatch, tmp_path):
+    """前の既定（~/.netvision）に DB があれば、そのまま使う。黙って動かすとデータを見失う。"""
+    monkeypatch.delenv(standalone.DATA_DIR_ENV, raising=False)
+    legacy = tmp_path / ".netvision"
+    legacy.mkdir()
+    (legacy / "netvision.db").write_bytes(b"")
+    monkeypatch.setattr(standalone, "LEGACY_DATA", legacy)
+    assert standalone.default_data_dir() == legacy
+
+
+def test_the_new_default_follows_each_os(monkeypatch, tmp_path):
+    """新しい既定は OS の決まりの場所。Windows は同期されない %LOCALAPPDATA% に置く。"""
+    monkeypatch.setattr(standalone.Path, "home", lambda: tmp_path)
+    monkeypatch.setenv("LOCALAPPDATA", str(tmp_path / "Local"))
+    assert standalone.os_data_dir("win32") == tmp_path / "Local" / "NetVision"
+    assert standalone.os_data_dir("darwin") == (
+        tmp_path / "Library" / "Application Support" / "NetVision"
+    )
+    monkeypatch.delenv("XDG_DATA_HOME", raising=False)
+    assert standalone.os_data_dir("linux") == tmp_path / ".local" / "share" / "netvision"
+    monkeypatch.setenv("XDG_DATA_HOME", str(tmp_path / "xdg"))
+    assert standalone.os_data_dir("linux") == tmp_path / "xdg" / "netvision"
 
 
 def test_the_log_is_written_next_to_the_data(tmp_path):

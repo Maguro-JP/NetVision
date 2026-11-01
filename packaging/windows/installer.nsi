@@ -1,7 +1,7 @@
 ; NetVision の Setup.exe。packaging/make-setup-windows.sh から makensis で組む（SRC、OUT、VERSION を渡す）。
 ; 利用者ごとの場所（%LOCALAPPDATA%\Programs）に入れるので、管理者の権限は要らない。
 ; 起動はスタートメニューとデスクトップのショートカットから。アプリのウィンドウで開き、ブラウザは使わない。
-; データ（DB と資料）は %USERPROFILE%\.netvision、AI のモデルは C:\LLM に置くので、入れた場所の外にある。
+; データ（DB と資料）は %LOCALAPPDATA%\NetVision（前の版からなら %USERPROFILE%\.netvision）、AI のモデルは C:\LLM に置くので、入れた場所の外にある。
 ; 中身の Python が amd64 なので、Setup.exe も 64 ビットにそろえる
 Target amd64-unicode
 !include "MUI2.nsh"
@@ -46,12 +46,12 @@ Section "Install"
 SectionEnd
 
 Section "Uninstall"
-  ; 消すのは入れたもの（プログラム）だけ。データ（%USERPROFILE%\.netvision）と AI のモデル（C:\LLM）は
+  ; 消すのは入れたもの（プログラム）だけ。データ（%LOCALAPPDATA%\NetVision）と AI のモデル（C:\LLM）は
   ; 入れた場所の外にあるので残る。消すと戻せないものには触らない
   RMDir /r "$INSTDIR"
   Delete "$SMPROGRAMS\NetVision\*.lnk"
   RMDir "$SMPROGRAMS\NetVision"
   Delete "$DESKTOP\NetVision.lnk"
   DeleteRegKey HKCU "${UNINST}"
-  MessageBox MB_OK|MB_ICONINFORMATION "NetVision を消しました。$\r$\nデータ（$PROFILE\.netvision）と AI のモデル（C:\LLM）は残してあります。" /SD IDOK
+  MessageBox MB_OK|MB_ICONINFORMATION "NetVision を消しました。$\r$\nデータ（$LOCALAPPDATA\NetVision）と AI のモデル（C:\LLM）は残してあります。" /SD IDOK
 SectionEnd

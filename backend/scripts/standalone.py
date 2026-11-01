@@ -24,11 +24,40 @@ REPO = Path(__file__).resolve().parent.parent.parent
 #: 端末によっては C ドライブに置けない（データを残さない決まりの端末など）ので、
 #: 画面を触らずに、起動用のファイルの中だけで移せるようにしておく
 DATA_DIR_ENV = "NETVISION_DATA_DIR"
-DEFAULT_DATA = Path.home() / ".netvision"
+#: これまでの置き場所。ここに DB があれば、そのまま使い続ける（黙って動かさない）
+LEGACY_DATA = Path.home() / ".netvision"
+#: 互換のための名前。新しい既定は os_data_dir() で決まる
+DEFAULT_DATA = LEGACY_DATA
+
+
+def os_data_dir(platform: str | None = None) -> Path:
+    """OS ごとの、利用者ひとり分のデータの置き場所。
+
+    Windows は %LOCALAPPDATA%\\NetVision。%APPDATA%（Roaming）は同期されるので SQLite を置かない。
+    C:\\ProgramData は端末で共有する場所で、別の利用者が作ったファイルは書けないので使わない
+    （複数人で使うならサーバーで動かし、DB は PostgreSQL にする。docs/DATA_LOCATIONS.md）。
+    macOS は ~/Library/Application Support/NetVision、Linux は $XDG_DATA_HOME/netvision
+    （無ければ ~/.local/share/netvision）。
+    """
+    platform = platform or sys.platform
+    home = Path.home()
+    if platform.startswith("win"):
+        base = os.environ.get("LOCALAPPDATA")
+        return Path(base) / "NetVision" if base else home / "AppData" / "Local" / "NetVision"
+    if platform == "darwin":
+        return home / "Library" / "Application Support" / "NetVision"
+    base = os.environ.get("XDG_DATA_HOME")
+    return (Path(base) if base else home / ".local" / "share") / "netvision"
 
 
 def default_data_dir() -> Path:
-    return Path(os.environ.get(DATA_DIR_ENV) or DEFAULT_DATA).expanduser()
+    """DB と資料の置き場所。指定 > これまでの置き場所（DB があるとき） > OS の決まりの場所。"""
+    named = os.environ.get(DATA_DIR_ENV)
+    if named:
+        return Path(named).expanduser()
+    if (LEGACY_DATA / "netvision.db").is_file():
+        return LEGACY_DATA
+    return os_data_dir()
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -42,7 +71,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--data-dir",
         default=None,
-        help=f"DB と資料ファイルの置き場所（既定 {DEFAULT_DATA}、{DATA_DIR_ENV} でも指定できる）",
+        help=f"DB と資料ファイルの置き場所（既定は OS ごとの場所、{DATA_DIR_ENV} でも指定できる）",
     )
     parser.add_argument("--demo", action="store_true", help="デモデータを入れて起動する")
     return parser

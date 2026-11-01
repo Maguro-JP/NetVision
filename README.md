@@ -76,9 +76,7 @@ docs/INSTALL.md          閉域環境への導入手順書
 docs/WINDOWS_BEGINNER.md Windows で動かす手順（はじめての人向け）
 docs/OPERATIONS.md   運用手順書
 docs/UPGRADE.md          版を上げる手順（入れ替え・確認・戻し方）
-docs/PREVIEW.md  プレビュー環境（Vercel）の手順
-api/index.py     プレビュー用のサーバーレス関数入口
-packaging/       閉域へ持ち込むオフラインバンドルの作成・導入スクリプト
+packaging/       Windows の Setup.exe と ZIP を作るスクリプト、サーバー用の systemd 設定
 ```
 
 ## 起動方法
@@ -91,20 +89,18 @@ cd backend && .venv/bin/pip install -e '.[desktop]'   # 初回のみ
 cd backend && .venv/bin/python -m scripts.launcher     # アプリのウィンドウが開く
 ```
 
-データは `~/.netvision/netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
+データは `netvision.db` の1ファイルに入るので、コピーすればバックアップになります。
+置き場所は OS ごとに決まっていて（Windows は `%LOCALAPPDATA%\NetVision`）、サーバーで複数人で使うときは PostgreSQL にします（[docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md)）。
 認証がまだ無いため、既定では自分の端末からのみ待ち受けます。
 
 ### 閉域環境へ導入する
 
-インターネットに繋がらない環境へは、持ち込み用の1ファイルを作って渡します。
+インターネットに繋がらない環境へは、Windows の Setup.exe か ZIP を作って渡します。
 閉域側で Git もネットも使いません。
 
 ```bash
-./packaging/make-bundle.sh        # ネット側で実行 → dist/netvision-YYYYMMDD.tar.gz
+./packaging/make-setup-windows.sh   # → dist/NetVision-Setup.exe と ZIP
 ```
-
-閉域側は展開して `./install.sh`（Windows は `install.bat`）だけ。必要なのは Python 3.11 以上のみで、
-Node.js もインターネットも要りません。
 
 Python すら入れられない環境向けに、インストール不要版も作れます。
 python.org の embeddable package を同梱するので、ZIP を展開して `NetVision.bat` を
@@ -133,10 +129,7 @@ docker compose up --build
 docker compose exec backend python -m scripts.seed
 ```
 
-### プレビュー（Vercel）
-
-PR ごとに実際の画面を触って確認できます。DB の用意は不要で、デモデータが自動で入ります。
-手順と制約は [docs/PREVIEW.md](docs/PREVIEW.md) を参照してください。
+### 本番運用の想定
 
 本番運用の想定は変わりません。 閉域のオンプレが前提です。サーバーに載せるのが
 理想ですが、採用の前に現場のノートPCで実データを試せないと話が進みません。
@@ -230,7 +223,7 @@ Excel でそのまま開けるよう BOM 付き UTF-8）。
 ```
 
 これにより、最初の1回さえ取り込めば、以降はフォーマットの揺れを気にせず運用できます。
-往復して内容が変わらないことは自動テストで担保しています（`tests/test_export_api.py`）。
+往復して内容が変わらないことは自動テストで担保しています（`backend/tests/test_export_api.py`）。
 
 算出列（保守期限・残日数・経過年数・アラート）も既定で出力されます。これらは取り込み対象では
 ないため、取り込み時は自動的に「取り込まない」列として扱われます。稟議・見積依頼用の資料には
@@ -246,7 +239,7 @@ Excel でそのまま開けるよう BOM 付き UTF-8）。
 - 取り込み1回分の変更は同じバッチIDでまとまるため、「あの取り込みで何が変わったか」を追えます
 - 発生元（画面操作 / 台帳の取り込み / デモデータ）で絞り込めます
 
-実装は SQLAlchemy のフラッシュに介入する方式（`app/services/audit.py`）です。
+実装は SQLAlchemy のフラッシュに介入する方式（`backend/app/services/audit.py`）です。
 個々のAPIに記録処理を書くと必ず抜けが出るため、1か所で全ての変更を捕捉しています。
 
 ## 最適化の指摘
@@ -1489,7 +1482,7 @@ NVD にあるのは説明文と参照URLだけ、回避策はベンダーのア�
 | `NETVISION_LLM_API_KEY` | なし | 事業者の API を使う場合の鍵。閉域では空のまま |
 | `NETVISION_LLM_ALLOWED_HOSTS` | なし | 外へ出してよい宛先（カンマ区切り）。並べると、そこ以外へは出さない |
 | `NETVISION_LLM_ALLOW_EXTERNAL` | `false` | 外向きの宛先を許すか。既定は不可で、社内・手元の宛先だけ繋ぐ |
-| `NETVISION_DATA_DIR` | `~/.netvision` | 1台完結で動かすときの、DB と資料の置き場所。C ドライブに置けない端末向け |
+| `NETVISION_DATA_DIR` | OS ごとの場所（[docs/DATA_LOCATIONS.md](docs/DATA_LOCATIONS.md)） | 1台完結で動かすときの、DB と資料の置き場所。C ドライブに置けない端末向け |
 | `NETVISION_ENV_FILE` | なし | 客先ごとの設定ファイル。`.env` の後に読み、書いてある項目だけ上書きする |
 | `NETVISION_LLM_PROFILES` | なし | 役割ごとにモデルを分ける場合の一覧（JSON）。下の例を参照 |
 
@@ -1670,3 +1663,4 @@ CI が走らなかったとき、落ちたときは、手元で上のコマン�
 
 更改計画のトポロジー上での影響範囲表示、図のエクスポート、Config の自動収集を予定しています。
 詳細は [docs/ROADMAP.md](docs/ROADMAP.md) を参照してください。
+ネットワーク管理システムとして育てる場合の構想は [docs/NMS_CONCEPT.md](docs/NMS_CONCEPT.md) にあります。
