@@ -17,6 +17,7 @@ description: 走っているセッションを観察して、使われている�
 - `list_triggers` で Routine を見る。実行されたのに成果がないもの、1回きりのまま残っているもの
 - 各リポジトリ（ルーティンの紐づけ先）で、この1週間の PR のタイトルと、`.claude/skills/lessons/LESSONS.md` に増えた項目、`docs/reports/pending.md` の答え待ちを読む。
   手元に clone があれば `scripts/observe.py` が 1 本で表にする（コミット・PR のマージ・DEV/SYNC/FB の数・Ciel に無い lessons の題・答えの無い判断待ち）
+- 各リポジトリからのスキルの要請（`docs/reports/skill-requests.md`。`skill-request` の `requests.py --collect` が 1 つの表にする）。未対応は「新作」の先頭の候補
 - ユーザーがこの1週間に直させたこと（Ciel の git log と lessons）
 - Ciel に `content-audit` の `--all` と `ja-proofread` の `--tree` を当て、見せてはいけないものと壊れた日本語が増えていないか見る。見つかったら直す PR を先に出す
 
@@ -24,7 +25,7 @@ description: 走っているセッションを観察して、使われている�
 週の上限（`rate_limit_info.status` が `rejected`）で止まったものは起こさない。枠の使い道はユーザーが決める（patrol）。
 
 月の最初の回は、観察の前に Ciel 自身に tidy の「月に 1 回の整理整頓」を行い、結果を週報に書く。
-毎回、観察のあとに tidy の「終わったセッション」と「一回きりの Routine」の手順で、立てたまま終わっているセッションと実行済みの一回きりのルーティンを消し、数を週報に書く。
+毎回、観察のあとに session-watch の `judge.py` を回し、actions.json の順に消す・無効にする・催促する（AI が作ったものだけ。人のセッションには触らない）。tidy の「一回きりの Routine」の手順で実行済みの一回きりのルーティンも消し、数を週報に書く。
 
 ### 2. 教訓の収穫
 

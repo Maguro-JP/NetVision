@@ -50,7 +50,7 @@ squash マージは作業ブランチを残す。自律開発は毎日ブラン�
 1. `list_sessions` で、自分（か自分の親）が立てたもの（`parent_session_id` がある、tag が `feedback-session:auto` か `ciel:`、tag `config:meta-mcp-own-entry`）を選ぶ
 2. 終わっているもの（IDLE か COMPLETED で、紐づく有効なルーティンが無く、3 日以上動いていない。PR がマージ済みか close）を `archive_session` で消す（アーカイブ。`unarchive_session` で戻せる）。`get_session` の `post_turn_summary` と `list_triggers` の `persistent_session_id` で見る
 3. 人が開いたセッション（`origin` が ios・web・desktop で、上の目印が無い）、`feedback-session:keep` の付いたもの、答え待ちで止まっているもの（BLOCKED）は残す。残したものは週報に 1 行で書く
-4. その週に立てたものは、終わった回の中で消す（feedback-session の 5）。毎日は session-watch が消し、週 1 回の skill-upkeep で取りこぼしを拾う。ツールの権限で消せなかったものは、名前を週報に書く。人には聞かない
+4. その週に立てたものは、終わった回の中で消す（feedback-session の 5）。週 1 回の skill-upkeep で session-watch の judge.py を回して消す。ツールの権限で消せなかったものは、名前を週報に書く。人には聞かない
 
 ## 散らかさない（予防）
 

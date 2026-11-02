@@ -25,6 +25,7 @@ TABLE = [
     (r"判断待ち|決めて|答え", "判断待ちを見る・答える→pending"),
     (r"ブランチ.*(整理|消|多い)|掃除|片付け|散らか|PR が多い", "散らかさない・ブランチや Routine の掃除→tidy（表や週報は同じ PR に、配布ブランチは 1 日 1 本、Release とタグは頼まれたときだけ）"),
     (r"フィードバック|トピック|並列|成果物だけ", "トピックごとにセッションを分けて成果物で回す・並列で開発→feedback-session"),
+    (r"スキル.*(欲しい|足りない|要請|頼んで|にして)|要請", "スキルが欲しい・足りない→skill-request（requests.py --add で docs/reports/skill-requests.md に書き、作業の PR に入れる。Ciel が週 1 回拾う）"),
     (r"スキル", "セッションを見てスキルを直す・作る→skill-upkeep／1つのスキルの診断→skill-audit／配るだけ→skill-sync"),
     (r"トークン|文脈|頭打ち|長いセッション|節約|無駄", "文脈が膨らむ・トークンを節約する→token-efficiency（読む前に探す、要る範囲だけ読む、出力を絞る、一覧には limit）"),
     (r"権限|許可|permissions|policy|auto_merge", "権限や方針を足したくなった→follow-instructions（AI は自分に権限を付与しない。ユーザーが入れる）"),
