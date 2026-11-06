@@ -11,9 +11,9 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
-from judge import judge, load, repo_of  # noqa: E402
+from judge import judge, load, repo_of, window_days  # noqa: E402
 
-NOW = dt.datetime(2026, 11, 1, 0, 0, tzinfo=dt.timezone.utc)
+NOW = dt.datetime.now(dt.timezone.utc).replace(microsecond=0)  # commits_since は git log --since で実際の今から数えるので、作る clone の日付も今から数える
 
 
 def sess(id, title, status="SESSION_STATUS_IDLE", bucket="SESSION_STATUS_BUCKET_COMPLETED", days=0, **kw):
@@ -21,8 +21,8 @@ def sess(id, title, status="SESSION_STATUS_IDLE", bucket="SESSION_STATUS_BUCKET_
             "updated_at": (NOW - dt.timedelta(days=days)).isoformat().replace("+00:00", "Z"), **kw}
 
 
-def trig(id, sid, prompt, enabled=True, last="ROUTINE_RUN_STATUS_SUCCEEDED"):
-    return {"id": id, "name": prompt, "persistent_session_id": sid, "enabled": enabled, "derived_state": {"prompt": prompt}, "last_run": {"status": last}}
+def trig(id, sid, prompt, enabled=True, last="ROUTINE_RUN_STATUS_SUCCEEDED", cron="0 0 * * *"):
+    return {"id": id, "name": prompt, "persistent_session_id": sid, "enabled": enabled, "cron_expression": cron, "derived_state": {"prompt": prompt}, "last_run": {"status": last}}
 
 
 def make_clone(root: Path, name: str, days_ago: int):
@@ -42,9 +42,11 @@ class Judge(unittest.TestCase):
             root = Path(d)
             make_clone(root, "Lazy", days_ago=10)
             make_clone(root, "Busy", days_ago=1)
+            make_clone(root, "Weekly", days_ago=6)
             sessions = [
                 sess("s_lazy", "Lazy 長期開発", days=1, origin="ios"),  # 人が開いたが、ルーティンの動きは見る
                 sess("s_busy", "Busy 長期開発", days=1, origin="claude_code_mcp_seed"),
+                sess("s_weekly", "Weekly 長期開発", days=1, parent_session_id="p"),  # 週 1 回のルーティン。6 日前のコミットで回っている
                 sess("s_limit", "Limit", bucket="SESSION_STATUS_BUCKET_FAILED", days=1, parent_session_id="p", post_turn_summary={"status_detail": "You've hit your weekly limit"}),
                 sess("s_fail", "Fail", bucket="SESSION_STATUS_BUCKET_FAILED", days=1, origin="ios", post_turn_summary={"status_detail": "error"}),
                 sess("s_aifail", "AI 落ちた", bucket="SESSION_STATUS_BUCKET_FAILED", days=1, parent_session_id="p", post_turn_summary={"status_detail": "error"}),
@@ -65,12 +67,18 @@ class Judge(unittest.TestCase):
             triggers = [trig("t1", "s_lazy", "Maguro-JP/Lazy の long-dev"), trig("t2", "s_busy", "Maguro-JP/Busy の long-dev"),
                         trig("t3", "s_fail", "Maguro-JP/Fail の long-dev"), trig("t4", "s_limit", "Maguro-JP/Limit"),
                         trig("t5", "s_arch", "Maguro-JP/Gone の週 1 回"), trig("t6", "s_gone", "Maguro-JP/Gone2", enabled=False),
-                        trig("t7", "s_harch", "人の済みの週 1 回"), trig("t8", "s_nowhere", "一覧に無い")]
+                        trig("t7", "s_harch", "人の済みの週 1 回"), trig("t8", "s_nowhere", "一覧に無い"),
+                        trig("t9", "s_weekly", "Maguro-JP/Weekly の long-dev", cron="CRON_TZ=Asia/Tokyo 0 9 * * 0")]
             rows, actions = judge(sessions, triggers, NOW, clones=root, days=3, fetch=False)
             v = {r[0]: r[2] for r in rows}
             act = {r[0]: r[4] for r in rows}
             self.assertEqual(v["Lazy 長期開発"], "サボり")
             self.assertEqual(v["Busy 長期開発"], "回っている")
+            self.assertEqual(v["Weekly 長期開発"], "回っている")  # 週 1 回は 8 日の窓で見る
+            self.assertEqual(window_days("CRON_TZ=Asia/Tokyo 0 9 * * 0", 3), 8)
+            self.assertEqual(window_days("0 0 1 * *", 3), 32)
+            self.assertEqual(window_days("0 22 * * *", 3), 3)
+            self.assertEqual(window_days("", 3), 3)
             self.assertEqual(v["Limit"], "上限で止まった")
             self.assertEqual(v["Fail"], "落ちた")
             self.assertEqual(v["AI 落ちた"], "落ちた")

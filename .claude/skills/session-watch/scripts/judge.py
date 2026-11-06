@@ -31,7 +31,7 @@ PR_WAIT = re.compile(r"\bPRs?\b|マージ|\bmerge\b|\bpush\b|\bmain\b|リリー�
 REPO = re.compile(r"\b([\w.-]+)/([\w.-]+)\b")
 AI_TAGS = ("feedback-session:", "ciel:", "config:meta-mcp-own-entry")
 TEXT = {
-    "サボり": "前回から成果が無い（{days} 日間コミット 0）。今日の分を進める。進めない理由があれば docs/reports/pending.md に書く",
+    "サボり": "前回から成果が無い（この間隔でコミット 0）。今日の分を進める。進めない理由があれば docs/reports/pending.md に書く",
     "落ちた": "前回は落ちた（{detail}）。続きを進める",
     "答え待ち": "判断待ちで止まっている。戻せる判断はデフォルトで進め（finish-first）、戻せないものは docs/reports/pending.md に書いて次へ進む",
     "動いたまま止まっている": "{idle} 日動いたままだったので止めた。続きを進める",
@@ -67,6 +67,21 @@ def repo_of(prompt: str):
         if "/" in m.group(0) and not m.group(0).startswith("."):
             return name
     return None
+
+
+def window_days(cron: str, days: int) -> int:
+    """ルーティンの間隔から、成果を見る日数。週 1 回（曜日の欄が * でない）なら 8 日、月 1 回（日の欄が * でない）なら 32 日。それ以外は days。
+    毎日のルーティンの日数で週 1 回のものを見ると、動いているのにサボりに見える。"""
+    f = (cron or "").split()
+    if f and f[0].startswith("CRON_TZ="):
+        f = f[1:]
+    if len(f) != 5:
+        return days
+    if f[4] != "*":
+        return max(days, 8)
+    if f[2] != "*":
+        return max(days, 32)
+    return days
 
 
 def commits_since(clones: Path, repo: str, days: int, fetch: bool):
@@ -143,14 +158,15 @@ def judge(sessions, triggers, now, clones=None, days=3, fetch=False):
                 verdict, why, act = "動いている", detail, "無し"
         elif enabled:
             repo = next((repo_of(t.get("derived_state", {}).get("prompt") or t.get("prompt") or "") for t in enabled), None)
-            n = commits_since(clones, repo, days, fetch)
+            win = max(window_days(t.get("cron_expression", ""), days) for t in enabled)
+            n = commits_since(clones, repo, win, fetch)
             last = (enabled[0].get("last_run") or {}).get("status", "")
             if n is None:
                 verdict, why, act = "分からない", f"clone 無し（{repo}）", "待機（clone を置けば次から判定できる）"
             elif n == 0 and "SUCCEEDED" in last:
-                verdict, why, act = "サボり", f"ルーティンは動くが {days} 日間コミット 0（{repo}）。{detail}", nudge("サボり")
+                verdict, why, act = "サボり", f"ルーティンは動くが {win} 日間コミット 0（{repo}）。{detail}", nudge("サボり")
             else:
-                verdict, why, act = "回っている", f"{days} 日でコミット {n}", "無し"
+                verdict, why, act = "回っている", f"{win} 日でコミット {n}", "無し"
         elif not keep and idle >= days:
             verdict, why, act = "無駄", f"AI が立てて {idle} 日、ルーティン無し", "消す（アーカイブ）"
             actions["archive"].append({"id": sid, "title": title, "why": why})

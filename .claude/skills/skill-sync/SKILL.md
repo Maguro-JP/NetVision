@@ -73,6 +73,14 @@ Ciel → <repo> の .claude/skills/（見るだけ）
 sync.py <対象のパス> --apply
 ```
 
+CLAUDE.md の「ユーザーの決めたこと」も同じ PR で写す。Ciel の節の行を鍵（先頭の語。無ければ最初のスキルの名前）で突き合わせ、
+無い行は節の末尾に足し、文言の変わった行は置き換え、対象にだけある行は触らない（末尾に空行を作らない。precheck の diff --check で落ちる）。
+
+```
+Ciel/.claude/skills/skill-sync/scripts/rules_sync.py <対象のパス>          # 足す行と置き換える行を出すだけ
+Ciel/.claude/skills/skill-sync/scripts/rules_sync.py <対象のパス> --apply  # 書き換える
+```
+
 一部だけなら `--only auto-dev,ci-triage`。
 
 `lessons/LESSONS.md` だけは上書きしない。そのリポジトリで起きた失敗の記録なので、
