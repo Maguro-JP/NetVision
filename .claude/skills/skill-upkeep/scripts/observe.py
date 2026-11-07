@@ -52,10 +52,12 @@ def observe(repo: Path, since: str, ciel_heads: set, fetch: bool = True) -> dict
     lessons = git(repo, "show", f"{ref}:.claude/skills/lessons/LESSONS.md")
     extra = [h for h in heads(lessons) if h not in ciel_heads] if lessons else []
     pending = git(repo, "show", f"{ref}:docs/reports/pending.md")
+    requests = git(repo, "show", f"{ref}:docs/reports/skill-requests.md")
+    requests_open = sum(1 for s in re.split(r"^(?=## )", requests, flags=re.M) if s.startswith("## ") and not re.search(r"^- 状態: (?:対応済み|見送り)", s, re.M))
     sections = [s for s in re.split(r"^(?=## )", pending, flags=re.M) if s.startswith("## ")]
     open_items = [s for s in sections if not re.search(r"^- 答え|答え[:：（(]|反映済み", s, re.M)]
     return {"repo": repo.name, "branch": branch, "commits": len(subjects), "merges": merges, **kinds,
-            "lessons_extra": extra, "pending_open": len(open_items)}
+            "lessons_extra": extra, "pending_open": len(open_items), "requests_open": requests_open}
 
 
 def main() -> int:

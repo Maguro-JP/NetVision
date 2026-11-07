@@ -25,6 +25,7 @@ TABLE = [
     (r"判断待ち|決めて|答え", "判断待ちを見る・答える→pending"),
     (r"ブランチ.*(整理|消|多い)|掃除|片付け|散らか|PR が多い", "散らかさない・ブランチや Routine の掃除→tidy（表や週報は同じ PR に、配布ブランチは 1 日 1 本、Release とタグは頼まれたときだけ）"),
     (r"フィードバック|トピック|並列|成果物だけ", "トピックごとにセッションを分けて成果物で回す・並列で開発→feedback-session"),
+    (r"スキル.*(欲しい|足りない|要請|頼んで|にして)|要請", "スキルが欲しい・足りない→skill-request（requests.py --add で docs/reports/skill-requests.md に書き、作業の PR に入れる。Ciel が週 1 回拾う）"),
     (r"スキル", "セッションを見てスキルを直す・作る→skill-upkeep／1つのスキルの診断→skill-audit／配るだけ→skill-sync"),
     (r"トークン|文脈|頭打ち|長いセッション|節約|無駄", "文脈が膨らむ・トークンを節約する→token-efficiency（読む前に探す、要る範囲だけ読む、出力を絞る、一覧には limit）"),
     (r"権限|許可|permissions|policy|auto_merge", "権限や方針を足したくなった→follow-instructions（AI は自分に権限を付与しない。ユーザーが入れる）"),
@@ -37,6 +38,7 @@ TABLE = [
     (r"サボ|無駄なセッション|セッション.*(止ま|消|溜ま|動いてない)", "サボり・止まり・無駄なセッション→session-watch（judge.py で判定し、AI が作ったものだけ催促・待機・消す。人のセッションには触らない）"),
     (r"脆弱性|CVE|セキュリティ|依存.*(安全|更新|古)|更新が遅|パッチ|悪用", "脆弱性を調べる・依存の更新→vuln-watch（inventory.py で棚卸し、scan.py で OSV・KEV・JVN に突き合わせ、新しいものを周知。更新は bump.py と solo-pr-flow）"),
     (r"略語|訳語|造語|用語|言い方|言葉を|俺の言|呼び方", "略語・訳語・造語をユーザーの語に直す→user-terms（表は references/user-terms.md。Stop フックが会話を止め、precheck が文書を注意で出す。表に無い語は --candidates で見て足す）"),
+    (r"感情|怒|いらだ|イライラ|機嫌|気持ち|言わせ", "ユーザーの感情を読んで動き方を変える→user-emotion（いらだちには謝らず聞き返さず 1〜2 行で実行。同じ指示の 2 回目は理由を 1 行で書いて今すぐやる）"),
     (r"短い|一言|文脈から|プロンプト", "短い一言・文脈からプロンプトを組み立てる→prompt-from-context（対象・やること・形・完成条件を前の会話から補い、↩ 読み取り を1行出してから動く。聞き返さない）"),
 ]
 hits = [line for pat, line in TABLE if re.search(pat, prompt)]

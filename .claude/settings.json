@@ -70,6 +70,11 @@
             "type": "command",
             "command": "python3 .claude/skills/user-terms/hooks/terms_learn.py",
             "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "python3 .claude/skills/user-emotion/hooks/emotion.py",
+            "timeout": 10
           }
         ]
       }
