@@ -268,10 +268,10 @@ Config には入っていない情報なので、別途登録します。
 止めてから、データディレクトリごとコピーするだけです。
 
 ```bash
-cp -r ~/.netvision ~/backup/netvision-$(date +%Y%m%d)
+cp -r ~/.local/share/netvision ~/backup/netvision-$(date +%Y%m%d)
 ```
 
-Windows の場合は `C:\Users\<ユーザー名>\.netvision` フォルダをコピーします。
+Windows の場合は `C:\Users\<ユーザー名>\AppData\Local\NetVision` フォルダをコピーします。
 
 ### Docker Compose
 
@@ -294,7 +294,7 @@ docker run --rm -v netvision_documents:/d -v "$PWD:/out" alpine \
 
 要点だけ:
 
-- データディレクトリ（`~/.netvision`）は触らないので、そのまま引き継がれます
+- データディレクトリ（`~/.local/share/netvision`）は触らないので、そのまま引き継がれます
 - 表の形が変わるときは、起動すると「表の更新」ページが出ます。控えを取ってから更新し、問題ないことを確認するまで控えは残します
 - いまの版は `/api/v1/meta` で確認できます。上げる前に控えておいてください
 

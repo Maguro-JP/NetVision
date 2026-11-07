@@ -13,6 +13,12 @@ Type=simple
 User=netvision
 WorkingDirectory=/opt/netvision/backend
 Environment=NETVISION_SERVE_FRONTEND=/opt/netvision/frontend/dist
+# DB と資料の置き場所。ProtectHome=read-only なので、ホームの下（既定の置き場所）には書けない。
+# systemd が /var/lib/netvision を作り、User の持ち物にする（StateDirectory）
+Environment=NETVISION_DATA_DIR=/var/lib/netvision
+StateDirectory=netvision
+# 複数人で使う・台数が多い場合は PostgreSQL にする（docs/DATA_LOCATIONS.md）
+#Environment=NETVISION_DATABASE_URL=postgresql+psycopg://netvision:CHANGE_ME@127.0.0.1:5432/netvision
 ExecStart=/opt/netvision/.venv/bin/python -m scripts.standalone --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5

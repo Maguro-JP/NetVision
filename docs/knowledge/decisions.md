@@ -114,7 +114,7 @@
 - 触る場所: `backend/app/services/configcheck.py` の `_JUNOS_LOGICAL_SYSTEM`、読むときは `configparse/juniper.py` と
   `configparse/__init__.py` の `parse`。
 
-## Junos の論理システムを取り込むときの設計（2026-10-12 JST。未実装）
+## Junos の論理システムを取り込むときの設計（2026-10-12 JST。2026-11-01 JST に `configs.ingest_many` へつないだ）
 
 - 決めたこと: 論理システムは「1つのファイルに何台分も入っている」の一種として扱う。
   `configs.ingest_many` が今 `configsplit.split` で台数ぶんに分けているのと同じ段で、Junos の塊に論理システムがあれば
@@ -128,10 +128,13 @@
   AP の自動登録（`_register_aps`）と違い、論理システムは自分の口と経路を持つので、同じ読み手で読める形にして渡すのが素直
 - 変わらないもの: 設定の点検（`configcheck.check`）は1ファイル1機器のまま。notes の「論理システムの中は読んでいない」も残す
   （点検を論理システムごとに出すのは別の段にする）
-- 決めていないこと（実装の前に確かめる）:
-  - 機器の種別（device_type）と拠点は全体の機器から写すか。AP の登録はコントローラの拠点を写している
-  - `device_id` を指定して取り込んだとき（今は分けない）に、論理システムをどう扱うか。指定と食い違うので、分けない方に倒す案
-  - 名前の区切りに `/` を使ってよいか（台帳・URL・画面で問題が出ないか）
+- 決めていなかったこと（2026-10-31 JST にデフォルトを決めた。AI の判断。戻せる）:
+  - 機器の種別（device_type）と拠点は、全体の機器から写す。AP の登録がコントローラの拠点を写すのと同じ形にそろえる
+  - `device_id` を指定して取り込んだときは、論理システムを分けない（今のまま）。指定した1台と食い違うため。
+    結果の notes の「論理システムの中は読んでいない」はそのまま出る
+  - 名前の区切りは `_` にする（`core-01_LS1`）。`/` と `:` は、機器名が入る書き出しのファイル名（Windows で使えない）で困る。
+    `.` は `normalize_hostname` がドメインとして切り落とし、全体の機器と同じ名前になってしまう。
+    採らなかった案: `/`（10/12 の案）、`:`（Junos のプロンプトの形）、`.`、`-`（実在の機器名と見分けにくい）
 - 採らなかった案: parse が複数の ParsedConfig を返す入口（`parse_all`）を足す（10/4 の案）。呼び出し元が8か所あり、
   全部を複数台に対応させる必要がある。`ingest_many` の分ける段に寄せれば、触るのは1か所で済む
 - 触る場所: `backend/app/services/configs.py` の `ingest_many`、`backend/app/services/configparse/juniper.py` の
@@ -193,3 +196,16 @@
 - 理由: 決めてあった「Node.js の版は、その時点で最新の LTS に合わせる」（判断待ち 5 の答え）。nodejs/Release の schedule.json で、v26 の lts は 2026-10-28。
   手元で Node 26.13.0（LTS「Lithium」）を使い、frontend の npm ci・型チェック・試験（230 passed）・ビルドが通った。
 - 触る場所: `.github/workflows/ci.yml`、`.github/workflows/bundle.yml`、`.github/workflows/windows-smoke.yml`、`frontend/Dockerfile`
+
+## データの置き場所を OS の決まりの場所にし、複数人は PostgreSQL にする（2026-10-31 JST）
+
+- 決めたこと: 1台で使うときの既定の置き場所を、Windows は `%LOCALAPPDATA%\NetVision`、macOS は `~/Library/Application Support/NetVision`、
+  Linux は `$XDG_DATA_HOME/netvision`（無ければ `~/.local/share/netvision`）にした。前の既定 `~/.netvision` に DB があれば、そのまま使い続ける。
+  サーバーで複数人で使うときは `NETVISION_DATABASE_URL` で PostgreSQL にし、systemd の例は `/var/lib/netvision`（StateDirectory）に置く。
+- 理由: ユーザーの指示（DB の置き方も一番良いのを考えて、今後の拡張性やサーバーでの利用も考慮して）。Setup.exe は利用者ごとに入るので、
+  データも利用者ごとの OS の決まりの場所にそろえる。複数人で書くなら SQLite の1ファイルより PostgreSQL が向いていて、表は Alembic で同じものが作れる。
+  あわせて、systemd の例がホームを読み取り専用にしたまま既定の置き場所（ホームの下）に書こうとしていた食い違いを直した。
+- 採らなかった案: `C:\ProgramData\NetVision`（端末で共有する場所で、別の利用者が作ったファイルは既定で書き換えられない。shared-models の決まりの
+  「設定は ProgramData」は Program Files に入れるアプリ向けで、利用者ごとに入れる Setup.exe とは合わない）。`%APPDATA%`（Roaming。同期で SQLite が壊れることがある）。
+  `~/.netvision` のまま（OS の決まりから外れ、Windows ではホームの直下に隠しフォルダが増える）。前の場所から自動で移す（黙って動かすとデータを見失う）。
+- 触る場所: `backend/scripts/standalone.py`（default_data_dir、os_data_dir）、`packaging/netvision.service`、`docs/DATA_LOCATIONS.md`

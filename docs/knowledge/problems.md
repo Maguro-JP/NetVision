@@ -2153,3 +2153,36 @@ OpenAPI の定義から全経路（194）に崩れた要求を送り、500 を�
   Arista ATD Lab Guides の Layer 3 Leaf-Spine（labguides-dev.testdrive.arista.com）の出力例。どれも Status は up だけだった。
 - 結論: 直す所は無い。docstring に「資料に届かない」として見た資料を書いた（成果物 2 の完成条件）。
   `show interfaces` の段落（`line protocol is lowerlayerdown (notconnect)`）は Arista Community の記事にあるが、公式の資料ではないので根拠にしない。
+
+## Cisco の `show interfaces status` の disabled・monitoring は公式の出力例に無い（2026-10-31 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の `_STATUS_WORDS` のうち、disabled・monitoring・切り詰めた notconnec は「既存の試験の形（未確認）」だった。
+- 見た資料: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、Cupertino 17.9.x・Dublin 17.11.x・17.16.x・17.17.x）の
+  Checking Port Status and Connectivity。`show interface status` の出力例は connected と notconnect、err-disabled の例だけだった。
+- 結論: 直す所は無い。コメントに「資料に届かない」と見た資料を書いた。
+
+## 見張り: AOS-CX の `show interfaces brief` を公式の作例の形で読めている（2026-10-31 JST）
+
+- 確かめたこと: `configparse/linkstate.py` の Aruba CX の表は「公式の出力例に当たれず（未確認）」だった。
+- 確かめた資料: HPE Aruba Networking「AOS-CX 10.09 / 10.13 Virtual Switching Framework (VSF) Guide」の One Virtual Device の作例
+  （見出し `Port Native Mode Type Enabled Status Reason Speed` と `VLAN (Mb/s)` の2行、`1/1/1 10 access SFP+DA3 yes up 10000`、
+  `1/1/2 -- routed -- no down No XCVR installed --`）。コマンドは `show interfaces brief`（複数形）。
+- 試験: `test_linkstate.py` の `test_aruba_cx_brief_follows_the_vsf_guide`。見出しの読み方を壊すと落ちることを確かめた。
+- あわせて: 冒頭の「未確認の表」の行に、FortiGate・NEC IX の brief・アラクサラの届かなかった資料の名前を書いた。
+
+## 見張り: Cisco の `Gi`・`Fa` を公式の出力例の形で正式名にそろえている（2026-10-31 JST）
+
+- 確かめたこと: `configparse/ifname.py` の Cisco の略記は「既存の試験の形（未確認）」だった。
+- 確かめた資料: Cisco「Interface and Hardware Components Configuration Guide」（Catalyst 9400、17.9.x〜17.17.x）の Checking Port Status and Connectivity
+  （`show interface status` の `Gi1/0/1`、`show interfaces status err-disabled` の `Fa9/4`）。
+- 試験: `test_ifname.py` の `test_cisco_gi_and_fa_follow_the_configuration_guide`。
+- あわせて: ifname.py のほかの略記と arubaos.py の表番号に「資料に届かない」を書いた。これで成果物 2 の完成条件を満たした。
+
+## Junos の論理システムを、論理システムごとの機器として取り込む（2026-11-01 JST）
+
+- 起きていたこと: 論理システムを持つ Junos の Config を取り込むと、論理システムの中の口と経路は読まれず、台帳にも載らなかった（設定の点検に「論理システムの中は読んでいない」と出るだけ）。
+- 直したこと: `configs.ingest_many` で、Junos の塊に論理システムがあれば `juniper.split_logical_systems` で分け、`set system host-name 本体_論理システム名` を頭に足した塊を別の機器として取り込む。
+  本体の塊は元の字のまま。種別と拠点は本体から写す。`device_id` を指定したときは分けない。
+- 確かめた資料: Juniper「Understanding Logical Systems for Routers and Switches」（論理システムは自分の口と経路表を持つ）、
+  「Routing, Interfaces, and NAT for User Logical Systems」の set の設定例（`set logical-systems LS1 interfaces ...`）。
+- 試験: `test_junos_logical_systems_ingest.py`。直す前のコードで、台帳に `pe-01` しか載らずに落ちた。

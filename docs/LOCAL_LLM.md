@@ -42,7 +42,7 @@ C:\LLM\
 |---|---|
 | `LLM_HOME` の `gguf` | 環境変数 `LLM_HOME` があるとき。OS を問わない |
 | `C:\LLM\gguf` | Windows で `LLM_HOME` が無いとき。初めて起動したときに作る |
-| アプリの隣の `models`、`~/.netvision/models` | 前に置いたモデルを読むためだけに見る。新しく置く先には案内しない |
+| アプリの隣の `models`、データの置き場所の `models` | 前に置いたモデルを読むためだけに見る。新しく置く先には案内しない |
 
 道は ASCII だけにしてあります。利用者名が全角だと、ユーザーのフォルダの下の道で
 llama.cpp がモデルを開けないことがあるためです。
@@ -80,10 +80,6 @@ LICENSE も一緒に入れてください。
 WITH_MODEL=https://…/qwen2.5-coder-7b-instruct-q4_k_m.gguf ./packaging/make-bundle-windows.sh
 ```
 
-```
-./packaging/make-bundle-windows.ps1 -WithModel C:\LLM\gguf\qwen2.5-coder-7b.gguf
-```
-
 同梱したモデルは一式の `models` に入り、そこから読みます。導入先で `C:\LLM\gguf` に
 移しておくと、一式を入れ替えてもモデルが残り、ほかのアプリとも共有できます。
 
@@ -104,7 +100,7 @@ NETVISION_LLM_ALLOW_EXTERNAL=true
 NETVISION_LLM_ALLOWED_HOSTS=ai.example.co.jp
 ```
 
-独自の作法の事業者でも、`app/services/llm.py` に関数を1つ足して `_PROVIDERS` に
+独自の作法の事業者でも、`backend/app/services/llm.py` に関数を1つ足して `_PROVIDERS` に
 登録すれば繋がります。呼び出し側（Config の下書きなど）は変えません。
 
 ### 外へ出すときにやっていること
@@ -117,7 +113,7 @@ NETVISION_LLM_ALLOWED_HOSTS=ai.example.co.jp
   /30 なのかが消え、返ってくる設定が使えない）
 - 宛先を限る: `NETVISION_LLM_ALLOWED_HOSTS` に並べた宛先以外へは出さない
 - 記録する: いつ・どの作法で・どこへ・何文字送り・何件伏せたかを
-  `~/.netvision/llm-usage.log` に残す。送った中身は残さない（記録そのものが
+  `~/.local/share/netvision/llm-usage.log` に残す。送った中身は残さない（記録そのものが
   漏れ口になるため）
 
 手元やアプリの中で動かすときは伏せません。外へ出ていないうえ、伏せると答えが
