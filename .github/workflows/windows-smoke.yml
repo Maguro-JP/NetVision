@@ -105,6 +105,7 @@ jobs:
           }
 
           function Check($label, [scriptblock]$start) {
+            $before = @(Get-Process -Name msedge, chrome, firefox -ErrorAction SilentlyContinue | ForEach-Object { $_.Id })
             & $start
             $deadline = (Get-Date).AddSeconds(120)
             while (-not (Healthy) -and (Get-Date) -lt $deadline) { Start-Sleep 1 }
@@ -121,7 +122,8 @@ jobs:
             Start-Sleep 8
             $views = @(Get-CimInstance Win32_Process -Filter "Name = 'msedgewebview2.exe'")
             if ($views.Count -gt 0) { Note "${label}: WebView2 が $($views.Count) 個動いている" } else { Fail "${label}: WebView2 が動いていない" }
-            $browsers = @(Get-Process -Name msedge, chrome, firefox -ErrorAction SilentlyContinue)
+            # ランナーには最初から動いているブラウザ（更新の確認など）があるので、起こす前から居たものは数えない
+            $browsers = @(Get-Process -Name msedge, chrome, firefox -ErrorAction SilentlyContinue | Where-Object { $before -notcontains $_.Id })
             if ($browsers.Count -eq 0) { Note "${label}: ブラウザは開いていない" } else { Fail "${label}: ブラウザが開いた（$($browsers.ProcessName -join ', ')）" }
             Shot $label
 
