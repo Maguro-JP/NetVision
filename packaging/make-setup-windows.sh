@@ -31,5 +31,5 @@ done
 
 echo "==> Setup.exe を組みます"
 VERSION="$(basename "$STAGE" | sed 's/^NetVision-//; s/-windows$//')+$(git -C "$REPO" rev-parse --short HEAD 2>/dev/null || echo dev)"
-makensis -V2 -DSRC="$STAGE" -DOUT="$OUT/NetVision-Setup.exe" -DVERSION="$VERSION" "$REPO/packaging/windows/installer.nsi"
+makensis -V2 -DSRC="$STAGE" -DICON="$REPO/packaging/icons/netvision.ico" -DOUT="$OUT/NetVision-Setup.exe" -DVERSION="$VERSION" "$REPO/packaging/windows/installer.nsi"
 ls -l "$OUT/NetVision-Setup.exe"

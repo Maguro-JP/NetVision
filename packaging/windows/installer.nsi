@@ -11,6 +11,9 @@ OutFile "${OUT}"
 InstallDir "$LOCALAPPDATA\Programs\NetVision"
 RequestExecutionLevel user
 SetCompressor /SOLID lzma
+; Setup.exe とアンインストーラーの絵。make-setup-windows.sh が ICON に packaging/icons/netvision.ico の絶対パスを渡す
+!define MUI_ICON "${ICON}"
+!define MUI_UNICON "${ICON}"
 
 ; 黒い画面を出さないよう pythonw.exe で起動役を動かす。様子を見たいときは入れた場所の NetVision-console.bat
 !define MUI_FINISHPAGE_RUN "$INSTDIR\python\pythonw.exe"
@@ -33,14 +36,15 @@ Section "Install"
   ; ショートカットの作業フォルダは、作る直前の SetOutPath になる。起動役は backend から動かす
   SetOutPath "$INSTDIR\backend"
   CreateDirectory "$SMPROGRAMS\NetVision"
-  CreateShortcut "$SMPROGRAMS\NetVision\NetVision.lnk" "$INSTDIR\python\pythonw.exe" "-m scripts.launcher" "$INSTDIR\python\pythonw.exe"
+  CreateShortcut "$SMPROGRAMS\NetVision\NetVision.lnk" "$INSTDIR\python\pythonw.exe" "-m scripts.launcher" "$INSTDIR\netvision.ico"
   CreateShortcut "$SMPROGRAMS\NetVision\Uninstall.lnk" "$INSTDIR\Uninstall.exe"
-  CreateShortcut "$DESKTOP\NetVision.lnk" "$INSTDIR\python\pythonw.exe" "-m scripts.launcher" "$INSTDIR\python\pythonw.exe"
+  CreateShortcut "$DESKTOP\NetVision.lnk" "$INSTDIR\python\pythonw.exe" "-m scripts.launcher" "$INSTDIR\netvision.ico"
   SetOutPath "$INSTDIR"
   WriteRegStr HKCU "${UNINST}" "DisplayName" "NetVision"
   WriteRegStr HKCU "${UNINST}" "DisplayVersion" "${VERSION}"
   WriteRegStr HKCU "${UNINST}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
   WriteRegStr HKCU "${UNINST}" "InstallLocation" "$INSTDIR"
+  WriteRegStr HKCU "${UNINST}" "DisplayIcon" "$INSTDIR\netvision.ico"
   WriteRegDWORD HKCU "${UNINST}" "NoModify" 1
   WriteRegDWORD HKCU "${UNINST}" "NoRepair" 1
 SectionEnd

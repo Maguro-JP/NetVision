@@ -119,7 +119,7 @@ class _FakeWebview:
     def create_window(self, title, url, **kwargs):
         self.windows.append((title, url))
 
-    def start(self):
+    def start(self, **kwargs):
         # ウィンドウが出ている間はサーバーが動いていること
         self.alive_when_shown = self.runner_box[0].running
 

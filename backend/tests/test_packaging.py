@@ -197,3 +197,20 @@ def test_the_server_unit_writes_the_data_where_systemd_allows():
     assert "Environment=NETVISION_DATA_DIR=/var/lib/netvision" in unit
     assert "ReadWritePaths=/var/lib/netvision" in unit
     assert "StateDirectory=netvision" in unit
+
+
+def test_the_app_carries_its_icon():
+    """Setup.exe、ショートカット、「アプリと機能」、画面のタブに同じ絵を付けること。
+
+    絵が無いと、スタートメニューに Python の絵が並び、どれが NetVision か分からない。
+    """
+    icons = REPO / "packaging" / "icons"
+    ico = (icons / "netvision.ico").read_bytes()
+    assert ico[:4] == b"\x00\x00\x01\x00", "netvision.ico が ICO の形をしていない"
+    assert int.from_bytes(ico[4:6], "little") >= 4, "小さい絵から大きい絵までそろっていない"
+    nsi = INSTALLER.read_text(encoding="utf-8")
+    assert "MUI_ICON" in nsi and "DisplayIcon" in nsi
+    assert nsi.count('"$INSTDIR\\netvision.ico"') >= 2, "ショートカットに絵が付いていない"
+    assert "netvision.ico" in FOR_WINDOWS.read_text(encoding="utf-8"), "一式に絵が入らない"
+    assert (REPO / "frontend" / "public" / "netvision.svg").is_file()
+    assert "netvision.svg" in (REPO / "frontend" / "index.html").read_text(encoding="utf-8")

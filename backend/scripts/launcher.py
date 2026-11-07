@@ -30,6 +30,7 @@ import threading
 import time
 import urllib.request
 from dataclasses import dataclass
+from pathlib import Path
 
 from scripts import standalone
 
@@ -101,13 +102,17 @@ class Runner:
             self._thread.join(timeout=timeout)
 
 
+ICON = Path(__file__).resolve().parents[2] / "packaging" / "icons" / "netvision.png"
+
+
 def open_window(runner: Runner) -> int:
     """アプリのウィンドウを開き、閉じるまで待つ。閉じたらサーバーを止める。"""
     import webview
 
     webview.create_window(TITLE, runner.url, width=1360, height=860, min_size=(960, 600))
     try:
-        webview.start()
+        # Windows ではショートカットの絵が使われ、ここは Linux（GTK と Qt）のウィンドウに効く
+        webview.start(icon=str(ICON) if ICON.is_file() else None)
     finally:
         # ウィンドウを閉じたのに動き続けるのが一番困る
         runner.stop()

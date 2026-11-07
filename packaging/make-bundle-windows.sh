@@ -67,6 +67,8 @@ cp -r "$REPO/backend/scripts" "$STAGE/backend/scripts"
 cp -r "$REPO/backend/alembic" "$STAGE/backend/alembic"
 cp "$REPO/backend/alembic.ini" "$STAGE/backend/"
 cp -r "$REPO/frontend/dist" "$STAGE/frontend/dist"
+# ショートカットと「アプリと機能」に出す絵
+cp "$REPO/packaging/icons/netvision.ico" "$STAGE/netvision.ico"
 # 手引きは丸ごと持ち込む。個別に並べていると、新しく書いたものが入らない
 # （実際に LOCAL_LLM.md が抜けた）
 cp "$REPO"/docs/*.md "$STAGE/docs/" 2>/dev/null || true
