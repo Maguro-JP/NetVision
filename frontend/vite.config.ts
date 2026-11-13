@@ -3,6 +3,18 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // 変わりにくい部品を画面の本体から分ける。1 つの塊が大きいと、開くたびに全部を読み直すことになる
+        manualChunks: {
+          react: ["react", "react-dom", "react-router-dom"],
+          query: ["@tanstack/react-query"],
+          flow: ["@xyflow/react"],
+        },
+      },
+    },
+  },
   server: {
     port: 5173,
     // バックエンドへは /api でプロキシする（CORS 設定なしでも開発できる）
