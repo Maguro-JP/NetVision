@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <!-- 16〜32 px 用の NetVision のアイコン。大きい絵と同じ形を、光と細い線を省き、太く描く -->
+  <defs>
+    <linearGradient id="flame" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0" stop-color="#ff2d3a"/>
+      <stop offset="1" stop-color="#ff8a1f"/>
+    </linearGradient>
+  </defs>
+  <rect x="0" y="0" width="256" height="256" rx="52" fill="#141417"/>
+  <circle cx="128" cy="128" r="92" fill="none" stroke="url(#flame)" stroke-width="26" stroke-linecap="round"
+          stroke-dasharray="400 178" transform="rotate(118 128 128)"/>
+  <g stroke="#f4f4f6" stroke-width="14" stroke-linecap="round">
+    <line x1="128" y1="86" x2="88" y2="158"/>
+    <line x1="128" y1="86" x2="168" y2="158"/>
+    <line x1="88" y1="158" x2="168" y2="158"/>
+  </g>
+  <circle cx="128" cy="86" r="24" fill="url(#flame)"/>
+  <circle cx="88" cy="158" r="20" fill="#f4f4f6"/>
+  <circle cx="168" cy="158" r="20" fill="#f4f4f6"/>
+</svg>

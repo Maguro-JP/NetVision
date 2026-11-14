@@ -213,4 +213,6 @@ def test_the_app_carries_its_icon():
     assert nsi.count('"$INSTDIR\\netvision.ico"') >= 2, "ショートカットに絵が付いていない"
     assert "netvision.ico" in FOR_WINDOWS.read_text(encoding="utf-8"), "一式に絵が入らない"
     assert (REPO / "frontend" / "public" / "netvision.svg").is_file()
+    # 16〜32 px は細い線が潰れるので、太く描いた別の絵から作る
+    assert (icons / "netvision-small.svg").is_file()
     assert "netvision.svg" in (REPO / "frontend" / "index.html").read_text(encoding="utf-8")
