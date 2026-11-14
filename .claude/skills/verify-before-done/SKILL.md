@@ -152,3 +152,7 @@ PR を作る前・マージの前・main に push する前の検査は、`scrip
 
 姿勢全体は `work-style`。このスキルはその「完了前」を詳しくしたもの。
 PR を作ってからの流れは `solo-pr-flow`、CI が落ちたときは `ci-triage`。
+
+## 作ったコードの機械の確認（code-check）
+
+コードを書いたら、完了と言う前に `python3 .claude/skills/code-check/scripts/code_check.py` を回す（長いので裏で）。バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩を、ruff・bandit・semgrep・shellcheck・detect-secrets・gitleaks で見る。重大は直してから出し、❕ 疑い に `コードの確認: 重大 0 / 注意 n / 情報 n` を写す。precheck が差分で同じ 3 本を回し、重大で NG にする。書き込みのたびにフック（code_nudge.py）が重大を 1 行差し込む。

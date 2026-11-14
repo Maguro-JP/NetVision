@@ -47,5 +47,19 @@ class Observe(unittest.TestCase):
             self.assertEqual(heads("## a\n## b\n"), ["a", "b"])
 
 
+class Similar(unittest.TestCase):
+    def test_reworded_title_is_known_and_new_title_is_not(self):
+        import importlib.util
+        from pathlib import Path as _P
+        spec = importlib.util.spec_from_file_location("observe_mod", _P(__file__).resolve().parent / "observe.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        ciel = [mod.norm("2026-10-18 終わりを待つ pgrep -f が自分自身に当たった"), mod.norm("2026-10 long-dev を会話中のセッションに紐づけて起こした")]
+        self.assertTrue(mod.known("2026-10-18 処理の終わりを待つ pgrep が自分自身に当たった", ciel))
+        self.assertTrue(mod.known("2026-10 long-dev を会話中のセッションに結びつけて起こした", ciel))
+        self.assertFalse(mod.known("2026-11-08 squash マージの本文に [skip ci] が入った", ciel))
+
+
+
 if __name__ == "__main__":
     unittest.main()

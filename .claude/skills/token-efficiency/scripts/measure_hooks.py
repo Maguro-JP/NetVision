@@ -24,7 +24,7 @@ def run(cmd: str, payload: dict) -> int:
     n = 0
     for _ in range(2):
         try:
-            r = subprocess.run(cmd, shell=True, input=json.dumps(payload, ensure_ascii=False), capture_output=True, text=True, timeout=60,
+            r = subprocess.run(cmd, shell=True, input=json.dumps(payload, ensure_ascii=False), capture_output=True, text=True, timeout=60,  # code-check: ignore 固定の文字列（ユーザーの入力は入らない）
                                env=dict(os.environ, LANG_RULE_STATE=STATE, TOKEN_EFFICIENCY_STATE=STATE, FOLLOW_INSTRUCTIONS_STATE=STATE))
             n = len(r.stdout)
         except (OSError, subprocess.TimeoutExpired):

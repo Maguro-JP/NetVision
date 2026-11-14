@@ -37,7 +37,7 @@ ja-proofread の `glossary.md`（開発者の間で通る語の既定）と重�
 | 作業 | タスク、task、tasks | CLAUDE.md |
 | 成果物 | アウトプット、デリバラブル、deliverable、deliverables | 発言 |
 | 機密情報 | 秘密情報、シークレット、秘匿情報、機微情報、クレデンシャル、credential、credentials、secret、secrets | 発言 |
-| 整理整頓 | (?<!後)片付け、掃除、クリーンアップ、cleanup | 発言 |
+| 整理整頓 | 掃除、クリーンアップ、cleanup | 発言 |
 | 一時ファイル | テンポラリファイル、temp ファイル、一時的なファイル | CLAUDE.md |
 | public | パブリック | 発言 |
 | private | プライベート | 発言 |
@@ -58,10 +58,24 @@ ja-proofread の `glossary.md`（開発者の間で通る語の既定）と重�
 | インテュイティブ | 直感的、直観的、intuitive | 発言 |
 | ユーザーフレンドリー | ユーザフレンドリー、user-friendly、親切な設計 | 発言 |
 | ストレスフリー | ストレスのない、stress-free | 発言 |
+| モデル | 模型 | 発言 |
+| 難易度 | 難度、複雑度、complexity、difficulty | 発言 |
+| 開発加速 | 開発の高速化、開発のスピードアップ | 発言 |
+| セッションをたてる | セッションをスポーンする、セッションを生やす、spawn | 発言 |
 | バックグラウンド | バックグランド、background、非同期、裏側で | 発言 |
 | 優先 | プライオリティ、priority | 発言 |
 | 要請 | リクエスト、request、requests、依頼書 | 発言 |
 | 感情 | エモーション、センチメント、感情値、emotion、sentiment | 発言 |
+| 魅せる README | 見栄えの良い README、映える README、きれいな README、README を整える | 発言 |
+| リポジトリ管理 | リポジトリの管理、リポジトリの運用、repo management | 発言 |
+| 漏洩 | リーク、leak、流出 | 発言 |
+| 不具合 | 欠陥、defect、ディフェクト | 発言 |
+| 情報の扱い | データハンドリング、data handling、データの取り扱い | 発言 |
+| 便利なツール | サードパーティのツール、外部ツール、OSS のツール | 発言 |
+| GitHub Actions | Actions の実行、GHA、ワークフローの実行 | 発言 |
+| 通知 | ノーティフィケーション、notification、アラート | 発言 |
+| 調べ物 | リサーチ、下調べ | 発言 |
+| 知識 | ナレッジ | 発言 |
 | 真面 | まとも、真面目(?!に)、ちゃんとした | 発言 |
 
 ## 略語（ユーザーの語は無いので、省略しない形か日本語）

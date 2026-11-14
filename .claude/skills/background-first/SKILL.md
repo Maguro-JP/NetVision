@@ -15,7 +15,7 @@ description: 長い処理を裏で動かし、ターンを短く終えて、ユ�
 |---|---|---|
 | Bash の `run_in_background` | 1 分を超えそうなコマンド。precheck、validate、テスト一式、npm や pip の install、git clone、vuln-watch の scan、ビルド、配布 | 出力はファイルへ。`<コマンド> > <scratchpad>/<名前>.log 2>&1; echo exit=$?`。終わると通知が来る。読むのは `tail -5` か `grep`（ファイルは文脈に乗らない） |
 | Agent（`run_in_background`） | 3 手以上の調べもの・検査・直し。親の文脈に途中の出力を乗せたくないもの | `general-purpose`（文脈を渡さないので、プロンプトに対象・やること・形・完成条件を書く）。`fork` は文脈を全部渡すので高い。結果の 1 行だけ親が受ける |
-| 子のセッション（`create_session`） | 1 時間を超える作業、並列の開発 | feedback-session の決まりで元のセッションの設定を引き継ぐ。session-watch が催促・待機・クローズを管理する |
+| 子のセッション（`create_session`） | 独立した 10 手以上の作業が 2 つ以上あるとき（長さは問わない） | feedback-session「親が取りまとめる並列開発」。`fanout.py plan` が束・難易度に合うモデル・プロンプトを出す。権限は元のセッションから引き継ぎ、子は親のブランチに push し、親が 3〜5 分後に 1 回見て取りまとめる |
 
 スキル自身を裏で動かすこともできる。SKILL.md の frontmatter に `context: fork`（`background` は既定で true）を書くと、そのスキルは subagent で動き、会話は続く。
 
@@ -43,7 +43,7 @@ Agent の途中の出力が親の文脈に乗らないこと、待っている�
 
 | 何 | すること |
 |---|---|
-| `hooks/background_first.py` | PreToolUse。長いコマンドを `run_in_background` 無しで呼んだら止める（exit 2。裏に出して出力をファイルに書くよう求める）。このターンのツール呼び出しが 12 回を超えるごとに、残りを裏に出して ❕ で終えるよう知らせる。`BACKGROUND_FIRST_OFF=1` で止める、`BACKGROUND_FIRST_EVERY=N` で間隔を変える |
+| `hooks/background_first.py` | PreToolUse。長いコマンドを `run_in_background` 無しで呼んだら止める（exit 2。裏に出して出力をファイルに書くよう求める）。このターンのツール呼び出しが 12 回を超えるごとに、残りを裏に出して ❕ で終えるよう知らせる。24 回からは、独立した残りを子のセッションに分ける（`fanout.py plan`）よう知らせる。`BACKGROUND_FIRST_OFF=1` で止める、`BACKGROUND_FIRST_EVERY=N` で間隔を変える |
 | `scripts/test_background_first.py` | 作ったツール入力と transcript で、止める・通す・知らせるを確かめる |
 
 長いコマンドの表はフックの `LONG`。短いテスト 1 本（`test_*.py`）や、名前が出るだけの grep や cat は止めない。
@@ -51,6 +51,6 @@ Agent の途中の出力が親の文脈に乗らないこと、待っている�
 ## 他のスキルとの関係
 
 - 読む前に探す、出力を絞る、一覧には limit: `token-efficiency`。このスキルは「いつ裏に出すか」と「ターンをいつ終えるか」
-- 子のセッションの設定の引き継ぎと整理整頓: `feedback-session`。管理: `session-watch`
+- 子のセッションに分ける計画、難易度とモデル、取りまとめ: `feedback-session`「親が取りまとめる並列開発」。取りこぼしの管理: `session-watch`
 - 会話の 4 種類の行: `work-style`。裏に出したときの ❕ もその形
 - 通った・落ちたの言い方: `verify-before-done`

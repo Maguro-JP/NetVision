@@ -85,3 +85,4 @@ python3 .claude/skills/vuln-watch/scripts/bump.py <リポジトリ> <種類> <�
 - 鍵や ID の混入は `secret-leak-check`。自分の書いたコードの穴は `security-review`。人に見せてよいかは `content-audit`
 - 更新の PR の出し方と確認は `solo-pr-flow`。CI が落ちたら `ci-triage`
 - 定期実行の作り方は `scheduler`。週の報告への写しは `skill-upkeep`
+- 自分のコードの穴と、手元の依存の pip-audit・npm audit の行: `code-check`（週 1 回の本番はこちら。code-check は書いた直後と PR の前に見る）

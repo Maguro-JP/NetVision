@@ -10,6 +10,7 @@
   既定: root は Ciel の親、since は 7 日前（JST の 0 時）。
 """
 
+import difflib
 import argparse
 import datetime as dt
 import re
@@ -41,6 +42,20 @@ def heads(text: str):
     return re.findall(r"^## (.+)$", text, re.M)
 
 
+SIMILAR = 0.7  # これ以上似ている題は、同じ項目と見る
+
+
+def norm(h: str) -> str:
+    """題を比べる形にする。日付と記号と空白を落とす。"""
+    return re.sub(r"^\d{4}-\d{2}(-\d{2})?\s*|[\s、。「」（）()・,.:：`\-]", "", h)
+
+
+def known(h: str, ciel_norms) -> bool:
+    """Ciel に同じ題があるか。題を言い換えると文字列では毎週「無い」に出て、同じ中身を 2 回写すので、似ている題も同じと見る。"""
+    n = norm(h)
+    return any(n == c or difflib.SequenceMatcher(None, n, c).ratio() >= SIMILAR for c in ciel_norms)
+
+
 def observe(repo: Path, since: str, ciel_heads: set, fetch: bool = True) -> dict:
     branch = default_branch(repo)
     if fetch:
@@ -50,7 +65,8 @@ def observe(repo: Path, since: str, ciel_heads: set, fetch: bool = True) -> dict
     kinds = {k: sum(1 for s in subjects if s.startswith(k)) for k in ("DEV", "SYNC", "FB", "FIX")}
     merges = sum(1 for s in subjects if re.search(r"\(#\d+\)$|^Merge pull request", s))
     lessons = git(repo, "show", f"{ref}:.claude/skills/lessons/LESSONS.md")
-    extra = [h for h in heads(lessons) if h not in ciel_heads] if lessons else []
+    ciel_norms = [norm(c) for c in ciel_heads]
+    extra = [h for h in heads(lessons) if not known(h, ciel_norms)] if lessons else []
     pending = git(repo, "show", f"{ref}:docs/reports/pending.md")
     requests = git(repo, "show", f"{ref}:docs/reports/skill-requests.md")
     requests_open = sum(1 for s in re.split(r"^(?=## )", requests, flags=re.M) if s.startswith("## ") and not re.search(r"^- 状態: (?:対応済み|見送り)", s, re.M))

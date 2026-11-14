@@ -71,6 +71,13 @@ class BackgroundFirst(unittest.TestCase):
             rows.append(use())
             t.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
             self.assertEqual(run("Read", {"file_path": "a.md"}, transcript=str(t))[1], "")  # 13 回目は黙る
+            rows += [result()] + [use(), result()] * 11
+            t.write_text("\n".join(json.dumps(r, ensure_ascii=False) for r in rows) + "\n", encoding="utf-8")
+            text = json.loads(run("Read", {"file_path": "a.md"}, transcript=str(t))[1])["hookSpecificOutput"]["additionalContext"]
+            self.assertIn("24 回", text)  # 24 回からは、裏に出すだけでなく子のセッションに分ける
+            self.assertIn("fanout.py plan", text)
+            self.assertIn("難易度でモデル", text)
+            self.assertNotIn("fanout", out)  # 12 回目は今までの文
 
 
 if __name__ == "__main__":

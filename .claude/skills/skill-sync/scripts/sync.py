@@ -12,7 +12,7 @@
 lessons/LESSONS.md だけは対象側の記録。上書きせず、Ciel にしか無い項目を上に足す。
 Ciel の複製で置き換えると、そのリポジトリで起きた失敗の記録が消える（実際に消しかけた）。
 """
-import argparse, hashlib, json, shutil, sys
+import argparse, hashlib, json, re, shutil, sys
 from pathlib import Path
 
 SRC_ROOT = Path(__file__).resolve().parents[4]   # Ciel のルート
@@ -27,7 +27,7 @@ def digest(d: Path, skip=()) -> str:
     h = hashlib.sha256()
     for f in sorted(p for p in d.rglob("*") if p.is_file()):
         rel = str(f.relative_to(d))
-        if rel in skip:
+        if rel in skip or "__pycache__" in f.parts or f.suffix == ".pyc":
             continue
         h.update(rel.encode())
         h.update(f.read_bytes())
@@ -99,8 +99,34 @@ def _command_exists(cmd: str, target_root: Path) -> bool:
     return False
 
 
+def core(cmd: str) -> str:
+    """登録のコマンドの、起動の仕方を除いた中身（フックのパスと引数）。
+    起動役（run.sh）を通す形と、古い相対パスの形（python3 .claude/...）を同じ登録と見るために使う。"""
+    m = re.search(r"(\.claude/(?!hooks/run\.sh)\S+.*)$", cmd, re.S)
+    if m and not cmd.lstrip().startswith(("awk", "cat", "cd ")):
+        return m.group(1).strip()
+    return re.sub(r'^cd "\$\{CLAUDE_PROJECT_DIR:-\.\}" && ', "", cmd).strip()
+
+
+def reanchor(cur: dict, tpl: dict) -> int:
+    """対象の登録のうち、ひな形と中身が同じで起動の仕方が古い物を、ひな形の形に置き換える。置き換えた数を返す。
+    古い形は、会話の途中で cd するとフックが見つからず、全部のツールが止まる。"""
+    want = {core(h.get("command", "")): h.get("command", "") for es in tpl.get("hooks", {}).values() for e in es for h in e.get("hooks", [])}
+    n = 0
+    for es in cur.get("hooks", {}).values():
+        for e in es:
+            for h in e.get("hooks", []):
+                cmd = h.get("command", "")
+                new = want.get(core(cmd))
+                if new and new != cmd:
+                    h["command"] = new
+                    n += 1
+    return n
+
+
 def settings_missing(target_root: Path):
-    """ひな形にあって対象の settings.json に無いフックの登録。対象にファイルがあるものだけ。"""
+    """ひな形にあって対象の settings.json に無いフックの登録。対象にファイルがあるものだけ。
+    起動の仕方だけが古い登録は、足さずに置き換える（cur["_reanchored"] に数を入れる）。"""
     try:
         tpl = json.loads((TEMPLATE / "settings.json").read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
@@ -110,6 +136,7 @@ def settings_missing(target_root: Path):
         cur = json.loads(dst.read_text(encoding="utf-8")) if dst.exists() else {}
     except json.JSONDecodeError:
         return None, []
+    fixed = reanchor(cur, tpl)
     have = {h.get("command", "") for es in cur.get("hooks", {}).values() for e in es for h in e.get("hooks", [])}
     missing = []
     for ev in HOOK_EVENTS:
@@ -118,6 +145,8 @@ def settings_missing(target_root: Path):
                 cmd = h.get("command", "")
                 if cmd not in have and _command_exists(cmd, target_root):
                     missing.append((ev, e.get("matcher"), h))
+    if fixed:
+        cur["_reanchored"] = fixed
     return cur, missing
 
 
@@ -127,6 +156,10 @@ def apply_hooks(target_root: Path, add, upd, cur, missing):
     for name in add + upd:
         shutil.copy2(TEMPLATE / "hooks" / name, hooks_dir / name)
         (hooks_dir / name).chmod(0o755)
+    fixed = cur.pop("_reanchored", 0)
+    if fixed and not missing:
+        (target_root / ".claude" / "settings.json").write_text(
+            json.dumps(cur, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
     if missing:
         cur.setdefault("hooks", {})
         for ev, matcher, h in missing:
@@ -183,7 +216,8 @@ def main():
                 keep = (dst / n / LESSONS_FILE).read_text(encoding="utf-8")
             if (dst / n).exists():
                 shutil.rmtree(dst / n)
-            shutil.copytree(SRC / n, dst / n)
+            # 手元の一時ファイル（__pycache__）を配らない。.gitignore の無いリポジトリでは main に入ってしまう
+            shutil.copytree(SRC / n, dst / n, ignore=shutil.ignore_patterns("__pycache__", "*.pyc", ".pytest_cache"))
             if keep is not None:
                 merged, _ = merge_lessons((SRC / n / LESSONS_FILE).read_text(encoding="utf-8"), keep)
                 (dst / n / LESSONS_FILE).write_text(merged, encoding="utf-8")
@@ -194,11 +228,12 @@ def main():
     # フックのファイルと登録。スキルを入れたあとに見る（登録はファイルがあるものだけ足すため）
     h_add, h_upd = ([], []) if a.only else hook_file_diffs(target_root)
     cur, missing = (None, []) if a.only else settings_missing(target_root)
-    if a.apply and (h_add or h_upd or missing):
+    fixed = (cur or {}).get("_reanchored", 0)
+    if a.apply and (h_add or h_upd or missing or fixed):
         # コピーしたあとに登録を見直す。コピーで初めてファイルがそろうものがある
         apply_hooks(target_root, h_add, h_upd, cur if cur is not None else {}, [])
         cur, missing = settings_missing(target_root)
-        if missing:
+        if missing or (cur or {}).get("_reanchored"):
             apply_hooks(target_root, [], [], cur, missing)
 
     if a.json:
@@ -207,9 +242,9 @@ def main():
                           "hooks_add": h_add, "hooks_update": h_upd,
                           "settings_add": [f"{ev} {h.get('command','')}" for ev, _, h in missing],
                           "applied": a.apply}, ensure_ascii=False, indent=2))
-        return 0 if not (add or upd or h_add or h_upd or missing) else (0 if a.apply else 1)
+        return 0 if not (add or upd or h_add or h_upd or missing or fixed) else (0 if a.apply else 1)
 
-    if not add and not upd and not h_add and not h_upd and not missing:
+    if not add and not upd and not h_add and not h_upd and not missing and not fixed:
         return 0          # 差分なし。何も言わない
 
     # 向きが読めるように書く。Ciel が元で、対象リポジトリに入れる
@@ -224,6 +259,8 @@ def main():
         print(f"  {'更新した' if a.apply else 'Ciel より古い'}  hooks/{n}")
     for ev, _, h in missing:
         print(f"  {'登録した' if a.apply else '登録がない'}  {ev}: {h.get('command', '')}")
+    if fixed:
+        print(f"  {'直した' if a.apply else '起動の仕方が古い'}  フックの登録 {fixed} 件（cd しても見つかるように、起動役 run.sh を通す形にする）")
     if not a.apply:
         print("--apply で Ciel から入れる。")
     elif SELF in add + upd:
