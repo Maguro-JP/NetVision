@@ -19,7 +19,7 @@ README = """# sample
 
 ![License](https://img.shields.io/github/license/o/r)
 
-![画面](docs/images/screenshot.png)
+![画面](docs/img/screenshot.png)
 
 ## 特長
 
@@ -111,7 +111,7 @@ class Check(unittest.TestCase):
             ".claude/policy/u.json": "{}",
             "LICENSE": "MIT\n",
             "README.md": README,
-            "docs/images/screenshot.png": b"\x89PNG",
+            "docs/img/screenshot.png": b"\x89PNG",
             ".gitignore": "__pycache__/\n.env\n",
             "app.py": "print(1)\n",
         })

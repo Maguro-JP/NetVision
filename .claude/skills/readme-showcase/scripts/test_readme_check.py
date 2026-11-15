@@ -18,7 +18,7 @@ GOOD = """# sample
 ![CI](https://img.shields.io/github/actions/workflow/status/o/r/ci.yml)
 ![License](https://img.shields.io/github/license/o/r)
 
-![画面](docs/images/screenshot.png)
+![画面](docs/img/screenshot.png)
 
 ## 特長
 
@@ -64,8 +64,8 @@ class Check(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         (self.root / ".git").mkdir()
-        (self.root / "docs" / "images").mkdir(parents=True)
-        (self.root / "docs" / "images" / "screenshot.png").write_bytes(b"\x89PNG")
+        (self.root / "docs" / "img").mkdir(parents=True)
+        (self.root / "docs" / "img" / "screenshot.png").write_bytes(b"\x89PNG")
         (self.root / "docs" / "design.md").write_text("# 設計\n", encoding="utf-8")
         (self.root / "LICENSE").write_text("MIT\n", encoding="utf-8")
         self.readme = self.root / "README.md"

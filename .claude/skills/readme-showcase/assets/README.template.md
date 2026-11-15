@@ -1,7 +1,7 @@
 <!-- 魅せる README の雛形。<…> を置き換え、根拠の無い節は消す。HTML のコメントは書き終えたら消す。 -->
 <!-- ロゴがあれば、タイトルの上に中央で。無ければこの 3 行を消す -->
 <p align="center">
-  <img src="docs/images/logo.png" alt="<プロジェクト名>" width="120">
+  <img src="docs/images/<ロゴ>.png" alt="<プロジェクト名>" width="120">
 </p>
 
 # <プロジェクト名>
@@ -14,7 +14,7 @@
 ![License](https://img.shields.io/github/license/<owner>/<repo>)
 
 <!-- スクリーンショットか GIF か図。scripts/shot.py で撮り、docs/images/ に置く。ライブラリなら使う所のコードでもよい -->
-![画面](docs/images/screenshot.png)
+![画面](docs/images/<画面>.png)
 
 ## 特長
 

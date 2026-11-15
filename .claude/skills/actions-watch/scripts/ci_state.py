@@ -16,7 +16,9 @@ import sys
 # 通知の中の目印。kind のあとに head_sha と pr が続く（間に説明の文が挟まる）
 # 記録の中では引用符が \" に化け、json.dumps の形で : のあとに空白が入ることもあるので、どちらも受ける
 Q = r'\\?"'
-EVENT = re.compile(r'kind=' + Q + r'(?P<kind>[a-z_]+\.[a-z_]+)' + Q + r'(?P<body>.{0,2500}?)' + Q + r'head_sha' + Q + r':\s*' + Q + r'(?P<sha>[0-9a-f]{7,40})' + Q
+# 通知の本文は、その通知の終わり（</event>）と次の通知の kind= をまたがない。head_sha の無い通知（ready_for_review など）が、
+# 次の通知の head_sha を自分の物として取り込み、完了の通知を「動いている」と読ませるのを避ける
+EVENT = re.compile(r'kind=' + Q + r'(?P<kind>[a-z_]+\.[a-z_]+)' + Q + r'(?P<body>(?:(?!</event>|kind=).){0,2500}?)' + Q + r'head_sha' + Q + r':\s*' + Q + r'(?P<sha>[0-9a-f]{7,40})' + Q
                    + r'(?P<tail>.{0,300}?)' + Q + r'pr' + Q + r':\s*' + Q + r'(?P<pr>[\w.-]+/[\w.-]+#\d+)' + Q, re.S)
 CONCLUSION = re.compile(Q + r'conclusion' + Q + r':\s*' + Q + r'(?P<c>[a-z_]+)' + Q)
 FAILED = {"failure", "timed_out", "action_required", "startup_failure", "stale"}

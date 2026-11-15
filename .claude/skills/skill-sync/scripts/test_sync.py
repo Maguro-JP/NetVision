@@ -35,12 +35,35 @@ class Registration(unittest.TestCase):
         self.assertEqual(sync.reanchor(cur, tpl), 0)
 
     def test_every_registration_goes_through_the_launcher(self):
-        for p in (ROOT / ".claude/settings.json", ROOT / ".claude/skills/repo-bootstrap/templates/settings.json"):
-            d = json.loads(p.read_text(encoding="utf-8"))
-            for groups in d["hooks"].values():
-                for g in groups:
-                    for h in g["hooks"]:
-                        self.assertTrue(h["command"].startswith((RUN, 'cd "${CLAUDE_PROJECT_DIR:-.}" && ')), h["command"])
+        anchored = (RUN, 'cd "${CLAUDE_PROJECT_DIR:-.}" && ')
+        tpl = json.loads((ROOT / ".claude/skills/repo-bootstrap/templates/settings.json").read_text(encoding="utf-8"))
+        ours = set()
+        for groups in tpl["hooks"].values():
+            for g in groups:
+                for h in g["hooks"]:
+                    self.assertTrue(h["command"].startswith(anchored), h["command"])  # ひな形は全部
+                    ours.add(sync.core(h["command"]))
+        # このテストは配った先でも動く。配った先の settings.json には、そのリポジトリ自身の登録がある（触らない決まり）。
+        # 見るのは、ひな形にある登録（配った物）だけ
+        d = json.loads((ROOT / ".claude/settings.json").read_text(encoding="utf-8"))
+        for groups in d["hooks"].values():
+            for g in groups:
+                for h in g["hooks"]:
+                    if sync.core(h["command"]) in ours:
+                        self.assertTrue(h["command"].startswith(anchored), h["command"])
+
+    def test_superseded_registration_is_dropped_only_when_its_successor_exists(self):
+        old = "cat .claude/skills/work-style/SKILL.md 2>/dev/null || true"
+        new = 'cd "${CLAUDE_PROJECT_DIR:-.}" && awk \'1\' .claude/skills/work-style/SKILL.md 2>/dev/null || true'
+        own = "cat docs/notes.md"
+        cur = {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": old}]},
+                                           {"hooks": [{"type": "command", "command": new}, {"type": "command", "command": own}]}]}}
+        self.assertEqual(sync.drop_superseded(cur), 1)
+        self.assertEqual([h["command"] for g in cur["hooks"]["SessionStart"] for h in g["hooks"]], [new, own])  # 空になった組も消える
+        self.assertEqual(sync.drop_superseded(cur), 0)
+        alone = {"hooks": {"SessionStart": [{"hooks": [{"type": "command", "command": old}]}]}}
+        self.assertEqual(sync.drop_superseded(alone), 0)  # 後継が無ければ残す
+        self.assertEqual(len(alone["hooks"]["SessionStart"][0]["hooks"]), 1)
 
 
 class Launcher(unittest.TestCase):

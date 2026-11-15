@@ -18,10 +18,6 @@
           },
           {
             "type": "command",
-            "command": "cat .claude/skills/work-style/SKILL.md 2>/dev/null || true"
-          },
-          {
-            "type": "command",
             "command": "\"${CLAUDE_PROJECT_DIR:-.}/.claude/hooks/run.sh\" .claude/hooks/lessons.sh"
           },
           {

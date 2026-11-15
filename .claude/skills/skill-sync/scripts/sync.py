@@ -124,6 +124,30 @@ def reanchor(cur: dict, tpl: dict) -> int:
     return n
 
 
+# ひな形から消えた古い登録と、その後継の目印。work-style は、全文を読む形（cat）から、要る節だけを読む形（awk）に替わった。
+# 古い方が残ると、セッションの開始のたびに同じ文が 2 回差し込まれる
+SUPERSEDED = {"cat .claude/skills/work-style/SKILL.md 2>/dev/null || true": "work-style/SKILL.md"}
+
+
+def drop_superseded(cur: dict) -> int:
+    """後継の登録が対象にあるときだけ、古い登録を外す。外した数を返す。後継が無ければ残す（読む物が無くなる）。"""
+    every = [h.get("command", "").strip() for es in cur.get("hooks", {}).values() for e in es for h in e.get("hooks", [])]
+    n = 0
+    for ev, es in list(cur.get("hooks", {}).items()):
+        for e in es:
+            keep = []
+            for h in e.get("hooks", []):
+                cmd = h.get("command", "").strip()
+                mark = SUPERSEDED.get(cmd)
+                if mark and any(mark in o and o != cmd for o in every):
+                    n += 1
+                    continue
+                keep.append(h)
+            e["hooks"] = keep
+        cur["hooks"][ev] = [e for e in es if e.get("hooks")]  # 空になった組は残さない
+    return n
+
+
 def settings_missing(target_root: Path):
     """ひな形にあって対象の settings.json に無いフックの登録。対象にファイルがあるものだけ。
     起動の仕方だけが古い登録は、足さずに置き換える（cur["_reanchored"] に数を入れる）。"""
@@ -136,7 +160,7 @@ def settings_missing(target_root: Path):
         cur = json.loads(dst.read_text(encoding="utf-8")) if dst.exists() else {}
     except json.JSONDecodeError:
         return None, []
-    fixed = reanchor(cur, tpl)
+    fixed = reanchor(cur, tpl) + drop_superseded(cur)
     have = {h.get("command", "") for es in cur.get("hooks", {}).values() for e in es for h in e.get("hooks", [])}
     missing = []
     for ev in HOOK_EVENTS:

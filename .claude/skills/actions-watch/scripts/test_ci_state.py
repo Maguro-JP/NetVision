@@ -71,6 +71,16 @@ class State(unittest.TestCase):
         p = write([user("go"), user(event("check_suite.completed")), assistant("", [("Bash", {"command": "git push origin x"})])])
         self.assertTrue(ci_state.latest(ci_state.read(p), 12)["stale"])
 
+    def test_event_without_sha_does_not_swallow_the_next_one(self):
+        ready = ('<wake reason="external-event"><event source="github" kind="pull_request.ready_for_review" from="system" trust="relay">\n'
+                 '<!-- The PR was marked ready for review. -->\n{"actor":"someone","pr":"Owner/Repo#12"}\n</event></wake>')
+        # 1 回の読み取りに、完了・ready・完了が続けて入る形（通知を読むツールの結果）
+        p = write([user("go"), result(event("check_suite.completed", sha="1" * 40) + "\n" + ready + "\n" + event("check_suite.completed"))])
+        st = ci_state.read(p)
+        self.assertEqual([(e["kind"], e["sha"][:4], e["status"]) for e in st["events"]],
+                         [("check_suite.completed", "1111", "通った"), ("check_suite.completed", SHA[:4], "通った")])
+        self.assertEqual(ci_state.latest(st, 12)["status"], "通った")
+
     def test_in_progress(self):
         p = write([user(event("check_suite.requested"))])
         self.assertEqual(ci_state.read(p)["events"][0]["status"], "動いている")

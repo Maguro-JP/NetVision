@@ -48,7 +48,7 @@ description: README を魅せる形で書く・直すとき。「README を書�
 1. 根拠を集める。manifest、entrypoint、`.github/workflows`、LICENSE、既存の README、設定の雛形（`.env.example`）、画面。ここで集まらない物は書かない
 2. 型を決める。CLI、ライブラリ、サービス、アプリ（ウィンドウ）、文書のどれか。型で要る節が変わる（CLI は使い方に CLI の例、ライブラリは import の例、アプリはスクリーンショットと起動の手順）
 3. 書く。`assets/README.template.md` から始め、節の順で埋める。文は ja-proofread の決まり（です・ます、助詞のある文、`**` を使わない）
-4. スクリーンショットを撮る。画面があるなら `scripts/shot.py <URL か HTML> docs/images/screenshot.png` で撮り、README の上に置く。画面が無ければ図か、使う所のコード
+4. スクリーンショットを撮る。画面があるなら `scripts/shot.py <URL か HTML> docs/images/<名前>.png` で撮り、README の上に置く。画面が無ければ図か、使う所のコード
 5. 検査する。`scripts/readme_check.py` で 10 項目を見る。NG を直し、点数を 10/10 にする。注意は目安
 6. 公開前の連携。README と画像を、secret-leak-check の `scan.py --tree`、content-audit の `audit.py --tree`（非公開の名前、メール、ID、費用、スクリーンショットに写った物）、ja-proofread の `proofread.py`、docs-upkeep の `docs_check.py`（壊れたリンク、無いファイル）に通す。precheck が README の差分に点数を注意で出す
 7. 出す。★ で README の場所と点数を 1 行。PR とマージは solo-pr-flow（❔ への返事のあと）
