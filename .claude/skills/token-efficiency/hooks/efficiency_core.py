@@ -100,6 +100,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass  # a hook must never break the session
+    except Exception:  # フックは会話を止めない。何が起きたかは捨てずに残す
+        _state.note_crash("efficiency_core")
     sys.exit(0)

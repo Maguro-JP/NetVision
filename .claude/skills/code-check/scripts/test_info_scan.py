@@ -96,7 +96,13 @@ class Hook(unittest.TestCase):
     def run_hook(self, path):
         payload = json.dumps({"tool_name": "Write", "tool_input": {"file_path": str(path), "content": "x"}})
         r = subprocess.run([sys.executable, str(HOOK)], input=payload, capture_output=True, text=True, timeout=60)
-        return r.stdout.strip()
+        out = r.stdout.strip()
+        if not out:
+            return ""
+        # 素の標準出力は Claude に届かない。additionalContext の形で出ていることを、ここで見る（形が違えば KeyError で落ちる）
+        d = json.loads(out)
+        self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+        return d["hookSpecificOutput"]["additionalContext"]
 
     def test_hook_flags_shell_and_syntax(self):
         d = Path(tempfile.mkdtemp())

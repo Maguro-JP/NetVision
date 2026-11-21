@@ -43,7 +43,9 @@ def main() -> int:
     if m and re.search(r"(^|/)(app|src|gui|desktop)/", path):
         notes.append(f"CLI の入口「{m.group(0)}」。ユーザーが触る機能は画面に置く")
     if notes:
-        print(f"desktop-app: {path}: " + "／".join(notes) + "（desktop-app）")
+        msg = f"desktop-app: {path}: " + "／".join(notes) + "（desktop-app）"
+        # PostToolUse の素の標準出力は Claude に届かない（届くのは additionalContext）
+        print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
     return 0
 
 

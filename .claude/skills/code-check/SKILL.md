@@ -30,7 +30,8 @@ description: 作った物のバグやクラッシュ・不具合や脆弱性・�
 
 1. ツールを揃える。`python3 .claude/skills/code-check/scripts/tools.py` で何があるかを見て、無ければ `--install`。出力の先頭の `ツール:` の行に、何で見て何が無かったかが出る。無い物を黙って飛ばさない
 2. 書いたら回す。`python3 .claude/skills/code-check/scripts/code_check.py` を根で動かす（差分だけなら `--diff origin/main`）。長いので裏で動かし、出力はファイルへ（background-first）
-3. 重大は直してから出す。直せない物は `code-check: ignore` を理由つきで行末に書き、❕ 疑い に 1 行
+3. 重大は直してから出す。直せない物は `code-check: ignore` を理由つきで行末に書き、❕ 疑い に 1 行。
+   その場で直さない重大と、main ブランチに前からある重大は、バグの帳簿に書く（`python3 .claude/skills/bug-first/scripts/bugs.py --add`。bug-first）
 4. 注意は直すか、直さない理由を ❕ 疑い に 1 行。情報（外に送る先、扱っている個人情報）は README の「情報の扱い」に書く
 5. 完了と言うときは「❕ 疑い」に `コードの確認: 重大 0 / 注意 n / 情報 n` を写す。回していなければ「回していない」と書く
 

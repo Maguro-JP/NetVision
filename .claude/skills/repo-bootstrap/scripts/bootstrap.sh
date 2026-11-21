@@ -107,6 +107,12 @@ else
 fi
 
 # --- .gitignore -----------------------------------------------------
+# スキルのテストとフックを動かすと __pycache__ ができる。無視されていないと、追跡していないファイルとして残り続ける
+if [ ! -f "$dest/.gitignore" ]; then
+  printf '__pycache__/\n*.pyc\n.env\n.env.*\n!.env.example\n' > "$dest/.gitignore"; placed+=(".gitignore（__pycache__ と .env）")
+elif ! grep -q "__pycache__" "$dest/.gitignore"; then
+  notes+=(".gitignore に __pycache__/ が無い。足す（スキルのテストを動かすとできる）")
+fi
 if git -C "$dest" check-ignore -q .claude/skills 2>/dev/null; then
   notes+=(".gitignore が .claude/skills を無視している。'!.claude/' '!.claude/skills/' を足す")
 fi
@@ -127,7 +133,8 @@ fi
 # --- CI -------------------------------------------------------------
 # 手元でできる検証（lint・テスト）はフックが受け持つ。private では Actions の枠を使うので
 # 同じものを CI に置かない。public は無料なので、他の人の PR のために置く。
-slug=$(git -C "$dest" remote get-url origin 2>/dev/null | sed -E 's#.*github\.com[:/]##; s#\.git$##')
+# origin が無いリポジトリ（作ったばかりで、まだ push していない）では、ここで黙って止まっていた。無ければ空にして続ける
+slug=$(git -C "$dest" remote get-url origin 2>/dev/null | sed -E 's#.*github\.com[:/]##; s#\.git$##' || true)
 private=$(gh api "repos/$slug" --jq .private 2>/dev/null || echo unknown)
 if [ "$private" != "false" ]; then
   notes+=("CI は置いていない（private か公開範囲が分からない）。検証はフックが手元で行う")

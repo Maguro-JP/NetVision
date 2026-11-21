@@ -56,8 +56,8 @@ def load(session_id: str) -> dict:
     try:
         with _path_for(session_id).open(encoding="utf-8") as fh:
             state.update(json.load(fh))
-    except Exception:
-        pass
+    except (OSError, ValueError, TypeError):
+        pass  # 状態は目安。ファイルが無い（最初のターン）、壊れている、辞書でないときは、初期値から始める
     return state
 
 
@@ -69,8 +69,8 @@ def save(session_id: str, state: dict) -> None:
         with tmp.open("w", encoding="utf-8") as fh:
             json.dump(state, fh)
         os.replace(tmp, target)
-    except Exception:
-        pass
+    except (OSError, TypeError, ValueError):
+        pass  # 書けなくても会話は止めない。失うのは次の知らせ 1 回分
 
 
 def prune_old_state() -> None:
@@ -80,8 +80,8 @@ def prune_old_state() -> None:
         for f in STATE_DIR.glob("*.json"):
             if f.stat().st_mtime < cutoff:
                 f.unlink(missing_ok=True)
-    except Exception:
-        pass
+    except OSError:
+        pass  # 古い状態の掃除は、できなければ次のセッションがする
 
 
 def emit_context(event_name: str, text: str) -> None:
@@ -101,5 +101,16 @@ def append_metric(record: dict) -> None:
         STATE_DIR.mkdir(parents=True, exist_ok=True)
         with METRICS_FILE.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps(record) + "\n")
-    except Exception:
-        pass
+    except (OSError, TypeError, ValueError):
+        pass  # 数の記録は、書けなくても会話を止めない
+
+
+def note_crash(hook: str) -> None:
+    """フックの中の予期しない例外を、黙って捨てずに残す。except の中から呼ぶ。
+    フックは会話を止めてはいけないので、呼ぶ側は終了コード 0 で終える。ただ、捨てるだけだと、
+    壊れたフックが一度も動いていないことに気づけない。標準エラーに 1 行と、metrics.jsonl に 1 行を残す。"""
+    import traceback
+
+    last = (traceback.format_exc(limit=1).strip().splitlines() or ["不明な例外"])[-1][:200]
+    print(f"token-efficiency {hook}: {last}", file=sys.stderr)
+    append_metric({"ts": int(time.time()), "event": "hook_error", "hook": hook, "error": last})

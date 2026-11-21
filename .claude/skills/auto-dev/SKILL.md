@@ -139,6 +139,7 @@ git log --oneline -10
 - main を取り込む（`git fetch origin && git merge origin/main`）。feedback-session など別のセッションの発見は main 経由でしか届かない
 - 前のサイクルのあとで main に入った `docs/knowledge/` と `docs/reports/pending.md` の差分。`git log -p <前のサイクルのコミット>..origin/main -- docs/knowledge docs/reports/pending.md` で読み、そのサイクルの作業を選ぶ
 - ユーザーからの指示が届いていれば、それを最優先にする。判断待ちに回さない（work-style「人が決める」）
+- バグの帳簿（`docs/reports/bugs.md`）。サイクルの最初に `python3 .claude/skills/bug-first/scripts/bugs.py --list --open` で、直していないバグを見る（bug-first）
 - `docs/reports/deliverables.md`（成果物の表）。無ければ finish-first に従って作る（README の未着手、issue、優先指示から1〜3行、完成条件は仮）。
   あれば先頭の未完成の行が今の成果物で、その「残り」がこのサイクルの作業の候補
 - 直近のコミットで何をしていたか（前のサイクルの続きがあるか）
@@ -157,6 +158,7 @@ git log --oneline -10
 
 | 順 | 対象 |
 |---|---|
+| 0 | バグ。帳簿（`docs/reports/bugs.md`）の直していない節、main ブランチで落ちているテスト、code-check の重大。致命的は、今の作業を止めて修正版まで出す（bug-first） |
 | 1 | 壊れているもの。テストが落ちている、build が通らない、lint が赤い |
 | 2 | 詰まっているもの。マージできない PR、コンフリクト、レビュー指摘の未対応 |
 | 3 | 優先指示。引数で渡されたもの、ユーザーから届いた指示 |
@@ -164,6 +166,8 @@ git log --oneline -10
 | 5 | 明示された宿題。issue、TODO、ドキュメントに書かれた未着手 |
 | 6 | 自分で見つけた改善余地 |
 
+0 が残っているうちは、ほかを選ばない。何よりもバグ修正が先。重いバグはその日の最初に直し、軽いバグは次の PR にまとめる。
+ユーザーが別の作業をはっきり指示したときは指示に従い、`❕ バグ: <残っているバグと、先にしなかった理由>` を 1 行書く。
 **1と2を飛ばして新しいものを作らない。** 壊れたまま積み上げない。
 選んだ作業のほかに、独立した未完成（触る場所が重ならず、それぞれ 10 手以上）が 2 つ以上あれば、順に回さず子のセッションに分ける
 （`feedback-session/scripts/fanout.py plan --from-reports`。feedback-session「親が取りまとめる並列開発」）。分けないときは `❕ 並列: 分けない（理由）` を 1 行書く。

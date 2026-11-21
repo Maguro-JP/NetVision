@@ -7,10 +7,11 @@ HEAD ごとの結果を ~/.claude/state/pr-gate/<repo>.json に残す。pr_gate.
 
 動かすもの（あるものだけ）: コミットメッセージの ID・URL・メールの検査、git diff --check、./scripts/validate.sh、.claude/skills/*/scripts/test_*.py、
 .claude/hooks/test.sh（リポジトリ自身のテストの台本。無ければ pytest）、
-ja-proofread・content-audit・secret-leak-check・user-terms・ui-design・readme・knowledge の差分（base から。user-terms と ui-design と readme と knowledge は注意で、落とさない）、
-code-check の crash・vuln・info の差分（バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩。重大で落とす）、npm test（package.json に test があり node_modules があるとき）。
+ja-proofread・content-audit・secret-leak-check・user-terms・ui-design・readme・knowledge の差分（base との分かれ目から。user-terms と ui-design と readme と knowledge は注意で、落とさない）、
+code-check の crash・vuln・info の差分（バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩。重大で落とす）、
+no-fake の fake_scan の差分（見せかけの形、握りつぶし、弱めた検査、消したテスト。重大で落とし、注意は数だけ出す）、npm test（package.json に test があり node_modules があるとき）。
 
-使い方: precheck.py [--base <ref>]   base の既定は origin のデフォルトブランチ
+使い方: precheck.py [--base <ref>]   base の既定は origin のデフォルトブランチ。差分の検査は、base との分かれ目（git merge-base）から後だけを見る
 環境変数: PR_GATE_STATE=dir  記録の保存先（既定は ~/.claude/state/pr-gate）
 """
 
@@ -48,6 +49,14 @@ def default_base() -> str:
     return "HEAD~1"
 
 
+def fork_point(base: str) -> str:
+    """base との分かれ目（git merge-base）。分かれ目が取れなければ base のまま。
+    差分の検査に base の先頭を渡すと、base が進んだ分（他人が直した行）が「足した行」として出て、
+    触っていない行の重大で落ちる（配布のブランチが base より古いときに起きた）。分かれ目から後だけを見せる。"""
+    code, out = sh(["git", "merge-base", base, "HEAD"])
+    return out.strip() if code == 0 and re.fullmatch(r"[0-9a-f]{40,64}", out.strip()) else base
+
+
 def pass_by_text(name: str, code: int, out: str) -> bool:
     if name == "proofread":
         # 注意（訳語、強調の記号、読点）は直す目安で、出す前に止める理由にはしない。重大（文字の混入、英語の出だし）だけで判定する
@@ -69,7 +78,8 @@ def main() -> int:
     code, sha = sh(["git", "rev-parse", "HEAD"])
     if code != 0:
         print("git のリポジトリではない"); return 1
-    steps = [("git diff --check", f"git diff --check {base}")]
+    since = fork_point(base)  # 差分の検査には、base の先頭ではなく、分かれ目を渡す
+    steps = [("git diff --check", f"git diff --check {since}")]
     if Path("scripts/validate.sh").exists():
         steps.append(("validate", "./scripts/validate.sh"))
     for t in sorted(glob.glob(".claude/skills/*/scripts/test_*.py")):
@@ -89,13 +99,16 @@ def main() -> int:
                        ("readme", ".claude/skills/readme-showcase/scripts/readme_check.py"),
                        ("knowledge", ".claude/skills/research-to-tech/scripts/knowledge.py")):
         if Path(path).exists():
-            steps.append((name, f"{sys.executable} {path} --diff {base}"))
+            steps.append((name, f"{sys.executable} {path} --diff {since}"))
     # code-check の 3 本（バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩）。重大で NG。テストは上で流すので crash は --no-tests
     for name, path, extra in (("crash", ".claude/skills/code-check/scripts/crash_check.py", " --no-tests"),
                               ("vuln", ".claude/skills/code-check/scripts/vuln_scan.py", ""),
                               ("info", ".claude/skills/code-check/scripts/info_scan.py", "")):
         if Path(path).exists():
-            steps.append((name, f"{sys.executable} {path} --diff {base}{extra}"))
+            steps.append((name, f"{sys.executable} {path} --diff {since}{extra}"))
+    # no-fake の差分の検査（見せかけの形、握りつぶし、弱めた検査、消したテスト）。重大で NG。注意は、最後の行に数だけ出る
+    if Path(".claude/skills/no-fake/scripts/fake_scan.py").exists():
+        steps.append(("no-fake", f"{sys.executable} .claude/skills/no-fake/scripts/fake_scan.py . --diff {since}"))
     if Path("package.json").exists() and Path("node_modules").is_dir():
         try:
             if "test" in json.loads(Path("package.json").read_text(encoding="utf-8")).get("scripts", {}):

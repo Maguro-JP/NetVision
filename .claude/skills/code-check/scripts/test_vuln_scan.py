@@ -124,5 +124,60 @@ class Repo(unittest.TestCase):
         self.assertIn("使った", r.stdout)
 
 
+class MovedBase(unittest.TestCase):
+    """base が進んだあとの古いブランチ。base の側の変更（他人が直した行、足したファイル）を、自分の変更と数えないこと。
+    base の先頭と比べると、base が直した悪い行が「私が足した行」に見え、関係の無い重大で precheck が落ちる（配った先で起きた）。"""
+
+    def git(self, *args):
+        subprocess.run(["git", "-c", "user.email=t@users.noreply.github.com", "-c", "user.name=t", *args], cwd=self.d, check=True, capture_output=True)
+
+    def setUp(self):
+        self.d = tempfile.mkdtemp()
+        self.root = Path(self.d)
+        self.git("init", "-q")
+        self.git("checkout", "-q", "-b", "base")
+        self.bad = "import os\nos.sys" + "tem('rm -rf ' + p)\nx = 1\n"
+        (self.root / "old.py").write_text(self.bad, encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "分かれ目")
+        self.git("checkout", "-q", "-b", "work")
+        # base が進む: 悪い行を直し、ファイルを 1 つ足す
+        self.git("checkout", "-q", "base")
+        (self.root / "old.py").write_text("import os\nx = 1\n", encoding="utf-8")
+        (self.root / "theirs.py").write_text("y = 1\n", encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "base が進んだ")
+        # 自分のブランチは、関係の無いファイルを 1 つ足しただけ
+        self.git("checkout", "-q", "work")
+        (self.root / "mine.py").write_text("z = 1\n", encoding="utf-8")
+        self.git("add", "-A")
+        self.git("commit", "-q", "-m", "mine")
+
+    def test_files_and_lines_changed_on_the_base_side_are_not_mine(self):
+        from common import changed_lines
+        self.assertEqual(changed(self.root, "base"), ["mine.py"])
+        self.assertEqual(changed_lines(self.root, "base"), {"mine.py": {1}})
+
+    def test_my_own_lines_are_still_mine(self):
+        from common import changed_lines
+        (self.root / "old.py").write_text(self.bad + "os.sys" + "tem('ls ' + q)\n", encoding="utf-8")  # 作業ツリーの、まだコミットしていない行
+        self.assertEqual(changed(self.root, "base"), ["mine.py", "old.py"])
+        self.assertEqual(changed_lines(self.root, "base"), {"mine.py": {1}, "old.py": {4}})
+
+    def test_cli_does_not_block_on_what_the_base_fixed(self):
+        env = dict(os.environ, CODE_CHECK_NO_TOOLS="1")
+        for script, label in (("vuln_scan.py", "不具合や脆弱性"), ("info_scan.py", "情報の扱いや漏洩"), ("crash_check.py", "バグやクラッシュ")):
+            extra = ["--no-tests", "--no-smoke"] if script == "crash_check.py" else []
+            r = subprocess.run([sys.executable, str(HERE / script), self.d, "--diff", "base", *extra], capture_output=True, text=True, env=env)
+            self.assertEqual(r.returncode, 0, script + "\n" + r.stdout + r.stderr)
+            self.assertNotIn("old.py", r.stdout, script)
+            self.assertIn(f"{label}: 重大 0", r.stdout, script)
+
+    def test_a_base_that_does_not_exist_falls_back_to_itself(self):
+        from common import merge_base
+        self.assertEqual(merge_base(self.root, "no-such-ref"), "no-such-ref")
+        self.assertEqual(len(merge_base(self.root, "base")), 40)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -33,6 +33,14 @@ except Exception:
     sys.exit(0)
 hits = re.findall(r"[가-힯ᄀ-ᇿ㄰-㆏]+", last)
 if hits:
-    print("直前の応答に韓国語が混ざっています: " + " ".join(hits[:5]) + "\n日本語だけで書き直してください。", file=sys.stderr)
+    try:
+        import os
+        from pathlib import Path
+        root = Path(os.environ.get("LANG_RULE_STATE") or Path.home() / ".claude" / "state" / "lang")
+        root.mkdir(parents=True, exist_ok=True)
+        (root / (Path(path).stem + ".again")).write_text("1")
+    except Exception:
+        pass
+    print("直前の応答に韓国語が混ざっています: " + " ".join(hits[:5]) + "\n混ざった行だけを日本語で書き直す。前の行を出し直さない。", file=sys.stderr)
     sys.exit(2)
 PY

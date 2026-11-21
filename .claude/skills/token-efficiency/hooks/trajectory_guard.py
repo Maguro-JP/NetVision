@@ -152,6 +152,6 @@ def main() -> None:
 if __name__ == "__main__":
     try:
         main()
-    except Exception:
-        pass
+    except Exception:  # フックは会話を止めない。何が起きたかは捨てずに残す
+        _state.note_crash("trajectory_guard")
     sys.exit(0)

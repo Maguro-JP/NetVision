@@ -62,6 +62,15 @@ class Fixture(unittest.TestCase):
                     "体言止めの連発", "文末の繰り返し", "矢印でつないだ羅列"]:
             self.assertNotIn(bad, out, f"{bad} を拾った\n{out}")
 
+    def test_ordinary_words_with_the_same_character_are_not_coined_translations(self):
+        # 「周」を訳語として拾うのは、単独で cycle の意味に使ったときだけ。「周知」「周り」「周到」は普通の語
+        for ok in ["新しく出たものを周知します。", "悪用済みと重大は周知する。", "周りの人に聞く。", "周到に用意する。", "周期と周辺と周囲を見る。"]:
+            code, out = proof("--stdin", stdin=ok + "\n")
+            self.assertNotIn("勝手な訳語", out, f"{ok} を拾った\n{out}")
+        for bad in ["周を重ねるごとに良くなる。", "次の周で直す。", "毎周見る。", "周3 で止まった。"]:
+            code, out = proof("--stdin", stdin=bad + "\n")
+            self.assertIn("勝手な訳語", out, f"{bad} を拾っていない\n{out}")
+
     def test_code_and_tables_skipped(self):
         text = "表と囲みは見ない。\n\n| 这 | のの |\n|---|---|\n\n```\n这 のの **x**\n```\n"
         code, out = proof("--stdin", stdin=text)

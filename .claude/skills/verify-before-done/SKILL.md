@@ -142,11 +142,12 @@ git show --stat HEAD
 
 PR を作る前・マージの前・main に push する前の検査は、`scripts/precheck.py` で 1 本にまとめる。テストは、そのリポジトリの
 `.claude/hooks/test.sh`（repo-bootstrap が置く台本）があればそれを流し、無ければ pytest を流す。
+差分の検査は、base との分かれ目（`git merge-base`）から後だけを見る。base の先頭と比べると、base が進んだ分を自分の変更と数えて落ちる。
 手で選んで動かすと抜けて、出したあとに間違いが分かる。precheck は、あるものだけを順に動かし、結果と HEAD を
 `~/.claude/state/pr-gate/<repo>.json` に残す。`hooks/pr_gate.py`（PreToolUse）が、その記録と、出す内容を ❔ で見せたあとの
 ユーザーの返事の無い PR の作成・マージ・main への push を止める。手順は `solo-pr-flow` の「出す前の確認」。
 返事は、❔ を出した直後の一言だけを数える。別の話のあとでは、もう一度 ❔ を出す。
-頼まれていない Release やタグの作成も止める。テストは `scripts/test_pr_gate.py`。`PR_GATE_OFF=1` で止まる。
+頼まれていない Release やタグの作成も止める。テストは `scripts/test_pr_gate.py` と `scripts/test_precheck.py`。`PR_GATE_OFF=1` で止まる。
 
 ## 他のスキルとの関係
 

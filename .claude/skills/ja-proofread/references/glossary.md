@@ -38,7 +38,7 @@
 | ツール | 道具 | tool |
 | 日本語 | 和文 | Japanese text |
 | 文字 | 字 | character |
-| サイクル、N周目 | 周、周N | iteration, cycle |
+| サイクル、N周目 | 周、周N（周知・周り・周到・周期・周辺は普通の語なので、そのまま） | iteration, cycle |
 | N回目 | 回N | round N |
 | 参考画像、リファレンス | 手本 | reference |
 | ルール | 網 | rules |

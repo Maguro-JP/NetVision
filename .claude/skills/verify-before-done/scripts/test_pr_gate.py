@@ -173,6 +173,33 @@ class PrGate(unittest.TestCase):
         self.assertIn("test.sh", names)
         self.assertNotIn("pytest", names)
 
+    def test_no_fake_step_stops_a_swallowed_exception(self):
+        # no-fake の fake_scan.py があれば、差分の検査を 1 段として流す。握りつぶしを足した差分は落ち、注意だけの差分は通る
+        scan = PRECHECK.parent.parent.parent / "no-fake" / "scripts" / "fake_scan.py"
+        if not scan.exists():
+            self.skipTest("no-fake が入っていない")
+        repo = self.dir / "repo3"
+        (repo / ".claude/skills/no-fake/scripts").mkdir(parents=True)
+        (repo / ".claude/skills/no-fake/scripts/fake_scan.py").write_text(scan.read_text(encoding="utf-8"), encoding="utf-8")
+        (repo / "app.py").write_text("def load(p):\n    return open(p).read()\n\n\nload('x')\n", encoding="utf-8")
+        g = lambda *a: subprocess.run(["git", "-C", str(repo), *a], capture_output=True, text=True, check=True)
+        g("init", "-q", "-b", "main"), g("add", "-A")
+        g("-c", "user.email=t@example.invalid", "-c", "user.name=t", "commit", "-q", "-m", "a")
+        g("remote", "add", "origin", "https://example.invalid/o/Demo3.git")
+        env = dict(os.environ, PR_GATE_STATE=str(self.state), NO_FAKE_STATE=str(self.dir / "no-fake"))
+
+        def step():
+            r = subprocess.run([sys.executable, "-I", str(PRECHECK), "--base", "HEAD"], cwd=str(repo), capture_output=True, text=True, env=env)
+            steps = json.loads((self.state / "demo3.json").read_text(encoding="utf-8"))["steps"]
+            return r.returncode, next(s for s in steps if s["name"] == "no-fake")
+
+        (repo / "app.py").write_text("def load(p):\n    return open(p).read()  # TODO: 文字コードを見る\n\n\nload('x')\n", encoding="utf-8")
+        code, s = step()
+        self.assertEqual((code, s["ok"], s["tail"]), (0, True, "見せかけの確認: 重大 0 / 注意 1"))
+        (repo / "app.py").write_text("def load(p):\n    try:\n        return open(p).read()\n    except Exception:\n        pass\n\n\nload('x')\n", encoding="utf-8")
+        code, s = step()
+        self.assertEqual((code, s["ok"], s["tail"]), (1, False, "見せかけの確認: 重大 1 / 注意 0"))
+
     def test_pytest_with_no_tests_passes(self):
         # tests/ に Python 以外のテストしか無いリポジトリでは pytest が 5（0 件）で終わる。落ちた扱いにしない
         sys.path.insert(0, str(PRECHECK.parent))

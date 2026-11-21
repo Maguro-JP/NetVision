@@ -19,7 +19,7 @@ PR を作る前と、マージする前と、main に直接 push する前に、
 出したあとに間違いが分かると、直すのはユーザーになる。ユーザーが決めた手順なので、自分の判断で省かない。
 
 1. `python3 .claude/skills/verify-before-done/scripts/precheck.py` を動かす。`git diff --check`、validate、スキルのテスト、pytest、
-   proofread・content-audit・secret-leak-check の差分（base から）を 1 本で通し、結果を `~/.claude/state/pr-gate/<repo>.json` に残す。
+   proofread・content-audit・secret-leak-check の差分（base との分かれ目から）を 1 本で通し、結果を `~/.claude/state/pr-gate/<repo>.json` に残す。
    落ちたら直して、もう一度動かす。手で選んで動かすと抜ける
 2. 出す内容を ❔ で 1 行出す。形: `❔ 確認: <リポジトリ> の <ブランチ>（<HEAD 7 桁>）を PR にしてマージします。変えたもの: <1 行>。検査: precheck 通った <N>/<N>。進めてよいですか。`
    複数のリポジトリに配るときは、1 つの ❔ に全部を並べる。同じ内容を出し直すときは「前の ❔ と同じ内容（HEAD は <7 桁>）。進めてよいですか」と短く書き、リポジトリの名前だけは入れる（フックが照合する）

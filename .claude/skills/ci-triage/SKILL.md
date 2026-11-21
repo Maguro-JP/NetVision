@@ -87,6 +87,7 @@ PR の現在の `head.sha` と、見ているチェックの `head_sha` が一�
 
 **基のブランチで再現するかを確認する。** 自分の差分が原因でないものを
 直そうとして時間を溶かさない。
+main ブランチで落ちているテストは、その PR の問題でなくても、バグの帳簿に書く（`python3 .claude/skills/bug-first/scripts/bugs.py --add`。bug-first）。黙って残さない。
 
 ### 7. 待つ
 

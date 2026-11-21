@@ -24,7 +24,7 @@ import sys
 from collections import Counter
 
 try:  # 形態素解析は任意
-    import fugashi  # type: ignore
+    import fugashi  # type: ignore[import-not-found]
 
     _TAGGER = fugashi.Tagger()
 except Exception:  # pragma: no cover

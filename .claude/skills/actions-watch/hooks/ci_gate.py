@@ -70,8 +70,11 @@ def main() -> int:
     reasons = []
     # 1. 作ったのに購読していない
     # 止められた作成（フックの差し戻し、エラー）は PR が無いので数えない。成功した作成だけ見る（ci_state.read の acts）
-    created = any("create_pull_request" in a["tool"] and a["line"] > turn["line"] for a in st["acts"])
-    if created and not any("subscribe_pr_activity" in t for t in tools):
+    # 作成と購読は、最後の人の発言から後の範囲で見る。作ったあとに通知や差し戻しが挟まると、作成が今のターンの外に出て見落とすため
+    human = ci_state.human_turn(st)
+    _, human_tools = assistant_texts_after(path, human["line"])
+    created = any("create_pull_request" in a["tool"] and a["line"] > human["line"] for a in st["acts"])
+    if created and not any("subscribe_pr_activity" in t for t in human_tools):
         reasons.append("PR を作ったのに Actions の通知を購読していない。subscribe_pr_activity を呼び、完了の通知が来るまでマージの ❔ を出さない（actions-watch）")
     # 2. 終わっていないのに、マージの確認を出している
     for m in MERGE_Q.finditer(mine):

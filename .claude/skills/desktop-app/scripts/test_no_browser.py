@@ -17,7 +17,12 @@ def run(tool: str, path: str, text: str) -> str:
     key = "content" if tool == "Write" else "new_string"
     r = subprocess.run([sys.executable, "-I", str(HOOK)], input=json.dumps({"tool_name": tool, "tool_input": {"file_path": path, key: text}}),
                        capture_output=True, text=True, env=env, check=True)
-    return r.stdout
+    if not r.stdout.strip():
+        return ""
+    # 素の標準出力は Claude に届かない。additionalContext の形で出ていることを、ここで見る（形が違えば KeyError で落ちる）
+    d = json.loads(r.stdout)
+    assert d["hookSpecificOutput"]["hookEventName"] == "PostToolUse", d
+    return d["hookSpecificOutput"]["additionalContext"]
 
 
 class NoBrowser(unittest.TestCase):

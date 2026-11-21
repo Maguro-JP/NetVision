@@ -42,7 +42,9 @@ def main() -> int:
         return 0
     shown = [f"{no or ''}{'行 ' if no else ''}「{snip}」{msg}" for no, snip, msg in notes[:3]]
     more = f"（ほか {len(notes) - 3} 件）" if len(notes) > 3 else ""
-    print(f"ui-design: {path}: " + "／".join(shown) + more + "（ui-design の references/checklist.md）")
+    msg = f"ui-design: {path}: " + "／".join(shown) + more + "（ui-design の references/checklist.md）"
+    # PostToolUse の素の標準出力は Claude に届かない（届くのは additionalContext）
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
     return 0
 
 

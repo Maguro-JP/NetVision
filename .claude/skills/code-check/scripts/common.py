@@ -103,10 +103,17 @@ def tracked(root: Path) -> list:
     return sorted(files)
 
 
+def merge_base(root: Path, base: str) -> str:
+    """base との分かれ目（git merge-base）。分かれ目が取れなければ base のまま。
+    base の先頭と比べると、base が進んだ分（他人が直した行）が「自分が変えた行」に入り、関係の無い重大で PR の前の確認が落ちる。
+    no-fake の fake_scan.py と同じ決まり。"""
+    return git(root, "merge-base", base, "HEAD") or base
+
+
 def changed(root: Path, base: str) -> list:
-    """base から変わったファイル（コミット済みと作業ツリーの両方）と、追跡していない新しいファイル。"""
+    """base との分かれ目から変わったファイル（コミット済みと作業ツリーの両方）と、追跡していない新しいファイル。"""
     names = set()
-    out = git(root, "diff", "--name-only", "--diff-filter=ACMR", base)
+    out = git(root, "diff", "--name-only", "--diff-filter=ACMR", merge_base(root, base))
     names.update(l for l in out.splitlines() if l.strip())
     out = git(root, "ls-files", "--others", "--exclude-standard")
     names.update(l for l in out.splitlines() if l.strip())
@@ -114,9 +121,9 @@ def changed(root: Path, base: str) -> list:
 
 
 def changed_lines(root: Path, base: str) -> dict:
-    """base から変わった行。{相対パス: 行番号の集合}。追跡していない新しいファイルは入らない（全部の行が新しい）。"""
+    """base との分かれ目から変わった行。{相対パス: 行番号の集合}。追跡していない新しいファイルは入らない（全部の行が新しい）。"""
     out, cur = {}, None
-    for line in git(root, "diff", "-U0", "--diff-filter=ACMR", base).splitlines():
+    for line in git(root, "diff", "-U0", "--diff-filter=ACMR", merge_base(root, base)).splitlines():
         if line.startswith("+++ "):
             p = line[4:].strip()
             cur = p[2:] if p.startswith("b/") else None
@@ -247,7 +254,7 @@ def parse_args(doc: str, extra=None):
     import argparse
     ap = argparse.ArgumentParser(description=doc, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("root", nargs="?", default=".")
-    ap.add_argument("--diff", metavar="BASE", help="base から変わったファイルだけ見る")
+    ap.add_argument("--diff", metavar="BASE", help="base との分かれ目から変わったファイルだけ見る")
     ap.add_argument("--json", action="store_true")
     for args, kw in (extra or []):
         ap.add_argument(*args, **kw)

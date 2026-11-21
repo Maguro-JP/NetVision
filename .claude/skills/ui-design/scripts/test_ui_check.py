@@ -90,7 +90,12 @@ class Check(unittest.TestCase):
             def run(tool, key, text, path=str(p), extra=None):
                 r = subprocess.run([sys.executable, "-I", str(HOOK)], input=json.dumps({"tool_name": tool, "tool_input": {"file_path": path, key: text}}),
                                    capture_output=True, text=True, env=extra or env, check=True)
-                return r.stdout
+                if not r.stdout.strip():
+                    return ""
+                # 素の標準出力は Claude に届かない。additionalContext の形で出ていることを、ここで見る
+                d = json.loads(r.stdout)
+                self.assertEqual(d["hookSpecificOutput"]["hookEventName"], "PostToolUse")
+                return d["hookSpecificOutput"]["additionalContext"]
 
             self.assertIn("何が起きるかを言っていない", run("Edit", "new_string", "<button>OK</button>"))
             self.assertEqual("", run("Edit", "new_string", "<button>保存する</button>"))

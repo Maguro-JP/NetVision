@@ -195,6 +195,7 @@ def apply_hooks(target_root: Path, add, upd, cur, missing):
                     slot = {"matcher": matcher, "hooks": []}
                 entries.append(slot)
             slot["hooks"].append(h)
+        drop_superseded(cur)  # 後継を今足したので、古い登録を外せる（settings_missing の時点では後継が無く、残っていた）
         (target_root / ".claude" / "settings.json").write_text(
             json.dumps(cur, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 

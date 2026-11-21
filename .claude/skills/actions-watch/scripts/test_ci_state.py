@@ -97,6 +97,16 @@ class Gate(unittest.TestCase):
         code, out = self.stop([user("PR を作って"), assistant("★ PR #12", [("mcp__github__create_pull_request", {}), ("mcp__Claude_Code_Remote__subscribe_pr_activity", {})])])
         self.assertEqual(code, 0, out)
 
+    def test_notification_between_create_and_stop_does_not_hide_the_missing_subscribe(self):
+        tool = ("mcp__github__create_pull_request", {"owner": "Owner", "repo": "Repo"})
+        tid = assistant("", [tool])["message"]["content"][0]["id"]
+        # PR を作ったあとに、通知と Stop フックの差し戻しが挟まる。どちらも人の発言ではないので、作成は同じターンの中
+        for between in ("<task-notification><task-type>queued-remote-notifications</task-type>", "Stop hook feedback:\n[command hook 9]: 疑いの行が無い"):
+            code, out = self.stop([user("PR を作って"), assistant("", [tool]), tool_result(tid, '{"number": 12}'), assistant("★ PR #12"),
+                                   user(between), assistant("❕ 疑い: 無し")])
+            self.assertEqual(code, 2, between)
+            self.assertIn("購読", out)
+
     def test_blocked_create_is_not_counted(self):
         tool = ("mcp__github__create_pull_request", {"owner": "Owner", "repo": "Repo"})
         tid = assistant("", [tool])["message"]["content"][0]["id"]

@@ -116,8 +116,20 @@ def latest(state: dict, pr_number: int, repo: str = "") -> dict:
     return {**last, "stale": stale}
 
 
+NOT_HUMAN = re.compile(r"^\s*(?:Stop hook feedback|\[SYSTEM NOTIFICATION|<task-notification>|<system-reminder>|<wake reason=)")
+
+
+def human_turn(state: dict) -> dict:
+    """最後の人の発言から後の範囲。ツールの結果、通知、Stop フックの差し戻しは、人の発言ではないので始まりに数えない。
+    PR を作ったあとに通知が挟まっても、作成と購読を同じ範囲で見るために使う（current_turn だと作成が範囲の外になる）。"""
+    starts = [u for u in state["users"] if not u["result"] and not NOT_HUMAN.search(u["text"])]
+    if not starts:
+        return {"line": -1, "text": ""}
+    return starts[-1]
+
+
 def current_turn(state: dict) -> dict:
-    """最後の人の発言（ツールの結果ではない物）から後の範囲。"""
+    """最後の発言（ツールの結果ではない物。通知と差し戻しを含む）から後の範囲。通知を受けたターンに結果を書いたかを見るために使う。"""
     starts = [u for u in state["users"] if not u["result"]]
     if not starts:
         return {"line": -1, "text": ""}

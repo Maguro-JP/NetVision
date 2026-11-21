@@ -110,7 +110,9 @@ def main() -> int:
         return 0
     shown = "／".join(f"{f.line}行 {f.id} {f.what}" for f in findings[:3])
     more = f"（ほか {len(findings) - 3} 件）" if len(findings) > 3 else ""
-    print((f"code-check: {path.name}: 重大 {len(findings)} 件。{shown}{more}。直してから出す（code-check の references/patterns.md）")[:300])
+    msg = (f"code-check: {path.name}: 重大 {len(findings)} 件。{shown}{more}。直してから出す（code-check の references/patterns.md）")[:300]
+    # PostToolUse の素の標準出力は Claude に届かない（届くのは additionalContext）。素で出していた間、この知らせは会話に出ていなかった
+    print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
     return 0
 
 
