@@ -1,0 +1,121 @@
+# semgrep の registry（p/security-audit、p/secrets）が proxy の向こうで取れないときに使う、同梱の最小の規則。
+# 元は Bandit の B 番号と OWASP Top 10 の分類（references/patterns.md と同じ型）。registry が取れるときは使わない。
+rules:
+  - id: py-eval-exec
+    languages: [python]
+    severity: ERROR
+    message: eval/exec に文字列でない物を渡している（任意のコードの実行。B307/B102）
+    patterns:
+      - pattern-either:
+          - pattern: eval($X)
+          - pattern: exec($X)
+      - pattern-not: eval("...")
+      - pattern-not: exec("...")
+  - id: py-subprocess-shell-true
+    languages: [python]
+    severity: ERROR
+    message: shell=True（コマンドの注入。B602）
+    pattern-either:
+      - pattern: subprocess.$F(..., shell=True, ...)
+      - pattern: os.system($X)
+  - id: py-pickle-load
+    languages: [python]
+    severity: ERROR
+    message: pickle/marshal の読み込み（細工したデータでコードが動く。B301）
+    pattern-either:
+      - pattern: pickle.load(...)
+      - pattern: pickle.loads(...)
+      - pattern: marshal.loads(...)
+  - id: py-yaml-load
+    languages: [python]
+    severity: ERROR
+    message: yaml.load に Loader の指定が無い（B506）
+    patterns:
+      - pattern: yaml.load($X)
+  - id: py-requests-verify-false
+    languages: [python]
+    severity: ERROR
+    message: TLS の検証を切っている（B501）
+    pattern: requests.$F(..., verify=False, ...)
+  - id: py-tempfile-mktemp
+    languages: [python]
+    severity: ERROR
+    message: tempfile.mktemp（B306）
+    pattern: tempfile.mktemp(...)
+  - id: py-flask-debug
+    languages: [python]
+    severity: ERROR
+    message: debug=True で動かしている（B201）
+    pattern: $APP.run(..., debug=True, ...)
+  - id: py-sql-format
+    languages: [python]
+    severity: ERROR
+    message: SQL を文字列で組み立てている（B608）
+    pattern-either:
+      - pattern: $CUR.execute("..." % ...)
+      - pattern: $CUR.execute("...".format(...))
+      - pattern: $CUR.execute(f"...")
+      - pattern: $CUR.execute("..." + ...)
+  - id: py-hardcoded-password
+    languages: [python]
+    severity: ERROR
+    message: パスワードや鍵をコードに直書きしている（B105）
+    patterns:
+      - pattern-either:
+          - pattern: password = "..."
+          - pattern: passwd = "..."
+          - pattern: secret = "..."
+          - pattern: api_key = "..."
+          - pattern: token = "..."
+      - pattern-not: password = ""
+      - pattern-not: $X = "<...>"
+  - id: js-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: eval/new Function（任意のコードの実行。OWASP A03）
+    pattern-either:
+      - pattern: eval($X)
+      - pattern: new Function(...)
+  - id: js-child-process-exec
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: child_process.exec に組み立てた文字列を渡している（OWASP A03）
+    patterns:
+      - pattern-either:
+          - pattern: exec(`...${$X}...`, ...)
+          - pattern: execSync(`...${$X}...`, ...)
+          - pattern: exec($A + $B, ...)
+  - id: js-innerhtml
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: innerHTML に変数を入れている（DOM の XSS。OWASP A03）
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: document.write($X)
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.innerHTML = ""
+  - id: js-reject-unauthorized
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: TLS の検証を切っている（OWASP A02）
+    pattern-either:
+      - pattern: rejectUnauthorized: false
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+  - id: js-math-random-token
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: Math.random で鍵やトークンを作っている（予測できる。OWASP A02）
+    patterns:
+      - pattern: $TOKEN = Math.random()
+      - metavariable-regex:
+          metavariable: $TOKEN
+          regex: (?i).*(token|secret|password|nonce|salt|otp).*
+  - id: js-cors-any
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: CORS がどこからでも（OWASP A05）
+    pattern-either:
+      - pattern: cors({origin:"*"})
+      - pattern: $RES.setHeader("Access-Control-Allow-Origin", "*")

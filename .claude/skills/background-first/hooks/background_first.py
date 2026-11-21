@@ -4,7 +4,8 @@
 ユーザーが優先。ターンが動いている間、ユーザーの一言は次のターンまで届かない。だから長い処理は裏で動かし、ターンを短く終える。
 - Bash で長いコマンド（precheck、validate、テスト一式、npm や pip、clone、scan、ビルド、配布）を run_in_background 無しで呼んだら止める（exit 2）。
   裏で動かし、出力はファイルに書く。終わると通知が来るので、待つ間は sleep も polling もしない
-- このターンのツール呼び出しが 12 回を超えるごとに、残りを裏（run_in_background、subagent）に出して ❕ で終えるよう知らせる（additionalContext）
+- このターンのツール呼び出しが 12 回を超えるごとに、残りを裏（run_in_background、subagent）に出して ❕ で終えるよう知らせる（additionalContext）。
+  24 回からは、独立した残りを子のセッションに分ける（fanout.py plan）よう知らせる
 
 環境変数:
   BACKGROUND_FIRST_OFF=1   止める
@@ -91,8 +92,11 @@ def main() -> int:
     if path and os.path.isfile(path):
         n = calls_this_turn(path)
         if n and n % every == 0:
+            # 2 回目からは、裏に出すだけでなく分ける。長いターンを 1 本で進めるのが、開発の遅さの元
+            how = ("独立した残りは子のセッションに分ける（feedback-session の fanout.py plan）。難易度でモデルを選ぶ。分けたら ❕ 1 行で終える" if n >= every * 2
+                   else "残りは裏（run_in_background、Agent の run_in_background、子のセッション）に出し、❕ 1 行で終える")
             print(json.dumps({"hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext":
-                  f"このターンのツール呼び出しが {n} 回。ユーザーの一言はターンが終わるまで届かない。残りは裏（run_in_background、Agent の run_in_background、子のセッション）に出し、❕ 1 行で終える（background-first）"}},
+                  f"このターンのツール呼び出しが {n} 回。ユーザーの一言はターンが終わるまで届かない。{how}（background-first）"}},
                   ensure_ascii=False))
     return 0
 

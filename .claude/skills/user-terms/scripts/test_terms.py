@@ -38,7 +38,8 @@ class Table(unittest.TestCase):
 
     def test_variants_found_with_user_word(self):
         hits = {(v, u) for _, v, u in find("プルリクをマージして、リポのフォルダを片付けます。Routine は 9:00 JST です。e.g. これ。")}
-        self.assertEqual(hits, {("プルリク", "PR"), ("リポ", "リポジトリ"), ("フォルダ", "ディレクトリ"), ("片付け", "整理整頓"),
+        # 「片付け」はユーザーが使う語なので、直す言い方に入れない
+        self.assertEqual(hits, {("プルリク", "PR"), ("リポ", "リポジトリ"), ("フォルダ", "ディレクトリ"),
                                 ("Routine", "ルーティン"), ("JST", "日本時間"), ("e.g.", "例えば")})
 
     def test_user_words_and_boundaries_pass(self):

@@ -27,7 +27,7 @@ def run_hook(cmd: str, cwd: Path) -> int:
     out = ""
     try:
         for _ in range(2):
-            r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=20,
+            r = subprocess.run(cmd, shell=True, cwd=cwd, capture_output=True, text=True, timeout=20,  # code-check: ignore 固定の文字列（ユーザーの入力は入らない）
                                input='{"session_id":"budget","user_input":"x"}')
             out = r.stdout
     except (subprocess.TimeoutExpired, OSError):

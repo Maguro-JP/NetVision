@@ -16,6 +16,6 @@ if not hit:
     sys.exit(0)
 msg = ("PR を作った、または push した。solo-pr-flow の判定に入る。"
        "マージの前に「出す前の確認」（precheck の記録と、❔ へのユーザーの返事）があることを確かめる。無ければ ❔ を出して待つ。"
-       "止まるなら条件名を挙げる。")
+       "止まるなら条件名を挙げる。PR を作ったら同じターンで subscribe_pr_activity で購読し、Actions の完了の通知が来るまでマージの ❔ を出さない（actions-watch）。")
 print(json.dumps({"hookSpecificOutput": {"hookEventName": "PostToolUse", "additionalContext": msg}}, ensure_ascii=False))
 PY
