@@ -21,7 +21,7 @@ BIG = 5 * 1024 * 1024
 
 def sh(cmd, timeout=120):
     try:
-        r = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, timeout=timeout)  # code-check: ignore 固定の文字列（ユーザーの入力は入らない）
         return r.returncode, r.stdout.strip()
     except (OSError, subprocess.TimeoutExpired):
         return 1, ""

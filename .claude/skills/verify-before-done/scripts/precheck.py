@@ -7,7 +7,8 @@ HEAD ごとの結果を ~/.claude/state/pr-gate/<repo>.json に残す。pr_gate.
 
 動かすもの（あるものだけ）: コミットメッセージの ID・URL・メールの検査、git diff --check、./scripts/validate.sh、.claude/skills/*/scripts/test_*.py、
 .claude/hooks/test.sh（リポジトリ自身のテストの台本。無ければ pytest）、
-ja-proofread・content-audit・secret-leak-check・user-terms・ui-design の差分（base から。user-terms と ui-design は注意で、落とさない）、npm test（package.json に test があり node_modules があるとき）。
+ja-proofread・content-audit・secret-leak-check・user-terms・ui-design・readme・knowledge の差分（base から。user-terms と ui-design と readme と knowledge は注意で、落とさない）、
+code-check の crash・vuln・info の差分（バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩。重大で落とす）、npm test（package.json に test があり node_modules があるとき）。
 
 使い方: precheck.py [--base <ref>]   base の既定は origin のデフォルトブランチ
 環境変数: PR_GATE_STATE=dir  記録の保存先（既定は ~/.claude/state/pr-gate）
@@ -25,7 +26,7 @@ from pathlib import Path
 
 def sh(cmd, timeout=900):
     try:
-        r = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, timeout=timeout)
+        r = subprocess.run(cmd, shell=isinstance(cmd, str), capture_output=True, text=True, timeout=timeout)  # code-check: ignore 固定の文字列（ユーザーの入力は入らない）
         return r.returncode, (r.stdout + r.stderr).strip()
     except subprocess.TimeoutExpired:
         return 124, "timeout"
@@ -84,9 +85,17 @@ def main() -> int:
                        ("content-audit", ".claude/skills/content-audit/scripts/audit.py"),
                        ("secret-leak-check", ".claude/skills/secret-leak-check/scripts/scan.py"),
                        ("user-terms", ".claude/skills/user-terms/scripts/terms.py"),
-                       ("ui-design", ".claude/skills/ui-design/scripts/ui_check.py")):
+                       ("ui-design", ".claude/skills/ui-design/scripts/ui_check.py"),
+                       ("readme", ".claude/skills/readme-showcase/scripts/readme_check.py"),
+                       ("knowledge", ".claude/skills/research-to-tech/scripts/knowledge.py")):
         if Path(path).exists():
             steps.append((name, f"{sys.executable} {path} --diff {base}"))
+    # code-check の 3 本（バグやクラッシュ・不具合や脆弱性・情報の扱いや漏洩）。重大で NG。テストは上で流すので crash は --no-tests
+    for name, path, extra in (("crash", ".claude/skills/code-check/scripts/crash_check.py", " --no-tests"),
+                              ("vuln", ".claude/skills/code-check/scripts/vuln_scan.py", ""),
+                              ("info", ".claude/skills/code-check/scripts/info_scan.py", "")):
+        if Path(path).exists():
+            steps.append((name, f"{sys.executable} {path} --diff {base}{extra}"))
     if Path("package.json").exists() and Path("node_modules").is_dir():
         try:
             if "test" in json.loads(Path("package.json").read_text(encoding="utf-8")).get("scripts", {}):

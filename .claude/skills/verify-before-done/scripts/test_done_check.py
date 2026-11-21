@@ -142,6 +142,22 @@ class DoneCheck(unittest.TestCase):
         self.run_hook("❕ 直して validate を通します。")
         self.assertEqual(self.last_metric()["plan_lines"], 1)
 
+    # 予定の行
+    def test_future_plan_is_blocked(self):
+        for line in ("❕ 検査を裏で動かしています。結果が来たらマージの確認を出します。", "❕ 通ったらマージします。", "❕ あとで docs を直します。"):
+            code, err = self.run_hook(line, tools=())
+            self.assertEqual(code, 2, line)
+            self.assertIn("予定の行", err)
+        self.assertEqual(self.last_metric()["future_plan_lines"], 1)
+
+    def test_future_plan_exceptions_pass(self):
+        for line in ("❕ 検査を裏で動かしています（出力は /tmp/a.log）。",   # 今の事実
+                     "❕ 次に開くセッションから効きます。",                    # 行動ではない事実
+                     "❕ 「結果が来たらマージします」という行を止めます。",     # 引用の中
+                     "❕ `通ったら push します` は例です。",                  # コードの中
+                     "❔ 通ったらマージしてよいですか。確認の後で出します。"):    # ❔ の行
+            self.assertEqual(self.run_hook(line, tools=())[0], 0, line)
+
     def test_stop_hook_active_passes(self):
         self.assertEqual(self.run_hook("直しました。", active=True)[0], 0)
 

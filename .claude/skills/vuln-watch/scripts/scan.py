@@ -52,7 +52,7 @@ def fetch(url: str, data: bytes = None, cache_name: str = None, max_age: int = 0
     if OFFLINE:
         raise RuntimeError(f"offline で写しが無い: {cache_name or url}")
     req = urllib.request.Request(url, data=data, headers={"User-Agent": "ciel-vuln-watch", **({"Content-Type": "application/json"} if data else {})})
-    with urllib.request.urlopen(req, timeout=60) as r:
+    with urllib.request.urlopen(req, timeout=60) as r:  # code-check: ignore https の固定の URL
         body = r.read()
     if p:
         p.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +77,7 @@ def osv_query(rows):
     found = {}
     for i in range(0, len(queries), 500):
         chunk = queries[i:i + 500]
-        name = "batch-" + hashlib.sha1(json.dumps(chunk, sort_keys=True).encode()).hexdigest()[:16] + ".json"
+        name = "batch-" + hashlib.sha1(json.dumps(chunk, sort_keys=True).encode(), usedforsecurity=False).hexdigest()[:16] + ".json"
         body = fetch(OSV_BATCH, json.dumps({"queries": chunk}).encode(), name, max_age=20 * 3600)
         for key, res in zip(keys[i:i + 500], json.loads(body).get("results", [])):
             found[key] = [v["id"] for v in res.get("vulns", [])]

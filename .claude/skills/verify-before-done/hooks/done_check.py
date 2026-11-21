@@ -76,6 +76,9 @@ UNDONE = re.compile(r"やっていない|やっていません|できていな�
 # 経過の行。ユーザーに見せる文字は成果物と答えだけ。長いなら裏に出してターンを終える（background-first）
 PROGRESS = re.compile(r"^[❕!]\s*(?:進み|進捗|経過)[:：]|(?:してい|動かしてい|書いてい|直してい|回してい)ます。?$")
 PLAN = re.compile(r"(?:し|やり|進め|配り|通し|残し|作り|直し|見|調べ|確かめ|書き|入れ|送り|始め|続け|回し|試し|読み|探し|組み立て|足し|消し|外し)ます。?$")
+# 予定の行。「結果が来たら何々を出します」「通ったらマージします」「あとで直します」のように、先の自分の行動を約束する文。
+# 裏で動かしてターンを終えるときは、いま動かしている物だけを書く。予定は次のターンで実行すれば足りるので、書いても文字が流れるだけになる
+FUTURE = re.compile(r"来たら|届いたら|出たら|通ったら|落ちたら|終わったら|終えたら|済んだら|できたら|分かったら|わかったら|揃ったら|戻ったら|来次第|次第|あとで|後で|のあと(?:で|に)?|その後|これから|次に|続けて|引き続き")
 PUSHBACK = re.compile(r"しかし|ただし|とはいえ|おすすめしません|お勧めしません|の方が良い|のほうが良い|べきではない|やめた方が|やめたほうが|反対です|賛成できません|AI の判断で|私の判断で")
 OUT_LIMIT = 400_000  # 照合するツールの出力の上限（文字）
 
@@ -137,6 +140,23 @@ def record(session_id: str, row: dict) -> None:
         pass
 
 
+def future_plans(lines) -> list:
+    """予定の行（先の行動を約束する文）。引用・コードの中、❔ の行、行動ではない事実の文は数えない。
+
+    事実の文（「次に開くセッションから効きます」）は、文末が自分の動作の動詞（します、書きます など）ではないので当たらない。
+    """
+    found = []
+    for l in lines:
+        if l[0] not in MARKS or l[0] in "❔❓":
+            continue
+        for sentence in re.split(r"[。\n]", strip_quotes(l)):
+            sentence = sentence.strip()
+            if sentence and FUTURE.search(sentence) and PLAN.search(sentence + "。"):
+                found.append(l)
+                break
+    return found
+
+
 def strip_quotes(s: str) -> str:
     """引用（「…」）とコード（`…`）の中の語は、主張ではなく説明なので外す。"""
     return re.sub(r"「[^」]*」|`[^`]*`", "", s)
@@ -173,6 +193,7 @@ def main() -> int:
     directives = sum(1 for p in re.split(r"[\s。]+", user or "") if p and IMPERATIVE.search(p)) if len(user or "") <= 400 else 0
     marked = sum(1 for l in lines if l[0] in "★⭐↩⏎")
     plan = sum(1 for l in lines if l[0] in MARKS and PLAN.search(l))
+    future = future_plans(lines)
     progress = [l for l in lines if l[0] in MARKS and PROGRESS.search(l)]
     uncovered = directives >= 2 and marked == 0 and not UNDONE.search(text)
     pushback = [l for l in lines if PUSHBACK.search(strip_quotes(l)) and "権限" not in l] if corrected else []
@@ -182,7 +203,7 @@ def main() -> int:
     retraction = bool(RETRACTION.search(said))
     record(d.get("session_id", ""), {"lines": len(lines), "questions": questions, "outside_marks": outside,
                                      "claim": claim, "claim_without_evidence": bare, "corrected": corrected, "pushback": len(pushback),
-                                     "directives": directives, "marked": marked, "plan_lines": plan, "progress_lines": len(progress),
+                                     "directives": directives, "marked": marked, "plan_lines": plan, "progress_lines": len(progress), "future_plan_lines": len(future),
                                      "tools": len(tools), "unbacked": [n for n, _ in unbacked], "contradiction": contradiction, "retraction": retraction})
     reasons = []
     if pushback:
@@ -200,6 +221,8 @@ def main() -> int:
         reasons.append(f"指示が {directives} 個あるのに、★ か ↩ の行が無い。指示ごとに1行ずつ返し、やらなかったものは「やっていない」と書く（follow-instructions）。")
     if progress:
         reasons.append(f"経過の行がある（「{progress[0][:30]}」）。ユーザーに見せる文字は成果物と答えだけ。途中で一言を求められたら、残りを裏に出してターンを終える（background-first）。")
+    if future:
+        reasons.append(f"予定の行がある（「{future[0][:30]}」）。予定は書かない。裏で動かしている物だけを ❕ で 1 行にして終える（work-style「会話に出すもの」）。")
     if questions > 1:
         reasons.append(f"❔ が {questions} 行ある。1 ターンに 1 つまで。残りは決めて進めるか、ファイルに書いて ★ で渡す（follow-instructions）。")
     if reasons:
